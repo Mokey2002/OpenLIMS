@@ -15,7 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from django.http import JsonResponse
 from django.db import connection
 def health(request):
@@ -32,9 +32,10 @@ def health(request):
 def home(request):
     return JsonResponse({"app": "OpenLIMS", "health": "/health", "admin": "/admin"})
 
+
 urlpatterns = [
     path("", home),
     path("admin/", admin.site.urls),
     path("health", health),
+    path("api/", include("config.api_urls")),
 ]
-

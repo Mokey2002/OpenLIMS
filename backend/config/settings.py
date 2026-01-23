@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'samples',
     'inventory',
     'events',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
