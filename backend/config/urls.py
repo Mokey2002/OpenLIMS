@@ -16,7 +16,25 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from django.http import JsonResponse
+from django.db import connection
+def health(request):
+    # DB connectivity check
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1;")
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    return JsonResponse({"status": "ok", "db_ok": db_ok})
+
+def home(request):
+    return JsonResponse({"app": "OpenLIMS", "health": "/health", "admin": "/admin"})
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path("", home),
+    path("admin/", admin.site.urls),
+    path("health", health),
 ]
+
