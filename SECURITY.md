@@ -12,7 +12,7 @@ If you discover a security vulnerability, **do not open a public issue**.
 
 Please report it privately by emailing:
 
-security@openlims.org (placeholder)
+edu.lemuss@gmail. com
 
 Include:
 - Description of the issue
