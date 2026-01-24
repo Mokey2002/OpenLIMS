@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'inventory',
     'events',
     'rest_framework',
+    'custom_fields',
 ]
 
 MIDDLEWARE = [
