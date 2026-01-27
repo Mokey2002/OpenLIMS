@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create env file
+        run: |
+          cp deploy/.env.example deploy/.env
+
+      - name: Build services
+        run: |
+          docker compose -f deploy/docker-compose.yml build
+
+      - name: Start database
+        run: |
+          docker compose -f deploy/docker-compose.yml up -d db
+
+      - name: Run migrations + checks
+        run: |
+          docker compose -f deploy/docker-compose.yml run --rm api python manage.py check
+          docker compose -f deploy/docker-compose.yml run --rm api python manage.py makemigrations --check --dry-run
+          docker compose -f deploy/docker-compose.yml run --rm api python manage.py migrate
+
+      - name: Run tests (if any)
+        run: |
+          docker compose -f deploy/docker-compose.yml run --rm api python manage.py test

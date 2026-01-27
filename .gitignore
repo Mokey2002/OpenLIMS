@@ -1,0 +1,32 @@
+# env files
+deploy/.env
+.env
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.dist/
+build/
+dist/
+
+# django
+*.log
+staticfiles/
+media/
+
+# editor/OS
+.DS_Store
+.vscode/
+.idea/
+
+# database dumps/backups
+*.sql
+*.dump
+
+# test/coverage
+.coverage
+htmlcov/
+.pytest_cache/
