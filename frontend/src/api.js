@@ -13,3 +13,13 @@ export async function apiPost(path, body) {
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+export async function apiPatch(path, body) {
+  const res = await fetch(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
