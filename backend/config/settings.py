@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'events',
     'rest_framework',
     'custom_fields',
+    'core',
 ]
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
