@@ -1,14 +1,13 @@
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
-
 from .models import Sample
 from .serializers import SampleSerializer
-
 from custom_fields.models import FieldValue
-
+from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite
 
 class SampleViewSet(ModelViewSet):
+    permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
     queryset = Sample.objects.all().order_by("-created_at")
     serializer_class = SampleSerializer
 

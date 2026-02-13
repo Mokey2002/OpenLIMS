@@ -1,8 +1,11 @@
 from rest_framework.viewsets import ModelViewSet
 from .models import FieldDefinition, FieldValue
 from .serializers import FieldDefinitionSerializer, FieldValueSerializer
+from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite
+from core.permissions import IsAdminOnly
 
 class FieldDefinitionViewSet(ModelViewSet):
+    permission_classes=[IsAdminOnly]
     serializer_class = FieldDefinitionSerializer
 
     def get_queryset(self):
@@ -14,6 +17,7 @@ class FieldDefinitionViewSet(ModelViewSet):
 
 
 class FieldValueViewSet(ModelViewSet):
+    permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
     serializer_class = FieldValueSerializer
 
     def get_queryset(self):
