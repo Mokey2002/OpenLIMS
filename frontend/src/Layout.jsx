@@ -1,4 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { clearTokens } from "./auth";
+import { useNavigate } from "react-router-dom";
 
 const linkStyle = ({ isActive }) => ({
   padding: "8px 10px",
@@ -7,6 +9,17 @@ const linkStyle = ({ isActive }) => ({
   color: "black",
   background: isActive ? "#eaeaea" : "transparent",
 });
+
+const nav = useNavigate();
+
+<button
+  onClick={() => {
+    clearTokens();
+    nav("/login");
+  }}
+>
+  Logout
+</button>
 
 export default function Layout() {
   return (
