@@ -1,6 +1,6 @@
 import { getAccessToken, getRefreshToken, setTokens, clearTokens } from "./auth";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+const API_BASE = "";//import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 async function refreshAccessToken() {
   const refresh = getRefreshToken();
