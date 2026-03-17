@@ -1,41 +1,41 @@
+import { Container, Nav, Navbar, Button } from "react-bootstrap";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearTokens } from "./auth";
-
-const linkStyle = ({ isActive }) => ({
-  padding: "8px 10px",
-  borderRadius: 8,
-  textDecoration: "none",
-  color: "black",
-  background: isActive ? "#eaeaea" : "transparent",
-});
 
 export default function Layout() {
   const nav = useNavigate();
 
+  function logout() {
+    clearTokens();
+    nav("/login");
+  }
+
   return (
-    <div style={{ maxWidth: 980, margin: "0 auto", padding: 16, fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ marginBottom: 8 }}>OpenLIMS UI</h1>
+    <>
+      <Navbar bg="dark" variant="dark" expand="lg" className="mb-4">
+        <Container fluid className="px-4">
+          <Navbar.Brand as={NavLink} to="/samples">
+            OpenLIMS
+          </Navbar.Brand>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <NavLink to="/samples" style={linkStyle}>Samples</NavLink>
-        <NavLink to="/inventory" style={linkStyle}>Inventory</NavLink>
-        <NavLink to="/events" style={linkStyle}>Events</NavLink>
+          <Navbar.Toggle aria-controls="openlims-nav" />
+          <Navbar.Collapse id="openlims-nav">
+            <Nav className="me-auto">
+              <Nav.Link as={NavLink} to="/samples">Samples</Nav.Link>
+              <Nav.Link as={NavLink} to="/inventory">Inventory</Nav.Link>
+              <Nav.Link as={NavLink} to="/events">Events</Nav.Link>
+            </Nav>
 
-        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
-          <a href="/api/" target="_blank" rel="noreferrer">API</a>
-          <a href="/health" target="_blank" rel="noreferrer">Health</a>
-          <button
-            onClick={() => {
-              clearTokens();
-              nav("/login");
-            }}
-          >
-            Logout
-          </button>
-        </div>
-      </div>
+            <Button variant="outline-light" size="sm" onClick={logout}>
+              Logout
+            </Button>
+          </Navbar.Collapse>
+        </Container>
+      </Navbar>
 
-      <Outlet />
-    </div>
+      <Container fluid className="px-4 pb-4">
+        <Outlet />
+      </Container>
+    </>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Alert, Button, Card, Form, Table } from "react-bootstrap";
 import { apiGet, apiPost } from "../api";
 
 export default function SamplesList() {
@@ -41,53 +42,58 @@ export default function SamplesList() {
   }
 
   return (
-    <div>
-      <h2 style={{ marginTop: 0 }}>Samples</h2>
+    <div className="w-100">
+      <h2 className="mb-3">Samples</h2>
 
-      <form onSubmit={createSample} style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <input
-          value={sampleId}
-          onChange={(e) => setSampleId(e.target.value)}
-          placeholder="New sample id (e.g. S-002)"
-          style={{ flex: 1, padding: 10 }}
-        />
-        <button type="submit" style={{ padding: "10px 14px" }}>Create</button>
-      </form>
+      <Card className="shadow-sm border-0 mb-4">
+        <Card.Body>
+          <Form onSubmit={createSample} className="d-flex gap-2">
+            <Form.Control
+              value={sampleId}
+              onChange={(e) => setSampleId(e.target.value)}
+              placeholder="New sample id (e.g. S-002)"
+            />
+            <Button type="submit" variant="dark">
+              Create
+            </Button>
+          </Form>
+        </Card.Body>
+      </Card>
 
-      {err && (
-        <div style={{ background: "#ffe6e6", padding: 12, borderRadius: 8, marginBottom: 12 }}>
-          <strong>Error:</strong> {err}
-        </div>
-      )}
+      {err && <Alert variant="danger">{err}</Alert>}
 
-      {loading ? (
-        <div>Loading...</div>
-      ) : (
-        <table width="100%" cellPadding="10" style={{ borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
-              <th>ID</th>
-              <th>sample_id</th>
-              <th>status</th>
-              <th>container</th>
-              <th>created_at</th>
-            </tr>
-          </thead>
-          <tbody>
-            {samples.map((s) => (
-              <tr key={s.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                <td>{s.id}</td>
-                <td>
-                  <Link to={`/samples/${s.id}`}>{s.sample_id}</Link>
-                </td>
-                <td>{s.status}</td>
-                <td>{s.container ?? "-"}</td>
-                <td style={{ fontFamily: "monospace", fontSize: 12 }}>{s.created_at}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <Card className="shadow-sm border-0">
+        <Card.Body>
+          {loading ? (
+            <div>Loading...</div>
+          ) : (
+            <Table responsive hover>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Sample ID</th>
+                  <th>Status</th>
+                  <th>Container</th>
+                  <th>Created At</th>
+                </tr>
+              </thead>
+              <tbody>
+                {samples.map((s) => (
+                  <tr key={s.id}>
+                    <td>{s.id}</td>
+                    <td>
+                      <Link to={`/samples/${s.id}`}>{s.sample_id}</Link>
+                    </td>
+                    <td>{s.status}</td>
+                    <td>{s.container ?? "-"}</td>
+                    <td>{s.created_at}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Card.Body>
+      </Card>
     </div>
   );
 }
