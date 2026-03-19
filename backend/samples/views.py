@@ -4,7 +4,7 @@ from rest_framework.response import Response
 
 from .models import Sample
 from .serializers import SampleSerializer
-from .workflow_serializers import SampleTransitionSerializer
+from .workflows_serializers import SampleTransitionSerializer
 from .workflows import get_allowed_transitions
 
 from custom_fields.models import FieldValue
