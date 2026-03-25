@@ -1,19 +1,44 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Alert, Button, Card, Form, Table } from "react-bootstrap";
+import { Alert, Button, Card, Form, Row, Col, Table } from "react-bootstrap";
 import { apiGet, apiPost } from "../api";
+
+const STATUS_OPTIONS = [
+  "",
+  "RECEIVED",
+  "IN_PROGRESS",
+  "QC",
+  "REPORTED",
+  "ARCHIVED",
+];
 
 export default function SamplesList() {
   const [samples, setSamples] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+
   const [sampleId, setSampleId] = useState("");
+
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
 
   async function load() {
     setErr("");
     setLoading(true);
+
     try {
-      const data = await apiGet("/api/samples/");
+      const params = new URLSearchParams();
+
+      if (search.trim()) {
+        params.set("search", search.trim());
+      }
+
+      if (status) {
+        params.set("status", status);
+      }
+
+      const query = params.toString() ? `?${params.toString()}` : "";
+      const data = await apiGet(`/api/samples/${query}`);
       setSamples(data);
     } catch (e) {
       setErr(e.message || String(e));
@@ -24,7 +49,7 @@ export default function SamplesList() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [search, status]);
 
   async function createSample(e) {
     e.preventDefault();
@@ -57,6 +82,33 @@ export default function SamplesList() {
               Create
             </Button>
           </Form>
+        </Card.Body>
+      </Card>
+
+      <Card className="shadow-sm border-0 mb-4">
+        <Card.Body>
+          <Row className="g-3">
+            <Col md={8}>
+              <Form.Control
+                placeholder="Search by sample ID"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </Col>
+            <Col md={4}>
+              <Form.Select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="">All statuses</option>
+                {STATUS_OPTIONS.filter(Boolean).map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </Form.Select>
+            </Col>
+          </Row>
         </Card.Body>
       </Card>
 
