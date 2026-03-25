@@ -102,6 +102,7 @@ export default function Events() {
 
                     <div className="text-muted small mb-2">
                       {formatTimestamp(event.timestamp)}
+		      {event.actor_username ? ` • by ${event.actor_username}` : ""}
                     </div>
                   </div>
                 </div>

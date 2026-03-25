@@ -193,6 +193,7 @@ export default function SampleDetail() {
 
                         <small className="text-muted">
                           {formatTimestamp(event.timestamp)}
+			  {event.actor_username ? ` • by ${event.actor_username}` : ""}
                         </small>
                       </div>
 
