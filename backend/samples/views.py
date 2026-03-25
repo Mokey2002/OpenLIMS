@@ -14,8 +14,21 @@ from events.models import Event
 
 class SampleViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
-    queryset = Sample.objects.all().order_by("-created_at")
     serializer_class = SampleSerializer
+
+    def get_queryset(self):
+        queryset = Sample.objects.all().order_by("-created_at")
+
+        search = self.request.query_params.get("search")
+        status = self.request.query_params.get("status")
+
+        if search:
+            queryset = queryset.filter(sample_id__icontains=search)
+
+        if status:
+            queryset = queryset.filter(status=status)
+
+        return queryset
 
     @action(detail=True, methods=["get"], url_path="custom-fields")
     def custom_fields(self, request, pk=None):
