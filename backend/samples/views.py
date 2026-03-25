@@ -78,7 +78,7 @@ class SampleViewSet(ModelViewSet):
             entity_type="Sample",
             entity_id=str(sample.id),
             action="STATUS_CHANGED",
-	    actor=request.user
+	    actor=request.user,
             payload={
                 "sample_id": sample.id,
                 "sample_code": sample.sample_id,
