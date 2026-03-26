@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Alert, Badge, Button, Card, Spinner } from "react-bootstrap";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Col,
+  Form,
+  Row,
+  Spinner,
+} from "react-bootstrap";
 import { apiGet, apiPost } from "../api";
 
 function statusVariant(status) {
@@ -15,6 +24,21 @@ function statusVariant(status) {
       return "success";
     case "ARCHIVED":
       return "dark";
+    default:
+      return "light";
+  }
+}
+
+function workItemVariant(status) {
+  switch (status) {
+    case "PENDING":
+      return "secondary";
+    case "IN_PROGRESS":
+      return "primary";
+    case "COMPLETED":
+      return "success";
+    case "FAILED":
+      return "danger";
     default:
       return "light";
   }
@@ -47,19 +71,15 @@ function describeEvent(event) {
   if (event.action === "STATUS_CHANGED") {
     return `Status changed from ${event.payload?.old_status} to ${event.payload?.new_status}`;
   }
-
   if (event.action === "CREATED") {
     return `${event.entity_type} was created`;
   }
-
   if (event.action === "UPDATED") {
     return `${event.entity_type} was updated`;
   }
-
   if (event.action === "DELETED") {
     return `${event.entity_type} was deleted`;
   }
-
   return event.action;
 }
 
@@ -69,24 +89,31 @@ export default function SampleDetail() {
   const [sample, setSample] = useState(null);
   const [allowed, setAllowed] = useState([]);
   const [events, setEvents] = useState([]);
+  const [workItems, setWorkItems] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+
+  const [newWorkItemName, setNewWorkItemName] = useState("");
+  const [newWorkItemNotes, setNewWorkItemNotes] = useState("");
+
+  const [resultForms, setResultForms] = useState({});
 
   async function load() {
     setLoading(true);
     setErr("");
 
     try {
-      const [s, t, ev] = await Promise.all([
+      const [s, t, ev, wi] = await Promise.all([
         apiGet(`/api/samples/${id}/`),
         apiGet(`/api/samples/${id}/allowed-transitions/`),
         apiGet(`/api/events/`),
+        apiGet(`/api/work-items/?sample=${id}`),
       ]);
 
       setSample(s);
       setAllowed(t.allowed_transitions || []);
 
-      // Filter only events related to this sample
       const sampleEvents = ev.filter(
         (event) =>
           event.entity_type === "Sample" &&
@@ -97,6 +124,7 @@ export default function SampleDetail() {
       );
 
       setEvents(sampleEvents);
+      setWorkItems(wi);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -113,6 +141,73 @@ export default function SampleDetail() {
       await apiPost(`/api/samples/${id}/transition/`, {
         new_status: newStatus,
       });
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
+  async function createWorkItem(e) {
+    e.preventDefault();
+    setErr("");
+
+    try {
+      await apiPost("/api/work-items/", {
+        sample: Number(id),
+        name: newWorkItemName,
+        status: "PENDING",
+        notes: newWorkItemNotes,
+      });
+
+      setNewWorkItemName("");
+      setNewWorkItemNotes("");
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
+  function updateResultForm(workItemId, field, value) {
+    setResultForms((prev) => ({
+      ...prev,
+      [workItemId]: {
+        ...(prev[workItemId] || {}),
+        [field]: value,
+      },
+    }));
+  }
+
+  async function addResult(workItemId) {
+    const form = resultForms[workItemId] || {};
+    setErr("");
+
+    try {
+      const payload = {
+        work_item: workItemId,
+        key: form.key,
+        value_type: form.value_type,
+      };
+
+      if (form.value_type === "STRING") {
+        payload.value_string = form.value_string || "";
+      } else if (form.value_type === "NUMBER") {
+        payload.value_number = form.value_number ? Number(form.value_number) : null;
+      } else if (form.value_type === "BOOLEAN") {
+        payload.value_boolean = form.value_boolean === "true";
+      }
+
+      await apiPost("/api/results/", payload);
+
+      setResultForms((prev) => ({
+        ...prev,
+        [workItemId]: {
+          key: "",
+          value_type: "STRING",
+          value_string: "",
+          value_number: "",
+          value_boolean: "true",
+        },
+      }));
 
       await load();
     } catch (e) {
@@ -166,6 +261,161 @@ export default function SampleDetail() {
             </Card.Body>
           </Card>
 
+          <Card className="shadow-sm border-0 mb-4">
+            <Card.Body>
+              <h5 className="mb-3">Work Items</h5>
+
+              <Form onSubmit={createWorkItem} className="mb-4">
+                <Row className="g-2">
+                  <Col md={4}>
+                    <Form.Control
+                      placeholder="Work item name (e.g. DNA Extraction)"
+                      value={newWorkItemName}
+                      onChange={(e) => setNewWorkItemName(e.target.value)}
+                    />
+                  </Col>
+                  <Col md={6}>
+                    <Form.Control
+                      placeholder="Notes"
+                      value={newWorkItemNotes}
+                      onChange={(e) => setNewWorkItemNotes(e.target.value)}
+                    />
+                  </Col>
+                  <Col md={2}>
+                    <Button type="submit" variant="dark" className="w-100">
+                      Add
+                    </Button>
+                  </Col>
+                </Row>
+              </Form>
+
+              {workItems.length === 0 ? (
+                <Alert variant="light" className="mb-0">
+                  No work items yet.
+                </Alert>
+              ) : (
+                <div className="d-grid gap-3">
+                  {workItems.map((wi) => {
+                    const form = resultForms[wi.id] || {
+                      key: "",
+                      value_type: "STRING",
+                      value_string: "",
+                      value_number: "",
+                      value_boolean: "true",
+                    };
+
+                    return (
+                      <Card key={wi.id} className="bg-light border-0">
+                        <Card.Body>
+                          <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                            <div>
+                              <div className="fw-semibold">{wi.name}</div>
+                              <div className="text-muted small">{wi.notes}</div>
+                            </div>
+                            <Badge bg={workItemVariant(wi.status)}>
+                              {wi.status}
+                            </Badge>
+                          </div>
+
+                          <div className="mb-3">
+                            <div className="fw-semibold mb-2">Results</div>
+                            {wi.results?.length === 0 ? (
+                              <div className="text-muted small">No results yet.</div>
+                            ) : (
+                              <ul className="mb-0">
+                                {wi.results.map((r) => (
+                                  <li key={r.id}>
+                                    <strong>{r.key}</strong>: {String(r.value)}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+
+                          <div className="border-top pt-3">
+                            <div className="fw-semibold mb-2">Add Result</div>
+                            <Row className="g-2">
+                              <Col md={3}>
+                                <Form.Control
+                                  placeholder="Key"
+                                  value={form.key}
+                                  onChange={(e) =>
+                                    updateResultForm(wi.id, "key", e.target.value)
+                                  }
+                                />
+                              </Col>
+                              <Col md={3}>
+                                <Form.Select
+                                  value={form.value_type}
+                                  onChange={(e) =>
+                                    updateResultForm(wi.id, "value_type", e.target.value)
+                                  }
+                                >
+                                  <option value="STRING">STRING</option>
+                                  <option value="NUMBER">NUMBER</option>
+                                  <option value="BOOLEAN">BOOLEAN</option>
+                                </Form.Select>
+                              </Col>
+
+                              {form.value_type === "STRING" && (
+                                <Col md={4}>
+                                  <Form.Control
+                                    placeholder="Value"
+                                    value={form.value_string}
+                                    onChange={(e) =>
+                                      updateResultForm(wi.id, "value_string", e.target.value)
+                                    }
+                                  />
+                                </Col>
+                              )}
+
+                              {form.value_type === "NUMBER" && (
+                                <Col md={4}>
+                                  <Form.Control
+                                    type="number"
+                                    placeholder="Value"
+                                    value={form.value_number}
+                                    onChange={(e) =>
+                                      updateResultForm(wi.id, "value_number", e.target.value)
+                                    }
+                                  />
+                                </Col>
+                              )}
+
+                              {form.value_type === "BOOLEAN" && (
+                                <Col md={4}>
+                                  <Form.Select
+                                    value={form.value_boolean}
+                                    onChange={(e) =>
+                                      updateResultForm(wi.id, "value_boolean", e.target.value)
+                                    }
+                                  >
+                                    <option value="true">True</option>
+                                    <option value="false">False</option>
+                                  </Form.Select>
+                                </Col>
+                              )}
+
+                              <Col md={2}>
+                                <Button
+                                  variant="outline-dark"
+                                  className="w-100"
+                                  onClick={() => addResult(wi.id)}
+                                >
+                                  Save
+                                </Button>
+                              </Col>
+                            </Row>
+                          </div>
+                        </Card.Body>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+
           <Card className="shadow-sm border-0">
             <Card.Body>
               <h5 className="mb-3">Timeline</h5>
@@ -193,7 +443,7 @@ export default function SampleDetail() {
 
                         <small className="text-muted">
                           {formatTimestamp(event.timestamp)}
-			  {event.actor_username ? ` • by ${event.actor_username}` : ""}
+                          {event.actor_username ? ` • by ${event.actor_username}` : ""}
                         </small>
                       </div>
 

@@ -4,7 +4,7 @@ import SamplesList from "./pages/SamplesList";
 import SampleDetail from "./pages/SampleDetail";
 import Inventory from "./pages/Inventory";
 import Events from "./pages/Events";
-
+import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import { isLoggedIn } from "./auth";
 function RequireAuth({ children }) {
@@ -25,7 +25,7 @@ export default function App() {
       </RequireAuth>
     }
   >
-    <Route index element={<Navigate to="/samples" replace />} />
+    <Route index element={<Dashboard />}/>
     <Route path="samples" element={<SamplesList />} />
     <Route path="samples/:id" element={<SampleDetail />} />
     <Route path="inventory" element={<Inventory />} />
