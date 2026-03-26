@@ -3,6 +3,18 @@ import { Alert, Badge, Card, Col, Row, Spinner, Table } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api";
 
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import { Bar } from "react-chartjs-2";
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+
 function formatTimestamp(ts) {
   try {
     return new Date(ts).toLocaleString();
@@ -91,6 +103,37 @@ export default function Dashboard() {
       .slice(0, 8);
   }, [events]);
 
+  const chartData = useMemo(() => {
+    return {
+      labels: Object.keys(statusCounts),
+      datasets: [
+        {
+          label: "Samples",
+          data: Object.values(statusCounts),
+        },
+      ],
+    };
+  }, [statusCounts]);
+
+  const chartOptions = useMemo(() => {
+    return {
+      responsive: true,
+      plugins: {
+        legend: {
+          display: false,
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+          },
+        },
+      },
+    };
+  }, []);
+
   if (loading) {
     return <Spinner animation="border" />;
   }
@@ -122,31 +165,16 @@ export default function Dashboard() {
       </Row>
 
       <Row className="g-4 mb-4">
-        <Col lg={6}>
+        <Col lg={7}>
           <Card className="shadow-sm border-0 h-100">
             <Card.Body>
               <h5 className="mb-3">Samples by Status</h5>
-              <Table responsive className="mb-0">
-                <thead>
-                  <tr>
-                    <th>Status</th>
-                    <th>Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(statusCounts).map(([status, count]) => (
-                    <tr key={status}>
-                      <td>{status}</td>
-                      <td>{count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
+              <Bar data={chartData} options={chartOptions} />
             </Card.Body>
           </Card>
         </Col>
 
-        <Col lg={6}>
+        <Col lg={5}>
           <Card className="shadow-sm border-0 h-100">
             <Card.Body>
               <h5 className="mb-3">Quick Links</h5>
