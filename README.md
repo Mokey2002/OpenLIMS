@@ -88,3 +88,6 @@ git clone https://github.com/Mokey2002/OpenLIMS.git
 cd OpenLIMS
 cp deploy/.env.example deploy/.env
 docker compose up --build
+
+<img src="./images/login.png"  width="200">
+<img src="./images/Dashboard.png"  width="200">
