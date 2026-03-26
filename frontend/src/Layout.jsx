@@ -24,6 +24,8 @@ export default function Layout() {
               <Nav.Link as={NavLink} to="/samples">Samples</Nav.Link>
               <Nav.Link as={NavLink} to="/inventory">Inventory</Nav.Link>
               <Nav.Link as={NavLink} to="/events">Events</Nav.Link>
+	      <Nav.Link as={NavLink} to="/">Dashboard</Nav.Link>
+
             </Nav>
 
             <Button variant="outline-light" size="sm" onClick={logout}>
