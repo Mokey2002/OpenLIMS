@@ -110,7 +110,7 @@ export default function SampleDetail() {
     setErr("");
 
     try {
-      const [s, t, ev, wi] = await Promise.all([
+      const [s, t, ev, wi,att] = await Promise.all([
         apiGet(`/api/samples/${id}/`),
         apiGet(`/api/samples/${id}/allowed-transitions/`),
         apiGet(`/api/events/`),
