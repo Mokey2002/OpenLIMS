@@ -66,3 +66,15 @@ class Result(models.Model):
         if self.value_type == self.VALUE_TYPE_BOOLEAN:
             return self.value_boolean
         return self.value_string
+
+class SampleAttachment(models.Model):
+    sample = models.ForeignKey(
+        "samples.Sample",
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to="sample_attachments/")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.sample.sample_id} - {self.file.name.split('/')[-1]}"

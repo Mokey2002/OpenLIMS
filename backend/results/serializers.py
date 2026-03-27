@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import WorkItem, Result
+from .models import WorkItem, Result,SampleAttachment
 
 
 class ResultSerializer(serializers.ModelSerializer):
@@ -56,3 +56,14 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "results",
         ]
         read_only_fields = ["id", "created_at", "results"]
+
+class SampleAttachmentSerializer(serializers.ModelSerializer):
+    filename = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SampleAttachment
+        fields = ["id", "sample", "file", "filename", "uploaded_at"]
+        read_only_fields = ["id", "filename", "uploaded_at"]
+
+    def get_filename(self, obj):
+        return obj.file.name.split("/")[-1]

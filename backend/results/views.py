@@ -1,7 +1,7 @@
 from rest_framework.viewsets import ModelViewSet
 from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite
-from .models import WorkItem, Result
-from .serializers import WorkItemSerializer, ResultSerializer
+from .models import WorkItem, Result, SampleAttachment
+from .serializers import WorkItemSerializer, ResultSerializer, SampleAttachmentSerializer
 
 
 class WorkItemViewSet(ModelViewSet):
@@ -25,4 +25,15 @@ class ResultViewSet(ModelViewSet):
         work_item_id = self.request.query_params.get("work_item")
         if work_item_id:
             queryset = queryset.filter(work_item_id=work_item_id)
+        return queryset
+
+class SampleAttachmentViewSet(ModelViewSet):
+    permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
+    serializer_class = SampleAttachmentSerializer
+
+    def get_queryset(self):
+        queryset = SampleAttachment.objects.all().order_by("-uploaded_at")
+        sample_id = self.request.query_params.get("sample")
+        if sample_id:
+            queryset = queryset.filter(sample_id=sample_id)
         return queryset
