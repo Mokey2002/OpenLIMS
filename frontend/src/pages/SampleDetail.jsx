@@ -10,7 +10,8 @@ import {
   Row,
   Spinner,
 } from "react-bootstrap";
-import { apiGet, apiPost } from "../api";
+import { apiGet, apiPost,apiPostForm } from "../api";
+
 
 function statusVariant(status) {
   switch (status) {
@@ -85,6 +86,11 @@ function describeEvent(event) {
 
 export default function SampleDetail() {
   const { id } = useParams();
+  
+
+  const [attachments, setAttachments] = useState([]);
+  const [selectedFile, setSelectedFile] = useState(null);
+
 
   const [sample, setSample] = useState(null);
   const [allowed, setAllowed] = useState([]);
@@ -109,8 +115,10 @@ export default function SampleDetail() {
         apiGet(`/api/samples/${id}/allowed-transitions/`),
         apiGet(`/api/events/`),
         apiGet(`/api/work-items/?sample=${id}`),
-      ]);
+	apiGet(`/api/attachments/?sample=${id}`),
 
+      ]);
+      setAttachments(att)
       setSample(s);
       setAllowed(t.allowed_transitions || []);
 
@@ -135,6 +143,25 @@ export default function SampleDetail() {
   useEffect(() => {
     load();
   }, [id]);
+
+async function uploadAttachment(e) {
+  e.preventDefault();
+  if (!selectedFile) return;
+
+  setErr("");
+
+  try {
+    const formData = new FormData();
+    formData.append("sample", id);
+    formData.append("file", selectedFile);
+
+    await apiPostForm("/api/attachments/", formData);
+    setSelectedFile(null);
+    await load();
+  } catch (e) {
+    setErr(e.message || String(e));
+  }
+}
 
   async function doTransition(newStatus) {
     try {
@@ -416,6 +443,50 @@ export default function SampleDetail() {
             </Card.Body>
           </Card>
 
+<Card className="shadow-sm border-0 mb-4">
+  <Card.Body>
+    <h5 className="mb-3">Attachments</h5>
+
+    <Form onSubmit={uploadAttachment} className="mb-4">
+      <Row className="g-2 align-items-center">
+        <Col md={9}>
+          <Form.Control
+            type="file"
+            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+          />
+        </Col>
+        <Col md={3}>
+          <Button type="submit" variant="dark" className="w-100">
+            Upload
+          </Button>
+        </Col>
+      </Row>
+    </Form>
+
+    {attachments.length === 0 ? (
+      <Alert variant="light" className="mb-0">
+        No attachments yet.
+      </Alert>
+    ) : (
+      <ul className="mb-0">
+        {attachments.map((att) => (
+          <li key={att.id}>
+            <a
+              href={`http://localhost:8000${att.file}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {att.filename}
+            </a>{" "}
+            <span className="text-muted small">
+              ({new Date(att.uploaded_at).toLocaleString()})
+            </span>
+          </li>
+        ))}
+      </ul>
+    )}
+  </Card.Body>
+</Card>
           <Card className="shadow-sm border-0">
             <Card.Body>
               <h5 className="mb-3">Timeline</h5>

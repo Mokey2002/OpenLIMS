@@ -2,6 +2,28 @@ import { getAccessToken, getRefreshToken, setTokens, clearTokens } from "./auth"
 
 const API_BASE = "";//import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
+export async function apiPostForm(path, formData) {
+  const access = getAccessToken();
+
+  const headers = {};
+  if (access) {
+    headers.Authorization = `Bearer ${access}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`POST ${path} failed: ${res.status} ${text}`);
+  }
+
+  return res.json();
+}
+
 async function refreshAccessToken() {
   const refresh = getRefreshToken();
   if (!refresh) return null;
