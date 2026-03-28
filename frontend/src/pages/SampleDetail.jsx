@@ -111,7 +111,7 @@ export default function SampleDetail() {
     setErr("");
 
     try {
-      const [s, t, ev, wi,att] = await Promise.all([
+      const [s, t, ev, wi,att,containersData] = await Promise.all([
         apiGet(`/api/samples/${id}/`),
         apiGet(`/api/samples/${id}/allowed-transitions/`),
         apiGet(`/api/events/`),
@@ -121,11 +121,11 @@ export default function SampleDetail() {
 
       ]);
       
-      const [containers, setContainers] = useState([]);
-      const [selectedContainer, setSelectedContainer] = useState("");
+      setContainers(containersData)
+      setSelectedContainer(s.container || "")
       setAttachments(att)
       setSample(s);
-      setAllowed(t.allowed_transitions || []);
+      setAllowed(t.allowed_transitions || [])
 
       const sampleEvents = ev.filter(
         (event) =>
