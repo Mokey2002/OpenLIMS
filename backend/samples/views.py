@@ -17,7 +17,7 @@ class SampleViewSet(ModelViewSet):
     serializer_class = SampleSerializer
 
     def get_queryset(self):
-        queryset = Sample.objects.all().order_by("-created_at")
+        queryset = Sample.objects.select_related("container","container_location",).all().order_by("-created_at")
 
         search = self.request.query_params.get("search")
         status = self.request.query_params.get("status")

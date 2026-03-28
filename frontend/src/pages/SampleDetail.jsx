@@ -10,7 +10,7 @@ import {
   Row,
   Spinner,
 } from "react-bootstrap";
-import { apiGet, apiPost,apiPostForm } from "../api";
+import { apiGet, apiPost,apiPostForm,apiPatch } from "../api";
 
 
 function statusVariant(status) {
@@ -91,7 +91,8 @@ export default function SampleDetail() {
   const [attachments, setAttachments] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
 
-
+  const [containers, setContainers] = useState([]);
+  const [selectedContainer, setSelectedContainer] = useState("");
   const [sample, setSample] = useState(null);
   const [allowed, setAllowed] = useState([]);
   const [events, setEvents] = useState([]);
@@ -116,8 +117,12 @@ export default function SampleDetail() {
         apiGet(`/api/events/`),
         apiGet(`/api/work-items/?sample=${id}`),
 	apiGet(`/api/attachments/?sample=${id}`),
+	apiGet('/api/containers/'),
 
       ]);
+      
+      const [containers, setContainers] = useState([]);
+      const [selectedContainer, setSelectedContainer] = useState("");
       setAttachments(att)
       setSample(s);
       setAllowed(t.allowed_transitions || []);
@@ -174,6 +179,19 @@ async function uploadAttachment(e) {
     }
   }
 
+async function assignContainer(e) {
+  e.preventDefault();
+  setErr("");
+
+  try {
+    await apiPatch(`/api/samples/${id}/`, {
+      container: selectedContainer ? Number(selectedContainer) : null,
+    });
+    await load();
+  } catch (e) {
+    setErr(e.message || String(e));
+  }
+}
   async function createWorkItem(e) {
     e.preventDefault();
     setErr("");
@@ -268,6 +286,14 @@ async function uploadAttachment(e) {
                   {sample.status}
                 </Badge>
               </div>
+
+		<div className="mb-2">
+  <strong>Container:</strong> {sample.container_code || "Unassigned"}
+</div>
+
+<div className="mb-3">
+  <strong>Location:</strong> {sample.location_name || "Unassigned"}
+</div>
 
               <div className="d-flex gap-2 flex-wrap">
                 {allowed.length === 0 ? (
@@ -442,7 +468,34 @@ async function uploadAttachment(e) {
               )}
             </Card.Body>
           </Card>
+<Card className="shadow-sm border-0 mb-4">
+  <Card.Body>
+    <h5 className="mb-3">Storage Assignment</h5>
 
+    <Form onSubmit={assignContainer}>
+      <Row className="g-2 align-items-center">
+        <Col md={9}>
+          <Form.Select
+            value={selectedContainer}
+            onChange={(e) => setSelectedContainer(e.target.value)}
+          >
+            <option value="">Unassigned</option>
+            {containers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.container_id} ({c.kind}) — {c.location}
+              </option>
+            ))}
+          </Form.Select>
+        </Col>
+        <Col md={3}>
+          <Button type="submit" variant="dark" className="w-100">
+            Save Container
+          </Button>
+        </Col>
+      </Row>
+    </Form>
+  </Card.Body>
+</Card>
 <Card className="shadow-sm border-0 mb-4">
   <Card.Body>
     <h5 className="mb-3">Attachments</h5>
