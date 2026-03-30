@@ -106,3 +106,32 @@ class SampleViewSet(ModelViewSet):
             "old_status": old_status,
             "new_status": new_status,
         })
+
+
+    def partial_update(self, request, *args, **kwargs):
+        sample = self.get_object()
+        old_container_id = sample.container_id
+        old_container_code = sample.container.container_id if sample.container else None
+
+        response = super().partial_update(request, *args, **kwargs)
+
+        sample.refresh_from_db()
+
+        if old_container_id != sample.container_id:
+            Event.objects.create(
+                entity_type="Sample",
+                entity_id=str(sample.id),
+                action="CONTAINER_ASSIGNED",
+                actor=request.user,
+                payload={
+                    "sample_id": sample.id,
+                    "sample_code": sample.sample_id,
+                    "old_container_id": old_container_id,
+                    "old_container_code": old_container_code,
+                    "new_container_id": sample.container_id,
+                    "new_container_code": sample.container.container_id if sample.container else None,
+                    "location_name": sample.container.location.name if sample.container and sample.container.location else None,
+                },
+            )
+
+        return response

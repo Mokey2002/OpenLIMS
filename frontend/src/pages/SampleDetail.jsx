@@ -69,6 +69,10 @@ function formatTimestamp(ts) {
 }
 
 function describeEvent(event) {
+  if (event.action === "CONTAINER_ASSIGNED") {
+  return `Container changed from ${event.payload?.old_container_code || "Unassigned"} to ${event.payload?.new_container_code || "Unassigned"}`;
+   }
+
   if (event.action === "STATUS_CHANGED") {
     return `Status changed from ${event.payload?.old_status} to ${event.payload?.new_status}`;
   }

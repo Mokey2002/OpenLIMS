@@ -14,17 +14,19 @@ export default function Layout() {
     <>
       <Navbar bg="dark" variant="dark" expand="lg" className="mb-4">
         <Container fluid className="px-4">
-          <Navbar.Brand as={NavLink} to="/samples">
+          <Navbar.Brand as={NavLink} to="/">
             OpenLIMS
           </Navbar.Brand>
 
           <Navbar.Toggle aria-controls="openlims-nav" />
           <Navbar.Collapse id="openlims-nav">
             <Nav className="me-auto">
+              <Nav.Link as={NavLink} to="/">Dashboard</Nav.Link>
               <Nav.Link as={NavLink} to="/samples">Samples</Nav.Link>
               <Nav.Link as={NavLink} to="/inventory">Inventory</Nav.Link>
               <Nav.Link as={NavLink} to="/events">Events</Nav.Link>
-	      <Nav.Link as={NavLink} to="/">Dashboard</Nav.Link>
+              <Nav.Link as={NavLink} to="/analyze">Analyze</Nav.Link>
+
 
             </Nav>
 

@@ -7,6 +7,7 @@ import Events from "./pages/Events";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import { isLoggedIn } from "./auth";
+import Analyze from "./pages/Analyze";
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
 }
@@ -26,6 +27,7 @@ export default function App() {
     }
   >
     <Route index element={<Dashboard />}/>
+    <Route path="analyze" element={<Analyze/>}/>
     <Route path="samples" element={<SamplesList />} />
     <Route path="samples/:id" element={<SampleDetail />} />
     <Route path="inventory" element={<Inventory />} />

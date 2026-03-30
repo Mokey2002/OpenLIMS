@@ -12,6 +12,8 @@ function actionVariant(action) {
       return "danger";
     case "STATUS_CHANGED":
       return "warning";
+    case "CONTAINER_ASSIGNED":
+      return "info";
     default:
       return "secondary";
   }
@@ -23,6 +25,34 @@ function formatTimestamp(ts) {
   } catch {
     return ts;
   }
+}
+
+function describeEvent(event) {
+  if (event.action === "STATUS_CHANGED") {
+    return `Status changed from ${event.payload?.old_status} to ${event.payload?.new_status}`;
+  }
+
+  if (event.action === "CONTAINER_ASSIGNED") {
+    return `Container changed from ${
+      event.payload?.old_container_code || "Unassigned"
+    } to ${
+      event.payload?.new_container_code || "Unassigned"
+    }`;
+  }
+
+  if (event.action === "CREATED") {
+    return `${event.entity_type} was created`;
+  }
+
+  if (event.action === "UPDATED") {
+    return `${event.entity_type} was updated`;
+  }
+
+  if (event.action === "DELETED") {
+    return `${event.entity_type} was deleted`;
+  }
+
+  return `${event.entity_type} #${event.entity_id}`;
 }
 
 export default function Events() {
@@ -96,13 +126,13 @@ export default function Events() {
                         {event.action}
                       </Badge>
                       <span className="fw-semibold">
-                        {event.entity_type} #{event.entity_id}
+                        {describeEvent(event)}
                       </span>
                     </div>
 
                     <div className="text-muted small mb-2">
                       {formatTimestamp(event.timestamp)}
-		      {event.actor_username ? ` • by ${event.actor_username}` : ""}
+                      {event.actor_username ? ` • by ${event.actor_username}` : ""}
                     </div>
                   </div>
                 </div>
