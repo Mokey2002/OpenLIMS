@@ -89,7 +89,7 @@ export default function Inventory() {
                 <Row className="g-2">
                   <Col md={7}>
                     <Form.Control
-                      placeholder="Location name (e.g. Freezer A)"
+                      placeholder="Location name"
                       value={locationName}
                       onChange={(e) => setLocationName(e.target.value)}
                     />
@@ -124,7 +124,7 @@ export default function Inventory() {
                 <Row className="g-2">
                   <Col md={4}>
                     <Form.Control
-                      placeholder="Container ID (e.g. C-001)"
+                      placeholder="Container ID"
                       value={containerId}
                       onChange={(e) => setContainerId(e.target.value)}
                     />
@@ -173,9 +173,7 @@ export default function Inventory() {
               {loading ? (
                 <div>Loading...</div>
               ) : locations.length === 0 ? (
-                <Alert variant="light" className="mb-0">
-                  No locations yet.
-                </Alert>
+                <Alert variant="light" className="mb-0">No locations yet.</Alert>
               ) : (
                 <Table responsive hover className="mb-0">
                   <thead>
@@ -207,17 +205,16 @@ export default function Inventory() {
               {loading ? (
                 <div>Loading...</div>
               ) : containers.length === 0 ? (
-                <Alert variant="light" className="mb-0">
-                  No containers yet.
-                </Alert>
+                <Alert variant="light" className="mb-0">No containers yet.</Alert>
               ) : (
                 <Table responsive hover className="mb-0">
                   <thead>
                     <tr>
                       <th>ID</th>
-                      <th>Container ID</th>
+                      <th>Container</th>
                       <th>Kind</th>
                       <th>Location</th>
+                      <th>Samples</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -227,6 +224,14 @@ export default function Inventory() {
                         <td>{c.container_id}</td>
                         <td>{c.kind}</td>
                         <td>{c.location_name || c.location}</td>
+                        <td>
+                          {c.sample_count}
+                          {c.sample_ids?.length > 0 && (
+                            <div className="text-muted small">
+                              {c.sample_ids.join(", ")}
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

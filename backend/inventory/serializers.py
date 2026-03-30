@@ -9,8 +9,9 @@ class LocationSerializer(serializers.ModelSerializer):
 
 
 class ContainerSerializer(serializers.ModelSerializer):
-    sample_count = serializers.IntegerField(source="samples.count", read_only=True)
     location_name = serializers.CharField(source="location.name", read_only=True)
+    sample_count = serializers.SerializerMethodField()
+    sample_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = Container
@@ -21,4 +22,11 @@ class ContainerSerializer(serializers.ModelSerializer):
             "location",
             "location_name",
             "sample_count",
+            "sample_ids",
         ]
+
+    def get_sample_count(self, obj):
+        return obj.samples.count()
+
+    def get_sample_ids(self, obj):
+        return list(obj.samples.values_list("sample_id", flat=True))
