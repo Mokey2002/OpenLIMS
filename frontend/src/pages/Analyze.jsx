@@ -24,10 +24,28 @@ function isNumericResult(result) {
   return typeof result.value === "number";
 }
 
+function colorForIndex(i) {
+  const palette = [
+    "rgb(54, 162, 235)",
+    "rgb(255, 99, 132)",
+    "rgb(75, 192, 192)",
+    "rgb(255, 159, 64)",
+    "rgb(153, 102, 255)",
+    "rgb(255, 205, 86)",
+    "rgb(201, 203, 207)",
+    "rgb(0, 128, 128)",
+    "rgb(220, 20, 60)",
+    "rgb(46, 139, 87)",
+  ];
+  return palette[i % palette.length];
+}
+
 export default function Analyze() {
   const chartRef = useRef(null);
 
   const [samples, setSamples] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [selectedProjectIds, setSelectedProjectIds] = useState([]);
   const [selectedSampleIds, setSelectedSampleIds] = useState([]);
   const [mode, setMode] = useState("time");
   const [metricKey, setMetricKey] = useState("");
@@ -40,8 +58,12 @@ export default function Analyze() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiGet("/api/samples/");
-        setSamples(data);
+        const [samplesData, projectsData] = await Promise.all([
+          apiGet("/api/samples/"),
+          apiGet("/api/projects/"),
+        ]);
+        setSamples(samplesData);
+        setProjects(projectsData);
       } catch (e) {
         setErr(e.message || String(e));
       } finally {
@@ -49,6 +71,14 @@ export default function Analyze() {
       }
     })();
   }, []);
+
+  function toggleProject(id) {
+    setSelectedProjectIds((prev) =>
+      prev.includes(String(id))
+        ? prev.filter((x) => x !== String(id))
+        : [...prev, String(id)]
+    );
+  }
 
   function toggleSample(id) {
     setSelectedSampleIds((prev) =>
@@ -58,11 +88,20 @@ export default function Analyze() {
     );
   }
 
+  const visibleSamples = useMemo(() => {
+    if (selectedProjectIds.length === 0) return samples;
+    return samples.filter(
+      (s) => s.project_id && selectedProjectIds.includes(String(s.project_id))
+    );
+  }, [samples, selectedProjectIds]);
+
   async function loadAvailableMetrics() {
     setErr("");
 
     try {
-      const selected = samples.filter((s) => selectedSampleIds.includes(String(s.id)));
+      const selected = visibleSamples.filter((s) =>
+        selectedSampleIds.includes(String(s.id))
+      );
 
       if (selected.length === 0) {
         setAvailableMetricKeys([]);
@@ -100,14 +139,16 @@ export default function Analyze() {
   useEffect(() => {
     loadAvailableMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSampleIds, samples]);
+  }, [selectedSampleIds, visibleSamples]);
 
   async function runAnalysis() {
     setErr("");
     setAnalyzing(true);
 
     try {
-      const selected = samples.filter((s) => selectedSampleIds.includes(String(s.id)));
+      const selected = visibleSamples.filter((s) =>
+        selectedSampleIds.includes(String(s.id))
+      );
 
       if (selected.length === 0) {
         setPoints([]);
@@ -138,6 +179,8 @@ export default function Analyze() {
             extracted.push({
               sample_id: sample.sample_id,
               sample_db_id: sample.id,
+              project_id: sample.project_id,
+              project_code: sample.project_code,
               work_item_name: wi.name,
               created_at: sample.created_at,
               x_time: new Date(sample.created_at).toLocaleDateString(),
@@ -181,10 +224,10 @@ export default function Analyze() {
     if (points.length === 0) return;
 
     const rows = [
-      ["sample_id", "sample_db_id", "work_item_name", "created_at", "days_since_created", metricKey],
+      ["sample_id", "project_code", "work_item_name", "created_at", "days_since_created", metricKey],
       ...points.map((p) => [
         p.sample_id,
-        p.sample_db_id,
+        p.project_code,
         p.work_item_name,
         p.created_at,
         p.x_days,
@@ -205,24 +248,36 @@ export default function Analyze() {
   }
 
   const chartData = useMemo(() => {
-    return {
-      labels: points.map((p) => (mode === "time" ? p.x_time : p.x_days)),
-      datasets: [
-        {
-          label:
-            mode === "time"
-              ? `${metricKey || "Metric"} vs Time`
-              : `${metricKey || "Metric"} vs Days`,
-          data: points.map((p) => p.y),
-        },
-      ],
-    };
-  }, [points, mode, metricKey]);
+    const grouped = {};
+
+    for (const p of points) {
+      if (!grouped[p.sample_id]) grouped[p.sample_id] = [];
+      grouped[p.sample_id].push(p);
+    }
+
+    const datasets = Object.entries(grouped).map(([sampleId, samplePoints], idx) => {
+      const color = colorForIndex(idx);
+
+      return {
+        label: sampleId,
+        data: samplePoints.map((p) => ({
+          x: mode === "time" ? p.x_time : p.x_days,
+          y: p.y,
+        })),
+        borderColor: color,
+        backgroundColor: color,
+        tension: 0.2,
+      };
+    });
+
+    return { datasets };
+  }, [points, mode]);
 
   const chartOptions = useMemo(() => {
     return {
       responsive: true,
       maintainAspectRatio: false,
+      parsing: true,
       plugins: {
         legend: { display: true },
       },
@@ -235,6 +290,7 @@ export default function Analyze() {
           },
         },
         x: {
+          type: "category",
           title: {
             display: true,
             text: mode === "time" ? "Created Date" : "Days Since Created",
@@ -256,15 +312,32 @@ export default function Analyze() {
 
       <Card className="shadow-sm border-0 mb-4">
         <Card.Body>
+          <div className="fw-semibold mb-2">Select Projects</div>
+          <div style={{ maxHeight: 180, overflowY: "auto" }}>
+            {projects.map((p) => (
+              <Form.Check
+                key={p.id}
+                type="checkbox"
+                label={`${p.code} - ${p.name}`}
+                checked={selectedProjectIds.includes(String(p.id))}
+                onChange={() => toggleProject(p.id)}
+              />
+            ))}
+          </div>
+        </Card.Body>
+      </Card>
+
+      <Card className="shadow-sm border-0 mb-4">
+        <Card.Body>
           <Row className="g-3">
             <Col md={6}>
               <div className="fw-semibold mb-2">Select Samples</div>
               <div style={{ maxHeight: 220, overflowY: "auto" }}>
-                {samples.map((s) => (
+                {visibleSamples.map((s) => (
                   <Form.Check
                     key={s.id}
                     type="checkbox"
-                    label={`${s.sample_id} (${s.status})`}
+                    label={`${s.sample_id} (${s.project_code || "No Project"})`}
                     checked={selectedSampleIds.includes(String(s.id))}
                     onChange={() => toggleSample(s.id)}
                   />
@@ -334,7 +407,7 @@ export default function Analyze() {
 
           {points.length === 0 ? (
             <Alert variant="light" className="mb-0">
-              No analysis data yet. Select samples and run analysis.
+              No analysis data yet. Select projects, samples, and run analysis.
             </Alert>
           ) : (
             <div style={{ height: "300px" }}>
@@ -356,6 +429,7 @@ export default function Analyze() {
               <thead>
                 <tr>
                   <th>Sample</th>
+                  <th>Project</th>
                   <th>Work Item</th>
                   <th>Created</th>
                   <th>Days</th>
@@ -366,6 +440,7 @@ export default function Analyze() {
                 {points.map((p, idx) => (
                   <tr key={`${p.sample_id}-${p.work_item_name}-${idx}`}>
                     <td>{p.sample_id}</td>
+                    <td>{p.project_code || "-"}</td>
                     <td>{p.work_item_name}</td>
                     <td>{p.x_time}</td>
                     <td>{p.x_days}</td>
