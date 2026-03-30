@@ -89,6 +89,7 @@ export default function Analyze() {
   const chartOptions = useMemo(() => {
     return {
       responsive: true,
+      maintainAspectRatio: false,
       plugins: {
         legend: { display: true },
       },
@@ -169,7 +170,10 @@ export default function Analyze() {
                   No analysis data yet. Select samples and run analysis.
                 </Alert>
               ) : (
+                <div style={{maxHeight:"300px"}}>
                 <Line data={chartData} options={chartOptions} />
+                </div>
+                
               )}
             </Card.Body>
           </Card>
