@@ -14,13 +14,16 @@ const STATUS_OPTIONS = [
 
 export default function SamplesList() {
   const [samples, setSamples] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
   const [sampleId, setSampleId] = useState("");
+  const [projectId, setProjectId] = useState("");
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
 
   async function load() {
     setErr("");
@@ -29,17 +32,19 @@ export default function SamplesList() {
     try {
       const params = new URLSearchParams();
 
-      if (search.trim()) {
-        params.set("search", search.trim());
-      }
-
-      if (status) {
-        params.set("status", status);
-      }
+      if (search.trim()) params.set("search", search.trim());
+      if (status) params.set("status", status);
+      if (projectFilter) params.set("project", projectFilter);
 
       const query = params.toString() ? `?${params.toString()}` : "";
-      const data = await apiGet(`/api/samples/${query}`);
-      setSamples(data);
+
+      const [samplesData, projectsData] = await Promise.all([
+        apiGet(`/api/samples/${query}`),
+        apiGet("/api/projects/"),
+      ]);
+
+      setSamples(samplesData);
+      setProjects(projectsData);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -49,7 +54,7 @@ export default function SamplesList() {
 
   useEffect(() => {
     load();
-  }, [search, status]);
+  }, [search, status, projectFilter]);
 
   async function createSample(e) {
     e.preventDefault();
@@ -58,8 +63,13 @@ export default function SamplesList() {
     if (!id) return;
 
     try {
-      await apiPost("/api/samples/", { sample_id: id, status: "RECEIVED" });
+      await apiPost("/api/samples/", {
+        sample_id: id,
+        status: "RECEIVED",
+        project: projectId ? Number(projectId) : null,
+      });
       setSampleId("");
+      setProjectId("");
       await load();
     } catch (e) {
       setErr(e.message || String(e));
@@ -72,15 +82,34 @@ export default function SamplesList() {
 
       <Card className="shadow-sm border-0 mb-4">
         <Card.Body>
-          <Form onSubmit={createSample} className="d-flex gap-2">
-            <Form.Control
-              value={sampleId}
-              onChange={(e) => setSampleId(e.target.value)}
-              placeholder="New sample id (e.g. S-002)"
-            />
-            <Button type="submit" variant="dark">
-              Create
-            </Button>
+          <Form onSubmit={createSample}>
+            <Row className="g-2">
+              <Col md={6}>
+                <Form.Control
+                  value={sampleId}
+                  onChange={(e) => setSampleId(e.target.value)}
+                  placeholder="New sample id (e.g. S-002)"
+                />
+              </Col>
+              <Col md={4}>
+                <Form.Select
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                >
+                  <option value="">No project</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code} - {p.name}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Col>
+              <Col md={2}>
+                <Button type="submit" variant="dark" className="w-100">
+                  Create
+                </Button>
+              </Col>
+            </Row>
           </Form>
         </Card.Body>
       </Card>
@@ -88,14 +117,14 @@ export default function SamplesList() {
       <Card className="shadow-sm border-0 mb-4">
         <Card.Body>
           <Row className="g-3">
-            <Col md={8}>
+            <Col md={5}>
               <Form.Control
                 placeholder="Search by sample ID"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </Col>
-            <Col md={4}>
+            <Col md={3}>
               <Form.Select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
@@ -104,6 +133,19 @@ export default function SamplesList() {
                 {STATUS_OPTIONS.filter(Boolean).map((s) => (
                   <option key={s} value={s}>
                     {s}
+                  </option>
+                ))}
+              </Form.Select>
+            </Col>
+            <Col md={4}>
+              <Form.Select
+                value={projectFilter}
+                onChange={(e) => setProjectFilter(e.target.value)}
+              >
+                <option value="">All projects</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code} - {p.name}
                   </option>
                 ))}
               </Form.Select>
@@ -124,6 +166,7 @@ export default function SamplesList() {
                 <tr>
                   <th>ID</th>
                   <th>Sample ID</th>
+                  <th>Project</th>
                   <th>Status</th>
                   <th>Container</th>
                   <th>Created At</th>
@@ -136,8 +179,9 @@ export default function SamplesList() {
                     <td>
                       <Link to={`/samples/${s.id}`}>{s.sample_id}</Link>
                     </td>
+                    <td>{s.project_code || "-"}</td>
                     <td>{s.status}</td>
-                    <td>{s.container ?? "-"}</td>
+                    <td>{s.container_code || "-"}</td>
                     <td>{s.created_at}</td>
                   </tr>
                 ))}

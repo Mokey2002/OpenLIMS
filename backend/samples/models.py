@@ -19,6 +19,14 @@ class Sample(models.Model):
     sample_id = models.CharField(max_length=64, unique=True)
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_RECEIVED)
 
+    project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="samples",
+    )
+
     container = models.ForeignKey(
         "inventory.Container",
         on_delete=models.PROTECT,

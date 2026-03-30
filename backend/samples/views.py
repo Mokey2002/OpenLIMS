@@ -17,16 +17,24 @@ class SampleViewSet(ModelViewSet):
     serializer_class = SampleSerializer
 
     def get_queryset(self):
-        queryset = Sample.objects.select_related("container","container__location",).all().order_by("-created_at")
+        queryset = Sample.objects.select_related(
+            "project",
+            "container",
+            "container__location",
+        ).all().order_by("-created_at")
 
         search = self.request.query_params.get("search")
         status = self.request.query_params.get("status")
+        project = self.request.query_params.get("project")
 
         if search:
             queryset = queryset.filter(sample_id__icontains=search)
 
         if status:
             queryset = queryset.filter(status=status)
+
+        if project:
+            queryset = queryset.filter(project_id=project)
 
         return queryset
 

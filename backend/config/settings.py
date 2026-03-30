@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'custom_fields',
     'core',
     'results',
+    'projects',
 ]
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
