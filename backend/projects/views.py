@@ -7,4 +7,4 @@ from .serializers import ProjectSerializer
 class ProjectViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
     serializer_class = ProjectSerializer
-    queryset = Project.objects.all().order_by("name")
+    queryset = Project.objects.all().order_by("members","samples").all().order_by("name")
