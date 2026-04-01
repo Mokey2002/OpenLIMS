@@ -13,7 +13,7 @@ export default function Layout() {
     (async () => {
       try {
         const data = await apiGet("/api/me/");
-        console.log(data)
+        //console.log(data)
         setMe(data);
       } catch (e) {
         console.error("Failed to load current user:", e);

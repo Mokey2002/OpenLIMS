@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Alert, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, Badge, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 
@@ -12,6 +12,8 @@ export default function Projects() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
+
+  const [memberQuery, setMemberQuery] = useState("");
   const [selectedMembers, setSelectedMembers] = useState([]);
 
   async function load() {
@@ -23,6 +25,7 @@ export default function Projects() {
         apiGet("/api/projects/"),
         apiGet("/api/users/"),
       ]);
+      console.log(usersData)
       setProjects(projectsData);
       setUsers(usersData);
     } catch (e) {
@@ -36,11 +39,33 @@ export default function Projects() {
     load();
   }, []);
 
-  function toggleMember(id) {
-    setSelectedMembers((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+  function addMember(user) {
+    setSelectedMembers((prev) => {
+      if (prev.some((m) => m.id === user.id)) return prev;
+      return [...prev, user];
+    });
+    setMemberQuery("");
   }
+
+  function removeMember(userId) {
+    setSelectedMembers((prev) => prev.filter((m) => m.id !== userId));
+  }
+
+  const filteredUsers = useMemo(() => {
+    const q = memberQuery.trim().toLowerCase();
+    if (!q) return [];
+
+    return users
+      .filter((u) => {
+        const alreadySelected = selectedMembers.some((m) => m.id === u.id);
+        if (alreadySelected) return false;
+
+        const username = (u.username || "").toLowerCase();
+        const email = (u.email || "").toLowerCase();
+        return username.includes(q) || email.includes(q);
+      })
+      .slice(0, 10);
+  }, [users, memberQuery, selectedMembers]);
 
   async function createProject(e) {
     e.preventDefault();
@@ -51,12 +76,13 @@ export default function Projects() {
         name,
         code,
         description,
-        members: selectedMembers,
+        members: selectedMembers.map((m) => m.id),
       });
 
       setName("");
       setCode("");
       setDescription("");
+      setMemberQuery("");
       setSelectedMembers([]);
       await load();
     } catch (e) {
@@ -99,23 +125,81 @@ export default function Projects() {
               </Col>
             </Row>
 
-            <div className="mt-3">
+            <div className="mt-4">
               <div className="fw-semibold mb-2">Team Members</div>
-              <Row>
-                {users.map((u) => (
-                  <Col md={4} key={u.id}>
-                    <Form.Check
-                      type="checkbox"
-                      label={u.username}
-                      checked={selectedMembers.includes(u.id)}
-                      onChange={() => toggleMember(u.id)}
-                    />
-                  </Col>
-                ))}
-              </Row>
+
+              <Form.Control
+                placeholder="Search users by username or email"
+                value={memberQuery}
+                onChange={(e) => setMemberQuery(e.target.value)}
+              />
+
+              {memberQuery && (
+                <Card className="mt-2 border">
+                  <Card.Body className="py-2">
+                    {filteredUsers.length === 0 ? (
+                      <div className="text-muted small">No matching users.</div>
+                    ) : (
+                      <div className="d-grid gap-2">
+                        {filteredUsers.map((u) => (
+                          <div
+                            key={u.id}
+                            className="d-flex justify-content-between align-items-center"
+                          >
+                            <div>
+                              <div className="fw-semibold">{u.username}</div>
+                              <div className="text-muted small">{u.email || "-"}</div>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline-dark"
+                              onClick={() => addMember(u)}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              )}
+
+              <div className="mt-3">
+                {selectedMembers.length === 0 ? (
+                  <div className="text-muted small">No team members selected yet.</div>
+                ) : (
+                  <div className="d-flex flex-wrap gap-2">
+                    {selectedMembers.map((u) => (
+                      <Badge
+                        key={u.id}
+                        bg="secondary"
+                        className="d-flex align-items-center gap-2 px-3 py-2"
+                      >
+                        <span>{u.username}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeMember(u.id)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "white",
+                            fontWeight: "bold",
+                            cursor: "pointer",
+                            padding: 0,
+                            lineHeight: 1,
+                          }}
+                        >
+                          ×
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-4">
               <Button type="submit" variant="dark" disabled={!name || !code}>
                 Create Project
               </Button>
@@ -148,6 +232,7 @@ export default function Projects() {
               </thead>
               <tbody>
                 {projects.map((p) => (
+                    
                   <tr key={p.id}>
                     <td>{p.id}</td>
                     <td>{p.code}</td>
