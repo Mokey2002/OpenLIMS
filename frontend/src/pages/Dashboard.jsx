@@ -33,6 +33,8 @@ function actionVariant(action) {
       return "danger";
     case "STATUS_CHANGED":
       return "warning";
+    case "PROJECT_POSTED":
+      return "info";
     default:
       return "secondary";
   }
@@ -54,6 +56,9 @@ export default function Dashboard() {
   const [samples, setSamples] = useState([]);
   const [events, setEvents] = useState([]);
   const [workItems, setWorkItems] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [me, setMe] = useState(null);
+
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -61,15 +66,19 @@ export default function Dashboard() {
     setErr("");
     setLoading(true);
     try {
-      const [samplesData, eventsData, workItemsData] = await Promise.all([
+      const [samplesData, eventsData, workItemsData, projectsData, meData] = await Promise.all([
         apiGet("/api/samples/"),
         apiGet("/api/events/"),
         apiGet("/api/work-items/"),
+        apiGet("/api/projects/"),
+        apiGet("/api/me/"),
       ]);
 
       setSamples(samplesData);
       setEvents(eventsData);
       setWorkItems(workItemsData);
+      setProjects(projectsData);
+      setMe(meData);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -134,6 +143,20 @@ export default function Dashboard() {
     };
   }, []);
 
+  const isAdmin = me?.roles?.includes("admin");
+
+  const myProjects = useMemo(() => {
+    if (!me) return [];
+
+    if (isAdmin) {
+      return projects;
+    }
+
+    return projects.filter((p) =>
+      (p.member_usernames || []).includes(me.username)
+    );
+  }, [projects, me, isAdmin]);
+
   if (loading) {
     return <Spinner animation="border" />;
   }
@@ -160,7 +183,10 @@ export default function Dashboard() {
           <StatCard title="Recent Events" value={events.length} />
         </Col>
         <Col md={3}>
-          <StatCard title="Reported Samples" value={statusCounts.REPORTED || 0} />
+          <StatCard
+            title={isAdmin ? "Visible Projects" : "My Projects"}
+            value={myProjects.length}
+          />
         </Col>
       </Row>
 
@@ -177,18 +203,43 @@ export default function Dashboard() {
         <Col lg={5}>
           <Card className="shadow-sm border-0 h-100">
             <Card.Body>
-              <h5 className="mb-3">Quick Links</h5>
-              <div className="d-grid gap-2">
-                <Link className="btn btn-dark" to="/samples">
-                  Go to Samples
-                </Link>
-                <Link className="btn btn-outline-dark" to="/inventory">
-                  Go to Inventory
-                </Link>
-                <Link className="btn btn-outline-dark" to="/events">
-                  Go to Events
-                </Link>
-              </div>
+              <h5 className="mb-3">{isAdmin ? "Projects" : "My Projects"}</h5>
+
+              {myProjects.length === 0 ? (
+                <Alert variant="light" className="mb-0">
+                  {isAdmin ? "No projects yet." : "You are not assigned to any projects."}
+                </Alert>
+              ) : (
+                <div className="d-grid gap-2">
+                  {myProjects.slice(0, 6).map((p) => (
+                    <Link
+                      key={p.id}
+                      to={`/projects/${p.id}`}
+                      className="text-decoration-none"
+                    >
+                      <Card className="border">
+                        <Card.Body className="py-2">
+                          <div className="d-flex justify-content-between align-items-center">
+                            <div>
+                              <div className="fw-semibold">
+                                {p.code} - {p.name}
+                              </div>
+                              <div className="text-muted small">
+                                {p.sample_count ?? 0} samples
+                              </div>
+                            </div>
+                            <Badge bg="dark">Open</Badge>
+                          </div>
+                        </Card.Body>
+                      </Card>
+                    </Link>
+                  ))}
+
+                  <Link className="btn btn-outline-dark mt-2" to="/projects">
+                    View All Projects
+                  </Link>
+                </div>
+              )}
             </Card.Body>
           </Card>
         </Col>
