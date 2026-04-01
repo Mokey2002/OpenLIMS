@@ -5,6 +5,18 @@ def in_group(user, name: str) -> bool:
     return user.is_authenticated and user.groups.filter(name=name).exists()
 
 
+class IsAuthenticatedProjectReadAdminWrite(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+
+        if not user or not user.is_authenticated:
+            return False
+
+        if request.method in SAFE_METHODS:
+            return True
+
+        return user.is_superuser or in_group(user, "admin")
+
 class IsAuthenticatedReadOnlyOrTechAdminWrite(BasePermission):
     """
     Any authenticated user can READ (GET/HEAD/OPTIONS).

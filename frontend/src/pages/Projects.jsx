@@ -6,6 +6,8 @@ import { apiGet, apiPost } from "../api";
 export default function Projects() {
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
+  const [me, setMe] = useState(null);
+
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -21,13 +23,19 @@ export default function Projects() {
     setLoading(true);
 
     try {
-      const [projectsData, usersData] = await Promise.all([
+      const [projectsData, meData] = await Promise.all([
         apiGet("/api/projects/"),
-        apiGet("/api/users/"),
+        apiGet("/api/me/"),
       ]);
-      console.log(usersData)
+
       setProjects(projectsData);
-      setUsers(usersData);
+      setMe(meData);
+
+      // only fetch users if admin (optimization)
+      if (meData?.roles?.includes("admin")) {
+        const usersData = await apiGet("/api/users/");
+        setUsers(usersData);
+      }
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -38,6 +46,8 @@ export default function Projects() {
   useEffect(() => {
     load();
   }, []);
+
+  const isAdmin = me?.roles?.includes("admin");
 
   function addMember(user) {
     setSelectedMembers((prev) => {
@@ -84,6 +94,7 @@ export default function Projects() {
       setDescription("");
       setMemberQuery("");
       setSelectedMembers([]);
+
       await load();
     } catch (e) {
       setErr(e.message || String(e));
@@ -96,118 +107,126 @@ export default function Projects() {
 
       {err && <Alert variant="danger">{err}</Alert>}
 
-      <Card className="shadow-sm border-0 mb-4">
-        <Card.Body>
-          <h5 className="mb-3">Create Project</h5>
+      {/* ✅ ADMIN ONLY CREATE FORM */}
+      {isAdmin && (
+        <Card className="shadow-sm border-0 mb-4">
+          <Card.Body>
+            <h5 className="mb-3">Create Project</h5>
 
-          <Form onSubmit={createProject}>
-            <Row className="g-3">
-              <Col md={4}>
+            <Form onSubmit={createProject}>
+              <Row className="g-3">
+                <Col md={4}>
+                  <Form.Control
+                    placeholder="Project name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </Col>
+                <Col md={3}>
+                  <Form.Control
+                    placeholder="Project code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                  />
+                </Col>
+                <Col md={5}>
+                  <Form.Control
+                    placeholder="Description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </Col>
+              </Row>
+
+              {/* TEAM MEMBERS SEARCH */}
+              <div className="mt-4">
+                <div className="fw-semibold mb-2">Team Members</div>
+
                 <Form.Control
-                  placeholder="Project name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Search users by username or email"
+                  value={memberQuery}
+                  onChange={(e) => setMemberQuery(e.target.value)}
                 />
-              </Col>
-              <Col md={3}>
-                <Form.Control
-                  placeholder="Project code"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                />
-              </Col>
-              <Col md={5}>
-                <Form.Control
-                  placeholder="Description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-              </Col>
-            </Row>
 
-            <div className="mt-4">
-              <div className="fw-semibold mb-2">Team Members</div>
-
-              <Form.Control
-                placeholder="Search users by username or email"
-                value={memberQuery}
-                onChange={(e) => setMemberQuery(e.target.value)}
-              />
-
-              {memberQuery && (
-                <Card className="mt-2 border">
-                  <Card.Body className="py-2">
-                    {filteredUsers.length === 0 ? (
-                      <div className="text-muted small">No matching users.</div>
-                    ) : (
-                      <div className="d-grid gap-2">
-                        {filteredUsers.map((u) => (
-                          <div
-                            key={u.id}
-                            className="d-flex justify-content-between align-items-center"
-                          >
-                            <div>
-                              <div className="fw-semibold">{u.username}</div>
-                              <div className="text-muted small">{u.email || "-"}</div>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="outline-dark"
-                              onClick={() => addMember(u)}
+                {memberQuery && (
+                  <Card className="mt-2 border">
+                    <Card.Body className="py-2">
+                      {filteredUsers.length === 0 ? (
+                        <div className="text-muted small">No matching users.</div>
+                      ) : (
+                        <div className="d-grid gap-2">
+                          {filteredUsers.map((u) => (
+                            <div
+                              key={u.id}
+                              className="d-flex justify-content-between align-items-center"
                             >
-                              Add
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </Card.Body>
-                </Card>
-              )}
-
-              <div className="mt-3">
-                {selectedMembers.length === 0 ? (
-                  <div className="text-muted small">No team members selected yet.</div>
-                ) : (
-                  <div className="d-flex flex-wrap gap-2">
-                    {selectedMembers.map((u) => (
-                      <Badge
-                        key={u.id}
-                        bg="secondary"
-                        className="d-flex align-items-center gap-2 px-3 py-2"
-                      >
-                        <span>{u.username}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeMember(u.id)}
-                          style={{
-                            background: "transparent",
-                            border: "none",
-                            color: "white",
-                            fontWeight: "bold",
-                            cursor: "pointer",
-                            padding: 0,
-                            lineHeight: 1,
-                          }}
-                        >
-                          ×
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
+                              <div>
+                                <div className="fw-semibold">{u.username}</div>
+                                <div className="text-muted small">
+                                  {u.email || "-"}
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline-dark"
+                                onClick={() => addMember(u)}
+                              >
+                                Add
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Card.Body>
+                  </Card>
                 )}
+
+                {/* SELECTED MEMBERS */}
+                <div className="mt-3">
+                  {selectedMembers.length === 0 ? (
+                    <div className="text-muted small">
+                      No team members selected yet.
+                    </div>
+                  ) : (
+                    <div className="d-flex flex-wrap gap-2">
+                      {selectedMembers.map((u) => (
+                        <Badge
+                          key={u.id}
+                          bg="secondary"
+                          className="d-flex align-items-center gap-2 px-3 py-2"
+                        >
+                          <span>{u.username}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeMember(u.id)}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "white",
+                              fontWeight: "bold",
+                              cursor: "pointer",
+                            }}
+                          >
+                            ×
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            <div className="mt-4">
-              <Button type="submit" variant="dark" disabled={!name || !code}>
-                Create Project
-              </Button>
-            </div>
-          </Form>
-        </Card.Body>
-      </Card>
+              <div className="mt-4">
+                <Button type="submit" variant="dark" disabled={!name || !code}>
+                  Create Project
+                </Button>
+              </div>
+            </Form>
+          </Card.Body>
+        </Card>
+      )}
 
+      {/* PROJECT LIST */}
       <Card className="shadow-sm border-0">
         <Card.Body>
           <h5 className="mb-3">Existing Projects</h5>
@@ -216,7 +235,7 @@ export default function Projects() {
             <div>Loading...</div>
           ) : projects.length === 0 ? (
             <Alert variant="light" className="mb-0">
-              No projects yet.
+              No projects found.
             </Alert>
           ) : (
             <Table responsive hover className="mb-0">
@@ -232,7 +251,6 @@ export default function Projects() {
               </thead>
               <tbody>
                 {projects.map((p) => (
-                    
                   <tr key={p.id}>
                     <td>{p.id}</td>
                     <td>{p.code}</td>
