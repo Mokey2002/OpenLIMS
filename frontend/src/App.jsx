@@ -10,6 +10,7 @@ import { isLoggedIn } from "./auth";
 import Analyze from "./pages/Analyze";
 import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
+import Users from "./pages/Users";
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
 }
@@ -36,6 +37,7 @@ export default function App() {
     <Route path="events" element={<Events />} />
     <Route path="projects" element={<Projects/>}/>
     <Route path="projects/:id" element={<ProjectDetail/>}/>
+    <Route path="users" element={<Users/>}/>
   </Route>
 
   <Route path="*" element={<Navigate to="/" replace />} />

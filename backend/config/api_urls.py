@@ -5,7 +5,7 @@ from events.views import EventViewSet
 from custom_fields.views import FieldDefinitionViewSet, FieldValueViewSet
 from results.views import WorkItemViewSet, ResultViewSet, SampleAttachmentViewSet
 from projects.views import ProjectViewSet
-from core.views import UserLiteViewSet
+from core.views import UserLiteViewSet, UserAdminViewSet
 
 router = DefaultRouter()
 router.register(r"samples", SampleViewSet, basename="sample")
@@ -19,4 +19,5 @@ router.register(r"results", ResultViewSet, basename="result")
 router.register(r"attachments", SampleAttachmentViewSet, basename="attachment")
 router.register(r"projects", ProjectViewSet, basename="project")
 router.register(r"users", ProjectViewSet, basename="user-lite")
+router.register(r"admin-users",UserAdminViewSet,basename="admin-user")
 urlpatterns = router.urls
