@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Card, Col, Form, Row, Spinner, Table } from "react-bootstrap";
+import { Alert, Badge, Button, Card, Col, Form, Row, Spinner, Table } from "react-bootstrap";
 import { apiGet } from "../api";
 import {
   Chart as ChartJS,
@@ -45,72 +45,122 @@ export default function Analyze() {
 
   const [samples, setSamples] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [selectedProjectIds, setSelectedProjectIds] = useState([]);
-  const [selectedSampleIds, setSelectedSampleIds] = useState([]);
+
+  const [projectQuery, setProjectQuery] = useState("");
+  const [sampleQuery, setSampleQuery] = useState("");
+
+  const [selectedProjects, setSelectedProjects] = useState([]);
+  const [selectedSamples, setSelectedSamples] = useState([]);
+
   const [mode, setMode] = useState("time");
   const [metricKey, setMetricKey] = useState("");
   const [availableMetricKeys, setAvailableMetricKeys] = useState([]);
   const [points, setPoints] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [err, setErr] = useState("");
 
+  async function loadInitial() {
+    setErr("");
+    setLoading(true);
+    try {
+      const [samplesData, projectsData] = await Promise.all([
+        apiGet("/api/samples/"),
+        apiGet("/api/projects/"),
+      ]);
+      setSamples(samplesData);
+      setProjects(projectsData);
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    (async () => {
-      try {
-        const [samplesData, projectsData] = await Promise.all([
-          apiGet("/api/samples/"),
-          apiGet("/api/projects/"),
-        ]);
-        setSamples(samplesData);
-        setProjects(projectsData);
-      } catch (e) {
-        setErr(e.message || String(e));
-      } finally {
-        setLoading(false);
-      }
-    })();
+    loadInitial();
   }, []);
 
-  function toggleProject(id) {
-    setSelectedProjectIds((prev) =>
-      prev.includes(String(id))
-        ? prev.filter((x) => x !== String(id))
-        : [...prev, String(id)]
-    );
+  function addProject(project) {
+    setSelectedProjects((prev) => {
+      if (prev.some((p) => p.id === project.id)) return prev;
+      return [...prev, project];
+    });
+    setProjectQuery("");
   }
 
-  function toggleSample(id) {
-    setSelectedSampleIds((prev) =>
-      prev.includes(String(id))
-        ? prev.filter((x) => x !== String(id))
-        : [...prev, String(id)]
-    );
+  function removeProject(projectId) {
+    setSelectedProjects((prev) => prev.filter((p) => p.id !== projectId));
+    setSelectedSamples((prev) => prev.filter((s) => s.project_id !== projectId));
   }
 
-  const visibleSamples = useMemo(() => {
-    if (selectedProjectIds.length === 0) return samples;
-    return samples.filter(
-      (s) => s.project_id && selectedProjectIds.includes(String(s.project_id))
-    );
-  }, [samples, selectedProjectIds]);
+  function addSample(sample) {
+    setSelectedSamples((prev) => {
+      if (prev.some((s) => s.id === sample.id)) return prev;
+      return [...prev, sample];
+    });
+    setSampleQuery("");
+  }
+
+  function removeSample(sampleId) {
+    setSelectedSamples((prev) => prev.filter((s) => s.id !== sampleId));
+  }
+
+  const filteredProjects = useMemo(() => {
+    const q = projectQuery.trim().toLowerCase();
+    if (!q) return [];
+
+    return projects
+      .filter((p) => {
+        const alreadySelected = selectedProjects.some((sp) => sp.id === p.id);
+        if (alreadySelected) return false;
+
+        const code = (p.code || "").toLowerCase();
+        const name = (p.name || "").toLowerCase();
+        return code.includes(q) || name.includes(q);
+      })
+      .slice(0, 10);
+  }, [projects, projectQuery, selectedProjects]);
+
+  const projectIdSet = useMemo(
+    () => new Set(selectedProjects.map((p) => p.id)),
+    [selectedProjects]
+  );
+
+  const samplesWithinSelectedProjects = useMemo(() => {
+    if (selectedProjects.length === 0) return [];
+    return samples.filter((s) => s.project_id && projectIdSet.has(s.project_id));
+  }, [samples, selectedProjects, projectIdSet]);
+
+  const filteredSamples = useMemo(() => {
+    const q = sampleQuery.trim().toLowerCase();
+    if (!q) return [];
+
+    return samplesWithinSelectedProjects
+      .filter((s) => {
+        const alreadySelected = selectedSamples.some((ss) => ss.id === s.id);
+        if (alreadySelected) return false;
+
+        const sampleId = (s.sample_id || "").toLowerCase();
+        const projectCode = (s.project_code || "").toLowerCase();
+        return sampleId.includes(q) || projectCode.includes(q);
+      })
+      .slice(0, 12);
+  }, [samplesWithinSelectedProjects, sampleQuery, selectedSamples]);
 
   async function loadAvailableMetrics() {
     setErr("");
 
     try {
-      const selected = visibleSamples.filter((s) =>
-        selectedSampleIds.includes(String(s.id))
-      );
-
-      if (selected.length === 0) {
+      if (selectedSamples.length === 0) {
         setAvailableMetricKeys([]);
         setMetricKey("");
         return;
       }
 
       const workItemLists = await Promise.all(
-        selected.map((s) => apiGet(`/api/work-items/?sample=${s.id}`))
+        selectedSamples.map((s) => apiGet(`/api/work-items/?sample=${s.id}`))
       );
 
       const keys = new Set();
@@ -139,18 +189,14 @@ export default function Analyze() {
   useEffect(() => {
     loadAvailableMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSampleIds, visibleSamples]);
+  }, [selectedSamples]);
 
   async function runAnalysis() {
     setErr("");
     setAnalyzing(true);
 
     try {
-      const selected = visibleSamples.filter((s) =>
-        selectedSampleIds.includes(String(s.id))
-      );
-
-      if (selected.length === 0) {
+      if (selectedSamples.length === 0) {
         setPoints([]);
         setErr("Select at least one sample.");
         return;
@@ -163,13 +209,13 @@ export default function Analyze() {
       }
 
       const workItemLists = await Promise.all(
-        selected.map((s) => apiGet(`/api/work-items/?sample=${s.id}`))
+        selectedSamples.map((s) => apiGet(`/api/work-items/?sample=${s.id}`))
       );
 
       const extracted = [];
 
-      for (let i = 0; i < selected.length; i++) {
-        const sample = selected[i];
+      for (let i = 0; i < selectedSamples.length; i++) {
+        const sample = selectedSamples[i];
         const workItems = workItemLists[i];
 
         for (const wi of workItems) {
@@ -312,17 +358,159 @@ export default function Analyze() {
 
       <Card className="shadow-sm border-0 mb-4">
         <Card.Body>
-          <div className="fw-semibold mb-2">Select Projects</div>
-          <div style={{ maxHeight: 180, overflowY: "auto" }}>
-            {projects.map((p) => (
-              <Form.Check
-                key={p.id}
-                type="checkbox"
-                label={`${p.code} - ${p.name}`}
-                checked={selectedProjectIds.includes(String(p.id))}
-                onChange={() => toggleProject(p.id)}
-              />
-            ))}
+          <h5 className="mb-3">Select Projects</h5>
+
+          <Form.Control
+            placeholder="Search project by name or code"
+            value={projectQuery}
+            onChange={(e) => setProjectQuery(e.target.value)}
+          />
+
+          {projectQuery && (
+            <Card className="mt-2 border">
+              <Card.Body className="py-2">
+                {filteredProjects.length === 0 ? (
+                  <div className="text-muted small">No matching projects.</div>
+                ) : (
+                  <div className="d-grid gap-2">
+                    {filteredProjects.map((p) => (
+                      <div
+                        key={p.id}
+                        className="d-flex justify-content-between align-items-center"
+                      >
+                        <div>
+                          <div className="fw-semibold">
+                            {p.code} - {p.name}
+                          </div>
+                          <div className="text-muted small">
+                            {p.description || "-"}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline-dark"
+                          onClick={() => addProject(p)}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
+          )}
+
+          <div className="mt-3">
+            {selectedProjects.length === 0 ? (
+              <div className="text-muted small">No projects selected yet.</div>
+            ) : (
+              <div className="d-flex flex-wrap gap-2">
+                {selectedProjects.map((p) => (
+                  <Badge
+                    key={p.id}
+                    bg="secondary"
+                    className="d-flex align-items-center gap-2 px-3 py-2"
+                  >
+                    <span>{p.code}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeProject(p.id)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "white",
+                        fontWeight: "bold",
+                        cursor: "pointer",
+                        padding: 0,
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card.Body>
+      </Card>
+
+      <Card className="shadow-sm border-0 mb-4">
+        <Card.Body>
+          <h5 className="mb-3">Select Samples</h5>
+
+          <Form.Control
+            placeholder="Search sample by ID within selected projects"
+            value={sampleQuery}
+            onChange={(e) => setSampleQuery(e.target.value)}
+            disabled={selectedProjects.length === 0}
+          />
+
+          {sampleQuery && selectedProjects.length > 0 && (
+            <Card className="mt-2 border">
+              <Card.Body className="py-2">
+                {filteredSamples.length === 0 ? (
+                  <div className="text-muted small">No matching samples.</div>
+                ) : (
+                  <div className="d-grid gap-2">
+                    {filteredSamples.map((s) => (
+                      <div
+                        key={s.id}
+                        className="d-flex justify-content-between align-items-center"
+                      >
+                        <div>
+                          <div className="fw-semibold">{s.sample_id}</div>
+                          <div className="text-muted small">
+                            {s.project_code || "No Project"} • {s.status}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline-dark"
+                          onClick={() => addSample(s)}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
+          )}
+
+          <div className="mt-3">
+            {selectedSamples.length === 0 ? (
+              <div className="text-muted small">No samples selected yet.</div>
+            ) : (
+              <div className="d-flex flex-wrap gap-2">
+                {selectedSamples.map((s) => (
+                  <Badge
+                    key={s.id}
+                    bg="dark"
+                    className="d-flex align-items-center gap-2 px-3 py-2"
+                  >
+                    <span>{s.sample_id}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeSample(s.id)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "white",
+                        fontWeight: "bold",
+                        cursor: "pointer",
+                        padding: 0,
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
         </Card.Body>
       </Card>
@@ -330,22 +518,7 @@ export default function Analyze() {
       <Card className="shadow-sm border-0 mb-4">
         <Card.Body>
           <Row className="g-3">
-            <Col md={6}>
-              <div className="fw-semibold mb-2">Select Samples</div>
-              <div style={{ maxHeight: 220, overflowY: "auto" }}>
-                {visibleSamples.map((s) => (
-                  <Form.Check
-                    key={s.id}
-                    type="checkbox"
-                    label={`${s.sample_id} (${s.project_code || "No Project"})`}
-                    checked={selectedSampleIds.includes(String(s.id))}
-                    onChange={() => toggleSample(s.id)}
-                  />
-                ))}
-              </div>
-            </Col>
-
-            <Col md={3}>
+            <Col md={4}>
               <div className="fw-semibold mb-2">Metric</div>
               <Form.Select
                 value={metricKey}
@@ -364,15 +537,17 @@ export default function Analyze() {
               </Form.Select>
             </Col>
 
-            <Col md={3}>
+            <Col md={4}>
               <div className="fw-semibold mb-2">Chart Mode</div>
               <Form.Select value={mode} onChange={(e) => setMode(e.target.value)}>
                 <option value="time">Metric vs Time</option>
                 <option value="days">Metric vs Days</option>
               </Form.Select>
+            </Col>
 
+            <Col md={4} className="d-flex align-items-end">
               <Button
-                className="mt-3 w-100"
+                className="w-100"
                 variant="dark"
                 onClick={runAnalysis}
                 disabled={analyzing}
@@ -396,10 +571,20 @@ export default function Analyze() {
             </h5>
 
             <div className="d-flex gap-2">
-              <Button variant="outline-dark" size="sm" onClick={downloadChart} disabled={points.length === 0}>
+              <Button
+                variant="outline-dark"
+                size="sm"
+                onClick={downloadChart}
+                disabled={points.length === 0}
+              >
                 Download Chart
               </Button>
-              <Button variant="outline-secondary" size="sm" onClick={downloadCsv} disabled={points.length === 0}>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={downloadCsv}
+                disabled={points.length === 0}
+              >
                 Download CSV
               </Button>
             </div>
@@ -407,7 +592,7 @@ export default function Analyze() {
 
           {points.length === 0 ? (
             <Alert variant="light" className="mb-0">
-              No analysis data yet. Select projects, samples, and run analysis.
+              No analysis data yet. Search projects, add samples, and run analysis.
             </Alert>
           ) : (
             <div style={{ height: "300px" }}>
