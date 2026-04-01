@@ -297,22 +297,37 @@ export default function Analyze() {
     const grouped = {};
 
     for (const p of points) {
-      if (!grouped[p.sample_id]) grouped[p.sample_id] = [];
-      grouped[p.sample_id].push(p);
+      const projectKey = p.project_code || "NO_PROJECT";
+      const xKey = mode === "time" ? p.x_time : String(p.x_days);
+
+      if (!grouped[projectKey]) grouped[projectKey] = {};
+      if (!grouped[projectKey][xKey]) grouped[projectKey][xKey] = [];
+
+      grouped[projectKey][xKey].push(p.y);
     }
 
-    const datasets = Object.entries(grouped).map(([sampleId, samplePoints], idx) => {
+    const datasets = Object.entries(grouped).map(([projectCode, xBuckets], idx) => {
       const color = colorForIndex(idx);
 
+      const data = Object.entries(xBuckets)
+        .map(([x, ys]) => ({
+          x: mode === "time" ? x : Number(x),
+          y: ys.reduce((sum, v) => sum + v, 0) / ys.length,
+        }))
+        .sort((a, b) => {
+          if (mode === "time") {
+            return new Date(a.x) - new Date(b.x);
+          }
+          return a.x - b.x;
+        });
+
       return {
-        label: sampleId,
-        data: samplePoints.map((p) => ({
-          x: mode === "time" ? p.x_time : p.x_days,
-          y: p.y,
-        })),
+        label: projectCode,
+        data,
         borderColor: color,
         backgroundColor: color,
         tension: 0.2,
+        fill: false,
       };
     });
 
@@ -336,7 +351,7 @@ export default function Analyze() {
           },
         },
         x: {
-          type: "category",
+          type: mode === "days" ? "linear" : "category",
           title: {
             display: true,
             text: mode === "time" ? "Created Date" : "Days Since Created",
