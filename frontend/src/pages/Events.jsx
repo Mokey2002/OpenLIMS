@@ -28,6 +28,9 @@ function formatTimestamp(ts) {
 }
 
 function describeEvent(event) {
+  if (event.action === "PROJECT_POSTED") {
+  return `Project post added${event.payload?.has_image ? " with image" : ""}`;
+}
   if (event.action === "STATUS_CHANGED") {
     return `Status changed from ${event.payload?.old_status} to ${event.payload?.new_status}`;
   }
