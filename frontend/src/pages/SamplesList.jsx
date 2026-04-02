@@ -25,6 +25,10 @@ export default function SamplesList() {
   const [status, setStatus] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
 
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkProject, setBulkProject] = useState("");
+
   async function load() {
     setErr("");
     setLoading(true);
@@ -56,6 +60,20 @@ export default function SamplesList() {
     load();
   }, [search, status, projectFilter]);
 
+  function toggleSelected(id) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.length === samples.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(samples.map((s) => s.id));
+    }
+  }
+
   async function createSample(e) {
     e.preventDefault();
     setErr("");
@@ -70,6 +88,28 @@ export default function SamplesList() {
       });
       setSampleId("");
       setProjectId("");
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
+  async function applyBulkUpdate() {
+    setErr("");
+
+    try {
+      const payload = {
+        ids: selectedIds,
+      };
+
+      if (bulkStatus) payload.status = bulkStatus;
+      if (bulkProject) payload.project = Number(bulkProject);
+
+      await apiPost("/api/samples/bulk-update/", payload);
+
+      setSelectedIds([]);
+      setBulkStatus("");
+      setBulkProject("");
       await load();
     } catch (e) {
       setErr(e.message || String(e));
@@ -154,6 +194,50 @@ export default function SamplesList() {
         </Card.Body>
       </Card>
 
+      <Card className="shadow-sm border-0 mb-4">
+        <Card.Body>
+          <h5 className="mb-3">Bulk Actions</h5>
+          <Row className="g-2">
+            <Col md={4}>
+              <Form.Select
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value)}
+              >
+                <option value="">Set status...</option>
+                {STATUS_OPTIONS.filter(Boolean).map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </Form.Select>
+            </Col>
+            <Col md={4}>
+              <Form.Select
+                value={bulkProject}
+                onChange={(e) => setBulkProject(e.target.value)}
+              >
+                <option value="">Assign project...</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code} - {p.name}
+                  </option>
+                ))}
+              </Form.Select>
+            </Col>
+            <Col md={4}>
+              <Button
+                variant="dark"
+                className="w-100"
+                onClick={applyBulkUpdate}
+                disabled={selectedIds.length === 0}
+              >
+                Apply to {selectedIds.length} sample(s)
+              </Button>
+            </Col>
+          </Row>
+        </Card.Body>
+      </Card>
+
       {err && <Alert variant="danger">{err}</Alert>}
 
       <Card className="shadow-sm border-0">
@@ -164,6 +248,13 @@ export default function SamplesList() {
             <Table responsive hover>
               <thead>
                 <tr>
+                  <th>
+                    <Form.Check
+                      type="checkbox"
+                      checked={samples.length > 0 && selectedIds.length === samples.length}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
                   <th>ID</th>
                   <th>Sample ID</th>
                   <th>Project</th>
@@ -175,6 +266,13 @@ export default function SamplesList() {
               <tbody>
                 {samples.map((s) => (
                   <tr key={s.id}>
+                    <td>
+                      <Form.Check
+                        type="checkbox"
+                        checked={selectedIds.includes(s.id)}
+                        onChange={() => toggleSelected(s.id)}
+                      />
+                    </td>
                     <td>{s.id}</td>
                     <td>
                       <Link to={`/samples/${s.id}`}>{s.sample_id}</Link>

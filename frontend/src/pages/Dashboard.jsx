@@ -35,6 +35,8 @@ function actionVariant(action) {
       return "warning";
     case "PROJECT_POSTED":
       return "info";
+    case "PROJECT_ASSIGNED":
+      return "secondary";
     default:
       return "secondary";
   }
@@ -157,6 +159,21 @@ export default function Dashboard() {
     );
   }, [projects, me, isAdmin]);
 
+  const myProjectIds = useMemo(
+    () => myProjects.map((p) => p.id),
+    [myProjects]
+  );
+
+  const myActivity = useMemo(() => {
+    return events
+      .filter((e) => {
+        const projectId = e.payload?.project_id;
+        return projectId && myProjectIds.includes(projectId);
+      })
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, 8);
+  }, [events, myProjectIds]);
+
   if (loading) {
     return <Spinner animation="border" />;
   }
@@ -244,6 +261,41 @@ export default function Dashboard() {
           </Card>
         </Col>
       </Row>
+
+      <Card className="shadow-sm border-0 mb-4">
+        <Card.Body>
+          <h5 className="mb-3">My Project Activity</h5>
+
+          {myActivity.length === 0 ? (
+            <Alert variant="light" className="mb-0">
+              No recent activity in your projects.
+            </Alert>
+          ) : (
+            <Table responsive hover className="mb-0">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Action</th>
+                  <th>Project</th>
+                  <th>Actor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myActivity.map((event) => (
+                  <tr key={event.id}>
+                    <td>{formatTimestamp(event.timestamp)}</td>
+                    <td>
+                      <Badge bg={actionVariant(event.action)}>{event.action}</Badge>
+                    </td>
+                    <td>{event.payload?.project_code || "-"}</td>
+                    <td>{event.actor_username || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Card.Body>
+      </Card>
 
       <Card className="shadow-sm border-0">
         <Card.Body>
