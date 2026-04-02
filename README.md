@@ -1,87 +1,68 @@
 # OpenLIMS
 
-OpenLIMS is a lightweight, production-style Laboratory Information Management System (LIMS) designed to manage samples, workflows, and laboratory results with minimal setup.
+OpenLIMS is a lightweight, production-shaped, open-source **Laboratory Information Management System (LIMS)** designed to manage laboratory workflows, sample tracking, and team collaboration with minimal setup.
 
-It is built to demonstrate real-world backend architecture, workflow orchestration, and auditability in a lab environment.
+It models real-world lab systems with audit trails, role-based access, project collaboration, bulk operations, and data analysis tools.
 
 ---
 
-## 🚀 Key Features
+## 🚀 Features
 
-### 🧪 Sample Management
-- Create and track samples
-- Assign containers and metadata
-- Search and filter samples by ID and status
+### 🧪 Core LIMS
+- Sample tracking with lifecycle states:
+  - RECEIVED → IN_PROGRESS → QC → REPORTED → ARCHIVED
+- Container and location management
+- Work items and result tracking
+- Custom fields per entity
+- Full audit trail of all system actions
 
-### 🔄 Workflow Engine
-- Enforced state transitions:
-- Received-IN_PROGRESS-QC-REPORTED-ARCHIVED
-- Invalid transitions are blocked at the API level
-- UI-driven workflow actions
+### 👥 Projects & Collaboration
+- Project-based organization of samples
+- Multi-user team support
+- Edit project members after creation
+- Project-level activity feed (notes + images)
+- Role-based project visibility
 
-### 📜 Audit Trail (Events)
-- All actions are logged
-- Includes:
-- timestamp
-- payload
-- actor (user)
-- Per-sample timeline view
+### 🔐 User Management
+- Admin-only user creation
+- Role-based access (Admin, Tech, Viewer)
 
-### 🧩 Custom Fields (Dynamic Schema)
-- Define fields without code changes
-- Supports validation rules
-- Attached to entities (e.g. Sample)
+### ⚡ Bulk Operations
+- Select multiple samples
+- Bulk update status and project assignment
+- Event logging for bulk actions
 
-### 🧬 Work Items & Results
-- Model lab processes (e.g. DNA Extraction, QC)
-- Attach structured results:
-- numeric
-- string
-- boolean
-- Results linked to samples via work items
+### 📊 Analytics
+- Compare multiple samples across projects
+- Metric vs Time and Days charts
+- Export charts (PNG) and data (CSV)
 
-### 📊 Dashboard
-- Sample counts by status
-- Charts (React + Chart.js)
-- Recent activity feed
-
-### 🔐 Authentication & Authorization
-- JWT-based authentication
-- Role-based access:
-- admin
-- tech
-- viewer
-
-### 🐳 Deployment
-- One-command setup with Docker Compose
-- Production-shaped architecture
+### 📡 Dashboard
+- System overview
+- “My Projects” widget
+- Activity feed
 
 ---
 
 ## 🏗 Architecture
 
-- **Backend**: Django + Django REST Framework  
-- **Frontend**: React (Vite) + Bootstrap  
-- **Database**: PostgreSQL  
-- **Auth**: JWT (SimpleJWT)  
-- **Containerization**: Docker + Docker Compose  
+### Backend
+- Django + Django REST Framework
+- PostgreSQL
+- REST APIs
+- Audit logging
 
-### Services
+### Frontend
+- React + Vite
+- React Bootstrap
+- Chart.js
 
-- `api` — Django backend
-- `db` — PostgreSQL database
-
-All services communicate via REST APIs.
+### Deployment
+- Docker + Docker Compose
 
 ---
 
-## ⚡ Quickstart
-
-### Prerequisites
-- Docker
-- Docker Compose
-
-### Run locally
+## ⚙️ Quickstart
 
 ```bash
 git clone https://github.com/Mokey2002/OpenLIMS.git
@@ -90,6 +71,31 @@ cp deploy/.env.example deploy/.env
 docker compose up --build
 ```
 
+---
+
+## 🌐 Access
+
+- Frontend: http://localhost:5173  
+- Backend: http://localhost:8000  
+
+---
+
+## 👨‍💻 Author
+
+Eduardo L.
+
+---
+
+## ⭐ Summary
+
+OpenLIMS is a full-stack system demonstrating:
+- system design
+- role-based security
+- audit trails
+- analytics
+- scalable UI
+
 ![Login Screen](./images/login.png)
-![Dashboard](./images/Dashboard.png)
+![Dashboard](./images/dashboard.png)
+![Project](./images/project.png)
 ![Analyze](./images/analyze.png)
