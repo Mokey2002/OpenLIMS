@@ -1,7 +1,7 @@
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
-
+from rest_framework import status
 from .models import Sample
 from .serializers import SampleSerializer
 from .workflows_serializers import SampleTransitionSerializer
@@ -15,6 +15,66 @@ from events.models import Event
 class SampleViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
     serializer_class = SampleSerializer
+
+    @action(detail=False, methods=["post"], url_path="bulk-update")
+    def bulk_update_samples(self, request):
+        ids = request.data.get("ids", [])
+        new_status = request.data.get("status")
+        new_project = request.data.get("project")
+
+        if not ids:
+            return Response({"detail": "No sample IDs provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        samples = Sample.objects.filter(id__in=ids)
+
+        updated_count = 0
+
+        for sample in samples:
+            changed = False
+
+            if new_status and sample.status != new_status:
+                old_status = sample.status
+                sample.status = new_status
+                changed = True
+
+                Event.objects.create(
+                    entity_type="Sample",
+                    entity_id=str(sample.id),
+                    action="STATUS_CHANGED",
+                    actor=request.user,
+                    payload={
+                        "sample_id": sample.id,
+                        "sample_code": sample.sample_id,
+                        "old_status": old_status,
+                        "new_status": new_status,
+                        "bulk": True,
+                    },
+                )
+
+            if new_project is not None and sample.project_id != new_project:
+                old_project = sample.project.code if sample.project else None
+                sample.project_id = new_project
+                changed = True
+
+                Event.objects.create(
+                    entity_type="Sample",
+                    entity_id=str(sample.id),
+                    action="PROJECT_ASSIGNED",
+                    actor=request.user,
+                    payload={
+                        "sample_id": sample.id,
+                        "sample_code": sample.sample_id,
+                        "old_project": old_project,
+                        "new_project_id": new_project,
+                        "bulk": True,
+                    },
+                )
+
+            if changed:
+                sample.save()
+                updated_count += 1
+
+        return Response({"updated": updated_count})
 
     def get_queryset(self):
         queryset = Sample.objects.select_related(
