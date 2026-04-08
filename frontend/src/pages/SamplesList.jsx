@@ -17,6 +17,7 @@ export default function SamplesList() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [bulkResult, setBulkResult] = useState(null);
 
   const [sampleId, setSampleId] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -96,6 +97,7 @@ export default function SamplesList() {
 
   async function applyBulkUpdate() {
     setErr("");
+    setBulkResult(null);
 
     try {
       const payload = {
@@ -105,8 +107,9 @@ export default function SamplesList() {
       if (bulkStatus) payload.status = bulkStatus;
       if (bulkProject) payload.project = Number(bulkProject);
 
-      await apiPost("/api/samples/bulk-update/", payload);
+      const result = await apiPost("/api/samples/bulk-update/", payload);
 
+      setBulkResult(result);
       setSelectedIds([]);
       setBulkStatus("");
       setBulkProject("");
@@ -235,6 +238,29 @@ export default function SamplesList() {
               </Button>
             </Col>
           </Row>
+
+          {bulkResult && (
+            <div className="mt-3">
+              <Alert variant="success" className="mb-2">
+                Updated {bulkResult.updated} sample(s).
+              </Alert>
+
+              {bulkResult.skipped?.length > 0 && (
+                <Alert variant="warning" className="mb-0">
+                  <div className="fw-semibold mb-2">
+                    Skipped {bulkResult.skipped.length} sample(s):
+                  </div>
+                  <ul className="mb-0">
+                    {bulkResult.skipped.map((s) => (
+                      <li key={s.id}>
+                        {s.sample_id}: {s.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </Alert>
+              )}
+            </div>
+          )}
         </Card.Body>
       </Card>
 

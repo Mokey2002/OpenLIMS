@@ -2,9 +2,10 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
+
 from .models import Sample
 from .serializers import SampleSerializer
-from .workflows_serializers import SampleTransitionSerializer
+from .workflow_serializers import SampleTransitionSerializer
 from .workflows import get_allowed_transitions
 
 from custom_fields.models import FieldValue
@@ -16,66 +17,6 @@ class SampleViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
     serializer_class = SampleSerializer
 
-    @action(detail=False, methods=["post"], url_path="bulk-update")
-    def bulk_update_samples(self, request):
-        ids = request.data.get("ids", [])
-        new_status = request.data.get("status")
-        new_project = request.data.get("project")
-
-        if not ids:
-            return Response({"detail": "No sample IDs provided."}, status=status.HTTP_400_BAD_REQUEST)
-
-        samples = Sample.objects.filter(id__in=ids)
-
-        updated_count = 0
-
-        for sample in samples:
-            changed = False
-
-            if new_status and sample.status != new_status:
-                old_status = sample.status
-                sample.status = new_status
-                changed = True
-
-                Event.objects.create(
-                    entity_type="Sample",
-                    entity_id=str(sample.id),
-                    action="STATUS_CHANGED",
-                    actor=request.user,
-                    payload={
-                        "sample_id": sample.id,
-                        "sample_code": sample.sample_id,
-                        "old_status": old_status,
-                        "new_status": new_status,
-                        "bulk": True,
-                    },
-                )
-
-            if new_project is not None and sample.project_id != new_project:
-                old_project = sample.project.code if sample.project else None
-                sample.project_id = new_project
-                changed = True
-
-                Event.objects.create(
-                    entity_type="Sample",
-                    entity_id=str(sample.id),
-                    action="PROJECT_ASSIGNED",
-                    actor=request.user,
-                    payload={
-                        "sample_id": sample.id,
-                        "sample_code": sample.sample_id,
-                        "old_project": old_project,
-                        "new_project_id": new_project,
-                        "bulk": True,
-                    },
-                )
-
-            if changed:
-                sample.save()
-                updated_count += 1
-
-        return Response({"updated": updated_count})
-
     def get_queryset(self):
         queryset = Sample.objects.select_related(
             "project",
@@ -84,14 +25,14 @@ class SampleViewSet(ModelViewSet):
         ).all().order_by("-created_at")
 
         search = self.request.query_params.get("search")
-        status = self.request.query_params.get("status")
+        status_filter = self.request.query_params.get("status")
         project = self.request.query_params.get("project")
 
         if search:
             queryset = queryset.filter(sample_id__icontains=search)
 
-        if status:
-            queryset = queryset.filter(status=status)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
 
         if project:
             queryset = queryset.filter(project_id=project)
@@ -159,7 +100,7 @@ class SampleViewSet(ModelViewSet):
             entity_type="Sample",
             entity_id=str(sample.id),
             action="STATUS_CHANGED",
-	    actor=request.user,
+            actor=request.user,
             payload={
                 "sample_id": sample.id,
                 "sample_code": sample.sample_id,
@@ -174,7 +115,6 @@ class SampleViewSet(ModelViewSet):
             "old_status": old_status,
             "new_status": new_status,
         })
-
 
     def partial_update(self, request, *args, **kwargs):
         sample = self.get_object()
@@ -203,3 +143,89 @@ class SampleViewSet(ModelViewSet):
             )
 
         return response
+
+    @action(detail=False, methods=["post"], url_path="bulk-update")
+    def bulk_update_samples(self, request):
+        ids = request.data.get("ids", [])
+        new_status = request.data.get("status", None)
+        new_project = request.data.get("project", None)
+
+        if not ids:
+            return Response(
+                {"detail": "No sample IDs provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if new_status is None and new_project is None:
+            return Response(
+                {"detail": "Nothing to update. Provide status and/or project."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        samples = Sample.objects.select_related("project").filter(id__in=ids)
+
+        updated_count = 0
+        skipped = []
+        updated_ids = []
+
+        for sample in samples:
+            changed = False
+
+            # workflow-aware status transition
+            if new_status is not None:
+                allowed = get_allowed_transitions(sample.status)
+                if new_status in allowed:
+                    old_status = sample.status
+                    sample.status = new_status
+                    changed = True
+
+                    Event.objects.create(
+                        entity_type="Sample",
+                        entity_id=str(sample.id),
+                        action="STATUS_CHANGED",
+                        actor=request.user,
+                        payload={
+                            "sample_id": sample.id,
+                            "sample_code": sample.sample_id,
+                            "old_status": old_status,
+                            "new_status": new_status,
+                            "bulk": True,
+                        },
+                    )
+                elif sample.status != new_status:
+                    skipped.append({
+                        "id": sample.id,
+                        "sample_id": sample.sample_id,
+                        "reason": f"Invalid workflow transition from {sample.status} to {new_status}",
+                    })
+
+            # project assignment
+            if new_project is not None and sample.project_id != new_project:
+                old_project = sample.project.code if sample.project else None
+                sample.project_id = new_project
+                changed = True
+
+                Event.objects.create(
+                    entity_type="Sample",
+                    entity_id=str(sample.id),
+                    action="PROJECT_ASSIGNED",
+                    actor=request.user,
+                    payload={
+                        "sample_id": sample.id,
+                        "sample_code": sample.sample_id,
+                        "old_project": old_project,
+                        "new_project_id": new_project,
+                        "bulk": True,
+                    },
+                )
+
+            if changed:
+                sample.save()
+                updated_count += 1
+                updated_ids.append(sample.id)
+
+        return Response({
+            "updated": updated_count,
+            "updated_ids": updated_ids,
+            "skipped": skipped,
+        })
