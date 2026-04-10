@@ -71,7 +71,7 @@ class SampleAttachment(models.Model):
     sample = models.ForeignKey(
         "samples.Sample",
         on_delete=models.CASCADE,
-        related_name="attachments",
+        related_name="result_attachments",
     )
     file = models.FileField(upload_to="sample_attachments/")
     uploaded_at = models.DateTimeField(auto_now_add=True)

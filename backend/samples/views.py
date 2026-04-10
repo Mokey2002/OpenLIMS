@@ -3,8 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import Sample
-from .serializers import SampleSerializer
+from .models import Sample, SampleAttachment
+from .serializers import SampleSerializer, SampleAttachmentSerializer
 from .workflows_serializers import SampleTransitionSerializer
 from .workflows import get_allowed_transitions
 
@@ -229,3 +229,33 @@ class SampleViewSet(ModelViewSet):
             "updated_ids": updated_ids,
             "skipped": skipped,
         })
+class SampleAttachmentViewSet(ModelViewSet):
+    permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
+    serializer_class = SampleAttachmentSerializer
+
+    def get_queryset(self):
+        queryset = SampleAttachment.objects.select_related(
+            "sample",
+            "uploaded_by",
+        ).all().order_by("-uploaded_at")
+
+        sample_id = self.request.query_params.get("sample")
+        if sample_id:
+            queryset = queryset.filter(sample_id=sample_id)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        attachment = serializer.save(uploaded_by=self.request.user)
+
+        Event.objects.create(
+            entity_type="Sample",
+            entity_id=str(attachment.sample.id),
+            action="ATTACHMENT_UPLOADED",
+            actor=self.request.user,
+            payload={
+                "sample_id": attachment.sample.id,
+                "sample_code": attachment.sample.sample_id,
+                "filename": attachment.file.name.split("/")[-1],
+            },
+        )

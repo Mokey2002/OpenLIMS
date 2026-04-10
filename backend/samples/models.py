@@ -24,7 +24,7 @@ class Sample(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="samples",
+        related_name="samples_attachemnts",
     )
 
     container = models.ForeignKey(
@@ -39,3 +39,26 @@ class Sample(models.Model):
 
     def __str__(self):
         return self.sample_id
+from django.conf import settings
+
+class SampleAttachment(models.Model):
+    sample = models.ForeignKey(
+        "samples.Sample",
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to="sample_attachments/")
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sample_attachments",
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def filename(self):
+        return self.file.name.split("/")[-1]
+
+    def __str__(self):
+        return f"{self.sample.sample_id} - {self.filename()}"
