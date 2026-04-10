@@ -14,6 +14,12 @@ function actionVariant(action) {
       return "warning";
     case "CONTAINER_ASSIGNED":
       return "info";
+    case "PROJECT_POSTED":
+      return "info";
+    case "ATTACHMENT_UPLOADED":
+      return "info";
+    case "PROJECT_ASSIGNED":
+      return "secondary";
     default:
       return "secondary";
   }
@@ -28,9 +34,6 @@ function formatTimestamp(ts) {
 }
 
 function describeEvent(event) {
-  if (event.action === "PROJECT_POSTED") {
-  return `Project post added${event.payload?.has_image ? " with image" : ""}`;
-}
   if (event.action === "STATUS_CHANGED") {
     return `Status changed from ${event.payload?.old_status} to ${event.payload?.new_status}`;
   }
@@ -41,6 +44,18 @@ function describeEvent(event) {
     } to ${
       event.payload?.new_container_code || "Unassigned"
     }`;
+  }
+
+  if (event.action === "PROJECT_POSTED") {
+    return `Project post added${event.payload?.has_image ? " with image" : ""}`;
+  }
+
+  if (event.action === "ATTACHMENT_UPLOADED") {
+    return `Attachment uploaded: ${event.payload?.filename || "file"}`;
+  }
+
+  if (event.action === "PROJECT_ASSIGNED") {
+    return `Project changed to ${event.payload?.new_project_id || "Unassigned"}`;
   }
 
   if (event.action === "CREATED") {

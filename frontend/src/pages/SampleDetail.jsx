@@ -10,8 +10,7 @@ import {
   Row,
   Spinner,
 } from "react-bootstrap";
-import { apiGet, apiPost,apiPostForm,apiPatch } from "../api";
-
+import { apiGet, apiPost, apiPostForm, apiPatch } from "../api";
 
 function statusVariant(status) {
   switch (status) {
@@ -55,6 +54,10 @@ function actionVariant(action) {
       return "danger";
     case "STATUS_CHANGED":
       return "warning";
+    case "CONTAINER_ASSIGNED":
+      return "info";
+    case "ATTACHMENT_UPLOADED":
+      return "info";
     default:
       return "secondary";
   }
@@ -69,38 +72,43 @@ function formatTimestamp(ts) {
 }
 
 function describeEvent(event) {
-  if (event.action === "CONTAINER_ASSIGNED") {
-  return `Container changed from ${event.payload?.old_container_code || "Unassigned"} to ${event.payload?.new_container_code || "Unassigned"}`;
-   }
-
   if (event.action === "STATUS_CHANGED") {
     return `Status changed from ${event.payload?.old_status} to ${event.payload?.new_status}`;
   }
+
+  if (event.action === "CONTAINER_ASSIGNED") {
+    return `Container changed from ${event.payload?.old_container_code || "Unassigned"} to ${event.payload?.new_container_code || "Unassigned"}`;
+  }
+
+  if (event.action === "ATTACHMENT_UPLOADED") {
+    return `Attachment uploaded: ${event.payload?.filename || "file"}`;
+  }
+
   if (event.action === "CREATED") {
     return `${event.entity_type} was created`;
   }
+
   if (event.action === "UPDATED") {
     return `${event.entity_type} was updated`;
   }
+
   if (event.action === "DELETED") {
     return `${event.entity_type} was deleted`;
   }
+
   return event.action;
 }
 
 export default function SampleDetail() {
   const { id } = useParams();
-  
 
-  const [attachments, setAttachments] = useState([]);
-  const [selectedFile, setSelectedFile] = useState(null);
-
-  const [containers, setContainers] = useState([]);
-  const [selectedContainer, setSelectedContainer] = useState("");
   const [sample, setSample] = useState(null);
   const [allowed, setAllowed] = useState([]);
   const [events, setEvents] = useState([]);
   const [workItems, setWorkItems] = useState([]);
+  const [attachments, setAttachments] = useState([]);
+  const [containers, setContainers] = useState([]);
+  const [sampleAttachments, setSampleAttachments] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -110,26 +118,32 @@ export default function SampleDetail() {
 
   const [resultForms, setResultForms] = useState({});
 
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedAttachmentFile, setSelectedAttachmentFile] = useState(null);
+  const [selectedContainer, setSelectedContainer] = useState("");
+
   async function load() {
     setLoading(true);
     setErr("");
 
     try {
-      const [s, t, ev, wi,att,containersData] = await Promise.all([
+      const [s, t, ev, wi, att, containersData, sampleAtts] = await Promise.all([
         apiGet(`/api/samples/${id}/`),
         apiGet(`/api/samples/${id}/allowed-transitions/`),
         apiGet(`/api/events/`),
         apiGet(`/api/work-items/?sample=${id}`),
-	apiGet(`/api/attachments/?sample=${id}`),
-	apiGet('/api/containers/'),
-
+        apiGet(`/api/attachments/?sample=${id}`),
+        apiGet("/api/containers/"),
+        apiGet(`/api/sample-attachments/?sample=${id}`),
       ]);
-      
-      setContainers(containersData)
-      setSelectedContainer(s.container || "")
-      setAttachments(att)
+
       setSample(s);
-      setAllowed(t.allowed_transitions || [])
+      setAllowed(t.allowed_transitions || []);
+      setAttachments(att);
+      setWorkItems(wi);
+      setContainers(containersData);
+      setSelectedContainer(s.container || "");
+      setSampleAttachments(sampleAtts);
 
       const sampleEvents = ev.filter(
         (event) =>
@@ -141,7 +155,6 @@ export default function SampleDetail() {
       );
 
       setEvents(sampleEvents);
-      setWorkItems(wi);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -152,25 +165,6 @@ export default function SampleDetail() {
   useEffect(() => {
     load();
   }, [id]);
-
-async function uploadAttachment(e) {
-  e.preventDefault();
-  if (!selectedFile) return;
-
-  setErr("");
-
-  try {
-    const formData = new FormData();
-    formData.append("sample", id);
-    formData.append("file", selectedFile);
-
-    await apiPostForm("/api/attachments/", formData);
-    setSelectedFile(null);
-    await load();
-  } catch (e) {
-    setErr(e.message || String(e));
-  }
-}
 
   async function doTransition(newStatus) {
     try {
@@ -183,19 +177,6 @@ async function uploadAttachment(e) {
     }
   }
 
-async function assignContainer(e) {
-  e.preventDefault();
-  setErr("");
-
-  try {
-    await apiPatch(`/api/samples/${id}/`, {
-      container: selectedContainer ? Number(selectedContainer) : null,
-    });
-    await load();
-  } catch (e) {
-    setErr(e.message || String(e));
-  }
-}
   async function createWorkItem(e) {
     e.preventDefault();
     setErr("");
@@ -264,6 +245,58 @@ async function assignContainer(e) {
     }
   }
 
+  async function uploadAttachment(e) {
+    e.preventDefault();
+    if (!selectedFile) return;
+
+    setErr("");
+
+    try {
+      const formData = new FormData();
+      formData.append("sample", id);
+      formData.append("file", selectedFile);
+
+      await apiPostForm("/api/attachments/", formData);
+      setSelectedFile(null);
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
+  async function uploadSampleAttachment(e) {
+    e.preventDefault();
+    if (!selectedAttachmentFile) return;
+
+    setErr("");
+
+    try {
+      const formData = new FormData();
+      formData.append("sample", id);
+      formData.append("file", selectedAttachmentFile);
+
+      await apiPostForm("/api/sample-attachments/", formData);
+      setSelectedAttachmentFile(null);
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
+  async function assignContainer(e) {
+    e.preventDefault();
+    setErr("");
+
+    try {
+      await apiPatch(`/api/samples/${id}/`, {
+        container: selectedContainer ? Number(selectedContainer) : null,
+      });
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
   const sortedEvents = useMemo(() => {
     return [...events].sort(
       (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
@@ -284,20 +317,24 @@ async function assignContainer(e) {
             <Card.Body>
               <h5>{sample.sample_id}</h5>
 
-              <div className="mb-3">
+              <div className="mb-2">
                 Status:{" "}
                 <Badge bg={statusVariant(sample.status)}>
                   {sample.status}
                 </Badge>
               </div>
 
-		<div className="mb-2">
-  <strong>Container:</strong> {sample.container_code || "Unassigned"}
-</div>
+              <div className="mb-2">
+                <strong>Project:</strong> {sample.project_code || "Unassigned"}
+              </div>
 
-<div className="mb-3">
-  <strong>Location:</strong> {sample.location_name || "Unassigned"}
-</div>
+              <div className="mb-2">
+                <strong>Container:</strong> {sample.container_code || "Unassigned"}
+              </div>
+
+              <div className="mb-3">
+                <strong>Location:</strong> {sample.location_name || "Unassigned"}
+              </div>
 
               <div className="d-flex gap-2 flex-wrap">
                 {allowed.length === 0 ? (
@@ -315,6 +352,35 @@ async function assignContainer(e) {
                   ))
                 )}
               </div>
+            </Card.Body>
+          </Card>
+
+          <Card className="shadow-sm border-0 mb-4">
+            <Card.Body>
+              <h5 className="mb-3">Storage Assignment</h5>
+
+              <Form onSubmit={assignContainer}>
+                <Row className="g-2 align-items-center">
+                  <Col md={9}>
+                    <Form.Select
+                      value={selectedContainer}
+                      onChange={(e) => setSelectedContainer(e.target.value)}
+                    >
+                      <option value="">Unassigned</option>
+                      {containers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.container_id} ({c.kind}) — {c.location_name || c.location}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Col>
+                  <Col md={3}>
+                    <Button type="submit" variant="dark" className="w-100">
+                      Save Container
+                    </Button>
+                  </Col>
+                </Row>
+              </Form>
             </Card.Body>
           </Card>
 
@@ -472,78 +538,100 @@ async function assignContainer(e) {
               )}
             </Card.Body>
           </Card>
-<Card className="shadow-sm border-0 mb-4">
-  <Card.Body>
-    <h5 className="mb-3">Storage Assignment</h5>
 
-    <Form onSubmit={assignContainer}>
-      <Row className="g-2 align-items-center">
-        <Col md={9}>
-          <Form.Select
-            value={selectedContainer}
-            onChange={(e) => setSelectedContainer(e.target.value)}
-          >
-            <option value="">Unassigned</option>
-            {containers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.container_id} ({c.kind}) — {c.location}
-              </option>
-            ))}
-          </Form.Select>
-        </Col>
-        <Col md={3}>
-          <Button type="submit" variant="dark" className="w-100">
-            Save Container
-          </Button>
-        </Col>
-      </Row>
-    </Form>
-  </Card.Body>
-</Card>
-<Card className="shadow-sm border-0 mb-4">
-  <Card.Body>
-    <h5 className="mb-3">Attachments</h5>
+          <Card className="shadow-sm border-0 mb-4">
+            <Card.Body>
+              <h5 className="mb-3">Attachments</h5>
 
-    <Form onSubmit={uploadAttachment} className="mb-4">
-      <Row className="g-2 align-items-center">
-        <Col md={9}>
-          <Form.Control
-            type="file"
-            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-          />
-        </Col>
-        <Col md={3}>
-          <Button type="submit" variant="dark" className="w-100">
-            Upload
-          </Button>
-        </Col>
-      </Row>
-    </Form>
+              <Form onSubmit={uploadAttachment} className="mb-4">
+                <Row className="g-2 align-items-center">
+                  <Col md={9}>
+                    <Form.Control
+                      type="file"
+                      onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                    />
+                  </Col>
+                  <Col md={3}>
+                    <Button type="submit" variant="dark" className="w-100">
+                      Upload
+                    </Button>
+                  </Col>
+                </Row>
+              </Form>
 
-    {attachments.length === 0 ? (
-      <Alert variant="light" className="mb-0">
-        No attachments yet.
-      </Alert>
-    ) : (
-      <ul className="mb-0">
-        {attachments.map((att) => (
-          <li key={att.id}>
-            <a
-              href={`http://localhost:8000${att.file}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {att.filename}
-            </a>{" "}
-            <span className="text-muted small">
-              ({new Date(att.uploaded_at).toLocaleString()})
-            </span>
-          </li>
-        ))}
-      </ul>
-    )}
-  </Card.Body>
-</Card>
+              {attachments.length === 0 ? (
+                <Alert variant="light" className="mb-0">
+                  No attachments yet.
+                </Alert>
+              ) : (
+                <ul className="mb-0">
+                  {attachments.map((att) => (
+                    <li key={att.id}>
+                      <a
+                        href={`http://localhost:8000${att.file}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {att.filename}
+                      </a>{" "}
+                      <span className="text-muted small">
+                        ({new Date(att.uploaded_at).toLocaleString()})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card.Body>
+          </Card>
+
+          <Card className="shadow-sm border-0 mb-4">
+            <Card.Body>
+              <h5 className="mb-3">Sample Attachments</h5>
+
+              <Form onSubmit={uploadSampleAttachment} className="mb-4">
+                <Row className="g-2 align-items-center">
+                  <Col md={9}>
+                    <Form.Control
+                      type="file"
+                      onChange={(e) =>
+                        setSelectedAttachmentFile(e.target.files?.[0] || null)
+                      }
+                    />
+                  </Col>
+                  <Col md={3}>
+                    <Button type="submit" variant="dark" className="w-100">
+                      Upload
+                    </Button>
+                  </Col>
+                </Row>
+              </Form>
+
+              {sampleAttachments.length === 0 ? (
+                <Alert variant="light" className="mb-0">
+                  No sample attachments yet.
+                </Alert>
+              ) : (
+                <ul className="mb-0">
+                  {sampleAttachments.map((att) => (
+                    <li key={att.id}>
+                      <a
+                        href={`http://localhost:8000${att.file}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {att.filename}
+                      </a>{" "}
+                      <span className="text-muted small">
+                        — uploaded by {att.uploaded_by_username || "Unknown"} on{" "}
+                        {new Date(att.uploaded_at).toLocaleString()}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card.Body>
+          </Card>
+
           <Card className="shadow-sm border-0">
             <Card.Body>
               <h5 className="mb-3">Timeline</h5>
