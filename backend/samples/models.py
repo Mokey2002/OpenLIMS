@@ -24,7 +24,7 @@ class Sample(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="samples_attachemnts",
+        related_name="samples",
     )
 
     container = models.ForeignKey(
@@ -41,7 +41,7 @@ class Sample(models.Model):
         return self.sample_id
 from django.conf import settings
 
-class SampleAttachment(models.Model):
+class SingleSampleAttachment(models.Model):
     sample = models.ForeignKey(
         "samples.Sample",
         on_delete=models.CASCADE,

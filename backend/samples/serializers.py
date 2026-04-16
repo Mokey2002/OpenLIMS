@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Sample, SampleAttachment
+from .models import Sample, SingleSampleAttachment
 
 
 class SampleSerializer(serializers.ModelSerializer):
@@ -61,12 +61,12 @@ class SampleSerializer(serializers.ModelSerializer):
 
     def get_location_name(self, obj):
         return obj.container.location.name if obj.container and obj.container.location else None
-class SampleAttachmentSerializer(serializers.ModelSerializer):
+class SingleSampleAttachmentSerializer(serializers.ModelSerializer):
     filename = serializers.SerializerMethodField()
     uploaded_by_username = serializers.SerializerMethodField()
 
     class Meta:
-        model = SampleAttachment
+        model = SingleSampleAttachment
         fields = [
             "id",
             "sample",

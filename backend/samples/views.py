@@ -3,8 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import Sample, SampleAttachment
-from .serializers import SampleSerializer, SampleAttachmentSerializer
+from .models import Sample, SingleSampleAttachment
+from .serializers import SampleSerializer, SingleSampleAttachmentSerializer
 from .workflows_serializers import SampleTransitionSerializer
 from .workflows import get_allowed_transitions
 
@@ -229,12 +229,12 @@ class SampleViewSet(ModelViewSet):
             "updated_ids": updated_ids,
             "skipped": skipped,
         })
-class SampleAttachmentViewSet(ModelViewSet):
+class SingleSampleAttachmentViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
-    serializer_class = SampleAttachmentSerializer
+    serializer_class = SingleSampleAttachmentSerializer
 
     def get_queryset(self):
-        queryset = SampleAttachment.objects.select_related(
+        queryset = SingleSampleAttachment.objects.select_related(
             "sample",
             "uploaded_by",
         ).all().order_by("-uploaded_at")

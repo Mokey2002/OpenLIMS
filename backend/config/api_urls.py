@@ -1,5 +1,5 @@
 from rest_framework.routers import DefaultRouter
-from samples.views import SampleViewSet, SampleAttachmentViewSet
+from samples.views import SampleViewSet, SingleSampleAttachmentViewSet
 from inventory.views import LocationViewSet, ContainerViewSet
 from events.views import EventViewSet
 from custom_fields.views import FieldDefinitionViewSet, FieldValueViewSet
@@ -21,5 +21,5 @@ router.register(r"projects", ProjectViewSet, basename="project")
 router.register(r"users", UserLiteViewSet, basename="user-lite")
 router.register(r"admin-users",UserAdminViewSet,basename="admin-user")
 router.register(r"project-posts", ProjectPostViewSet, basename="project-post")
-router.register(r"sample-attachments", SampleAttachmentViewSet, basename="sample-attachment")
+router.register(r"sample-attachments", SingleSampleAttachmentViewSet, basename="sample-attachment")
 urlpatterns = router.urls
