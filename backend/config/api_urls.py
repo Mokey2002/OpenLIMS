@@ -6,6 +6,8 @@ from custom_fields.views import FieldDefinitionViewSet, FieldValueViewSet
 from results.views import WorkItemViewSet, ResultViewSet, SampleAttachmentViewSet
 from projects.views import ProjectViewSet, ProjectPostViewSet
 from core.views import UserLiteViewSet, UserAdminViewSet
+from imports.views import InstrumentProfileViewSet,InstrumentColumnMappingViewSet,ImportJobViewSet
+
 
 router = DefaultRouter()
 router.register(r"samples", SampleViewSet, basename="sample")
@@ -22,4 +24,8 @@ router.register(r"users", UserLiteViewSet, basename="user-lite")
 router.register(r"admin-users",UserAdminViewSet,basename="admin-user")
 router.register(r"project-posts", ProjectPostViewSet, basename="project-post")
 router.register(r"sample-attachments", SingleSampleAttachmentViewSet, basename="sample-attachment")
+router.register(r"instrument-profiles", InstrumentProfileViewSet, basename="instrument-profile")
+router.register(r"instrument-mappings", InstrumentColumnMappingViewSet, basename="instrument-mapping")
+router.register(r"import-jobs", ImportJobViewSet, basename="import-job")
+
 urlpatterns = router.urls

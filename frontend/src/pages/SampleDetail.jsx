@@ -150,7 +150,7 @@ export default function SampleDetail() {
       );
 
       setEvents(sampleEvents);
-     console.log(sampleEvents)
+     
     } catch (e) {
       setErr(e.message || String(e));
     } finally {

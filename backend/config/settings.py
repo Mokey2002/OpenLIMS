@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'core',
     'results',
     'projects',
+    'imports',
 ]
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
