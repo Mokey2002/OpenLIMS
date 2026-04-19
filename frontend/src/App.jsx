@@ -11,6 +11,7 @@ import Analyze from "./pages/Analyze";
 import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
 import Users from "./pages/Users";
+import Imports from "./pages/Imports";
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
 }
@@ -30,6 +31,7 @@ export default function App() {
     }
   >
     <Route index element={<Dashboard />}/>
+    <Route paht="imports" element={<Imports/>}/>
     <Route path="analyze" element={<Analyze/>}/>
     <Route path="samples" element={<SamplesList />} />
     <Route path="samples/:id" element={<SampleDetail />} />

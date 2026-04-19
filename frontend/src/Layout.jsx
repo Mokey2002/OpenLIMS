@@ -48,7 +48,8 @@ export default function Layout() {
               <Nav.Link as={NavLink} to="/analyze">Analyze</Nav.Link>
               <Nav.Link as={NavLink} to="/projects">Projects</Nav.Link>
               {isAdmin && (
-                <Nav.Link as={NavLink} to="/users">Users</Nav.Link>
+                <Nav.Link as={NavLink} to="/users">Users</Nav.Link>,
+                <Nav.Link as={NavLink} to="/imports">Imports</Nav.Link>
               )}
             </Nav>
 
