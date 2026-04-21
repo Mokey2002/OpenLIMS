@@ -34,6 +34,12 @@ class ImportJobViewSet(ModelViewSet):
     serializer_class = ImportJobSerializer
     queryset = ImportJob.objects.select_related("instrument", "uploaded_by").all().order_by("-created_at")
 
+    rows_processed = 0
+    samples_matched = 0
+    samples_created = 0
+    results_created = 0
+    skipped_rows = []
+
     def perform_create(self, serializer):
         job = serializer.save(uploaded_by=self.request.user)
 
@@ -63,24 +69,37 @@ class ImportJobViewSet(ModelViewSet):
                     })
                     continue
 
-                try:
-                    sample = Sample.objects.get(sample_id=sample_code)
-                except Sample.DoesNotExist:
-                    skipped_rows.append({
-                        "row": rows_processed,
-                        "sample_id": sample_code,
-                        "reason": "Sample not found",
-                    })
-                    continue
+                sample, created = Sample.objects.get_or_create(
+                    sample_id=sample_code,
+                    defaults={
+                        "status": "RECEIVED",
+                    },
+                )
+
+                if created:
+                    Event.objects.create(
+                        entity_type="Sample",
+                        entity_id=str(sample.id),
+                        action="CREATED",
+                        actor=self.request.user,
+                        payload={
+                            "sample_id": sample.id,
+                            "sample_code": sample.sample_id,
+                            "source": "instrument_import",
+                            "instrument_code": instrument.code,
+                        },
+                    )
 
                 samples_matched += 1
 
                 work_item, _ = WorkItem.objects.get_or_create(
                     sample=sample,
                     name=f"{instrument.code} Import",
-                    defaults={"status": "COMPLETED", "notes": f"Imported from {instrument.name}"},
+                    defaults={
+                        "status": "COMPLETED",
+                        "notes": f"Imported from {instrument.name} (Import Job {job.id})",
+                    },
                 )
-
                 for source_column, mapping in mappings.items():
                     raw_value = row.get(source_column)
 
@@ -117,7 +136,9 @@ class ImportJobViewSet(ModelViewSet):
                 "rows_processed": rows_processed,
                 "samples_matched": samples_matched,
                 "results_created": results_created,
+		"samples_created": samples_created,
                 "skipped_rows": skipped_rows,
+
             }
             job.save()
 
@@ -131,6 +152,7 @@ class ImportJobViewSet(ModelViewSet):
                     "instrument_name": instrument.name,
                     "rows_processed": rows_processed,
                     "samples_matched": samples_matched,
+		    "samples_created": samples_created,
                     "results_created": results_created,
                 },
             )

@@ -31,7 +31,7 @@ export default function App() {
     }
   >
     <Route index element={<Dashboard />}/>
-    <Route paht="imports" element={<Imports/>}/>
+    
     <Route path="analyze" element={<Analyze/>}/>
     <Route path="samples" element={<SamplesList />} />
     <Route path="samples/:id" element={<SampleDetail />} />
@@ -40,6 +40,7 @@ export default function App() {
     <Route path="projects" element={<Projects/>}/>
     <Route path="projects/:id" element={<ProjectDetail/>}/>
     <Route path="users" element={<Users/>}/>
+    <Route path="imports" element={<Imports/>}/>
   </Route>
 
   <Route path="*" element={<Navigate to="/" replace />} />
