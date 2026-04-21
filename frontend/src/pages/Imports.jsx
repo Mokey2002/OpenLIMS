@@ -394,10 +394,21 @@ export default function Imports() {
                         <span className="text-danger">{job.summary.error}</span>
                       ) : (
                         <div className="small">
-                          <div>Rows: {job.summary?.rows_processed ?? 0}</div>
-                          <div>Samples matched: {job.summary?.samples_matched ?? 0}</div>
-                          <div>Results created: {job.summary?.results_created ?? 0}</div>
-                          <div>Skipped rows: {job.summary?.skipped_rows?.length ?? 0}</div>
+          <div>Rows: {job.summary?.rows_processed ?? 0}</div>
+<div>Samples matched: {job.summary?.samples_matched ?? 0}</div>
+<div>Samples created: {job.summary?.samples_created ?? 0}</div>
+<div>Results created: {job.summary?.results_created ?? 0}</div>
+<div>Skipped rows: {job.summary?.skipped_rows?.length ?? 0}</div>
+
+{job.summary?.skipped_rows?.length > 0 && (
+  <div className="mt-2">
+    {job.summary.skipped_rows.map((row, idx) => (
+      <div key={idx} className="text-muted small">
+        Row {row.row}: {row.sample_id ? `${row.sample_id} - ` : ""}{row.reason}
+      </div>
+    ))}
+  </div>
+)}
                         </div>
                       )}
                     </td>
