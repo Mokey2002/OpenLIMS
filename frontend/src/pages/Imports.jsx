@@ -11,7 +11,6 @@ import {
 } from "react-bootstrap";
 import { apiGet, apiPost, apiPostForm } from "../api";
 
-
 function statusVariant(status) {
   switch (status) {
     case "COMPLETED":
@@ -51,6 +50,9 @@ export default function Imports() {
   const [mappingSourceColumn, setMappingSourceColumn] = useState("");
   const [mappingTargetKey, setMappingTargetKey] = useState("");
   const [mappingValueType, setMappingValueType] = useState("NUMBER");
+  const [mappingMinValue, setMappingMinValue] = useState("");
+  const [mappingMaxValue, setMappingMaxValue] = useState("");
+  const [mappingAllowedValues, setMappingAllowedValues] = useState("");
 
   const [uploadInstrument, setUploadInstrument] = useState("");
   const [uploadProject, setUploadProject] = useState("");
@@ -95,6 +97,7 @@ export default function Imports() {
   }, []);
 
   const isAdmin = me?.roles?.includes("admin");
+
   const selectedProfile = useMemo(
     () => profiles.find((p) => String(p.id) === String(mappingInstrument)),
     [profiles, mappingInstrument]
@@ -134,35 +137,44 @@ export default function Imports() {
         source_column: mappingSourceColumn,
         target_key: mappingTargetKey,
         value_type: mappingValueType,
+        min_value: mappingMinValue === "" ? null : Number(mappingMinValue),
+        max_value: mappingMaxValue === "" ? null : Number(mappingMaxValue),
+        allowed_values:
+          mappingAllowedValues.trim() === ""
+            ? null
+            : mappingAllowedValues.split(",").map((v) => v.trim()),
       });
 
       setMappingSourceColumn("");
       setMappingTargetKey("");
       setMappingValueType("NUMBER");
+      setMappingMinValue("");
+      setMappingMaxValue("");
+      setMappingAllowedValues("");
       await load();
     } catch (e) {
       setErr(e.message || String(e));
     }
   }
 
-async function previewImport() {
-  setErr("");
-  setPreviewData(null);
-  setPreviewLoading(true);
+  async function previewImport() {
+    setErr("");
+    setPreviewData(null);
+    setPreviewLoading(true);
 
-  try {
-    const formData = new FormData();
-    formData.append("instrument", uploadInstrument);
-    formData.append("uploaded_file", uploadFile);
+    try {
+      const formData = new FormData();
+      formData.append("instrument", uploadInstrument);
+      formData.append("uploaded_file", uploadFile);
 
-    const data = await apiPostForm("/api/import-jobs/preview/", formData);
-    setPreviewData(data);
-  } catch (e) {
-    setErr(e.message || String(e));
-  } finally {
-    setPreviewLoading(false);
+      const data = await apiPostForm("/api/import-jobs/preview/", formData);
+      setPreviewData(data);
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setPreviewLoading(false);
+    }
   }
-}
 
   async function uploadImportJob(e) {
     e.preventDefault();
@@ -261,7 +273,7 @@ async function previewImport() {
 
               <Form onSubmit={createMapping}>
                 <Row className="g-2">
-                  <Col md={3}>
+                  <Col md={2}>
                     <Form.Select
                       value={mappingInstrument}
                       onChange={(e) => setMappingInstrument(e.target.value)}
@@ -273,20 +285,23 @@ async function previewImport() {
                       ))}
                     </Form.Select>
                   </Col>
-                  <Col md={3}>
+
+                  <Col md={2}>
                     <Form.Control
                       placeholder="Source column"
                       value={mappingSourceColumn}
                       onChange={(e) => setMappingSourceColumn(e.target.value)}
                     />
                   </Col>
-                  <Col md={3}>
+
+                  <Col md={2}>
                     <Form.Control
                       placeholder="Target key"
                       value={mappingTargetKey}
                       onChange={(e) => setMappingTargetKey(e.target.value)}
                     />
                   </Col>
+
                   <Col md={2}>
                     <Form.Select
                       value={mappingValueType}
@@ -297,14 +312,44 @@ async function previewImport() {
                       <option value="BOOLEAN">BOOLEAN</option>
                     </Form.Select>
                   </Col>
+
                   <Col md={1}>
+                    <Form.Control
+                      placeholder="Min"
+                      value={mappingMinValue}
+                      onChange={(e) => setMappingMinValue(e.target.value)}
+                    />
+                  </Col>
+
+                  <Col md={1}>
+                    <Form.Control
+                      placeholder="Max"
+                      value={mappingMaxValue}
+                      onChange={(e) => setMappingMaxValue(e.target.value)}
+                    />
+                  </Col>
+
+                  <Col md={2}>
+                    <Form.Control
+                      placeholder="Allowed values (comma-separated)"
+                      value={mappingAllowedValues}
+                      onChange={(e) => setMappingAllowedValues(e.target.value)}
+                    />
+                  </Col>
+                </Row>
+
+                <Row className="g-2 mt-2">
+                  <Col md={12}>
                     <Button
                       type="submit"
                       variant="dark"
-                      className="w-100"
-                      disabled={!mappingInstrument || !mappingSourceColumn || !mappingTargetKey}
+                      disabled={
+                        !mappingInstrument ||
+                        !mappingSourceColumn ||
+                        !mappingTargetKey
+                      }
                     >
-                      Add
+                      Add Mapping
                     </Button>
                   </Col>
                 </Row>
@@ -327,6 +372,9 @@ async function previewImport() {
                           <th>Source Column</th>
                           <th>Target Key</th>
                           <th>Value Type</th>
+                          <th>Min</th>
+                          <th>Max</th>
+                          <th>Allowed Values</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -335,6 +383,9 @@ async function previewImport() {
                             <td>{m.source_column}</td>
                             <td>{m.target_key}</td>
                             <td>{m.value_type}</td>
+                            <td>{m.min_value ?? "-"}</td>
+                            <td>{m.max_value ?? "-"}</td>
+                            <td>{m.allowed_values?.join(", ") || "-"}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -366,6 +417,7 @@ async function previewImport() {
                   ))}
                 </Form.Select>
               </Col>
+
               <Col md={4}>
                 <Form.Select
                   value={uploadProject}
@@ -379,6 +431,7 @@ async function previewImport() {
                   ))}
                 </Form.Select>
               </Col>
+
               <Col md={4}>
                 <Form.Control
                   type="file"
@@ -400,6 +453,7 @@ async function previewImport() {
                   {previewLoading ? "Previewing..." : "Preview Import"}
                 </Button>
               </Col>
+
               <Col md={6}>
                 <Button
                   type="submit"
@@ -417,6 +471,7 @@ async function previewImport() {
             <Card className="mt-4 border">
               <Card.Body>
                 <h6 className="mb-3">Preview</h6>
+
                 <div className="small mb-3">
                   <div>Instrument: {previewData.instrument_code}</div>
                   <div>Rows: {previewData.rows_processed}</div>
@@ -455,13 +510,15 @@ async function previewImport() {
                           <td>{row.exists ? "Existing" : "Will create"}</td>
                           <td>{row.valid_result_cells}</td>
                           <td>
-                            {row.errors?.length > 0
-                              ? row.errors.map((e, i) => (
-                                  <div key={i} className="small text-danger">
-                                    {e.column}: {e.reason}
-                                  </div>
-                                ))
-                              : "-"}
+                            {row.errors?.length > 0 ? (
+                              row.errors.map((e, i) => (
+                                <div key={i} className="small text-danger">
+                                  {e.column}: {e.reason}
+                                </div>
+                              ))
+                            ) : (
+                              "-"
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -498,7 +555,10 @@ async function previewImport() {
                 {jobs.map((job) => (
                   <tr key={job.id}>
                     <td>{job.id}</td>
-                    <td>{profiles.find((p) => p.id === job.instrument)?.code || job.instrument}</td>
+                    <td>
+                      {profiles.find((p) => p.id === job.instrument)?.code ||
+                        job.instrument}
+                    </td>
                     <td>
                       <Badge bg={statusVariant(job.status)}>
                         {job.status}
@@ -512,10 +572,19 @@ async function previewImport() {
                       ) : (
                         <div className="small">
                           <div>Rows: {job.summary?.rows_processed ?? 0}</div>
-                          <div>Samples matched: {job.summary?.samples_matched ?? 0}</div>
-                          <div>Samples created: {job.summary?.samples_created ?? 0}</div>
-                          <div>Results created: {job.summary?.results_created ?? 0}</div>
-                          <div>Skipped rows: {job.summary?.skipped_rows?.length ?? 0}</div>
+                          <div>
+                            Samples matched: {job.summary?.samples_matched ?? 0}
+                          </div>
+                          <div>
+                            Samples created: {job.summary?.samples_created ?? 0}
+                          </div>
+                          <div>
+                            Results created: {job.summary?.results_created ?? 0}
+                          </div>
+                          <div>
+                            Skipped rows:{" "}
+                            {job.summary?.skipped_rows?.length ?? 0}
+                          </div>
                         </div>
                       )}
                     </td>
