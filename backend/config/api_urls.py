@@ -7,7 +7,7 @@ from results.views import WorkItemViewSet, ResultViewSet, SampleAttachmentViewSe
 from projects.views import ProjectViewSet, ProjectPostViewSet
 from core.views import UserLiteViewSet, UserAdminViewSet
 from imports.views import InstrumentProfileViewSet,InstrumentColumnMappingViewSet,ImportJobViewSet
-
+from notifications.views import NotificationViewSet
 
 router = DefaultRouter()
 router.register(r"samples", SampleViewSet, basename="sample")
@@ -27,5 +27,5 @@ router.register(r"sample-attachments", SingleSampleAttachmentViewSet, basename="
 router.register(r"instrument-profiles", InstrumentProfileViewSet, basename="instrument-profile")
 router.register(r"instrument-mappings", InstrumentColumnMappingViewSet, basename="instrument-mapping")
 router.register(r"import-jobs", ImportJobViewSet, basename="import-job")
-
+router.register(r"notifications",NotificationViewSet, basename="notification")
 urlpatterns = router.urls

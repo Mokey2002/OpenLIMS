@@ -8,6 +8,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 
 from core.permissions import IsAdminOnly, IsAuthenticatedReadOnlyOrTechAdminWrite
 from events.models import Event
+from notifications.models import Notification
 from samples.models import Sample
 from results.models import WorkItem, Result
 
@@ -49,6 +50,15 @@ class ImportJobViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
     serializer_class = ImportJobSerializer
     parser_classes = [MultiPartParser, FormParser]
+
+    def get_queryset(self):
+        return (
+            ImportJob.objects
+            .select_related("instrument", "uploaded_by", "project")
+            .all()
+            .order_by("-created_at")
+        )
+
     def _validate_mapped_value(self, mapping, raw_value):
         if raw_value in (None, ""):
             return {"ok": True, "normalized": None}
@@ -112,14 +122,6 @@ class ImportJobViewSet(ModelViewSet):
 
         return {"ok": True, "normalized": raw_value}
 
-    def get_queryset(self):
-        return (
-            ImportJob.objects
-            .select_related("instrument", "uploaded_by", "project")
-            .all()
-            .order_by("-created_at")
-        )
-
     def _parse_preview(self, instrument, uploaded_file):
         mappings = {
             m.source_column: m
@@ -169,8 +171,6 @@ class ImportJobViewSet(ModelViewSet):
 
                 if raw_value in (None, ""):
                     continue
-
-                raw_value = str(raw_value).strip()
 
                 validation = self._validate_mapped_value(mapping, raw_value)
 
@@ -307,8 +307,6 @@ class ImportJobViewSet(ModelViewSet):
                     if raw_value in (None, ""):
                         continue
 
-                    raw_value = str(raw_value).strip()
-
                     validation = self._validate_mapped_value(mapping, raw_value)
 
                     if not validation["ok"]:
@@ -372,10 +370,24 @@ class ImportJobViewSet(ModelViewSet):
                 },
             )
 
+            Notification.objects.create(
+                user=self.request.user,
+                title="Import completed",
+                message=f"{instrument.code} import finished. {results_created} results created.",
+                link="/imports",
+            )
+
         except Exception as e:
             job.status = "FAILED"
             job.summary = {"error": str(e)}
             job.save()
+
+            Notification.objects.create(
+                user=self.request.user,
+                title="Import failed",
+                message=f"{job.instrument.code} import failed: {str(e)}",
+                link="/imports",
+            )
             raise
 
     @action(detail=True, methods=["get"], url_path="summary")
