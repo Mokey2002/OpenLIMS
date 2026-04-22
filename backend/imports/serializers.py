@@ -16,6 +16,7 @@ class InstrumentColumnMappingSerializer(serializers.ModelSerializer):
             "allowed_values",
         ]
 
+
 class InstrumentProfileSerializer(serializers.ModelSerializer):
     column_mappings = InstrumentColumnMappingSerializer(many=True, read_only=True)
 
@@ -45,6 +46,8 @@ class ImportJobSerializer(serializers.ModelSerializer):
             "uploaded_file",
             "uploaded_by",
             "uploaded_by_username",
+            "run_id",
+            "source_type",
             "status",
             "summary",
             "created_at",
@@ -53,6 +56,7 @@ class ImportJobSerializer(serializers.ModelSerializer):
             "id",
             "uploaded_by",
             "uploaded_by_username",
+            "source_type",
             "status",
             "summary",
             "created_at",
