@@ -1,5 +1,15 @@
+from django.conf import settings
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
+
+class HasInstrumentApiKey(BasePermission):
+    def has_permission(self, request, view):
+        api_key = request.headers.get("X-Instrument-Api-Key")
+        return bool(
+            api_key
+            and settings.INSTRUMENT_API_KEY
+            and api_key == settings.INSTRUMENT_API_KEY
+        )
 
 def in_group(user, name: str) -> bool:
     return user.is_authenticated and user.groups.filter(name=name).exists()
