@@ -49,6 +49,68 @@ class ImportJobViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
     serializer_class = ImportJobSerializer
     parser_classes = [MultiPartParser, FormParser]
+    def _validate_mapped_value(self, mapping, raw_value):
+        if raw_value in (None, ""):
+            return {"ok": True, "normalized": None}
+
+        raw_value = str(raw_value).strip()
+
+        if mapping.value_type == "NUMBER":
+            try:
+                number_value = float(raw_value)
+            except ValueError:
+                return {
+                    "ok": False,
+                    "reason": f"Invalid NUMBER value '{raw_value}'",
+                }
+
+            if mapping.min_value is not None and number_value < mapping.min_value:
+                return {
+                    "ok": False,
+                    "reason": f"Value {number_value} is below min_value {mapping.min_value}",
+                }
+
+            if mapping.max_value is not None and number_value > mapping.max_value:
+                return {
+                    "ok": False,
+                    "reason": f"Value {number_value} is above max_value {mapping.max_value}",
+                }
+
+            return {"ok": True, "normalized": number_value}
+
+        if mapping.value_type == "STRING":
+            if mapping.allowed_values:
+                allowed = [str(v) for v in mapping.allowed_values]
+                if raw_value not in allowed:
+                    return {
+                        "ok": False,
+                        "reason": f"Value '{raw_value}' is not in allowed_values {allowed}",
+                    }
+
+            return {"ok": True, "normalized": raw_value}
+
+        if mapping.value_type == "BOOLEAN":
+            normalized = raw_value.lower()
+            if normalized not in ["true", "1", "yes", "pass", "ok", "false", "0", "no", "fail"]:
+                return {
+                    "ok": False,
+                    "reason": f"Invalid BOOLEAN value '{raw_value}'",
+                }
+
+            bool_value = normalized in ["true", "1", "yes", "pass", "ok"]
+
+            if mapping.allowed_values:
+                allowed = [str(v).lower() for v in mapping.allowed_values]
+                bool_label = "true" if bool_value else "false"
+                if bool_label not in allowed:
+                    return {
+                        "ok": False,
+                        "reason": f"Boolean value '{bool_label}' is not in allowed_values {allowed}",
+                    }
+
+            return {"ok": True, "normalized": bool_value}
+
+        return {"ok": True, "normalized": raw_value}
 
     def get_queryset(self):
         return (
@@ -110,15 +172,14 @@ class ImportJobViewSet(ModelViewSet):
 
                 raw_value = str(raw_value).strip()
 
-                if mapping.value_type == "NUMBER":
-                    try:
-                        float(raw_value)
-                    except ValueError:
-                        row_errors.append({
-                            "column": source_column,
-                            "reason": f"Invalid NUMBER value '{raw_value}'",
-                        })
-                        continue
+                validation = self._validate_mapped_value(mapping, raw_value)
+
+                if not validation["ok"]:
+                    row_errors.append({
+                        "column": source_column,
+                        "reason": validation["reason"],
+                    })
+                    continue
 
                 row_valid_cells += 1
                 valid_result_cells += 1
@@ -233,13 +294,11 @@ class ImportJobViewSet(ModelViewSet):
 
                 samples_matched += 1
 
-                work_item, _ = WorkItem.objects.get_or_create(
+                work_item = WorkItem.objects.create(
                     sample=sample,
-                    name=f"{instrument.code} Import",
-                    defaults={
-                        "status": "COMPLETED",
-                        "notes": f"Imported from {instrument.name} (Import Job {job.id})",
-                    },
+                    name=f"{instrument.code} Import - Job {job.id}",
+                    status="COMPLETED",
+                    notes=f"Imported from {instrument.name} (Import Job {job.id})",
                 )
 
                 for source_column, mapping in mappings.items():
@@ -250,6 +309,17 @@ class ImportJobViewSet(ModelViewSet):
 
                     raw_value = str(raw_value).strip()
 
+                    validation = self._validate_mapped_value(mapping, raw_value)
+
+                    if not validation["ok"]:
+                        skipped_rows.append({
+                            "row": rows_processed,
+                            "sample_id": sample_code,
+                            "column": source_column,
+                            "reason": validation["reason"],
+                        })
+                        continue
+
                     defaults = {
                         "value_type": mapping.value_type,
                         "value_string": "",
@@ -257,25 +327,16 @@ class ImportJobViewSet(ModelViewSet):
                         "value_boolean": None,
                     }
 
+                    normalized = validation["normalized"]
+
                     if mapping.value_type == "STRING":
-                        defaults["value_string"] = raw_value
+                        defaults["value_string"] = normalized
 
                     elif mapping.value_type == "NUMBER":
-                        try:
-                            defaults["value_number"] = float(raw_value)
-                        except ValueError:
-                            skipped_rows.append({
-                                "row": rows_processed,
-                                "sample_id": sample_code,
-                                "column": source_column,
-                                "reason": f"Invalid NUMBER value '{raw_value}'",
-                            })
-                            continue
+                        defaults["value_number"] = normalized
 
                     elif mapping.value_type == "BOOLEAN":
-                        defaults["value_boolean"] = raw_value.lower() in [
-                            "true", "1", "yes", "pass", "ok"
-                        ]
+                        defaults["value_boolean"] = normalized
 
                     Result.objects.update_or_create(
                         work_item=work_item,

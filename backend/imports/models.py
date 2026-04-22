@@ -30,12 +30,15 @@ class InstrumentColumnMapping(models.Model):
     target_key = models.CharField(max_length=128)
     value_type = models.CharField(max_length=20, choices=VALUE_TYPE_CHOICES)
 
+    min_value = models.FloatField(null=True, blank=True)
+    max_value = models.FloatField(null=True, blank=True)
+    allowed_values = models.JSONField(null=True, blank=True)
+
     class Meta:
         unique_together = ("instrument", "source_column")
 
     def __str__(self):
         return f"{self.instrument.code}: {self.source_column} -> {self.target_key}"
-
 
 class ImportJob(models.Model):
     STATUS_CHOICES = [

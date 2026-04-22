@@ -5,8 +5,16 @@ from .models import InstrumentProfile, InstrumentColumnMapping, ImportJob
 class InstrumentColumnMappingSerializer(serializers.ModelSerializer):
     class Meta:
         model = InstrumentColumnMapping
-        fields = ["id", "instrument", "source_column", "target_key", "value_type"]
-
+        fields = [
+            "id",
+            "instrument",
+            "source_column",
+            "target_key",
+            "value_type",
+            "min_value",
+            "max_value",
+            "allowed_values",
+        ]
 
 class InstrumentProfileSerializer(serializers.ModelSerializer):
     column_mappings = InstrumentColumnMappingSerializer(many=True, read_only=True)
