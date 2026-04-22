@@ -1,7 +1,6 @@
 from django.db import models
 from django.conf import settings
-from django.db import models
-
+from projects.models import Project
 
 class InstrumentProfile(models.Model):
     name = models.CharField(max_length=128, unique=True)
@@ -48,6 +47,13 @@ class ImportJob(models.Model):
     instrument = models.ForeignKey(
         InstrumentProfile,
         on_delete=models.CASCADE,
+        related_name="import_jobs",
+    )
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="import_jobs",
     )
     uploaded_file = models.FileField(upload_to="imports/")

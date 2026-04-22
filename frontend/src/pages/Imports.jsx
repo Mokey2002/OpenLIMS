@@ -11,6 +11,7 @@ import {
 } from "react-bootstrap";
 import { apiGet, apiPost, apiPostForm } from "../api";
 
+
 function statusVariant(status) {
   switch (status) {
     case "COMPLETED":
@@ -35,6 +36,7 @@ function formatTimestamp(ts) {
 export default function Imports() {
   const [me, setMe] = useState(null);
   const [profiles, setProfiles] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
@@ -51,22 +53,28 @@ export default function Imports() {
   const [mappingValueType, setMappingValueType] = useState("NUMBER");
 
   const [uploadInstrument, setUploadInstrument] = useState("");
+  const [uploadProject, setUploadProject] = useState("");
   const [uploadFile, setUploadFile] = useState(null);
+
+  const [previewData, setPreviewData] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   async function load() {
     setErr("");
     setLoading(true);
 
     try {
-      const [meData, profilesData, jobsData] = await Promise.all([
+      const [meData, profilesData, jobsData, projectsData] = await Promise.all([
         apiGet("/api/me/"),
         apiGet("/api/instrument-profiles/"),
         apiGet("/api/import-jobs/"),
+        apiGet("/api/projects/"),
       ]);
 
       setMe(meData);
       setProfiles(profilesData);
       setJobs(jobsData);
+      setProjects(projectsData);
 
       if (!uploadInstrument && profilesData.length > 0) {
         setUploadInstrument(String(profilesData[0].id));
@@ -137,6 +145,25 @@ export default function Imports() {
     }
   }
 
+async function previewImport() {
+  setErr("");
+  setPreviewData(null);
+  setPreviewLoading(true);
+
+  try {
+    const formData = new FormData();
+    formData.append("instrument", uploadInstrument);
+    formData.append("uploaded_file", uploadFile);
+
+    const data = await apiPostForm("/api/import-jobs/preview/", formData);
+    setPreviewData(data);
+  } catch (e) {
+    setErr(e.message || String(e));
+  } finally {
+    setPreviewLoading(false);
+  }
+}
+
   async function uploadImportJob(e) {
     e.preventDefault();
     setErr("");
@@ -144,11 +171,15 @@ export default function Imports() {
     try {
       const formData = new FormData();
       formData.append("instrument", uploadInstrument);
+      if (uploadProject) {
+        formData.append("project", uploadProject);
+      }
       formData.append("uploaded_file", uploadFile);
 
       await apiPostForm("/api/import-jobs/", formData);
 
       setUploadFile(null);
+      setPreviewData(null);
       await load();
     } catch (e) {
       setErr(e.message || String(e));
@@ -321,7 +352,7 @@ export default function Imports() {
           <h5 className="mb-3">Upload Import File</h5>
 
           <Form onSubmit={uploadImportJob}>
-            <Row className="g-2 align-items-center">
+            <Row className="g-2 align-items-center mb-3">
               <Col md={4}>
                 <Form.Select
                   value={uploadInstrument}
@@ -335,25 +366,111 @@ export default function Imports() {
                   ))}
                 </Form.Select>
               </Col>
-              <Col md={6}>
+              <Col md={4}>
+                <Form.Select
+                  value={uploadProject}
+                  onChange={(e) => setUploadProject(e.target.value)}
+                >
+                  <option value="">No project</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code} - {p.name}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Col>
+              <Col md={4}>
                 <Form.Control
                   type="file"
                   accept=".csv,text/csv"
                   onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
                 />
               </Col>
-              <Col md={2}>
+            </Row>
+
+            <Row className="g-2">
+              <Col md={6}>
+                <Button
+                  type="button"
+                  variant="outline-dark"
+                  className="w-100"
+                  onClick={previewImport}
+                  disabled={!uploadInstrument || !uploadFile || previewLoading}
+                >
+                  {previewLoading ? "Previewing..." : "Preview Import"}
+                </Button>
+              </Col>
+              <Col md={6}>
                 <Button
                   type="submit"
                   variant="dark"
                   className="w-100"
                   disabled={!uploadInstrument || !uploadFile}
                 >
-                  Upload
+                  Run Import
                 </Button>
               </Col>
             </Row>
           </Form>
+
+          {previewData && (
+            <Card className="mt-4 border">
+              <Card.Body>
+                <h6 className="mb-3">Preview</h6>
+                <div className="small mb-3">
+                  <div>Instrument: {previewData.instrument_code}</div>
+                  <div>Rows: {previewData.rows_processed}</div>
+                  <div>Existing samples: {previewData.existing_samples}</div>
+                  <div>New samples to create: {previewData.new_samples}</div>
+                  <div>Valid result cells: {previewData.valid_result_cells}</div>
+                  <div>Skipped rows: {previewData.skipped_rows?.length ?? 0}</div>
+                </div>
+
+                {previewData.skipped_rows?.length > 0 && (
+                  <Alert variant="warning">
+                    {previewData.skipped_rows.map((row, idx) => (
+                      <div key={idx}>
+                        Row {row.row}: {row.reason}
+                      </div>
+                    ))}
+                  </Alert>
+                )}
+
+                {previewData.preview_rows?.length > 0 && (
+                  <Table responsive hover className="mb-0">
+                    <thead>
+                      <tr>
+                        <th>Row</th>
+                        <th>Sample ID</th>
+                        <th>Status</th>
+                        <th>Valid Cells</th>
+                        <th>Errors</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewData.preview_rows.map((row) => (
+                        <tr key={row.row}>
+                          <td>{row.row}</td>
+                          <td>{row.sample_id}</td>
+                          <td>{row.exists ? "Existing" : "Will create"}</td>
+                          <td>{row.valid_result_cells}</td>
+                          <td>
+                            {row.errors?.length > 0
+                              ? row.errors.map((e, i) => (
+                                  <div key={i} className="small text-danger">
+                                    {e.column}: {e.reason}
+                                  </div>
+                                ))
+                              : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                )}
+              </Card.Body>
+            </Card>
+          )}
         </Card.Body>
       </Card>
 
@@ -389,26 +506,16 @@ export default function Imports() {
                     </td>
                     <td>{job.uploaded_by_username || "-"}</td>
                     <td>{formatTimestamp(job.created_at)}</td>
-                    <td style={{ minWidth: "280px" }}>
+                    <td style={{ minWidth: "320px" }}>
                       {job.summary?.error ? (
                         <span className="text-danger">{job.summary.error}</span>
                       ) : (
                         <div className="small">
-          <div>Rows: {job.summary?.rows_processed ?? 0}</div>
-<div>Samples matched: {job.summary?.samples_matched ?? 0}</div>
-<div>Samples created: {job.summary?.samples_created ?? 0}</div>
-<div>Results created: {job.summary?.results_created ?? 0}</div>
-<div>Skipped rows: {job.summary?.skipped_rows?.length ?? 0}</div>
-
-{job.summary?.skipped_rows?.length > 0 && (
-  <div className="mt-2">
-    {job.summary.skipped_rows.map((row, idx) => (
-      <div key={idx} className="text-muted small">
-        Row {row.row}: {row.sample_id ? `${row.sample_id} - ` : ""}{row.reason}
-      </div>
-    ))}
-  </div>
-)}
+                          <div>Rows: {job.summary?.rows_processed ?? 0}</div>
+                          <div>Samples matched: {job.summary?.samples_matched ?? 0}</div>
+                          <div>Samples created: {job.summary?.samples_created ?? 0}</div>
+                          <div>Results created: {job.summary?.results_created ?? 0}</div>
+                          <div>Skipped rows: {job.summary?.skipped_rows?.length ?? 0}</div>
                         </div>
                       )}
                     </td>

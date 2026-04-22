@@ -33,6 +33,7 @@ class ImportJobSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "instrument",
+            "project",
             "uploaded_file",
             "uploaded_by",
             "uploaded_by_username",
