@@ -73,17 +73,21 @@ export default function Imports() {
         apiGet("/api/projects/"),
       ]);
 
-      setMe(meData);
-      setProfiles(profilesData);
-      setJobs(jobsData);
-      setProjects(projectsData);
+      const profileList = profilesData.results || profilesData || [];
+      const jobList = jobsData.results || jobsData || [];
+      const projectList = projectsData.results || projectsData || [];
 
-      if (!uploadInstrument && profilesData.length > 0) {
-        setUploadInstrument(String(profilesData[0].id));
+      setMe(meData);
+      setProfiles(profileList);
+      setJobs(jobList);
+      setProjects(projectList);
+
+      if (!uploadInstrument && profileList.length > 0) {
+        setUploadInstrument(String(profileList[0].id));
       }
 
-      if (!mappingInstrument && profilesData.length > 0) {
-        setMappingInstrument(String(profilesData[0].id));
+      if (!mappingInstrument && profileList.length > 0) {
+        setMappingInstrument(String(profileList[0].id));
       }
     } catch (e) {
       setErr(e.message || String(e));

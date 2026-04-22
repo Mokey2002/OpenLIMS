@@ -69,8 +69,8 @@ export default function Analyze() {
         apiGet("/api/samples/"),
         apiGet("/api/projects/"),
       ]);
-      setSamples(samplesData);
-      setProjects(projectsData);
+      setSamples(samplesData.results || samplesData || []);
+      setProjects(projectsData.results || projectsData || []);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -165,7 +165,8 @@ export default function Analyze() {
 
       const keys = new Set();
 
-      for (const workItems of workItemLists) {
+      for (const workItemsResp of workItemLists) {
+        const workItems = workItemsResp.results || workItemsResp || [];
         for (const wi of workItems) {
           for (const result of wi.results || []) {
             if (isNumericResult(result)) {
@@ -188,7 +189,6 @@ export default function Analyze() {
 
   useEffect(() => {
     loadAvailableMetrics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSamples]);
 
   async function runAnalysis() {
@@ -216,7 +216,7 @@ export default function Analyze() {
 
       for (let i = 0; i < selectedSamples.length; i++) {
         const sample = selectedSamples[i];
-        const workItems = workItemLists[i];
+        const workItems = workItemLists[i].results || workItemLists[i] || [];
 
         for (const wi of workItems) {
           const metricResult = wi.results?.find((r) => r.key === metricKey);

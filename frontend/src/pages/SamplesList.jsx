@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Alert, Button, Card, Form, Row, Col, Table } from "react-bootstrap";
+import {
+  Alert,
+  Button,
+  Card,
+  Form,
+  Row,
+  Col,
+  Table,
+  Pagination,
+} from "react-bootstrap";
 import { apiGet, apiPost } from "../api";
 
 const STATUS_OPTIONS = [
@@ -30,6 +39,11 @@ export default function SamplesList() {
   const [bulkStatus, setBulkStatus] = useState("");
   const [bulkProject, setBulkProject] = useState("");
 
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [nextPageUrl, setNextPageUrl] = useState(null);
+  const [previousPageUrl, setPreviousPageUrl] = useState(null);
+
   async function load() {
     setErr("");
     setLoading(true);
@@ -40,16 +54,21 @@ export default function SamplesList() {
       if (search.trim()) params.set("search", search.trim());
       if (status) params.set("status", status);
       if (projectFilter) params.set("project", projectFilter);
+      params.set("page", page);
 
-      const query = params.toString() ? `?${params.toString()}` : "";
+      const query = `?${params.toString()}`;
 
       const [samplesData, projectsData] = await Promise.all([
         apiGet(`/api/samples/${query}`),
         apiGet("/api/projects/"),
       ]);
 
-      setSamples(samplesData);
-      setProjects(projectsData);
+      setSamples(samplesData.results || []);
+      setTotalCount(samplesData.count || 0);
+      setNextPageUrl(samplesData.next || null);
+      setPreviousPageUrl(samplesData.previous || null);
+
+      setProjects(projectsData.results || projectsData);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -59,6 +78,10 @@ export default function SamplesList() {
 
   useEffect(() => {
     load();
+  }, [search, status, projectFilter, page]);
+
+  useEffect(() => {
+    setPage(1);
   }, [search, status, projectFilter]);
 
   function toggleSelected(id) {
@@ -118,6 +141,8 @@ export default function SamplesList() {
       setErr(e.message || String(e));
     }
   }
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / 10));
 
   return (
     <div className="w-100">
@@ -268,6 +293,24 @@ export default function SamplesList() {
 
       <Card className="shadow-sm border-0">
         <Card.Body>
+          <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div className="text-muted small">
+              Showing {samples.length} of {totalCount} samples
+            </div>
+
+            <Pagination className="mb-0">
+              <Pagination.Prev
+                disabled={!previousPageUrl || page === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              />
+              <Pagination.Item active>{page}</Pagination.Item>
+              <Pagination.Next
+                disabled={!nextPageUrl || page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              />
+            </Pagination>
+          </div>
+
           {loading ? (
             <div>Loading...</div>
           ) : (

@@ -42,9 +42,12 @@ export default function ProjectDetail() {
         apiGet(`/api/me/`),
       ]);
 
+      const sampleList = samplesData.results || samplesData || [];
+      const postList = postsData.results || postsData || [];
+
       setProject(projectData);
-      setSamples(samplesData);
-      setPosts(postsData);
+      setSamples(sampleList);
+      setPosts(postList);
       setMe(meData);
 
       const initialMembers = (projectData.members || []).map((memberId, idx) => ({
@@ -55,7 +58,7 @@ export default function ProjectDetail() {
 
       if (meData?.roles?.includes("admin")) {
         const usersData = await apiGet("/api/users/");
-        setUsers(usersData);
+        setUsers(usersData.results || usersData || []);
       }
     } catch (e) {
       setErr(e.message || String(e));
