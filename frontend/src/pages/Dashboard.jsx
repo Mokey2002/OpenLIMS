@@ -37,6 +37,8 @@ function actionVariant(action) {
       return "info";
     case "PROJECT_ASSIGNED":
       return "secondary";
+    case "RESULTS_IMPORTED":
+      return "dark";
     default:
       return "secondary";
   }
@@ -76,10 +78,10 @@ export default function Dashboard() {
         apiGet("/api/me/"),
       ]);
 
-      setSamples(samplesData);
-      setEvents(eventsData);
-      setWorkItems(workItemsData);
-      setProjects(projectsData);
+      setSamples(samplesData.results || samplesData || []);
+      setEvents(eventsData.results || eventsData || []);
+      setWorkItems(workItemsData.results || workItemsData || []);
+      setProjects(projectsData.results || projectsData || []);
       setMe(meData);
     } catch (e) {
       setErr(e.message || String(e));

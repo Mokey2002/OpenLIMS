@@ -58,6 +58,8 @@ function actionVariant(action) {
       return "info";
     case "ATTACHMENT_UPLOADED":
       return "info";
+    case "RESULTS_IMPORTED":
+      return "dark";
     default:
       return "secondary";
   }
@@ -82,6 +84,10 @@ function describeEvent(event) {
 
   if (event.action === "ATTACHMENT_UPLOADED") {
     return `Attachment uploaded: ${event.payload?.filename || "file"}`;
+  }
+
+  if (event.action === "RESULTS_IMPORTED") {
+    return `Results imported from ${event.payload?.instrument_code || "instrument"}`;
   }
 
   if (event.action === "CREATED") {
@@ -116,6 +122,7 @@ export default function SampleDetail() {
   const [newWorkItemNotes, setNewWorkItemNotes] = useState("");
 
   const [resultForms, setResultForms] = useState({});
+
   const [selectedAttachmentFile, setSelectedAttachmentFile] = useState(null);
   const [selectedContainer, setSelectedContainer] = useState("");
 
@@ -133,14 +140,19 @@ export default function SampleDetail() {
         apiGet(`/api/sample-attachments/?sample=${id}`),
       ]);
 
+      const eventList = ev.results || ev || [];
+      const workItemList = wi.results || wi || [];
+      const containerList = containersData.results || containersData || [];
+      const attachmentList = sampleAtts.results || sampleAtts || [];
+
       setSample(s);
       setAllowed(t.allowed_transitions || []);
-      setWorkItems(wi);
-      setContainers(containersData);
+      setWorkItems(workItemList);
+      setContainers(containerList);
       setSelectedContainer(s.container || "");
-      setSampleAttachments(sampleAtts);
-      
-      const sampleEvents = ev.filter(
+      setSampleAttachments(attachmentList);
+
+      const sampleEvents = eventList.filter(
         (event) =>
           event.entity_type === "Sample" &&
           (
@@ -150,7 +162,6 @@ export default function SampleDetail() {
       );
 
       setEvents(sampleEvents);
-     
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -498,7 +509,6 @@ export default function SampleDetail() {
 
                               <Col md={2}>
                                 <Button
-                                  type="button"
                                   variant="outline-dark"
                                   className="w-100"
                                   onClick={() => addResult(wi.id)}

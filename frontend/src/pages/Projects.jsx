@@ -28,13 +28,14 @@ export default function Projects() {
         apiGet("/api/me/"),
       ]);
 
-      setProjects(projectsData);
+      const projectList = projectsData.results || projectsData || [];
+
+      setProjects(projectList);
       setMe(meData);
 
-      // only fetch users if admin (optimization)
       if (meData?.roles?.includes("admin")) {
         const usersData = await apiGet("/api/users/");
-        setUsers(usersData);
+        setUsers(usersData.results || usersData || []);
       }
     } catch (e) {
       setErr(e.message || String(e));
@@ -107,7 +108,6 @@ export default function Projects() {
 
       {err && <Alert variant="danger">{err}</Alert>}
 
-      {/* ✅ ADMIN ONLY CREATE FORM */}
       {isAdmin && (
         <Card className="shadow-sm border-0 mb-4">
           <Card.Body>
@@ -138,7 +138,6 @@ export default function Projects() {
                 </Col>
               </Row>
 
-              {/* TEAM MEMBERS SEARCH */}
               <div className="mt-4">
                 <div className="fw-semibold mb-2">Team Members</div>
 
@@ -181,7 +180,6 @@ export default function Projects() {
                   </Card>
                 )}
 
-                {/* SELECTED MEMBERS */}
                 <div className="mt-3">
                   {selectedMembers.length === 0 ? (
                     <div className="text-muted small">
@@ -226,7 +224,6 @@ export default function Projects() {
         </Card>
       )}
 
-      {/* PROJECT LIST */}
       <Card className="shadow-sm border-0">
         <Card.Body>
           <h5 className="mb-3">Existing Projects</h5>
