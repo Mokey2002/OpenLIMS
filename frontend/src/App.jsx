@@ -6,12 +6,14 @@ import Inventory from "./pages/Inventory";
 import Events from "./pages/Events";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
-import { isLoggedIn } from "./auth";
 import Analyze from "./pages/Analyze";
 import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
 import Users from "./pages/Users";
 import Imports from "./pages/Imports";
+import Notifications from "./pages/Notifications";
+import { isLoggedIn } from "./auth";
+
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
 }
@@ -19,32 +21,32 @@ function RequireAuth({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
-<Routes>
-  <Route path="/login" element={<Login />} />
+      <Routes>
+        <Route path="/login" element={<Login />} />
 
-  <Route
-    path="/"
-    element={
-      <RequireAuth>
-        <Layout />
-      </RequireAuth>
-    }
-  >
-    <Route index element={<Dashboard />}/>
-    
-    <Route path="analyze" element={<Analyze/>}/>
-    <Route path="samples" element={<SamplesList />} />
-    <Route path="samples/:id" element={<SampleDetail />} />
-    <Route path="inventory" element={<Inventory />} />
-    <Route path="events" element={<Events />} />
-    <Route path="projects" element={<Projects/>}/>
-    <Route path="projects/:id" element={<ProjectDetail/>}/>
-    <Route path="users" element={<Users/>}/>
-    <Route path="imports" element={<Imports/>}/>
-  </Route>
+        <Route
+          path="/"
+          element={
+            <RequireAuth>
+              <Layout />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="samples" element={<SamplesList />} />
+          <Route path="samples/:id" element={<SampleDetail />} />
+          <Route path="inventory" element={<Inventory />} />
+          <Route path="events" element={<Events />} />
+          <Route path="analyze" element={<Analyze />} />
+          <Route path="projects" element={<Projects />} />
+          <Route path="projects/:id" element={<ProjectDetail />} />
+          <Route path="users" element={<Users />} />
+          <Route path="imports" element={<Imports />} />
+          <Route path="notifications" element={<Notifications />} />
+        </Route>
 
-  <Route path="*" element={<Navigate to="/" replace />} />
-  </Routes>    
-</BrowserRouter>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

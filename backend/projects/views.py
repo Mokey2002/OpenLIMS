@@ -1,13 +1,15 @@
 from rest_framework.viewsets import ModelViewSet
-from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite
+
+from core.permissions import (
+    IsAuthenticatedProjectReadAdminWrite,
+    IsAuthenticatedReadOnlyOrTechAdminWrite,
+)
+from events.models import Event
+from notifications.models import Notification
+
 from .models import Project, ProjectPost
 from .serializers import ProjectSerializer, ProjectPostSerializer
-from events.models import Event
-from rest_framework.viewsets import ModelViewSet
-from rest_framework.permissions import SAFE_METHODS
-from core.permissions import IsAdminOnly
-from .models import Project, ProjectPost
-from core.permissions import IsAuthenticatedProjectReadAdminWrite, IsAuthenticatedReadOnlyOrTechAdminWrite
+
 
 class ProjectViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedProjectReadAdminWrite]
@@ -15,12 +17,18 @@ class ProjectViewSet(ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = Project.objects.prefetch_related("members", "samples").all().order_by("name")
+        queryset = (
+            Project.objects
+            .prefetch_related("members", "samples")
+            .all()
+            .order_by("name")
+        )
 
         if user.is_superuser or user.groups.filter(name="admin").exists():
             return queryset
 
         return queryset.filter(members=user)
+
 
 class ProjectPostViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
@@ -28,7 +36,12 @@ class ProjectPostViewSet(ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = ProjectPost.objects.select_related("author", "project").all().order_by("-created_at")
+        queryset = (
+            ProjectPost.objects
+            .select_related("author", "project")
+            .all()
+            .order_by("-created_at")
+        )
 
         if not (user.is_superuser or user.groups.filter(name="admin").exists()):
             queryset = queryset.filter(project__members=user)
@@ -54,3 +67,12 @@ class ProjectPostViewSet(ModelViewSet):
                 "has_image": bool(post.image),
             },
         )
+
+        members = post.project.members.exclude(id=self.request.user.id)
+        for member in members:
+            Notification.objects.create(
+                user=member,
+                title="New project post",
+                message=f"{self.request.user.username} posted in {post.project.code}",
+                link=f"/projects/{post.project.id}",
+            )

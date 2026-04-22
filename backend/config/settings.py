@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'results',
     'projects',
     'imports',
+    'notifications',
 ]
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (

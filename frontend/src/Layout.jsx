@@ -1,22 +1,30 @@
-import { useEffect, useState } from "react";
-import { Container, Nav, Navbar, Button, Spinner } from "react-bootstrap";
+import { useEffect, useMemo, useState } from "react";
+import { Container, Nav, Navbar, Button, Spinner, Badge } from "react-bootstrap";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearTokens } from "./auth";
 import { apiGet } from "./api";
 
 export default function Layout() {
   const nav = useNavigate();
+
   const [me, setMe] = useState(null);
   const [loadingMe, setLoadingMe] = useState(true);
+
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiGet("/api/me/");
-        //console.log(data)
-        setMe(data);
+        const [meData, notificationData] = await Promise.all([
+          apiGet("/api/me/"),
+          apiGet("/api/notifications/"),
+        ]);
+
+        setMe(meData);
+        setNotifications(notificationData.results || notificationData || []);
       } catch (e) {
-        console.error("Failed to load current user:", e);
+        console.error("Failed to load layout data:", e);
+        setNotifications([]);
       } finally {
         setLoadingMe(false);
       }
@@ -29,6 +37,11 @@ export default function Layout() {
   }
 
   const isAdmin = me?.roles?.includes("admin");
+
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.is_read).length,
+    [notifications]
+  );
 
   return (
     <>
@@ -47,10 +60,20 @@ export default function Layout() {
               <Nav.Link as={NavLink} to="/events">Events</Nav.Link>
               <Nav.Link as={NavLink} to="/analyze">Analyze</Nav.Link>
               <Nav.Link as={NavLink} to="/projects">Projects</Nav.Link>
+
               {isAdmin && (
-                <Nav.Link as={NavLink} to="/users">Users</Nav.Link>,
-                <Nav.Link as={NavLink} to="/imports">Imports</Nav.Link>
+                <>
+                  <Nav.Link as={NavLink} to="/users">Users</Nav.Link>
+                  <Nav.Link as={NavLink} to="/imports">Imports</Nav.Link>
+                </>
               )}
+
+              <Nav.Link as={NavLink} to="/notifications">
+                Notifications{" "}
+                {unreadCount > 0 && (
+                  <Badge bg="danger">{unreadCount}</Badge>
+                )}
+              </Nav.Link>
             </Nav>
 
             <div className="d-flex align-items-center gap-3">

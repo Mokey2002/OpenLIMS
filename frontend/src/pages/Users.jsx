@@ -15,9 +15,10 @@ export default function Users() {
   async function load() {
     setErr("");
     setLoading(true);
+
     try {
       const data = await apiGet("/api/admin-users/");
-      setUsers(data);
+      setUsers(data.results || data || []); // ✅ FIX PAGINATION
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -33,6 +34,11 @@ export default function Users() {
     e.preventDefault();
     setErr("");
 
+    if (!username || !password) {
+      setErr("Username and password are required.");
+      return;
+    }
+
     try {
       await apiPost("/api/admin-users/", {
         username,
@@ -41,10 +47,12 @@ export default function Users() {
         role,
       });
 
+      // reset form
       setUsername("");
       setEmail("");
       setPassword("");
       setRole("tech");
+
       await load();
     } catch (e) {
       setErr(e.message || String(e));
@@ -57,6 +65,7 @@ export default function Users() {
 
       {err && <Alert variant="danger">{err}</Alert>}
 
+      {/* CREATE USER */}
       <Card className="shadow-sm border-0 mb-4">
         <Card.Body>
           <h5 className="mb-3">Create User</h5>
@@ -70,6 +79,7 @@ export default function Users() {
                   onChange={(e) => setUsername(e.target.value)}
                 />
               </Col>
+
               <Col md={3}>
                 <Form.Control
                   placeholder="Email"
@@ -77,6 +87,7 @@ export default function Users() {
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </Col>
+
               <Col md={3}>
                 <Form.Control
                   type="password"
@@ -85,6 +96,7 @@ export default function Users() {
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </Col>
+
               <Col md={2}>
                 <Form.Select
                   value={role}
@@ -95,12 +107,12 @@ export default function Users() {
                   <option value="viewer">viewer</option>
                 </Form.Select>
               </Col>
+
               <Col md={1}>
                 <Button
                   type="submit"
                   variant="dark"
                   className="w-100"
-                  disabled={!username || !password}
                 >
                   Add
                 </Button>
@@ -110,6 +122,7 @@ export default function Users() {
         </Card.Body>
       </Card>
 
+      {/* USERS TABLE */}
       <Card className="shadow-sm border-0">
         <Card.Body>
           <h5 className="mb-3">Existing Users</h5>
@@ -127,14 +140,19 @@ export default function Users() {
                   <th>ID</th>
                   <th>Username</th>
                   <th>Email</th>
+                  <th>Role</th> {/* ✅ NEW */}
                 </tr>
               </thead>
+
               <tbody>
                 {users.map((u) => (
                   <tr key={u.id}>
                     <td>{u.id}</td>
                     <td>{u.username}</td>
                     <td>{u.email || "-"}</td>
+                    <td>
+                      {u.roles?.join(", ") || "-"} {/* ✅ SHOW ROLES */}
+                    </td>
                   </tr>
                 ))}
               </tbody>
