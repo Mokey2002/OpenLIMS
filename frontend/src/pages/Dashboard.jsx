@@ -1,19 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Card, Col, Row, Spinner, Table } from "react-bootstrap";
+import { Alert, Badge, Card, ProgressBar, Table } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api";
-
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Tooltip,
-  Legend,
-} from "chart.js";
-import { Bar } from "react-chartjs-2";
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
 function formatTimestamp(ts) {
   try {
@@ -44,13 +32,13 @@ function actionVariant(action) {
   }
 }
 
-function StatCard({ title, value, subtitle }) {
+function MetricCard({ title, value, note }) {
   return (
-    <Card className="shadow-sm border-0 h-100">
+    <Card className="app-card metric-card h-100">
       <Card.Body>
-        <div className="text-muted small mb-2">{title}</div>
-        <div className="fs-3 fw-bold">{value}</div>
-        {subtitle ? <div className="text-muted small mt-1">{subtitle}</div> : null}
+        <div className="metric-label">{title}</div>
+        <div className="metric-value">{value}</div>
+        {note ? <div className="metric-note">{note}</div> : null}
       </Card.Body>
     </Card>
   );
@@ -62,21 +50,19 @@ export default function Dashboard() {
   const [workItems, setWorkItems] = useState([]);
   const [projects, setProjects] = useState([]);
   const [me, setMe] = useState(null);
-
-  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
   async function load() {
     setErr("");
-    setLoading(true);
     try {
-      const [samplesData, eventsData, workItemsData, projectsData, meData] = await Promise.all([
-        apiGet("/api/samples/"),
-        apiGet("/api/events/"),
-        apiGet("/api/work-items/"),
-        apiGet("/api/projects/"),
-        apiGet("/api/me/"),
-      ]);
+      const [samplesData, eventsData, workItemsData, projectsData, meData] =
+        await Promise.all([
+          apiGet("/api/samples/"),
+          apiGet("/api/events/"),
+          apiGet("/api/work-items/"),
+          apiGet("/api/projects/"),
+          apiGet("/api/me/"),
+        ]);
 
       setSamples(samplesData.results || samplesData || []);
       setEvents(eventsData.results || eventsData || []);
@@ -85,14 +71,28 @@ export default function Dashboard() {
       setMe(meData);
     } catch (e) {
       setErr(e.message || String(e));
-    } finally {
-      setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
   }, []);
+
+  const isAdmin = me?.roles?.includes("admin");
+
+  const myProjects = useMemo(() => {
+    if (!me) return [];
+    if (isAdmin) return projects;
+    return projects.filter((p) =>
+      (p.member_usernames || []).includes(me.username)
+    );
+  }, [projects, me, isAdmin]);
+
+  const recentEvents = useMemo(() => {
+    return [...events]
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, 8);
+  }, [events]);
 
   const statusCounts = useMemo(() => {
     const counts = {
@@ -110,124 +110,114 @@ export default function Dashboard() {
     return counts;
   }, [samples]);
 
-  const recentEvents = useMemo(() => {
-    return [...events]
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(0, 8);
-  }, [events]);
-
-  const chartData = useMemo(() => {
-    return {
-      labels: Object.keys(statusCounts),
-      datasets: [
-        {
-          label: "Samples",
-          data: Object.values(statusCounts),
-        },
-      ],
-    };
-  }, [statusCounts]);
-
-  const chartOptions = useMemo(() => {
-    return {
-      responsive: true,
-      plugins: {
-        legend: {
-          display: false,
-        },
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            precision: 0,
-          },
-        },
-      },
-    };
-  }, []);
-
-  const isAdmin = me?.roles?.includes("admin");
-
-  const myProjects = useMemo(() => {
-    if (!me) return [];
-
-    if (isAdmin) {
-      return projects;
-    }
-
-    return projects.filter((p) =>
-      (p.member_usernames || []).includes(me.username)
-    );
-  }, [projects, me, isAdmin]);
-
-  const myProjectIds = useMemo(
-    () => myProjects.map((p) => p.id),
-    [myProjects]
+  const totalSamples = samples.length || 1;
+  const qcPercent = Math.round((statusCounts.QC / totalSamples) * 100);
+  const reportedPercent = Math.round((statusCounts.REPORTED / totalSamples) * 100);
+  const inProgressPercent = Math.round(
+    (statusCounts.IN_PROGRESS / totalSamples) * 100
   );
-
-  const myActivity = useMemo(() => {
-    return events
-      .filter((e) => {
-        const projectId = e.payload?.project_id;
-        return projectId && myProjectIds.includes(projectId);
-      })
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(0, 8);
-  }, [events, myProjectIds]);
-
-  if (loading) {
-    return <Spinner animation="border" />;
-  }
 
   return (
     <div className="w-100">
-      <div className="d-flex justify-content-between align-items-center mb-4">
+      <div className="page-header">
         <div>
-          <h2 className="mb-1">Dashboard</h2>
-          <div className="text-muted">Operational overview of OpenLIMS</div>
+          <h1 className="page-title">Dashboard</h1>
+          <p className="page-subtitle">
+            Overview of samples, projects, work, and recent activity.
+          </p>
         </div>
       </div>
 
       {err && <Alert variant="danger">{err}</Alert>}
 
-      <Row className="g-3 mb-4">
-        <Col md={3}>
-          <StatCard title="Total Samples" value={samples.length} />
-        </Col>
-        <Col md={3}>
-          <StatCard title="Total Work Items" value={workItems.length} />
-        </Col>
-        <Col md={3}>
-          <StatCard title="Recent Events" value={events.length} />
-        </Col>
-        <Col md={3}>
-          <StatCard
-            title={isAdmin ? "Visible Projects" : "My Projects"}
-            value={myProjects.length}
-          />
-        </Col>
-      </Row>
+      <div className="stat-grid mb-4">
+        <MetricCard
+          title="Total Samples"
+          value={samples.length}
+          note={`${statusCounts.REPORTED} reported`}
+        />
+        <MetricCard
+          title="Work Items"
+          value={workItems.length}
+          note={`${statusCounts.IN_PROGRESS} samples in progress`}
+        />
+        <MetricCard
+          title={isAdmin ? "Visible Projects" : "My Projects"}
+          value={myProjects.length}
+          note={`${projects.length} total projects`}
+        />
+        <MetricCard
+          title="Events Logged"
+          value={events.length}
+          note={`${recentEvents.length} recent items below`}
+        />
+      </div>
 
-      <Row className="g-4 mb-4">
-        <Col lg={7}>
-          <Card className="shadow-sm border-0 h-100">
+      <div className="row g-4 mb-4">
+        <div className="col-lg-7">
+          <Card className="app-card h-100">
             <Card.Body>
-              <h5 className="mb-3">Samples by Status</h5>
-              <Bar data={chartData} options={chartOptions} />
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <h5 className="section-title mb-0">Sample Pipeline</h5>
+                <span className="feed-meta">{samples.length} total samples</span>
+              </div>
+
+              <div className="soft-card mb-3">
+                <div className="d-flex justify-content-between mb-2">
+                  <span className="fw-semibold">Reported</span>
+                  <span className="feed-meta">{statusCounts.REPORTED}</span>
+                </div>
+                <ProgressBar now={reportedPercent} />
+              </div>
+
+              <div className="soft-card mb-3">
+                <div className="d-flex justify-content-between mb-2">
+                  <span className="fw-semibold">In Progress</span>
+                  <span className="feed-meta">{statusCounts.IN_PROGRESS}</span>
+                </div>
+                <ProgressBar now={inProgressPercent} variant="info" />
+              </div>
+
+              <div className="soft-card mb-3">
+                <div className="d-flex justify-content-between mb-2">
+                  <span className="fw-semibold">QC</span>
+                  <span className="feed-meta">{statusCounts.QC}</span>
+                </div>
+                <ProgressBar now={qcPercent} variant="warning" />
+              </div>
+
+              <div className="row g-3 mt-1">
+                <div className="col-md-6">
+                  <div className="soft-card">
+                    <div className="feed-meta mb-1">Received</div>
+                    <div className="fs-4 fw-bold">{statusCounts.RECEIVED}</div>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="soft-card">
+                    <div className="feed-meta mb-1">Archived</div>
+                    <div className="fs-4 fw-bold">{statusCounts.ARCHIVED}</div>
+                  </div>
+                </div>
+              </div>
             </Card.Body>
           </Card>
-        </Col>
+        </div>
 
-        <Col lg={5}>
-          <Card className="shadow-sm border-0 h-100">
+        <div className="col-lg-5">
+          <Card className="app-card h-100">
             <Card.Body>
-              <h5 className="mb-3">{isAdmin ? "Projects" : "My Projects"}</h5>
+              <div className="toolbar-row mb-3">
+                <h5 className="section-title mb-0">
+                  {isAdmin ? "Projects" : "My Projects"}
+                </h5>
+                <Link to="/projects" className="text-decoration-none">
+                  View all
+                </Link>
+              </div>
 
               {myProjects.length === 0 ? (
-                <Alert variant="light" className="mb-0">
-                  {isAdmin ? "No projects yet." : "You are not assigned to any projects."}
-                </Alert>
+                <div className="empty-state">No projects available yet.</div>
               ) : (
                 <div className="d-grid gap-2">
                   {myProjects.slice(0, 6).map((p) => (
@@ -236,79 +226,41 @@ export default function Dashboard() {
                       to={`/projects/${p.id}`}
                       className="text-decoration-none"
                     >
-                      <Card className="border">
-                        <Card.Body className="py-2">
-                          <div className="d-flex justify-content-between align-items-center">
-                            <div>
-                              <div className="fw-semibold">
-                                {p.code} - {p.name}
-                              </div>
-                              <div className="text-muted small">
-                                {p.sample_count ?? 0} samples
-                              </div>
+                      <div className="soft-card">
+                        <div className="d-flex justify-content-between align-items-center">
+                          <div>
+                            <div className="fw-semibold">
+                              {p.code} - {p.name}
                             </div>
-                            <Badge bg="dark">Open</Badge>
+                            <div className="feed-meta">
+                              {p.sample_count ?? 0} samples
+                            </div>
                           </div>
-                        </Card.Body>
-                      </Card>
+                          <Badge bg="dark">Open</Badge>
+                        </div>
+                      </div>
                     </Link>
                   ))}
-
-                  <Link className="btn btn-outline-dark mt-2" to="/projects">
-                    View All Projects
-                  </Link>
                 </div>
               )}
             </Card.Body>
           </Card>
-        </Col>
-      </Row>
+        </div>
+      </div>
 
-      <Card className="shadow-sm border-0 mb-4">
+      <Card className="app-card">
         <Card.Body>
-          <h5 className="mb-3">My Project Activity</h5>
-
-          {myActivity.length === 0 ? (
-            <Alert variant="light" className="mb-0">
-              No recent activity in your projects.
-            </Alert>
-          ) : (
-            <Table responsive hover className="mb-0">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Action</th>
-                  <th>Project</th>
-                  <th>Actor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {myActivity.map((event) => (
-                  <tr key={event.id}>
-                    <td>{formatTimestamp(event.timestamp)}</td>
-                    <td>
-                      <Badge bg={actionVariant(event.action)}>{event.action}</Badge>
-                    </td>
-                    <td>{event.payload?.project_code || "-"}</td>
-                    <td>{event.actor_username || "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          )}
-        </Card.Body>
-      </Card>
-
-      <Card className="shadow-sm border-0">
-        <Card.Body>
-          <h5 className="mb-3">Recent Activity</h5>
+          <div className="toolbar-row mb-3">
+            <h5 className="section-title mb-0">Recent Activity</h5>
+            <Link to="/events" className="text-decoration-none">
+              View all
+            </Link>
+          </div>
 
           {recentEvents.length === 0 ? (
-            <Alert variant="light" className="mb-0">
-              No events yet.
-            </Alert>
+            <div className="empty-state">No recent events yet.</div>
           ) : (
-            <Table responsive hover className="mb-0">
+            <Table responsive hover className="app-table">
               <thead>
                 <tr>
                   <th>Time</th>
@@ -322,7 +274,9 @@ export default function Dashboard() {
                   <tr key={event.id}>
                     <td>{formatTimestamp(event.timestamp)}</td>
                     <td>
-                      <Badge bg={actionVariant(event.action)}>{event.action}</Badge>
+                      <Badge bg={actionVariant(event.action)}>
+                        {event.action}
+                      </Badge>
                     </td>
                     <td>
                       {event.entity_type} #{event.entity_id}

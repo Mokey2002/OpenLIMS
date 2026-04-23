@@ -23,7 +23,6 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-
         <Route
           path="/"
           element={
@@ -44,7 +43,6 @@ export default function App() {
           <Route path="imports" element={<Imports />} />
           <Route path="notifications" element={<Notifications />} />
         </Route>
-
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
