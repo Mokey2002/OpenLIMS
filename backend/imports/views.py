@@ -25,6 +25,9 @@ from .serializers import (
 )
 
 
+# =========================
+# Instrument Profile
+# =========================
 class InstrumentProfileViewSet(ModelViewSet):
     permission_classes = [IsAdminOnly]
     serializer_class = InstrumentProfileSerializer
@@ -38,6 +41,9 @@ class InstrumentProfileViewSet(ModelViewSet):
         )
 
 
+# =========================
+# Column Mapping
+# =========================
 class InstrumentColumnMappingViewSet(ModelViewSet):
     permission_classes = [IsAdminOnly]
     serializer_class = InstrumentColumnMappingSerializer
@@ -51,6 +57,9 @@ class InstrumentColumnMappingViewSet(ModelViewSet):
         )
 
 
+# =========================
+# Import Jobs
+# =========================
 class ImportJobViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
     serializer_class = ImportJobSerializer
@@ -62,6 +71,57 @@ class ImportJobViewSet(ModelViewSet):
             .select_related("instrument", "uploaded_by", "project")
             .all()
             .order_by("-created_at")
+        )
+
+    # -------------------------
+    # 📥 CSV Upload Entry Point
+    # -------------------------
+    def create(self, request, *args, **kwargs):
+        uploaded_file = request.FILES.get("uploaded_file")
+        instrument_id = request.data.get("instrument")
+        project_id = request.data.get("project")
+
+        if not uploaded_file:
+            return Response({"detail": "No file uploaded"}, status=400)
+
+        try:
+            instrument = InstrumentProfile.objects.get(id=instrument_id)
+        except InstrumentProfile.DoesNotExist:
+            return Response({"detail": "Invalid instrument"}, status=400)
+
+        # Parse CSV
+        decoded = uploaded_file.read().decode("utf-8")
+        reader = csv.DictReader(io.StringIO(decoded))
+        rows = list(reader)
+
+        if not rows:
+            return Response({"detail": "CSV is empty"}, status=400)
+
+        # Create job
+        job = ImportJob.objects.create(
+            instrument=instrument,
+            project_id=project_id,
+            source_type="CSV",
+            status="PENDING",
+            uploaded_by=request.user if request.user.is_authenticated else None,
+        )
+
+        # Process rows
+        summary = self._process_rows(
+            instrument=instrument,
+            project_id=project_id,
+            rows=rows,
+            actor=request.user,
+            job=job,
+        )
+
+        job.status = "COMPLETED"
+        job.summary = summary
+        job.save()
+
+        return Response(
+            {"job_id": job.id, **summary},
+            status=201,
         )
 
     # -------------------------
@@ -102,7 +162,7 @@ class ImportJobViewSet(ModelViewSet):
         return {"ok": True, "normalized": raw_value}
 
     # -------------------------
-    # 🔥 CORE PROCESSOR (shared)
+    # 🔥 CORE PROCESSOR
     # -------------------------
     def _process_rows(self, *, instrument, project_id, rows, actor, job):
         mappings = {m.source_column: m for m in instrument.column_mappings.all()}
@@ -132,7 +192,7 @@ class ImportJobViewSet(ModelViewSet):
 
             work_item = WorkItem.objects.create(
                 sample=sample,
-                name=f"{instrument.code} Run {job.run_id}",
+                name=f"{instrument.code} Run {job.run_id or 'CSV'}",
                 status="COMPLETED",
             )
 
@@ -172,20 +232,20 @@ class ImportJobViewSet(ModelViewSet):
         }
 
     # -------------------------
-    # 🚀 API KEY INGEST
+    # 🚀 API INGEST
     # -------------------------
     @action(
         detail=False,
         methods=["post"],
         url_path="instrument-ingest",
-        authentication_classes=[],                 # 🔥 NO JWT REQUIRED
-        permission_classes=[HasInstrumentApiKey],  # 🔐 API KEY ONLY
+        authentication_classes=[],
+        permission_classes=[HasInstrumentApiKey],
     )
     def instrument_ingest(self, request):
         instrument_code = request.data.get("instrument_code")
         project_id = request.data.get("project_id")
         run_id = request.data.get("run_id")
-        rows = request.data.get("rows", [])
+        rows = request.data.get("rows")
 
         if not instrument_code or not run_id:
             return Response({"detail": "Missing fields"}, status=400)
@@ -197,6 +257,9 @@ class ImportJobViewSet(ModelViewSet):
 
         if ImportJob.objects.filter(instrument=instrument, run_id=run_id).exists():
             return Response({"detail": "Run already exists"}, status=409)
+
+        if not isinstance(rows, list) or len(rows) == 0:
+            return Response({"detail": "rows must be a non-empty list"}, status=400)
 
         job = ImportJob.objects.create(
             instrument=instrument,
