@@ -1,101 +1,46 @@
-# OpenLIMS
+# 🧪 OpenLIMS
 
-OpenLIMS is a lightweight, production-shaped, open-source **Laboratory Information Management System (LIMS)** designed to manage laboratory workflows, sample tracking, and team collaboration with minimal setup.
-
-It models real-world lab systems with audit trails, role-based access, project collaboration, bulk operations, and data analysis tools.
-
----
+A lightweight, modular, and production-inspired Laboratory Information Management System (LIMS).
 
 ## 🚀 Features
+- Sample lifecycle tracking
+- CSV + Instrument API ingestion
+- Projects and collaboration
+- Audit trail and notifications
+- Analysis tools
 
-### 🧪 Core LIMS
-- Sample tracking with lifecycle states:
-  - RECEIVED → IN_PROGRESS → QC → REPORTED → ARCHIVED
-- Container and location management
-- Work items and result tracking
-- Custom fields per entity
-- Full audit trail of all system actions
-
-### 👥 Projects & Collaboration
-- Project-based organization of samples
-- Multi-user team support
-- Edit project members after creation
-- Project-level activity feed (notes + images)
-- Role-based project visibility
-
-### 🔐 User Management
-- Admin-only user creation
-- Role-based access (Admin, Tech, Viewer)
-
-### ⚡ Bulk Operations
-- Select multiple samples
-- Bulk update status and project assignment
-- Event logging for bulk actions
-
-### 📊 Analytics
-- Compare multiple samples across projects
-- Metric vs Time and Days charts
-- Export charts (PNG) and data (CSV)
-
-### 📡 Dashboard
-- System overview
-- “My Projects” widget
-- Activity feed
-
----
-
-## 🏗 Architecture
-
-### Backend
-- Django + Django REST Framework
-- PostgreSQL
-- REST APIs
-- Audit logging
-
-### Frontend
-- React + Vite
-- React Bootstrap
-- Chart.js
-
-### Deployment
-- Docker + Docker Compose
-
----
-
-## ⚙️ Quickstart
+## 🐳 Run Locally
 
 ```bash
-git clone https://github.com/Mokey2002/OpenLIMS.git
-cd OpenLIMS
-cp deploy/.env.example deploy/.env
-docker compose up --build
+docker compose -f deploy/docker-compose.yml up -d
+docker compose -f deploy/docker-compose.yml run --rm api python manage.py migrate
 ```
 
----
+## 🧪 Run Tests
 
-## 🌐 Access
+```bash
+docker compose -f deploy/docker-compose.yml run --rm api pytest -v
+```
 
-- Frontend: http://localhost:5173  
-- Backend: http://localhost:8000  
+## 🔁 Instrument API Example
 
----
+```bash
+curl -X POST http://localhost:8000/api/import-jobs/instrument-ingest/ \
+  -H "Content-Type: application/json" \
+  -H "X-Instrument-Api-Key: my-shared-lab-instrument-key" \
+  -d '{"instrument_code":"NOVAFLEX","run_id":"RUN-001","rows":[{"sample_id":"S-001"}]}'
+```
+
+## 📌 Goals
+- Lightweight and deployable
+- Configurable without code changes
+- Real-world lab workflow support
 
 ## 👨‍💻 Author
-
-Eduardo L.
-
----
-
-## ⭐ Summary
-
-OpenLIMS is a full-stack system demonstrating:
-- system design
-- role-based security
-- audit trails
-- analytics
-- scalable UI
+Eduardo L
 
 ![Login Screen](./images/login.png)
 ![Dashboard](./images/dashboard.png)
-![Project](./images/project.png)
+![Project](./images/projects.png)
 ![Analyze](./images/analyze.png)
+![Samples](./images/samples.png)
