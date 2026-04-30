@@ -43,6 +43,11 @@ class InstrumentColumnMapping(models.Model):
 
 
 class ImportJob(models.Model):
+
+    progress_current = models.PositiveIntegerField(default=0)
+    progress_total = models.PositiveIntegerField(default=0)
+    progress_message = models.CharField(max_length=255, blank=True)
+
     STATUS_CHOICES = [
         ("PENDING", "PENDING"),
         ("COMPLETED", "COMPLETED"),

@@ -51,6 +51,9 @@ class ImportJobSerializer(serializers.ModelSerializer):
             "status",
             "summary",
             "created_at",
+"progress_current",
+"progress_total",
+"progress_message",
         ]
         read_only_fields = [
             "id",
@@ -60,6 +63,9 @@ class ImportJobSerializer(serializers.ModelSerializer):
             "status",
             "summary",
             "created_at",
+"progress_current",
+"progress_total",
+"progress_message",
         ]
 
     def get_uploaded_by_username(self, obj):

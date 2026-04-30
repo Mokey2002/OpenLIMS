@@ -7,3 +7,5 @@ Pillow
 pytest
 pytest-django
 pytest-cov
+celery
+redis
