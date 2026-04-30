@@ -1,122 +1,78 @@
 import pytest
-from django.conf import settings
-from rest_framework.test import APIClient
 
-from imports.models import InstrumentProfile, InstrumentColumnMapping, ImportJob
+from imports.models import ImportJob
+from results.models import Result, WorkItem
 from samples.models import Sample
-from results.models import WorkItem, Result
-
 
 pytestmark = pytest.mark.django_db
 
 
-@pytest.fixture
-def client():
-    return APIClient()
-
-
-@pytest.fixture
-def instrument():
-    profile = InstrumentProfile.objects.create(
-        name="NovaFlex",
-        code="NOVAFLEX",
-        delimiter=",",
-        has_header=True,
-        sample_id_column="sample_id",
-    )
-
-    InstrumentColumnMapping.objects.create(
-        instrument=profile,
-        source_column="concentration",
-        target_key="concentration",
-        value_type="NUMBER",
-        min_value=0,
-        max_value=1000,
-    )
-
-    InstrumentColumnMapping.objects.create(
-        instrument=profile,
-        source_column="purity",
-        target_key="purity",
-        value_type="NUMBER",
-        min_value=0,
-        max_value=100,
-    )
-
-    return profile
-
-
-def ingest_headers():
-    return {
-        "HTTP_X_INSTRUMENT_API_KEY": settings.INSTRUMENT_API_KEY,
-    }
-
-
-def test_instrument_ingest_requires_api_key(client, instrument):
-    payload = {
-        "instrument_code": "NOVAFLEX",
-        "run_id": "RUN-001",
-        "rows": [{"sample_id": "S-001", "concentration": 12.4, "purity": 97.1}],
-    }
-
-    response = client.post(
+def test_instrument_ingest_requires_api_key(
+    api_client,
+    instrument_profile,
+    ingest_payload,
+):
+    response = api_client.post(
         "/api/import-jobs/instrument-ingest/",
-        payload,
+        ingest_payload,
         format="json",
     )
 
-    assert response.status_code in (401, 403)
+    assert response.status_code == 403
 
 
-def test_instrument_ingest_with_valid_key_creates_sample_and_results(client, instrument):
-    payload = {
-        "instrument_code": "NOVAFLEX",
-        "run_id": "RUN-001",
-        "rows": [
-            {"sample_id": "S-001", "concentration": 12.4, "purity": 97.1},
-        ],
-    }
-
-    response = client.post(
+def test_instrument_ingest_with_valid_key_creates_sample_and_results(
+    api_client,
+    instrument_profile,
+    instrument_headers,
+    ingest_payload,
+):
+    response = api_client.post(
         "/api/import-jobs/instrument-ingest/",
-        payload,
+        ingest_payload,
         format="json",
-        **ingest_headers(),
+        **instrument_headers,
     )
 
     assert response.status_code == 201
-    assert ImportJob.objects.count() == 1
-    assert Sample.objects.filter(sample_id="S-001").exists()
 
-    sample = Sample.objects.get(sample_id="S-001")
+    body = response.json()
+    assert body["status"] == "COMPLETED"
+    assert body["results_created"] == 3
+    assert body["samples_created"] == 1
+
+    job = ImportJob.objects.get(run_id="RUN-001")
+    assert job.status == "COMPLETED"
+    assert job.source_type == "API"
+
+    sample = Sample.objects.get(sample_id="S-INGEST-001")
     work_item = WorkItem.objects.get(sample=sample)
-    results = Result.objects.filter(work_item=work_item)
 
-    assert results.count() == 2
+    results = Result.objects.filter(work_item=work_item)
+    assert results.count() == 3
     assert results.filter(key="concentration").exists()
     assert results.filter(key="purity").exists()
+    assert results.filter(key="qc_flag").exists()
 
 
-def test_instrument_ingest_duplicate_run_id_is_rejected(client, instrument):
-    payload = {
-        "instrument_code": "NOVAFLEX",
-        "run_id": "RUN-001",
-        "rows": [
-            {"sample_id": "S-001", "concentration": 12.4, "purity": 97.1},
-        ],
-    }
-
-    first = client.post(
+def test_instrument_ingest_duplicate_run_id_is_rejected(
+    api_client,
+    instrument_profile,
+    instrument_headers,
+    ingest_payload,
+):
+    first = api_client.post(
         "/api/import-jobs/instrument-ingest/",
-        payload,
+        ingest_payload,
         format="json",
-        **ingest_headers(),
+        **instrument_headers,
     )
-    second = client.post(
+
+    second = api_client.post(
         "/api/import-jobs/instrument-ingest/",
-        payload,
+        ingest_payload,
         format="json",
-        **ingest_headers(),
+        **instrument_headers,
     )
 
     assert first.status_code == 201
@@ -124,24 +80,35 @@ def test_instrument_ingest_duplicate_run_id_is_rejected(client, instrument):
     assert ImportJob.objects.count() == 1
 
 
-def test_instrument_ingest_records_skipped_rows_for_invalid_values(client, instrument):
+def test_instrument_ingest_records_skipped_rows_for_invalid_values(
+    api_client,
+    instrument_profile,
+    instrument_headers,
+):
     payload = {
         "instrument_code": "NOVAFLEX",
-        "run_id": "RUN-002",
+        "run_id": "RUN-BAD-001",
         "rows": [
-            {"sample_id": "S-002", "concentration": "bad-value", "purity": 97.1},
+            {
+                "sample_id": "S-BAD-001",
+                "concentration": "bad-value",
+                "purity": 97.1,
+                "qc_flag": "PASS",
+            }
         ],
     }
 
-    response = client.post(
+    response = api_client.post(
         "/api/import-jobs/instrument-ingest/",
         payload,
         format="json",
-        **ingest_headers(),
+        **instrument_headers,
     )
 
     assert response.status_code == 201
+
     body = response.json()
-    assert body["results_created"] == 1
+    assert body["status"] == "COMPLETED"
+    assert body["results_created"] == 2
     assert len(body["skipped_rows"]) == 1
     assert body["skipped_rows"][0]["column"] == "concentration"
