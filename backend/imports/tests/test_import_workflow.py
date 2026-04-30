@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 
 from imports.models import InstrumentProfile, InstrumentColumnMapping, ImportJob
 from samples.models import Sample
+from imports.tasks import process_import_job
 
 User = get_user_model()
 pytestmark = pytest.mark.django_db
@@ -63,5 +64,7 @@ def test_csv_import_workflow(client, instrument):
     assert response.status_code in (200, 201)
 
     job = ImportJob.objects.first()
-    assert job.status in ("PENDING","COMPLETED")
+    process_import_job(job.id)
+    job.refresh_from_db()
+    assert job.status == "COMPLETED"
     assert Sample.objects.filter(sample_id="S-CSV-001").exists()

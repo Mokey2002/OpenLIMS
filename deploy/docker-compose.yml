@@ -1,34 +1,60 @@
+version: "3.9"
+
 services:
   db:
     image: postgres:16
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-openlims}
-      POSTGRES_USER: ${POSTGRES_USER:-openlims}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openlims}
+    container_name: openlims-db
+    restart: unless-stopped
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      - "5433:5432"   # avoid local 5432 conflicts
+
+  redis:
+    image: redis:7
+    container_name: openlims-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
 
   api:
     build:
-      context: ..
-      dockerfile: backend/Dockerfile
+      context: ../backend
+    container_name: openlims-api
+    command: >
+      sh -c "
+      python manage.py migrate &&
+      python manage.py runserver 0.0.0.0:8000
+      "
+    volumes:
+      - ../backend:/app
+      - media_data:/app/media
+      - static_data:/app/staticfiles
+    ports:
+      - "8000:8000"
     env_file:
       - .env
     depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - "8000:8000"
+      - db
+      - redis
+
+  worker:
+    build:
+      context: ../backend
+    container_name: openlims-worker
+    command: celery -A config worker -l info
     volumes:
       - ../backend:/app
-    command: sh -c "python manage.py runserver 0.0.0.0:8000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+
 
 volumes:
   postgres_data:
+  media_data:
+  static_data:

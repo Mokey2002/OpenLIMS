@@ -27,7 +27,8 @@ INSTRUMENT_API_KEY = os.getenv("INSTRUMENT_API_KEY", "")
 
 #ALLOWED_HOSTS = []
 env = environ.Env(DEBUG=(bool, False))
-
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
 DEBUG = env.bool("DJANGO_DEBUG", default=True)
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="change-me")
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
