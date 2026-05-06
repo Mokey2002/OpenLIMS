@@ -28,4 +28,5 @@ router.register(r"instrument-profiles", InstrumentProfileViewSet, basename="inst
 router.register(r"instrument-mappings", InstrumentColumnMappingViewSet, basename="instrument-mapping")
 router.register(r"import-jobs", ImportJobViewSet, basename="import-job")
 router.register(r"notifications",NotificationViewSet, basename="notification")
+
 urlpatterns = router.urls

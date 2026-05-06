@@ -10,6 +10,7 @@ import {
   Row,
   Table,
 } from "react-bootstrap";
+import { Link } from "react-router-dom";
 import { apiGet, apiPost, apiPostForm } from "../api";
 
 function statusVariant(status) {
@@ -71,6 +72,7 @@ export default function Imports() {
 
   async function load() {
     setErr("");
+
     try {
       const [meData, profilesData, jobsData, projectsData] = await Promise.all([
         apiGet("/api/me/"),
@@ -103,16 +105,13 @@ export default function Imports() {
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const hasActiveJob = jobs.some(
-        (job) => job.status === "PENDING" || job.status === "RUNNING"
-      );
+    const hasActiveJob = jobs.some(
+      (job) => job.status === "PENDING" || job.status === "RUNNING"
+    );
 
-      if (hasActiveJob) {
-        load();
-      }
-    }, 3000);
+    if (!hasActiveJob) return;
 
+    const interval = setInterval(load, 3000);
     return () => clearInterval(interval);
   }, [jobs]);
 
@@ -228,6 +227,7 @@ export default function Imports() {
             Manage instrument profiles, mappings, and async ingestion runs.
           </p>
         </div>
+
         <Button variant="outline-dark" size="sm" onClick={load}>
           Refresh
         </Button>
@@ -251,6 +251,7 @@ export default function Imports() {
                         onChange={(e) => setProfileName(e.target.value)}
                       />
                     </Col>
+
                     <Col md={3}>
                       <Form.Control
                         placeholder="Code"
@@ -258,6 +259,7 @@ export default function Imports() {
                         onChange={(e) => setProfileCode(e.target.value)}
                       />
                     </Col>
+
                     <Col md={3}>
                       <Form.Control
                         placeholder="Delimiter"
@@ -265,6 +267,7 @@ export default function Imports() {
                         onChange={(e) => setDelimiter(e.target.value)}
                       />
                     </Col>
+
                     <Col md={8}>
                       <Form.Control
                         placeholder="Sample ID column"
@@ -272,6 +275,7 @@ export default function Imports() {
                         onChange={(e) => setSampleIdColumn(e.target.value)}
                       />
                     </Col>
+
                     <Col md={4}>
                       <Button
                         type="submit"
@@ -315,6 +319,7 @@ export default function Imports() {
                         ))}
                       </Form.Select>
                     </Col>
+
                     <Col md={3}>
                       <Form.Control
                         placeholder="Source column"
@@ -322,6 +327,7 @@ export default function Imports() {
                         onChange={(e) => setMappingSourceColumn(e.target.value)}
                       />
                     </Col>
+
                     <Col md={3}>
                       <Form.Control
                         placeholder="Target key"
@@ -329,6 +335,7 @@ export default function Imports() {
                         onChange={(e) => setMappingTargetKey(e.target.value)}
                       />
                     </Col>
+
                     <Col md={3}>
                       <Form.Select
                         value={mappingValueType}
@@ -339,6 +346,7 @@ export default function Imports() {
                         <option value="BOOLEAN">BOOLEAN</option>
                       </Form.Select>
                     </Col>
+
                     <Col md={2}>
                       <Form.Control
                         placeholder="Min"
@@ -346,6 +354,7 @@ export default function Imports() {
                         onChange={(e) => setMappingMinValue(e.target.value)}
                       />
                     </Col>
+
                     <Col md={2}>
                       <Form.Control
                         placeholder="Max"
@@ -353,6 +362,7 @@ export default function Imports() {
                         onChange={(e) => setMappingMaxValue(e.target.value)}
                       />
                     </Col>
+
                     <Col md={6}>
                       <Form.Control
                         placeholder="Allowed values, comma-separated"
@@ -360,6 +370,7 @@ export default function Imports() {
                         onChange={(e) => setMappingAllowedValues(e.target.value)}
                       />
                     </Col>
+
                     <Col md={2}>
                       <Button
                         type="submit"
@@ -397,6 +408,7 @@ export default function Imports() {
                             <th>Allowed</th>
                           </tr>
                         </thead>
+
                         <tbody>
                           {selectedProfile.column_mappings.map((m) => (
                             <tr key={m.id}>
@@ -502,6 +514,7 @@ export default function Imports() {
                       </div>
                     </div>
                   </div>
+
                   <div className="col-md-3">
                     <div className="soft-card">
                       <div className="feed-meta">Rows</div>
@@ -510,6 +523,7 @@ export default function Imports() {
                       </div>
                     </div>
                   </div>
+
                   <div className="col-md-3">
                     <div className="soft-card">
                       <div className="feed-meta">Existing Samples</div>
@@ -518,6 +532,7 @@ export default function Imports() {
                       </div>
                     </div>
                   </div>
+
                   <div className="col-md-3">
                     <div className="soft-card">
                       <div className="feed-meta">New Samples</div>
@@ -527,6 +542,40 @@ export default function Imports() {
                     </div>
                   </div>
                 </div>
+
+                {previewData.preview_rows?.length > 0 && (
+                  <Table responsive hover className="app-table">
+                    <thead>
+                      <tr>
+                        <th>Row</th>
+                        <th>Sample</th>
+                        <th>Status</th>
+                        <th>Valid Cells</th>
+                        <th>Errors</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {previewData.preview_rows.map((row) => (
+                        <tr key={row.row}>
+                          <td>{row.row}</td>
+                          <td>{row.sample_id}</td>
+                          <td>{row.exists ? "Existing" : "Will create"}</td>
+                          <td>{row.valid_result_cells}</td>
+                          <td>
+                            {row.errors?.length > 0
+                              ? row.errors.map((e, idx) => (
+                                  <div key={idx} className="text-danger small">
+                                    {e.column}: {e.reason}
+                                  </div>
+                                ))
+                              : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                )}
               </Card.Body>
             </Card>
           )}
@@ -552,17 +601,23 @@ export default function Imports() {
                   <th>Summary</th>
                 </tr>
               </thead>
+
               <tbody>
                 {jobs.map((job) => {
                   const percent = progressPercent(job);
 
                   return (
                     <tr key={job.id}>
-                      <td>{job.id}</td>
                       <td>
-                        {profiles.find((p) => p.id === job.instrument)?.code ||
+                        <Link to={`/imports/${job.id}`}>#{job.id}</Link>
+                      </td>
+
+                      <td>
+                        {job.instrument_code ||
+                          profiles.find((p) => p.id === job.instrument)?.code ||
                           job.instrument}
                       </td>
+
                       <td>
                         <Badge
                           bg={job.source_type === "API" ? "dark" : "secondary"}
@@ -570,11 +625,13 @@ export default function Imports() {
                           {job.source_type || "UPLOAD"}
                         </Badge>
                       </td>
+
                       <td>
                         <Badge bg={statusVariant(job.status)}>
                           {job.status}
                         </Badge>
                       </td>
+
                       <td style={{ minWidth: "220px" }}>
                         <ProgressBar
                           now={percent}
@@ -585,7 +642,9 @@ export default function Imports() {
                           {job.progress_message || "-"}
                         </div>
                       </td>
+
                       <td>{formatTimestamp(job.created_at)}</td>
+
                       <td style={{ minWidth: "320px" }}>
                         {job.summary?.error ? (
                           <span className="text-danger">
@@ -593,9 +652,7 @@ export default function Imports() {
                           </span>
                         ) : (
                           <div className="small">
-                            <div>
-                              Rows: {job.summary?.rows_processed ?? 0}
-                            </div>
+                            <div>Rows: {job.summary?.rows_processed ?? 0}</div>
                             <div>
                               Samples created:{" "}
                               {job.summary?.samples_created ?? 0}
