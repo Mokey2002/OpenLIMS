@@ -60,6 +60,10 @@ def process_rows(job, rows, actor=None):
     results_created = 0
     skipped_rows = []
 
+    created_sample_ids = []
+    matched_sample_ids = []
+    touched_sample_ids = []
+
     job.progress_total = len(rows)
     job.progress_current = 0
     job.progress_message = "Starting import"
@@ -69,6 +73,7 @@ def process_rows(job, rows, actor=None):
         rows_processed += 1
 
         sample_code = row.get(instrument.sample_id_column)
+
         if not sample_code:
             skipped_rows.append({
                 "row": rows_processed,
@@ -79,6 +84,7 @@ def process_rows(job, rows, actor=None):
         sample_code = str(sample_code).strip()
 
         defaults = {"status": "RECEIVED"}
+
         if job.project_id:
             defaults["project_id"] = job.project_id
 
@@ -87,8 +93,12 @@ def process_rows(job, rows, actor=None):
             defaults=defaults,
         )
 
+        touched_sample_ids.append(sample.id)
+
         if created:
             samples_created += 1
+            created_sample_ids.append(sample.id)
+
             Event.objects.create(
                 entity_type="Sample",
                 entity_id=str(sample.id),
@@ -99,15 +109,36 @@ def process_rows(job, rows, actor=None):
                     "sample_code": sample.sample_id,
                     "source": "instrument_import",
                     "instrument_code": instrument.code,
+                    "import_job_id": job.id,
                     "project_id": job.project_id,
                 },
             )
         else:
+            samples_matched += 1
+            matched_sample_ids.append(sample.id)
+
             if job.project_id and sample.project_id is None:
+                before = {"project_id": sample.project_id}
+
                 sample.project_id = job.project_id
                 sample.save(update_fields=["project"])
 
-        samples_matched += 1
+                after = {"project_id": sample.project_id}
+
+                Event.objects.create(
+                    entity_type="Sample",
+                    entity_id=str(sample.id),
+                    action="UPDATED",
+                    actor=actor,
+                    payload={
+                        "sample_id": sample.id,
+                        "sample_code": sample.sample_id,
+                        "source": "instrument_import",
+                        "import_job_id": job.id,
+                        "before": before,
+                        "after": after,
+                    },
+                )
 
         work_item = WorkItem.objects.create(
             sample=sample,
@@ -123,6 +154,7 @@ def process_rows(job, rows, actor=None):
                 continue
 
             validation = validate_mapped_value(mapping, raw_value)
+
             if not validation["ok"]:
                 skipped_rows.append({
                     "row": rows_processed,
@@ -153,11 +185,15 @@ def process_rows(job, rows, actor=None):
                 key=mapping.target_key,
                 defaults=defaults,
             )
+
             results_created += 1
 
         job.progress_current = rows_processed
         job.progress_message = f"Processed {rows_processed} of {len(rows)} rows"
         job.save(update_fields=["progress_current", "progress_message"])
+
+
+
 
     return {
         "rows_processed": rows_processed,
@@ -166,6 +202,9 @@ def process_rows(job, rows, actor=None):
         "results_created": results_created,
         "skipped_rows": skipped_rows,
         "project_id": job.project_id,
+        "created_sample_ids": sorted(set(created_sample_ids)),
+        "matched_sample_ids": sorted(set(matched_sample_ids)),
+        "touched_sample_ids": sorted(set(touched_sample_ids)),
     }
 
 
