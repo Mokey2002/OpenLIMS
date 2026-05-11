@@ -11,7 +11,6 @@ from rest_framework.response import Response
 
 from core.permissions import IsAdminOnly, IsAuthenticatedReadOnlyOrTechAdminWrite
 from events.models import Event
-from notifications.models import Notification
 
 from .models import InstrumentProfile, InstrumentColumnMapping, ImportJob
 from .serializers import (
@@ -225,7 +224,10 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             uploaded_by=self.request.user,
             source_type="UPLOAD",
             status="PENDING",
+            progress_current=0,
+            progress_total=0,
             progress_message="Queued",
+            summary={},
         )
 
         process_import_job.delay(job.id)
@@ -235,7 +237,9 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         job = self.get_object()
 
         percent = 0
-        if job.progress_total:
+        if job.status == "COMPLETED":
+            percent = 100
+        elif job.progress_total:
             percent = round((job.progress_current / job.progress_total) * 100)
 
         return Response({
@@ -247,6 +251,63 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             "progress_message": job.progress_message,
             "summary": job.summary,
         })
+
+    @action(detail=True, methods=["post"], url_path="retry")
+    def retry(self, request, pk=None):
+        job = self.get_object()
+
+        if job.source_type != "UPLOAD":
+            return Response(
+                {"detail": "Only CSV upload import jobs can be retried from this endpoint."},
+                status=400,
+            )
+
+        if job.status in ["PENDING", "RUNNING"]:
+            return Response(
+                {"detail": "This import job is already queued or running."},
+                status=400,
+            )
+
+        if not job.uploaded_file:
+            return Response(
+                {"detail": "This import job has no uploaded file to retry."},
+                status=400,
+            )
+
+        job.status = "PENDING"
+        job.progress_current = 0
+        job.progress_total = 0
+        job.progress_message = "Retry queued"
+        job.summary = {
+            "retry_of_job_id": job.id,
+            "previous_summary": job.summary,
+        }
+        job.save(
+            update_fields=[
+                "status",
+                "progress_current",
+                "progress_total",
+                "progress_message",
+                "summary",
+            ]
+        )
+
+        Event.objects.create(
+            entity_type="ImportJob",
+            entity_id=str(job.id),
+            action="IMPORT_RETRY_QUEUED",
+            actor=request.user,
+            payload={
+                "job_id": job.id,
+                "instrument_code": job.instrument.code if job.instrument else None,
+                "source_type": job.source_type,
+            },
+        )
+
+        process_import_job.delay(job.id)
+
+        serializer = self.get_serializer(job)
+        return Response(serializer.data, status=202)
 
     @action(
         detail=False,
@@ -306,7 +367,10 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             run_id=run_id,
             source_type="API",
             status="RUNNING",
+            progress_current=0,
+            progress_total=len(rows),
             progress_message="Processing API payload",
+            summary={},
         )
 
         try:
