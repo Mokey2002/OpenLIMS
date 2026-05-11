@@ -122,19 +122,24 @@ export default function ImportDetail() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
+  const [linkedSamples, setLinkedSamples] = useState([]);
+async function load() {
+  setErr("");
 
-  async function load() {
-    setErr("");
+  try {
+    const [jobData, sampleData] = await Promise.all([
+      apiGet(`/api/import-jobs/${id}/`),
+      apiGet(`/api/import-jobs/${id}/samples/`),
+    ]);
 
-    try {
-      const data = await apiGet(`/api/import-jobs/${id}/`);
-      setJob(data);
-    } catch (e) {
-      setErr(e.message || String(e));
-    } finally {
-      setLoading(false);
-    }
+    setJob(jobData);
+    setLinkedSamples(sampleData.results || sampleData || []);
+  } catch (e) {
+    setErr(e.message || String(e));
+  } finally {
+    setLoading(false);
   }
+}
 
   useEffect(() => {
     load();
@@ -400,6 +405,63 @@ export default function ImportDetail() {
           )}
         </Card.Body>
       </Card>
+
+      <Card className="app-card mb-4">
+  <Card.Body>
+    <div className="toolbar-row mb-3">
+      <h5 className="section-title mb-0">Linked Samples</h5>
+      <div className="feed-meta">{linkedSamples.length} samples</div>
+    </div>
+
+    {linkedSamples.length === 0 ? (
+      <div className="empty-state">
+        No samples were linked to this import.
+      </div>
+    ) : (
+      <Table responsive hover className="app-table">
+        <thead>
+          <tr>
+            <th>Sample</th>
+            <th>Import Action</th>
+            <th>Status</th>
+            <th>Project</th>
+            <th>Container</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {linkedSamples.map((sample) => (
+            <tr key={sample.id}>
+              <td>
+                <Link to={`/samples/${sample.id}`}>
+                  {sample.sample_id}
+                </Link>
+              </td>
+              <td>
+                <Badge
+                  bg={
+                    sample.import_action === "CREATED"
+                      ? "success"
+                      : sample.import_action === "MATCHED"
+                      ? "primary"
+                      : "secondary"
+                  }
+                >
+                  {sample.import_action}
+                </Badge>
+              </td>
+              <td>{sample.status}</td>
+              <td>{sample.project_code || "-"}</td>
+              <td>{sample.container_code || "-"}</td>
+              <td>{formatTimestamp(sample.created_at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+    )}
+  </Card.Body>
+</Card>
 
       <Card className="app-card">
         <Card.Body>

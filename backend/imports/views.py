@@ -59,6 +59,57 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             .all()
             .order_by("-created_at")
         )
+    
+    @action(detail=True, methods=["get"], url_path="samples")
+    def samples(self, request, pk=None):
+        job = self.get_object()
+        summary = job.summary or {}
+
+        sample_ids = summary.get("touched_sample_ids", [])
+
+        if not sample_ids:
+            sample_ids = summary.get("created_sample_ids", []) + summary.get(
+                "matched_sample_ids",
+                [],
+            )
+
+        sample_ids = list(set(sample_ids))
+
+        from samples.models import Sample
+
+        samples = (
+            Sample.objects
+            .filter(id__in=sample_ids)
+            .select_related("project", "container")
+            .order_by("sample_id")
+        )
+
+        created_ids = set(summary.get("created_sample_ids", []))
+        matched_ids = set(summary.get("matched_sample_ids", []))
+
+        data = []
+
+        for sample in samples:
+            if sample.id in created_ids:
+                import_action = "CREATED"
+            elif sample.id in matched_ids:
+                import_action = "MATCHED"
+            else:
+                import_action = "TOUCHED"
+
+            data.append({
+                "id": sample.id,
+                "sample_id": sample.sample_id,
+                "status": sample.status,
+                "project_id": sample.project_id,
+                "project_code": sample.project.code if sample.project else None,
+                "container_id": sample.container_id,
+                "container_code": sample.container.container_id if sample.container else None,
+                "import_action": import_action,
+                "created_at": sample.created_at,
+            })
+
+        return Response(data)
 
     def _validate_mapped_value(self, mapping, raw_value):
         if raw_value in (None, ""):
