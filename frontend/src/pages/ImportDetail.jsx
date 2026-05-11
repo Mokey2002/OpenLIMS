@@ -8,7 +8,7 @@ import {
   Table,
 } from "react-bootstrap";
 import { Link, useParams } from "react-router-dom";
-import { apiGet } from "../api";
+import { apiGet, apiPost } from "../api";
 
 function statusVariant(status) {
   switch (status) {
@@ -119,7 +119,9 @@ export default function ImportDetail() {
 
   const [job, setJob] = useState(null);
   const [err, setErr] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
+  const [retrying, setRetrying] = useState(false);
 
   async function load() {
     setErr("");
@@ -145,9 +147,30 @@ export default function ImportDetail() {
     return () => clearInterval(interval);
   }, [job?.status, id]);
 
+  async function retryImport() {
+    setErr("");
+    setSuccess("");
+    setRetrying(true);
+
+    try {
+      const updated = await apiPost(`/api/import-jobs/${id}/retry/`, {});
+      setJob(updated);
+      setSuccess("Import retry queued.");
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   const summary = useMemo(() => safeSummary(job), [job]);
   const skippedRows = useMemo(() => normalizeSkippedRows(summary), [summary]);
   const progress = getProgressPercent(job);
+
+  const canRetry =
+    job &&
+    job.source_type === "UPLOAD" &&
+    !["PENDING", "RUNNING"].includes(job.status);
 
   if (loading) {
     return (
@@ -181,6 +204,16 @@ export default function ImportDetail() {
           <Button variant="outline-dark" size="sm" onClick={load}>
             Refresh
           </Button>
+
+          <Button
+            variant="dark"
+            size="sm"
+            onClick={retryImport}
+            disabled={!canRetry || retrying}
+          >
+            {retrying ? "Queueing..." : "Retry Import"}
+          </Button>
+
           <Link to="/imports" className="btn btn-outline-secondary btn-sm">
             Back to Imports
           </Link>
@@ -188,6 +221,7 @@ export default function ImportDetail() {
       </div>
 
       {err && <Alert variant="danger">{err}</Alert>}
+      {success && <Alert variant="success">{success}</Alert>}
 
       <div className="row g-4 mb-4">
         <div className="col-lg-8">
@@ -351,6 +385,7 @@ export default function ImportDetail() {
                   <th>Reason</th>
                 </tr>
               </thead>
+
               <tbody>
                 {skippedRows.map((row, index) => (
                   <tr key={`${row.row || index}-${row.column || "row"}`}>
