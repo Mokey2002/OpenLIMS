@@ -38,6 +38,43 @@ class SampleViewSet(ModelViewSet):
             queryset = queryset.filter(project_id=project)
 
         return queryset
+    
+    def perform_update(self, serializer):
+        sample = self.get_object()
+
+        before = {
+            "status": sample.status,
+            "project_id": sample.project_id,
+            "container_id": sample.container_id,
+        }
+
+        updated = serializer.save()
+
+        after = {
+            "status": updated.status,
+            "project_id": updated.project_id,
+            "container_id": updated.container_id,
+        }
+
+        changed_fields = [
+            key for key in before.keys()
+            if before[key] != after[key]
+        ]
+
+        if changed_fields:
+            Event.objects.create(
+                entity_type="Sample",
+                entity_id=str(updated.id),
+                action="UPDATED",
+                actor=self.request.user if self.request.user.is_authenticated else None,
+                payload={
+                    "sample_id": updated.id,
+                    "sample_code": updated.sample_id,
+                    "before": before,
+                    "after": after,
+                    "changed_fields": changed_fields,
+                },
+            )
 
     @action(detail=True, methods=["get"], url_path="custom-fields")
     def custom_fields(self, request, pk=None):
@@ -80,41 +117,71 @@ class SampleViewSet(ModelViewSet):
             "allowed_transitions": get_allowed_transitions(sample.status),
         })
 
+
+
     @action(detail=True, methods=["post"], url_path="transition")
     def transition(self, request, pk=None):
         sample = self.get_object()
+        new_status = request.data.get("new_status")
 
-        serializer = SampleTransitionSerializer(
-            data=request.data,
-            context={"sample": sample},
-        )
-        serializer.is_valid(raise_exception=True)
+        if not new_status:
+            return Response(
+                {"detail": "new_status is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        old_status = sample.status
-        new_status = serializer.validated_data["new_status"]
+        allowed_transitions = {
+            "RECEIVED": ["IN_PROGRESS"],
+            "IN_PROGRESS": ["QC"],
+            "QC": ["REPORTED", "IN_PROGRESS"],
+            "REPORTED": ["ARCHIVED"],
+            "ARCHIVED": [],
+        }
+
+        current_status = sample.status
+        allowed = allowed_transitions.get(current_status, [])
+
+        if new_status not in allowed:
+            return Response(
+                {
+                    "detail": f"Invalid transition from {current_status} to {new_status}.",
+                    "current_status": current_status,
+                    "allowed_transitions": allowed,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        before = {
+            "status": sample.status,
+            "project_id": sample.project_id,
+            "container_id": sample.container_id,
+        }
 
         sample.status = new_status
-        sample.save()
+        sample.save(update_fields=["status"])
+
+        after = {
+            "status": sample.status,
+            "project_id": sample.project_id,
+            "container_id": sample.container_id,
+        }
 
         Event.objects.create(
             entity_type="Sample",
             entity_id=str(sample.id),
             action="STATUS_CHANGED",
-            actor=request.user,
+            actor=request.user if request.user.is_authenticated else None,
             payload={
                 "sample_id": sample.id,
                 "sample_code": sample.sample_id,
-                "old_status": old_status,
-                "new_status": new_status,
+                "before": before,
+                "after": after,
+                "changed_fields": ["status"],
             },
         )
 
-        return Response({
-            "id": sample.id,
-            "sample_id": sample.sample_id,
-            "old_status": old_status,
-            "new_status": new_status,
-        })
+        serializer = self.get_serializer(sample)
+        return Response(serializer.data)
 
     def partial_update(self, request, *args, **kwargs):
         sample = self.get_object()

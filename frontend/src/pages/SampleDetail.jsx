@@ -1,60 +1,212 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
-import { Alert, Badge, Button, Card, Col, Form, Row } from "react-bootstrap";
+import { useParams, Link } from "react-router-dom";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Col,
+  Form,
+  Row,
+  Table,
+} from "react-bootstrap";
 import { apiGet, apiPatch, apiPost, apiPostForm } from "../api";
 
 function statusVariant(status) {
   switch (status) {
-    case "RECEIVED": return "secondary";
-    case "IN_PROGRESS": return "primary";
-    case "QC": return "warning";
-    case "REPORTED": return "success";
-    case "ARCHIVED": return "dark";
-    default: return "light";
+    case "RECEIVED":
+      return "secondary";
+    case "IN_PROGRESS":
+      return "primary";
+    case "QC":
+      return "warning";
+    case "REPORTED":
+      return "success";
+    case "ARCHIVED":
+      return "dark";
+    default:
+      return "light";
   }
 }
+
 function workItemVariant(status) {
   switch (status) {
-    case "PENDING": return "secondary";
-    case "IN_PROGRESS": return "primary";
-    case "COMPLETED": return "success";
-    case "FAILED": return "danger";
-    default: return "light";
+    case "PENDING":
+      return "secondary";
+    case "IN_PROGRESS":
+      return "primary";
+    case "COMPLETED":
+      return "success";
+    case "FAILED":
+      return "danger";
+    default:
+      return "light";
   }
 }
+
 function actionVariant(action) {
   switch (action) {
-    case "CREATED": return "success";
-    case "UPDATED": return "primary";
-    case "DELETED": return "danger";
-    case "STATUS_CHANGED": return "warning";
-    case "CONTAINER_ASSIGNED": return "info";
-    case "ATTACHMENT_UPLOADED": return "info";
-    case "RESULTS_IMPORTED": return "dark";
-    default: return "secondary";
+    case "CREATED":
+      return "success";
+    case "UPDATED":
+      return "primary";
+    case "DELETED":
+      return "danger";
+    case "STATUS_CHANGED":
+      return "warning";
+    case "CONTAINER_ASSIGNED":
+      return "info";
+    case "ATTACHMENT_UPLOADED":
+      return "info";
+    case "RESULTS_IMPORTED":
+      return "dark";
+    case "IMPORT_RETRY_QUEUED":
+      return "secondary";
+    default:
+      return "secondary";
   }
 }
-function formatTimestamp(ts) { try { return new Date(ts).toLocaleString(); } catch { return ts; } }
+
+function formatTimestamp(ts) {
+  if (!ts) return "-";
+  try {
+    return new Date(ts).toLocaleString();
+  } catch {
+    return ts;
+  }
+}
+
+function getTimelineTitle(event) {
+  const payload = event.payload || {};
+
+  if (event.action === "CREATED") {
+    if (payload.source === "instrument_import") {
+      return `Sample created from ${payload.instrument_code || "instrument import"}`;
+    }
+    return "Sample created";
+  }
+
+  if (event.action === "STATUS_CHANGED") {
+    const before = payload.before?.status;
+    const after = payload.after?.status;
+
+    if (before && after) {
+      return `Status changed from ${before} to ${after}`;
+    }
+
+    return "Status changed";
+  }
+
+  if (event.action === "UPDATED") {
+    const changed = payload.changed_fields || [];
+
+    if (changed.includes("container_id")) {
+      return "Container assignment changed";
+    }
+
+    if (changed.includes("project_id")) {
+      return "Project assignment changed";
+    }
+
+    return "Sample updated";
+  }
+
+  if (event.action === "ATTACHMENT_UPLOADED") {
+    return "File attached";
+  }
+
+  if (event.action === "RESULTS_IMPORTED") {
+    return "Results imported";
+  }
+
+  return event.action;
+}
+
+function renderBeforeAfter(event) {
+  const payload = event.payload || {};
+  const before = payload.before || null;
+  const after = payload.after || null;
+
+  if (!before || !after) return null;
+
+  const keys = Array.from(
+    new Set([...Object.keys(before), ...Object.keys(after)])
+  );
+
+  return (
+    <Table responsive size="sm" className="app-table mt-3">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Before</th>
+          <th>After</th>
+        </tr>
+      </thead>
+      <tbody>
+        {keys.map((key) => {
+          const beforeValue = before[key] ?? "-";
+          const afterValue = after[key] ?? "-";
+
+          if (beforeValue === afterValue) return null;
+
+          return (
+            <tr key={key}>
+              <td>{key}</td>
+              <td>{String(beforeValue)}</td>
+              <td>{String(afterValue)}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </Table>
+  );
+}
+
+function renderLineageLinks(event) {
+  const payload = event.payload || {};
+  const importJobId = payload.import_job_id;
+
+  if (!importJobId) return null;
+
+  return (
+    <div className="mt-2">
+      <Link to={`/imports/${importJobId}`}>View Import Job #{importJobId}</Link>
+    </div>
+  );
+}
 
 export default function SampleDetail() {
   const { id } = useParams();
+
   const [sample, setSample] = useState(null);
   const [allowed, setAllowed] = useState([]);
   const [events, setEvents] = useState([]);
   const [workItems, setWorkItems] = useState([]);
   const [containers, setContainers] = useState([]);
   const [sampleAttachments, setSampleAttachments] = useState([]);
+
   const [err, setErr] = useState("");
+  const [success, setSuccess] = useState("");
+
   const [newWorkItemName, setNewWorkItemName] = useState("");
   const [newWorkItemNotes, setNewWorkItemNotes] = useState("");
   const [resultForms, setResultForms] = useState({});
+
   const [selectedAttachmentFile, setSelectedAttachmentFile] = useState(null);
   const [selectedContainer, setSelectedContainer] = useState("");
 
   async function load() {
     setErr("");
+
     try {
-      const [s, t, ev, wi, containersData, sampleAtts] = await Promise.all([
+      const [
+        sampleData,
+        transitionData,
+        eventsData,
+        workItemsData,
+        containersData,
+        attachmentsData,
+      ] = await Promise.all([
         apiGet(`/api/samples/${id}/`),
         apiGet(`/api/samples/${id}/allowed-transitions/`),
         apiGet(`/api/events/`),
@@ -63,39 +215,59 @@ export default function SampleDetail() {
         apiGet(`/api/sample-attachments/?sample=${id}`),
       ]);
 
-      const eventList = ev.results || ev || [];
-      const workItemList = wi.results || wi || [];
+      const eventList = eventsData.results || eventsData || [];
+      const workItemList = workItemsData.results || workItemsData || [];
       const containerList = containersData.results || containersData || [];
-      const attachmentList = sampleAtts.results || sampleAtts || [];
+      const attachmentList = attachmentsData.results || attachmentsData || [];
 
-      setSample(s);
-      setAllowed(t.allowed_transitions || []);
+      setSample(sampleData);
+      setAllowed(transitionData.allowed_transitions || []);
       setWorkItems(workItemList);
       setContainers(containerList);
-      setSelectedContainer(s.container || "");
+      setSelectedContainer(sampleData.container || "");
       setSampleAttachments(attachmentList);
 
-      const sampleEvents = eventList.filter(
-        (event) => event.entity_type === "Sample" && (String(event.entity_id) === String(id) || String(event.payload?.sample_id) === String(id))
-      );
+      const sampleEvents = eventList.filter((event) => {
+        const payload = event.payload || {};
+
+        return (
+          event.entity_type === "Sample" &&
+          (String(event.entity_id) === String(id) ||
+            String(payload.sample_id) === String(id))
+        );
+      });
+
       setEvents(sampleEvents);
     } catch (e) {
       setErr(e.message || String(e));
     }
   }
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    load();
+  }, [id]);
 
   async function doTransition(newStatus) {
+    setErr("");
+    setSuccess("");
+
     try {
-      await apiPost(`/api/samples/${id}/transition/`, { new_status: newStatus });
+      await apiPost(`/api/samples/${id}/transition/`, {
+        new_status: newStatus,
+      });
+
+      setSuccess(`Sample moved to ${newStatus}.`);
       await load();
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
   }
 
   async function createWorkItem(e) {
     e.preventDefault();
     setErr("");
+    setSuccess("");
+
     try {
       await apiPost("/api/work-items/", {
         sample: Number(id),
@@ -103,255 +275,546 @@ export default function SampleDetail() {
         status: "PENDING",
         notes: newWorkItemNotes,
       });
+
       setNewWorkItemName("");
       setNewWorkItemNotes("");
+      setSuccess("Work item created.");
       await load();
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
   }
 
   function updateResultForm(workItemId, field, value) {
     setResultForms((prev) => ({
       ...prev,
-      [workItemId]: { ...(prev[workItemId] || {}), [field]: value },
+      [workItemId]: {
+        ...(prev[workItemId] || {}),
+        [field]: value,
+      },
     }));
   }
 
   async function addResult(workItemId) {
     const form = resultForms[workItemId] || {};
     setErr("");
+    setSuccess("");
+
     try {
-      const payload = { work_item: workItemId, key: form.key, value_type: form.value_type };
-      if (form.value_type === "STRING") payload.value_string = form.value_string || "";
-      else if (form.value_type === "NUMBER") payload.value_number = form.value_number ? Number(form.value_number) : null;
-      else if (form.value_type === "BOOLEAN") payload.value_boolean = form.value_boolean === "true";
+      const payload = {
+        work_item: workItemId,
+        key: form.key,
+        value_type: form.value_type,
+      };
+
+      if (form.value_type === "STRING") {
+        payload.value_string = form.value_string || "";
+      } else if (form.value_type === "NUMBER") {
+        payload.value_number =
+          form.value_number === "" || form.value_number === undefined
+            ? null
+            : Number(form.value_number);
+      } else if (form.value_type === "BOOLEAN") {
+        payload.value_boolean = form.value_boolean === "true";
+      }
 
       await apiPost("/api/results/", payload);
 
       setResultForms((prev) => ({
         ...prev,
-        [workItemId]: { key: "", value_type: "STRING", value_string: "", value_number: "", value_boolean: "true" },
+        [workItemId]: {
+          key: "",
+          value_type: "STRING",
+          value_string: "",
+          value_number: "",
+          value_boolean: "true",
+        },
       }));
 
+      setSuccess("Result added.");
       await load();
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
   }
 
   async function uploadSampleAttachment(e) {
     e.preventDefault();
+
     if (!selectedAttachmentFile) return;
+
     setErr("");
+    setSuccess("");
+
     try {
       const formData = new FormData();
       formData.append("sample", id);
       formData.append("file", selectedAttachmentFile);
+
       await apiPostForm("/api/sample-attachments/", formData);
+
       setSelectedAttachmentFile(null);
+      setSuccess("Attachment uploaded.");
       await load();
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
   }
 
   async function assignContainer(e) {
     e.preventDefault();
     setErr("");
+    setSuccess("");
+
     try {
-      await apiPatch(`/api/samples/${id}/`, { container: selectedContainer ? Number(selectedContainer) : null });
+      await apiPatch(`/api/samples/${id}/`, {
+        container: selectedContainer ? Number(selectedContainer) : null,
+      });
+
+      setSuccess("Container assignment updated.");
       await load();
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
   }
 
-  const sortedEvents = useMemo(() => [...events].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)), [events]);
+  const sortedEvents = useMemo(() => {
+    return [...events].sort(
+      (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+    );
+  }, [events]);
+
+  if (!sample) {
+    return (
+      <div className="w-100">
+        {err ? (
+          <Alert variant="danger">{err}</Alert>
+        ) : (
+          <Card className="app-card">
+            <Card.Body>Loading sample...</Card.Body>
+          </Card>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="w-100">
-      {sample && (
-        <>
-          <div className="page-header">
-            <div>
-              <h1 className="page-title">{sample.sample_id}</h1>
-              <p className="page-subtitle">Detailed sample record, work items, files, and timeline.</p>
-            </div>
-            <Badge bg={statusVariant(sample.status)}>{sample.status}</Badge>
-          </div>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">{sample.sample_id}</h1>
+          <p className="page-subtitle">
+            Sample record, workflow, results, files, and chain of custody.
+          </p>
+        </div>
 
-          {err && <Alert variant="danger">{err}</Alert>}
+        <Badge bg={statusVariant(sample.status)}>{sample.status}</Badge>
+      </div>
 
-          <Card className="app-card mb-4">
-            <Card.Body>
-              <div className="row g-4">
-                <div className="col-lg-8">
+      {err && <Alert variant="danger">{err}</Alert>}
+      {success && <Alert variant="success">{success}</Alert>}
+
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <div className="row g-4">
+            <div className="col-lg-8">
+              <h5 className="section-title">Sample Overview</h5>
+
+              <div className="row g-3">
+                <div className="col-md-4">
                   <div className="soft-card">
-                    <div className="mb-2"><span className="feed-meta">Project</span><div>{sample.project_code || "Unassigned"}</div></div>
-                    <div className="mb-2"><span className="feed-meta">Container</span><div>{sample.container_code || "Unassigned"}</div></div>
-                    <div><span className="feed-meta">Location</span><div>{sample.location_name || "Unassigned"}</div></div>
+                    <div className="feed-meta">Project</div>
+                    <div className="fw-semibold">
+                      {sample.project_code || "Unassigned"}
+                    </div>
                   </div>
                 </div>
-                <div className="col-lg-4">
-                  <div className="feed-meta mb-2">Status Actions</div>
-                  <div className="inline-actions">
-                    {allowed.length === 0 ? <span className="empty-state">No further transitions</span> : allowed.map((s) => (
-                      <Button key={s} variant="dark" size="sm" onClick={() => doTransition(s)}>Move to {s}</Button>
-                    ))}
+
+                <div className="col-md-4">
+                  <div className="soft-card">
+                    <div className="feed-meta">Container</div>
+                    <div className="fw-semibold">
+                      {sample.container_code || "Unassigned"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="col-md-4">
+                  <div className="soft-card">
+                    <div className="feed-meta">Location</div>
+                    <div className="fw-semibold">
+                      {sample.location_name || "Unassigned"}
+                    </div>
                   </div>
                 </div>
               </div>
-            </Card.Body>
-          </Card>
+            </div>
 
-          <Card className="app-card mb-4">
+            <div className="col-lg-4">
+              <h5 className="section-title">Status Actions</h5>
+
+              <div className="inline-actions">
+                {allowed.length === 0 ? (
+                  <span className="empty-state">No further transitions.</span>
+                ) : (
+                  allowed.map((status) => (
+                    <Button
+                      key={status}
+                      variant="dark"
+                      size="sm"
+                      onClick={() => doTransition(status)}
+                    >
+                      Move to {status}
+                    </Button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </Card.Body>
+      </Card>
+
+      <div className="row g-4 mb-4">
+        <div className="col-lg-5">
+          <Card className="app-card h-100">
             <Card.Body>
               <h5 className="section-title">Storage Assignment</h5>
+
               <Form onSubmit={assignContainer}>
                 <Row className="g-2 align-items-center">
-                  <Col md={9}>
-                    <Form.Select value={selectedContainer} onChange={(e) => setSelectedContainer(e.target.value)}>
+                  <Col md={8}>
+                    <Form.Select
+                      value={selectedContainer}
+                      onChange={(e) => setSelectedContainer(e.target.value)}
+                    >
                       <option value="">Unassigned</option>
-                      {containers.map((c) => (
-                        <option key={c.id} value={c.id}>{c.container_id} ({c.kind}) — {c.location_name || c.location}</option>
+                      {containers.map((container) => (
+                        <option key={container.id} value={container.id}>
+                          {container.container_id} ({container.kind}) —{" "}
+                          {container.location_name || container.location}
+                        </option>
                       ))}
                     </Form.Select>
                   </Col>
-                  <Col md={3}>
-                    <Button type="submit" variant="dark" className="w-100">Save Container</Button>
+
+                  <Col md={4}>
+                    <Button type="submit" variant="dark" className="w-100">
+                      Save
+                    </Button>
                   </Col>
                 </Row>
               </Form>
             </Card.Body>
           </Card>
+        </div>
 
-          <Card className="app-card mb-4">
+        <div className="col-lg-7">
+          <Card className="app-card h-100">
             <Card.Body>
-              <h5 className="section-title">Work Items</h5>
-              <Form onSubmit={createWorkItem} className="mb-4">
-                <Row className="g-2">
-                  <Col md={4}><Form.Control placeholder="Work item name" value={newWorkItemName} onChange={(e) => setNewWorkItemName(e.target.value)} /></Col>
-                  <Col md={6}><Form.Control placeholder="Notes" value={newWorkItemNotes} onChange={(e) => setNewWorkItemNotes(e.target.value)} /></Col>
-                  <Col md={2}><Button type="submit" variant="dark" className="w-100">Add</Button></Col>
+              <h5 className="section-title">Sample Attachments</h5>
+
+              <Form onSubmit={uploadSampleAttachment} className="mb-4">
+                <Row className="g-2 align-items-center">
+                  <Col md={8}>
+                    <Form.Control
+                      type="file"
+                      onChange={(e) =>
+                        setSelectedAttachmentFile(e.target.files?.[0] || null)
+                      }
+                    />
+                  </Col>
+
+                  <Col md={4}>
+                    <Button type="submit" variant="dark" className="w-100">
+                      Upload
+                    </Button>
+                  </Col>
                 </Row>
               </Form>
 
-              {workItems.length === 0 ? (
-                <div className="empty-state">No work items yet.</div>
+              {sampleAttachments.length === 0 ? (
+                <div className="empty-state">No attachments yet.</div>
               ) : (
-                <div className="d-grid gap-3">
-                  {workItems.map((wi) => {
-                    const form = resultForms[wi.id] || { key: "", value_type: "STRING", value_string: "", value_number: "", value_boolean: "true" };
-                    return (
-                      <div key={wi.id} className="feed-item">
-                        <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-                          <div>
-                            <div className="fw-semibold">{wi.name}</div>
-                            <div className="feed-meta">{wi.notes}</div>
-                          </div>
-                          <Badge bg={workItemVariant(wi.status)}>{wi.status}</Badge>
-                        </div>
+                <Table responsive hover className="app-table">
+                  <thead>
+                    <tr>
+                      <th>File</th>
+                      <th>Uploaded By</th>
+                      <th>Uploaded</th>
+                    </tr>
+                  </thead>
 
-                        <div className="mb-3">
-                          <div className="feed-meta mb-2">Results</div>
-                          {wi.results?.length === 0 ? (
-                            <div className="empty-state">No results yet.</div>
-                          ) : (
-                            <ul className="mb-0">
-                              {wi.results.map((r) => <li key={r.id}><strong>{r.key}</strong>: {String(r.value)}</li>)}
-                            </ul>
-                          )}
-                        </div>
-
-                        <div className="soft-card">
-                          <div className="feed-meta mb-2">Add Result</div>
-                          <Row className="g-2">
-                            <Col md={3}>
-                              <Form.Control placeholder="Key" value={form.key} onChange={(e) => updateResultForm(wi.id, "key", e.target.value)} />
-                            </Col>
-                            <Col md={3}>
-                              <Form.Select value={form.value_type} onChange={(e) => updateResultForm(wi.id, "value_type", e.target.value)}>
-                                <option value="STRING">STRING</option>
-                                <option value="NUMBER">NUMBER</option>
-                                <option value="BOOLEAN">BOOLEAN</option>
-                              </Form.Select>
-                            </Col>
-
-                            {form.value_type === "STRING" && (
-                              <Col md={4}><Form.Control placeholder="Value" value={form.value_string} onChange={(e) => updateResultForm(wi.id, "value_string", e.target.value)} /></Col>
-                            )}
-                            {form.value_type === "NUMBER" && (
-                              <Col md={4}><Form.Control type="number" placeholder="Value" value={form.value_number} onChange={(e) => updateResultForm(wi.id, "value_number", e.target.value)} /></Col>
-                            )}
-                            {form.value_type === "BOOLEAN" && (
-                              <Col md={4}>
-                                <Form.Select value={form.value_boolean} onChange={(e) => updateResultForm(wi.id, "value_boolean", e.target.value)}>
-                                  <option value="true">True</option>
-                                  <option value="false">False</option>
-                                </Form.Select>
-                              </Col>
-                            )}
-
-                            <Col md={2}><Button variant="outline-dark" className="w-100" onClick={() => addResult(wi.id)}>Save</Button></Col>
-                          </Row>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                  <tbody>
+                    {sampleAttachments.map((attachment) => (
+                      <tr key={attachment.id}>
+                        <td>
+                          <a
+                            href={`http://localhost:8000${attachment.file}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {attachment.filename || "Attachment"}
+                          </a>
+                        </td>
+                        <td>{attachment.uploaded_by_username || "-"}</td>
+                        <td>{formatTimestamp(attachment.uploaded_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
               )}
             </Card.Body>
           </Card>
+        </div>
+      </div>
 
-          <div className="row g-4 mb-4">
-            <div className="col-lg-5">
-              <Card className="app-card h-100">
-                <Card.Body>
-                  <h5 className="section-title">Sample Attachments</h5>
-                  <Form onSubmit={uploadSampleAttachment} className="mb-4">
-                    <Row className="g-2 align-items-center">
-                      <Col md={8}><Form.Control type="file" onChange={(e) => setSelectedAttachmentFile(e.target.files?.[0] || null)} /></Col>
-                      <Col md={4}><Button type="submit" variant="dark" className="w-100">Upload</Button></Col>
-                    </Row>
-                  </Form>
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <h5 className="section-title">Work Items</h5>
 
-                  {sampleAttachments.length === 0 ? (
-                    <div className="empty-state">No sample attachments yet.</div>
-                  ) : (
-                    <ul className="mb-0">
-                      {sampleAttachments.map((att) => (
-                        <li key={att.id}>
-                          <a href={`http://localhost:8000${att.file}`} target="_blank" rel="noreferrer">{att.filename}</a>{" "}
-                          <span className="feed-meta">— uploaded by {att.uploaded_by_username || "Unknown"} on {new Date(att.uploaded_at).toLocaleString()}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Card.Body>
-              </Card>
-            </div>
+          <Form onSubmit={createWorkItem} className="mb-4">
+            <Row className="g-2">
+              <Col md={4}>
+                <Form.Control
+                  placeholder="Work item name"
+                  value={newWorkItemName}
+                  onChange={(e) => setNewWorkItemName(e.target.value)}
+                />
+              </Col>
 
-            <div className="col-lg-7">
-              <Card className="app-card h-100">
-                <Card.Body>
-                  <h5 className="section-title">Timeline</h5>
-                  {sortedEvents.length === 0 ? (
-                    <div className="empty-state">No events found for this sample.</div>
-                  ) : (
-                    <div className="d-grid gap-3">
-                      {sortedEvents.map((event) => (
-                        <div key={event.id} className="feed-item">
-                          <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-                            <div className="d-flex align-items-center gap-2 flex-wrap">
-                              <Badge bg={actionVariant(event.action)}>{event.action}</Badge>
-                              <span className="fw-semibold">{event.entity_type} #{event.entity_id}</span>
-                            </div>
-                            <div className="feed-meta">{formatTimestamp(event.timestamp)}{event.actor_username ? ` • by ${event.actor_username}` : ""}</div>
-                          </div>
-                          <pre className="app-pre">{JSON.stringify(event.payload, null, 2)}</pre>
-                        </div>
-                      ))}
+              <Col md={6}>
+                <Form.Control
+                  placeholder="Notes"
+                  value={newWorkItemNotes}
+                  onChange={(e) => setNewWorkItemNotes(e.target.value)}
+                />
+              </Col>
+
+              <Col md={2}>
+                <Button
+                  type="submit"
+                  variant="dark"
+                  className="w-100"
+                  disabled={!newWorkItemName}
+                >
+                  Add
+                </Button>
+              </Col>
+            </Row>
+          </Form>
+
+          {workItems.length === 0 ? (
+            <div className="empty-state">No work items yet.</div>
+          ) : (
+            <div className="d-grid gap-3">
+              {workItems.map((workItem) => {
+                const form = resultForms[workItem.id] || {
+                  key: "",
+                  value_type: "STRING",
+                  value_string: "",
+                  value_number: "",
+                  value_boolean: "true",
+                };
+
+                return (
+                  <div key={workItem.id} className="feed-item">
+                    <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                      <div>
+                        <div className="fw-semibold">{workItem.name}</div>
+                        <div className="feed-meta">{workItem.notes}</div>
+                      </div>
+
+                      <Badge bg={workItemVariant(workItem.status)}>
+                        {workItem.status}
+                      </Badge>
                     </div>
-                  )}
-                </Card.Body>
-              </Card>
+
+                    <div className="mb-3">
+                      <div className="feed-meta mb-2">Results</div>
+
+                      {workItem.results?.length === 0 ? (
+                        <div className="empty-state">No results yet.</div>
+                      ) : (
+                        <Table responsive hover size="sm" className="app-table">
+                          <thead>
+                            <tr>
+                              <th>Key</th>
+                              <th>Value</th>
+                              <th>Type</th>
+                            </tr>
+                          </thead>
+
+                          <tbody>
+                            {workItem.results.map((result) => (
+                              <tr key={result.id}>
+                                <td>{result.key}</td>
+                                <td>{String(result.value)}</td>
+                                <td>{result.value_type}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      )}
+                    </div>
+
+                    <div className="soft-card">
+                      <div className="feed-meta mb-2">Add Result</div>
+
+                      <Row className="g-2">
+                        <Col md={3}>
+                          <Form.Control
+                            placeholder="Key"
+                            value={form.key}
+                            onChange={(e) =>
+                              updateResultForm(
+                                workItem.id,
+                                "key",
+                                e.target.value
+                              )
+                            }
+                          />
+                        </Col>
+
+                        <Col md={3}>
+                          <Form.Select
+                            value={form.value_type}
+                            onChange={(e) =>
+                              updateResultForm(
+                                workItem.id,
+                                "value_type",
+                                e.target.value
+                              )
+                            }
+                          >
+                            <option value="STRING">STRING</option>
+                            <option value="NUMBER">NUMBER</option>
+                            <option value="BOOLEAN">BOOLEAN</option>
+                          </Form.Select>
+                        </Col>
+
+                        {form.value_type === "STRING" && (
+                          <Col md={4}>
+                            <Form.Control
+                              placeholder="Value"
+                              value={form.value_string}
+                              onChange={(e) =>
+                                updateResultForm(
+                                  workItem.id,
+                                  "value_string",
+                                  e.target.value
+                                )
+                              }
+                            />
+                          </Col>
+                        )}
+
+                        {form.value_type === "NUMBER" && (
+                          <Col md={4}>
+                            <Form.Control
+                              type="number"
+                              placeholder="Value"
+                              value={form.value_number}
+                              onChange={(e) =>
+                                updateResultForm(
+                                  workItem.id,
+                                  "value_number",
+                                  e.target.value
+                                )
+                              }
+                            />
+                          </Col>
+                        )}
+
+                        {form.value_type === "BOOLEAN" && (
+                          <Col md={4}>
+                            <Form.Select
+                              value={form.value_boolean}
+                              onChange={(e) =>
+                                updateResultForm(
+                                  workItem.id,
+                                  "value_boolean",
+                                  e.target.value
+                                )
+                              }
+                            >
+                              <option value="true">True</option>
+                              <option value="false">False</option>
+                            </Form.Select>
+                          </Col>
+                        )}
+
+                        <Col md={2}>
+                          <Button
+                            variant="outline-dark"
+                            className="w-100"
+                            onClick={() => addResult(workItem.id)}
+                            disabled={!form.key}
+                          >
+                            Save
+                          </Button>
+                        </Col>
+                      </Row>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+          )}
+        </Card.Body>
+      </Card>
+
+      <Card className="app-card">
+        <Card.Body>
+          <div className="toolbar-row mb-3">
+            <h5 className="section-title mb-0">Chain of Custody Timeline</h5>
+            <div className="feed-meta">{sortedEvents.length} events</div>
           </div>
-        </>
-      )}
+
+          {sortedEvents.length === 0 ? (
+            <div className="empty-state">No timeline events yet.</div>
+          ) : (
+            <div className="d-grid gap-3">
+              {sortedEvents.map((event) => (
+                <div key={event.id} className="feed-item">
+                  <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                    <div>
+                      <div className="d-flex align-items-center gap-2 flex-wrap">
+                        <Badge bg={actionVariant(event.action)}>
+                          {event.action}
+                        </Badge>
+
+                        <span className="fw-semibold">
+                          {getTimelineTitle(event)}
+                        </span>
+                      </div>
+
+                      <div className="feed-meta mt-1">
+                        {event.actor_username
+                          ? `By ${event.actor_username}`
+                          : "System / Instrument"}
+                      </div>
+                    </div>
+
+                    <div className="feed-meta">
+                      {formatTimestamp(event.timestamp)}
+                    </div>
+                  </div>
+
+                  {renderLineageLinks(event)}
+                  {renderBeforeAfter(event)}
+
+                  <details className="mt-3">
+                    <summary className="feed-meta">Raw payload</summary>
+                    <pre className="app-pre mt-2">
+                      {JSON.stringify(event.payload, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card.Body>
+      </Card>
     </div>
   );
 }
