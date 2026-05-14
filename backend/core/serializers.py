@@ -5,6 +5,44 @@ from rest_framework import serializers
 User = get_user_model()
 
 
+class UserLiteSerializer(serializers.ModelSerializer):
+    roles = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "roles",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+        ]
+
+    def get_roles(self, obj):
+        return list(obj.groups.values_list("name", flat=True))
+
+
+class UserListSerializer(serializers.ModelSerializer):
+    roles = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "roles",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+        ]
+
+    def get_roles(self, obj):
+        return list(obj.groups.values_list("name", flat=True))
+
+
 class UserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     role = serializers.ChoiceField(
@@ -50,25 +88,6 @@ class UserCreateSerializer(serializers.ModelSerializer):
         user.groups.add(group)
 
         return user
-
-    def get_roles(self, obj):
-        return list(obj.groups.values_list("name", flat=True))
-
-
-class UserListSerializer(serializers.ModelSerializer):
-    roles = serializers.SerializerMethodField()
-
-    class Meta:
-        model = User
-        fields = [
-            "id",
-            "username",
-            "email",
-            "roles",
-            "is_active",
-            "is_staff",
-            "is_superuser",
-        ]
 
     def get_roles(self, obj):
         return list(obj.groups.values_list("name", flat=True))
