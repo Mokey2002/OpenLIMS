@@ -1,24 +1,41 @@
 # 🧪 OpenLIMS
 
-OpenLIMS is a lightweight, modular, production-inspired Laboratory Information Management System (LIMS) built to support real lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, audit trails, notifications, and result analysis.
+OpenLIMS is a lightweight, modular, production-inspired **Laboratory Information Management System (LIMS)** designed to support real lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, audit trails, notifications, and result analysis.
+
+The goal of OpenLIMS is to provide a configurable, easy-to-deploy LIMS foundation for real laboratory workflows.
 
 ---
 
-## 🚀 Core Features
+## 🌐 Live Demo
+
+OpenLIMS is currently deployed here:
+
+```text
+http://16.146.193.92
+```
+
+---
+
+## 🚀 Features
 
 ### Sample Management
-- Track samples through lifecycle statuses: RECEIVED, IN_PROGRESS, QC, REPORTED, ARCHIVED
+- Track samples through lifecycle states:
+  - `RECEIVED`
+  - `IN_PROGRESS`
+  - `QC`
+  - `REPORTED`
+  - `ARCHIVED`
 - Assign samples to projects
 - Assign samples to containers and storage locations
-- Attach files to samples
-- View sample work items, results, and audit timeline
+- Upload sample attachments
+- View sample work items, results, and timeline events
 
 ### Project Management
 - Create projects
 - Assign users to projects
+- Restrict project visibility by membership
 - Add project notes and images
-- Restrict project visibility based on membership
-- Notify users when project updates are posted
+- Notify project members when updates are posted
 
 ### Inventory Management
 - Create storage locations
@@ -26,40 +43,33 @@ OpenLIMS is a lightweight, modular, production-inspired Laboratory Information M
 - Link containers to locations
 - Assign samples to containers
 
-### Results and Work Items
-- Create work items per sample
-- Store structured results
-- Support numeric, string, and boolean result values
-- Group imported results under instrument-generated work items
-
 ### Instrument Data Ingestion
-OpenLIMS supports two ingestion modes:
+OpenLIMS supports two ingestion workflows:
 
-1. CSV upload through the UI
-2. Direct instrument/API push
+1. **CSV upload through the UI**
+2. **Direct instrument/API push**
 
 Instrument profiles define how incoming data should be interpreted.
 
 Each instrument can define:
-- code
-- name
+- instrument name
+- instrument code
 - delimiter
 - sample ID column
 - column mappings
 - validation rules
+- numeric min/max rules
 - allowed values
-- min/max numeric limits
 
-### Async Import Processing
+### Async CSV Import Processing
+CSV imports are processed asynchronously using **Celery** and **Redis**.
 
-CSV imports are processed asynchronously using Celery.
-
-This prevents large uploads from blocking the API request.
+This prevents large imports from blocking API requests.
 
 ```text
 User uploads CSV
    ↓
-Django API creates ImportJob with PENDING status
+Django API creates ImportJob as PENDING
    ↓
 Django queues Celery task in Redis
    ↓
@@ -72,32 +82,101 @@ Worker creates samples, work items, and results
 Worker marks job COMPLETED or FAILED
 ```
 
-### Audit Trail
+### Import Job Tracking
+Each import job tracks:
+- status
+- source type
+- run ID
+- progress current
+- progress total
+- progress message
+- rows processed
+- samples created
+- samples matched
+- results created
+- skipped rows
+- linked samples
 
-OpenLIMS records important actions as events.
+Supported statuses:
+
+```text
+PENDING → RUNNING → COMPLETED
+                  ↘ FAILED
+```
+
+### Retry Failed Imports
+Failed or completed CSV imports can be retried without uploading the file again.
+
+The original uploaded file is stored with the `ImportJob`, so retry reprocesses the same file.
+
+```text
+Original CSV upload
+   ↓
+ImportJob stores uploaded_file
+   ↓
+Import fails
+   ↓
+User clicks Retry Import
+   ↓
+Celery reprocesses the same stored file
+```
+
+### Import-to-Sample Lineage
+OpenLIMS links import jobs to the samples they created or matched.
+
+This allows users to answer:
+
+- Which import created this sample?
+- Which samples were touched by this run?
+- Which instrument run produced these results?
+
+The import summary stores:
+
+```json
+{
+  "created_sample_ids": [1, 2],
+  "matched_sample_ids": [3],
+  "touched_sample_ids": [1, 2, 3]
+}
+```
+
+### Audit Trail / Chain of Custody
+OpenLIMS records important actions as audit events.
 
 Examples:
 - sample created
 - sample status changed
-- results imported
+- sample container changed
 - attachment uploaded
-- project post created
+- results imported
+- import retry queued
 
-Audit events can store before/after state for traceability.
+Audit events can include before/after values:
+
+```json
+{
+  "before": {
+    "status": "RECEIVED"
+  },
+  "after": {
+    "status": "IN_PROGRESS"
+  },
+  "changed_fields": ["status"]
+}
+```
 
 ### Notifications
-
-OpenLIMS includes notifications for user-facing activity such as:
-- completed imports
-- failed imports
-- new project posts
+OpenLIMS includes notifications for key activity:
+- import completed
+- import failed
+- project post created
+- user-relevant workflow events
 
 ### Analysis
-
-The Analyze page supports:
+The analysis page supports:
 - selecting projects
 - selecting samples
-- selecting numeric result metrics
+- choosing numeric result metrics
 - graphing values over time
 - exporting chart data as CSV
 
@@ -112,12 +191,32 @@ Django REST API
    ↓
 PostgreSQL
 
-Async path:
+Async processing:
 Django API
    ↓
 Redis Queue
    ↓
 Celery Worker
+   ↓
+PostgreSQL
+```
+
+### Production Runtime Architecture
+
+```text
+Internet
+   ↓
+Caddy Reverse Proxy
+   ↓
+React Static Frontend
+   ↓
+Django API running with Gunicorn
+   ↓
+PostgreSQL
+
+Celery Worker
+   ↓
+Redis
    ↓
 PostgreSQL
 ```
@@ -129,9 +228,10 @@ PostgreSQL
 | React | Frontend UI |
 | Django REST Framework | API and business logic |
 | PostgreSQL | Primary database |
-| Redis | Celery message broker |
-| Celery Worker | Background import processing |
-| Docker Compose | Local orchestration |
+| Redis | Celery broker/result backend |
+| Celery Worker | Background CSV import processing |
+| Caddy | Reverse proxy, static file server |
+| Docker Compose | Service orchestration |
 
 ---
 
@@ -139,40 +239,40 @@ PostgreSQL
 
 | App | Responsibility |
 |---|---|
-| samples | Sample lifecycle, transitions, attachments |
-| projects | Project grouping, membership, posts |
-| inventory | Locations and containers |
-| imports | Instrument profiles, mappings, import jobs |
-| results | Work items and structured result values |
-| events | Audit trail |
-| notifications | User alerts |
-| custom_fields | Configurable fields |
+| `samples` | Sample lifecycle, transitions, attachments |
+| `projects` | Projects, membership, posts |
+| `inventory` | Locations and containers |
+| `imports` | Instrument profiles, mappings, import jobs |
+| `results` | Work items and structured results |
+| `events` | Audit trail |
+| `notifications` | User alerts |
+| `custom_fields` | Configurable fields |
 
 ---
 
-## 🔁 Import Architecture
+## 🔁 Import Workflows
 
-### CSV Upload
+### CSV Upload Workflow
 
 ```text
-Frontend Upload Form
+Frontend Import Page
    ↓
 POST /api/import-jobs/
    ↓
-ImportJob created as PENDING
+ImportJob created with PENDING status
    ↓
 process_import_job.delay(job.id)
    ↓
-Celery worker reads uploaded CSV
+Redis queues the task
    ↓
-Rows processed using instrument mappings
+Celery worker processes CSV rows
    ↓
-Samples/results created
+Samples, work items, and results are created
    ↓
-ImportJob updated with progress and summary
+ImportJob summary is updated
 ```
 
-### API Push Model
+### Instrument API Push Workflow
 
 ```text
 Instrument / Adapter Script
@@ -181,14 +281,16 @@ POST /api/import-jobs/instrument-ingest/
    ↓
 API key validated
    ↓
-Rows validated
+Instrument profile loaded
    ↓
-Samples/results created
+Rows validated and processed
    ↓
-ImportJob completed
+Samples, work items, and results are created
+   ↓
+ImportJob marked COMPLETED
 ```
 
-Example API request:
+Example request:
 
 ```bash
 curl -X POST http://localhost:8000/api/import-jobs/instrument-ingest/ \
@@ -210,65 +312,48 @@ curl -X POST http://localhost:8000/api/import-jobs/instrument-ingest/ \
 
 ---
 
-## 📊 Import Job Progress
+## 🔐 Authentication and Permissions
 
-Each import job tracks:
-- status
-- progress_current
-- progress_total
-- progress_message
-- summary
-- skipped rows
+OpenLIMS uses:
+- JWT authentication for users
+- shared API key authentication for instrument ingestion
+- role-based permissions
 
-Statuses:
+Current roles:
+- `admin`
+- `tech`
+- `viewer`
 
-```text
-PENDING → RUNNING → COMPLETED
-                  ↘ FAILED
-```
-
-Status endpoint:
-
-```text
-GET /api/import-jobs/{id}/status/
-```
-
-Example response:
-
-```json
-{
-  "id": 1,
-  "status": "RUNNING",
-  "progress_current": 25,
-  "progress_total": 100,
-  "progress_percent": 25,
-  "progress_message": "Processed 25 of 100 rows",
-  "summary": {}
-}
-```
+Admin users can:
+- manage users
+- manage instruments
+- manage mappings
+- view and manage imports
+- access admin-only workflows
 
 ---
 
 ## 🐳 Local Development
 
-### 1. Clone
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/Mokey2002/OpenLIMS.git
 cd OpenLIMS
 ```
 
-### 2. Environment
+### 2. Create environment file
 
 ```bash
 cp deploy/.env.example deploy/.env
 ```
 
-Example environment values:
+Example local environment:
 
 ```env
-SECRET_KEY=dev-secret-key
 DEBUG=1
+DJANGO_SECRET_KEY=dev-secret-key
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 
 POSTGRES_DB=openlims
 POSTGRES_USER=openlims
@@ -312,43 +397,44 @@ Admin:    http://localhost:8000/admin
 
 ## 🧪 Running Tests
 
+Run all tests:
+
 ```bash
 docker compose -p openlims -f deploy/docker-compose.yml run --rm api pytest -v
 ```
 
-Run one test file:
+Run import tests:
 
 ```bash
-docker compose -p openlims -f deploy/docker-compose.yml run --rm api pytest imports/tests/test_instrument_ingest.py -v
+docker compose -p openlims -f deploy/docker-compose.yml run --rm api pytest imports/tests/ -v
 ```
 
 Test coverage includes:
 - instrument API ingest
 - CSV import workflow
 - duplicate run protection
+- import retry validation
 - project permissions
 - sample transitions
-- notifications
-- end-to-end workflows
+- workflow tests
+- notification behavior
 
 ---
 
 ## ✅ CI/CD
 
-GitHub Actions can run:
-- Django checks
-- migration checks
-- tests
-- Docker build validation
+OpenLIMS can run tests through GitHub Actions.
 
-Example workflow:
+Typical CI flow:
 
 ```text
-Push / PR
+Push / Pull Request
    ↓
 Build Docker services
    ↓
 Run Django checks
+   ↓
+Check migrations
    ↓
 Run migrations
    ↓
@@ -357,44 +443,40 @@ Run pytest
 
 ---
 
-## 🔐 Authentication and Permissions
+## 📦 Database Backup
 
-OpenLIMS uses:
-- JWT authentication for users
-- API key authentication for instrument ingestion
-- role-based access control
+Create backup:
 
-Roles:
-- admin
-- tech
-- viewer
+```bash
+docker compose -p openlims -f deploy/docker-compose.prod.yml exec db pg_dump -U openlims openlims > openlims_backup.sql
+```
 
-Project access can also be restricted by project membership.
+Restore backup:
+
+```bash
+cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.prod.yml exec -T db psql -U openlims openlims
+```
 
 ---
 
 ## 🧭 Roadmap
 
 ### Short Term
-- Import job detail page
-- Skipped rows CSV download
-- Import retry button
-- Progress bar UI
-- Better sample timeline
-
-### Mid Term
-- Async API ingest
-- Celery retries
-- WebSocket progress updates
 - Result edit history
-- Data validation UI
+- WebSocket progress updates
+- Async API ingest
+- Celery retry policies
+- Instrument adapter framework
+- Advanced search
 
 ### Long Term
-- Multi-tenant labs
 - Per-instrument API keys
-- Kafka ingestion pipeline
-- External LIS/LIMS integrations
-- Cloud deployment
+- Multi-tenant labs
+- S3 file storage
+- External LIMS/LIS integrations
+- Kafka-based ingestion
+- Workflow engine
+- Report generation
 
 ---
 
@@ -402,11 +484,12 @@ Project access can also be restricted by project membership.
 
 OpenLIMS aims to be:
 - lightweight
+- deployable
 - configurable
 - open-source friendly
-- easy to deploy
-- suitable for many lab types
-- production-shaped without enterprise complexity
+- production-shaped
+- useful for real lab workflows
+- easy to run locally or on low-cost cloud infrastructure
 
 ---
 
@@ -421,10 +504,3 @@ Eduardo L
 
 Apache 2.0
 
-
-
-![Login Screen](./images/login.png)
-![Dashboard](./images/dashboard.png)
-![Project](./images/projects.png)
-![Analyze](./images/analyze.png)
-![Samples](./images/samples.png)
