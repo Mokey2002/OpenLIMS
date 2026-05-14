@@ -9,7 +9,10 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
-from core.permissions import IsAdminOnly, IsAuthenticatedReadOnlyOrTechAdminWrite
+from core.permissions import (
+    IsAuthenticatedReadOnlyAdminWrite,
+    IsAuthenticatedReadOnlyOrTechAdminWrite,
+)
 from events.models import Event
 
 from .models import InstrumentProfile, InstrumentColumnMapping, ImportJob
@@ -22,7 +25,16 @@ from .tasks import process_import_job, process_rows
 
 
 class InstrumentProfileViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAdminOnly]
+    """
+    Instrument configuration.
+
+    Permissions:
+    - admin: read/write
+    - tech: read only
+    - viewer: read only
+    """
+
+    permission_classes = [IsAuthenticatedReadOnlyAdminWrite]
     serializer_class = InstrumentProfileSerializer
 
     def get_queryset(self):
@@ -35,7 +47,16 @@ class InstrumentProfileViewSet(viewsets.ModelViewSet):
 
 
 class InstrumentColumnMappingViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAdminOnly]
+    """
+    Instrument column mapping configuration.
+
+    Permissions:
+    - admin: read/write
+    - tech: read only
+    - viewer: read only
+    """
+
+    permission_classes = [IsAuthenticatedReadOnlyAdminWrite]
     serializer_class = InstrumentColumnMappingSerializer
 
     def get_queryset(self):
@@ -48,6 +69,15 @@ class InstrumentColumnMappingViewSet(viewsets.ModelViewSet):
 
 
 class ImportJobViewSet(viewsets.ModelViewSet):
+    """
+    Import jobs.
+
+    Permissions:
+    - admin: read/write
+    - tech: read/write
+    - viewer: read only
+    """
+
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
     serializer_class = ImportJobSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -59,57 +89,6 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             .all()
             .order_by("-created_at")
         )
-    
-    @action(detail=True, methods=["get"], url_path="samples")
-    def samples(self, request, pk=None):
-        job = self.get_object()
-        summary = job.summary or {}
-
-        sample_ids = summary.get("touched_sample_ids", [])
-
-        if not sample_ids:
-            sample_ids = summary.get("created_sample_ids", []) + summary.get(
-                "matched_sample_ids",
-                [],
-            )
-
-        sample_ids = list(set(sample_ids))
-
-        from samples.models import Sample
-
-        samples = (
-            Sample.objects
-            .filter(id__in=sample_ids)
-            .select_related("project", "container")
-            .order_by("sample_id")
-        )
-
-        created_ids = set(summary.get("created_sample_ids", []))
-        matched_ids = set(summary.get("matched_sample_ids", []))
-
-        data = []
-
-        for sample in samples:
-            if sample.id in created_ids:
-                import_action = "CREATED"
-            elif sample.id in matched_ids:
-                import_action = "MATCHED"
-            else:
-                import_action = "TOUCHED"
-
-            data.append({
-                "id": sample.id,
-                "sample_id": sample.sample_id,
-                "status": sample.status,
-                "project_id": sample.project_id,
-                "project_code": sample.project.code if sample.project else None,
-                "container_id": sample.container_id,
-                "container_code": sample.container.container_id if sample.container else None,
-                "import_action": import_action,
-                "created_at": sample.created_at,
-            })
-
-        return Response(data)
 
     def _validate_mapped_value(self, mapping, raw_value):
         if raw_value in (None, ""):
@@ -252,7 +231,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         if not instrument_id or not uploaded_file:
             return Response(
                 {"detail": "instrument and uploaded_file are required."},
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
@@ -262,7 +241,10 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                 .get(id=instrument_id)
             )
         except InstrumentProfile.DoesNotExist:
-            return Response({"detail": "Instrument not found."}, status=404)
+            return Response(
+                {"detail": "Instrument not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         summary = self._parse_preview(instrument, uploaded_file)
         summary["instrument_code"] = instrument.code
@@ -288,6 +270,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         job = self.get_object()
 
         percent = 0
+
         if job.status == "COMPLETED":
             percent = 100
         elif job.progress_total:
@@ -303,27 +286,93 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             "summary": job.summary,
         })
 
+    @action(detail=True, methods=["get"], url_path="summary")
+    def summary(self, request, pk=None):
+        job = self.get_object()
+        return Response(job.summary or {})
+
+    @action(detail=True, methods=["get"], url_path="samples")
+    def samples(self, request, pk=None):
+        job = self.get_object()
+        summary = job.summary or {}
+
+        sample_ids = summary.get("touched_sample_ids", [])
+
+        if not sample_ids:
+            sample_ids = (
+                summary.get("created_sample_ids", [])
+                + summary.get("matched_sample_ids", [])
+            )
+
+        sample_ids = list(set(sample_ids))
+
+        from samples.models import Sample
+
+        samples = (
+            Sample.objects
+            .filter(id__in=sample_ids)
+            .select_related("project", "container")
+            .order_by("sample_id")
+        )
+
+        created_ids = set(summary.get("created_sample_ids", []))
+        matched_ids = set(summary.get("matched_sample_ids", []))
+
+        data = []
+
+        for sample in samples:
+            if sample.id in created_ids:
+                import_action = "CREATED"
+            elif sample.id in matched_ids:
+                import_action = "MATCHED"
+            else:
+                import_action = "TOUCHED"
+
+            data.append({
+                "id": sample.id,
+                "sample_id": sample.sample_id,
+                "status": sample.status,
+                "project_id": sample.project_id,
+                "project_code": sample.project.code if sample.project else None,
+                "container_id": sample.container_id,
+                "container_code": (
+                    sample.container.container_id
+                    if sample.container
+                    else None
+                ),
+                "import_action": import_action,
+                "created_at": sample.created_at,
+            })
+
+        return Response(data)
+
     @action(detail=True, methods=["post"], url_path="retry")
     def retry(self, request, pk=None):
         job = self.get_object()
 
         if job.source_type != "UPLOAD":
             return Response(
-                {"detail": "Only CSV upload import jobs can be retried from this endpoint."},
-                status=400,
+                {
+                    "detail": (
+                        "Only CSV upload import jobs can be retried from this endpoint."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if job.status in ["PENDING", "RUNNING"]:
             return Response(
                 {"detail": "This import job is already queued or running."},
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not job.uploaded_file:
             return Response(
                 {"detail": "This import job has no uploaded file to retry."},
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
+        previous_summary = job.summary or {}
 
         job.status = "PENDING"
         job.progress_current = 0
@@ -331,7 +380,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         job.progress_message = "Retry queued"
         job.summary = {
             "retry_of_job_id": job.id,
-            "previous_summary": job.summary,
+            "previous_summary": previous_summary,
         }
         job.save(
             update_fields=[
@@ -347,7 +396,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             entity_type="ImportJob",
             entity_id=str(job.id),
             action="IMPORT_RETRY_QUEUED",
-            actor=request.user,
+            actor=request.user if request.user.is_authenticated else None,
             payload={
                 "job_id": job.id,
                 "instrument_code": job.instrument.code if job.instrument else None,
@@ -358,7 +407,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         process_import_job.delay(job.id)
 
         serializer = self.get_serializer(job)
-        return Response(serializer.data, status=202)
+        return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
 
     @action(
         detail=False,
@@ -384,7 +433,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         if not instrument_code or not run_id:
             return Response(
                 {"detail": "instrument_code and run_id are required."},
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
@@ -396,19 +445,19 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         except InstrumentProfile.DoesNotExist:
             return Response(
                 {"detail": "Instrument not found."},
-                status=404,
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         if not isinstance(rows, list) or len(rows) == 0:
             return Response(
                 {"detail": "rows must be a non-empty list."},
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if ImportJob.objects.filter(instrument=instrument, run_id=run_id).exists():
             return Response(
                 {"detail": "Duplicate run_id for this instrument."},
-                status=409,
+                status=status.HTTP_409_CONFLICT,
             )
 
         job = ImportJob.objects.create(
@@ -459,7 +508,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                     "status": job.status,
                     **summary,
                 },
-                status=201,
+                status=status.HTTP_201_CREATED,
             )
 
         except Exception as e:
@@ -470,10 +519,5 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
             return Response(
                 {"detail": str(e)},
-                status=500,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-    @action(detail=True, methods=["get"], url_path="summary")
-    def summary(self, request, pk=None):
-        job = self.get_object()
-        return Response(job.summary)

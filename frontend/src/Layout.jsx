@@ -34,6 +34,7 @@ export default function Layout() {
   }
 
   const isAdmin = me?.roles?.includes("admin");
+const isTech = me?.roles?.includes("tech");
   const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications]);
 
   return (
@@ -50,12 +51,11 @@ export default function Layout() {
               <Nav.Link as={NavLink} to="/events">Events</Nav.Link>
               <Nav.Link as={NavLink} to="/analyze">Analyze</Nav.Link>
               <Nav.Link as={NavLink} to="/projects">Projects</Nav.Link>
-              {isAdmin && (
-                <>
-                  <Nav.Link as={NavLink} to="/users">Users</Nav.Link>
-                  <Nav.Link as={NavLink} to="/imports">Imports</Nav.Link>
-                </>
-              )}
+            {isAdmin && <Nav.Link as={NavLink} to="/users">Users</Nav.Link>}
+
+{(isAdmin || isTech) && (
+  <Nav.Link as={NavLink} to="/imports">Imports</Nav.Link>
+)}
               <Nav.Link as={NavLink} to="/notifications">
                 Notifications {unreadCount > 0 && <Badge bg="danger">{unreadCount}</Badge>}
               </Nav.Link>
