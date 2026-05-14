@@ -1,23 +1,24 @@
 import { useState } from "react";
+import { Alert, Button, Card, Form } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
-import { Alert, Button, Card, Col, Container, Form, Row, Spinner } from "react-bootstrap";
 import { login } from "../api";
 
 export default function Login() {
-  const nav = useNavigate();
+  const navigate = useNavigate();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function onSubmit(e) {
+  async function handleLogin(e) {
     e.preventDefault();
     setErr("");
     setLoading(true);
 
     try {
       await login(username, password);
-      nav("/samples");
+      navigate("/");
     } catch (e) {
       setErr(e.message || "Login failed");
     } finally {
@@ -25,65 +26,109 @@ export default function Login() {
     }
   }
 
+  function useDemoLogin() {
+    setUsername("peter");
+    setPassword("peter123");
+  }
+
   return (
-    <Container fluid className="min-vh-100 d-flex align-items-center bg-light">
-      <Row className="w-100 justify-content-center">
-        <Col xs={12} sm={10} md={8} lg={5} xl={4}>
-          <Card className="shadow-sm border-0">
-            <Card.Body className="p-4">
-              <div className="mb-4 text-center">
-                <h2 className="mb-2">OpenLIMS</h2>
-                <p className="text-muted mb-0">
-                  Sign in to access samples, inventory, events, and custom fields.
-                </p>
-              </div>
+    <div
+      className="d-flex align-items-center justify-content-center"
+      style={{
+        minHeight: "100vh",
+        background:
+          "linear-gradient(135deg, #f8fafc 0%, #eef2f7 45%, #e5e7eb 100%)",
+        padding: "24px",
+      }}
+    >
+      <Card
+        className="shadow-sm border-0"
+        style={{
+          width: "100%",
+          maxWidth: "440px",
+          borderRadius: "18px",
+        }}
+      >
+        <Card.Body className="p-4">
+          <div className="mb-4 text-center">
+            <div
+              className="mx-auto mb-3 d-flex align-items-center justify-content-center"
+              style={{
+                width: "56px",
+                height: "56px",
+                borderRadius: "16px",
+                background: "#111827",
+                color: "white",
+                fontWeight: "800",
+                fontSize: "22px",
+              }}
+            >
+              OL
+            </div>
 
-              <Form onSubmit={onSubmit}>
-                <Form.Group className="mb-3" controlId="username">
-                  <Form.Label>Username</Form.Label>
-                  <Form.Control
-                    type="text"
-                    placeholder="Enter your username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    autoComplete="username"
-                  />
-                </Form.Group>
+            <h2 className="mb-1 fw-bold">OpenLIMS</h2>
+            <p className="text-muted mb-0">
+              Laboratory workflow and sample tracking demo
+            </p>
+          </div>
 
-                <Form.Group className="mb-3" controlId="password">
-                  <Form.Label>Password</Form.Label>
-                  <Form.Control
-                    type="password"
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
-                  />
-                </Form.Group>
+          <Alert variant="info" className="mb-4">
+            <div className="fw-semibold mb-1">Demo Login</div>
+            <div>
+              Username: <strong>peter</strong>
+            </div>
+            <div>
+              Password: <strong>peter123</strong>
+            </div>
 
-                <div className="d-grid">
-                  <Button type="submit" variant="dark" disabled={loading || !username || !password}>
-                    {loading ? (
-                      <>
-                        <Spinner size="sm" animation="border" className="me-2" />
-                        Signing in...
-                      </>
-                    ) : (
-                      "Sign in"
-                    )}
-                  </Button>
-                </div>
-              </Form>
+            <Button
+              variant="outline-primary"
+              size="sm"
+              className="mt-3"
+              onClick={useDemoLogin}
+            >
+              Use demo credentials
+            </Button>
+          </Alert>
 
-              {err && (
-                <Alert variant="danger" className="mt-3 mb-0">
-                  {err}
-                </Alert>
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-    </Container>
+          {err && <Alert variant="danger">{err}</Alert>}
+
+          <Form onSubmit={handleLogin}>
+            <Form.Group className="mb-3">
+              <Form.Label>Username</Form.Label>
+              <Form.Control
+                autoFocus
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter username"
+              />
+            </Form.Group>
+
+            <Form.Group className="mb-4">
+              <Form.Label>Password</Form.Label>
+              <Form.Control
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+              />
+            </Form.Group>
+
+            <Button
+              type="submit"
+              variant="dark"
+              className="w-100"
+              disabled={!username || !password || loading}
+            >
+              {loading ? "Signing in..." : "Sign in"}
+            </Button>
+          </Form>
+
+          <div className="text-center text-muted mt-4 small">
+            Demo environment for OpenLIMS
+          </div>
+        </Card.Body>
+      </Card>
+    </div>
   );
 }
