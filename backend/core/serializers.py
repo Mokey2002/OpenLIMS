@@ -5,19 +5,24 @@ from rest_framework import serializers
 User = get_user_model()
 
 
-class UserLiteSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ["id", "username", "email"]
-
-
 class UserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
-    role = serializers.ChoiceField(choices=["admin", "tech", "viewer"], write_only=True)
+    role = serializers.ChoiceField(
+        choices=["admin", "tech", "viewer"],
+        write_only=True,
+    )
+    roles = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "password", "role"]
+        fields = [
+            "id",
+            "username",
+            "email",
+            "password",
+            "role",
+            "roles",
+        ]
 
     def create(self, validated_data):
         role = validated_data.pop("role")
@@ -27,17 +32,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
 
-        group = Group.objects.get(name=role)
+        group, _ = Group.objects.get_or_create(name=role)
         user.groups.add(group)
 
         return user
-
-class MeSerializer(serializers.ModelSerializer):
-    roles = serializers.SerializerMethodField()
-
-    class Meta:
-        model = User
-        fields = ["id", "username", "email", "roles"]
 
     def get_roles(self, obj):
         return list(obj.groups.values_list("name", flat=True))
