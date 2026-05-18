@@ -9,3 +9,5 @@ pytest-django
 pytest-cov
 celery
 redis
+gunicorn
+psycopg2-binary
