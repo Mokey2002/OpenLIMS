@@ -51,6 +51,7 @@ const isTech = me?.roles?.includes("tech");
               <Nav.Link as={NavLink} to="/events">Events</Nav.Link>
               <Nav.Link as={NavLink} to="/analyze">Analyze</Nav.Link>
               <Nav.Link as={NavLink} to="/projects">Projects</Nav.Link>
+              <Nav.Link as={NavLink} to="/sequences">Sequences</Nav.Link>
             {isAdmin && <Nav.Link as={NavLink} to="/users">Users</Nav.Link>}
 
 {(isAdmin || isTech) && (
