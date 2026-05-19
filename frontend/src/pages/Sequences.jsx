@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Badge,
@@ -10,6 +10,7 @@ import {
   Table,
 } from "react-bootstrap";
 import { SeqViz } from "seqviz";
+import { apiGet, apiPatch, apiPost } from "../api";
 
 const demoSequence =
   "TTGACGGCTAGCTCAGTCCTAGGTACAGTGCTAGCGGATCCATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGCACCACCGGCAAGCTGCCCGTGCCCTGGCCCACCCTCGTGACCACCCTGACCTACGGCGTGCAGTGCTTCAGCCGCTACCCCGACCACATGAAGCAGCACGACTTCTTCAAGTCCGCCATGCCCGAAGGCTACGTCCAGGAGCGCACCATCTTCTTCAAGGACGACGGCAACTACAAGACCCGCGCCGAGGTGAAGTTCGAGGGCGACACCCTGGTGAACCGCATCGAGCTGAAGGGCATCGACTTCAAGGAGGACGGCAACATCCTGGGGCACAAGCTGGAGTACAACTACAACAGCCACAACGTCTATATCATGGCCGACAAGCAGAAGAACGGCATCAAGGTGAACTTCAAGATCCGCCACAACATCGAGGACGGCAGCGTGCAGCTCGCCGACCACTACCAGCAGAACACCCCCATCGGCGACGGCCCCGTGCTGCTGCCCGACAACCACTACCTGAGCACCCAGTCCGCCCTGAGCAAAGACCCCAACGAGAAGCGCGATCACATGGTCCTGCTGGAGTTCGTGACCGCCGCCGGGATCACTCTCGGCATGGACGAGCTGTACAAGTAA";
@@ -74,6 +75,13 @@ const defaultHighlights = [
 ];
 
 const defaultEnzymes = ["EcoRI", "BamHI", "HindIII", "PstI", "XhoI"];
+
+const defaultBpColors = {
+  A: "#ef4444",
+  T: "#3b82f6",
+  G: "#22c55e",
+  C: "#f59e0b",
+};
 
 function cleanSequenceText(value) {
   return value.replace(/\s/g, "").toUpperCase();
@@ -165,6 +173,23 @@ function JsonPreview({ title, data }) {
   );
 }
 
+function ColorSwatch({ color }) {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        width: "18px",
+        height: "18px",
+        borderRadius: "6px",
+        background: color,
+        border: "1px solid #d1d5db",
+        verticalAlign: "middle",
+        marginRight: "8px",
+      }}
+    />
+  );
+}
+
 function FeatureTable({ items, type, onRemove }) {
   if (items.length === 0) {
     return <div className="empty-state mt-3">No {type} added yet.</div>;
@@ -189,18 +214,7 @@ function FeatureTable({ items, type, onRemove }) {
             <td>{formatRange(item)}</td>
             <td>{item.direction === -1 ? "REV" : "FWD"}</td>
             <td>
-              <span
-                style={{
-                  display: "inline-block",
-                  width: "18px",
-                  height: "18px",
-                  borderRadius: "6px",
-                  background: item.color,
-                  border: "1px solid #d1d5db",
-                  verticalAlign: "middle",
-                  marginRight: "8px",
-                }}
-              />
+              <ColorSwatch color={item.color} />
               {item.color}
             </td>
             <td>
@@ -221,6 +235,10 @@ function FeatureTable({ items, type, onRemove }) {
 
 export default function Sequences() {
   const [name, setName] = useState("Demo GFP Construct");
+  const [description, setDescription] = useState(
+    "Saved from SeqViz workspace"
+  );
+  const [sequenceType, setSequenceType] = useState("DNA");
   const [sequence, setSequence] = useState(demoSequence);
   const [viewer, setViewer] = useState("both");
   const [showComplement, setShowComplement] = useState(true);
@@ -238,6 +256,13 @@ export default function Sequences() {
 
   const [searchQuery, setSearchQuery] = useState("ATG");
   const [searchMismatch, setSearchMismatch] = useState(0);
+
+  const [savedSequences, setSavedSequences] = useState([]);
+  const [selectedSequenceId, setSelectedSequenceId] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loadingWorkspace, setLoadingWorkspace] = useState(false);
 
   const [annotationForm, setAnnotationForm] = useState({
     name: "",
@@ -279,12 +304,7 @@ export default function Sequences() {
     color: "#dbeafe",
   });
 
-  const [bpColors, setBpColors] = useState({
-    A: "#ef4444",
-    T: "#3b82f6",
-    G: "#22c55e",
-    C: "#f59e0b",
-  });
+  const [bpColors, setBpColors] = useState(defaultBpColors);
 
   const cleanSequence = useMemo(() => cleanSequenceText(sequence), [sequence]);
 
@@ -298,6 +318,10 @@ export default function Sequences() {
       mismatch: Number(searchMismatch || 0),
     };
   }, [searchQuery, searchMismatch]);
+
+  useEffect(() => {
+    loadSavedSequences();
+  }, []);
 
   function hasSelectionRange() {
     return (
@@ -353,6 +377,8 @@ export default function Sequences() {
 
   function resetDemo() {
     setName("Demo GFP Construct");
+    setDescription("Saved from SeqViz workspace");
+    setSequenceType("DNA");
     setSequence(demoSequence);
     setViewer("both");
     setShowComplement(true);
@@ -367,6 +393,145 @@ export default function Sequences() {
     setSearchMismatch(0);
     setSelection(null);
     setSearchResults([]);
+    setBpColors(defaultBpColors);
+  }
+
+  function startNewWorkspace() {
+    setSelectedSequenceId("");
+    setSaveMessage("");
+    setSaveError("");
+    resetDemo();
+  }
+
+  function buildFeaturesPayload() {
+    return [
+      ...annotations.map((item) => ({
+        feature_type: "ANNOTATION",
+        name: item.name || "",
+        start: item.start,
+        end: item.end,
+        direction: item.direction || 1,
+        color: item.color || "#22c55e",
+        metadata: {},
+      })),
+
+      ...primers.map((item) => ({
+        feature_type: "PRIMER",
+        name: item.name || "",
+        start: item.start,
+        end: item.end,
+        direction: item.direction || 1,
+        color: item.color || "#9333ea",
+        metadata: {},
+      })),
+
+      ...translations.map((item) => ({
+        feature_type: "TRANSLATION",
+        name: item.name || "",
+        start: item.start,
+        end: item.end,
+        direction: item.direction || 1,
+        color: item.color || "#16a34a",
+        metadata: {},
+      })),
+
+      ...highlights.map((item) => ({
+        feature_type: "HIGHLIGHT",
+        name: item.name || "",
+        start: item.start,
+        end: item.end,
+        direction: 1,
+        color: item.color || "#fde047",
+        metadata: {},
+      })),
+    ];
+  }
+
+  async function loadSavedSequences() {
+    setSaveError("");
+
+    try {
+      const data = await apiGet("/api/sequences/");
+      setSavedSequences(data.results || data || []);
+    } catch (e) {
+      setSaveError(e.message || String(e));
+    }
+  }
+
+  async function saveSequenceWorkspace() {
+    setSaveMessage("");
+    setSaveError("");
+    setSaving(true);
+
+    const payload = {
+      name,
+      description,
+      sequence_type: sequenceType,
+      sequence: cleanSequence,
+      viewer,
+      show_complement: showComplement,
+      rotate_on_scroll: rotateOnScroll,
+      zoom,
+      enzymes,
+      bp_colors: bpColors,
+      features: buildFeaturesPayload(),
+    };
+
+    try {
+      let saved;
+
+      if (selectedSequenceId) {
+        saved = await apiPatch(`/api/sequences/${selectedSequenceId}/`, payload);
+        setSaveMessage(`Updated "${saved.name}" successfully.`);
+      } else {
+        saved = await apiPost("/api/sequences/", payload);
+        setSelectedSequenceId(String(saved.id));
+        setSaveMessage(`Saved "${saved.name}" successfully.`);
+      }
+
+      await loadSavedSequences();
+    } catch (e) {
+      setSaveError(e.message || String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function loadSequenceWorkspace(id) {
+    if (!id) return;
+
+    setSaveMessage("");
+    setSaveError("");
+    setLoadingWorkspace(true);
+
+    try {
+      const data = await apiGet(`/api/sequences/${id}/workspace/`);
+
+      setSelectedSequenceId(String(data.id));
+      setName(data.name);
+      setDescription(data.description || "");
+      setSequenceType(data.sequence_type || "DNA");
+      setSequence(data.sequence);
+      setViewer(data.viewer || "both");
+      setShowComplement(Boolean(data.show_complement));
+      setRotateOnScroll(Boolean(data.rotate_on_scroll));
+      setZoom(data.zoom ?? 50);
+
+      setAnnotations(data.annotations || []);
+      setPrimers(data.primers || []);
+      setTranslations(data.translations || []);
+      setHighlights(data.highlights || []);
+      setEnzymes(data.enzymes || []);
+      setBpColors(data.bp_colors || defaultBpColors);
+
+      setSelection(null);
+      setSearchResults([]);
+      setSaveMessage(`Loaded "${data.name}".`);
+    } catch (e) {
+      setSaveError(e.message || String(e));
+    } finally {
+      setLoadingWorkspace(false);
+    }
   }
 
   function addAnnotation(e) {
@@ -514,9 +679,8 @@ export default function Sequences() {
         <div>
           <h1 className="page-title">Sequences</h1>
           <p className="page-subtitle">
-            Interactive sequence workspace for annotations, primers,
-            translations, enzyme sites, highlights, search, and selected
-            regions.
+            Saveable SeqViz workspaces for annotations, primers, translations,
+            enzyme sites, highlights, search, and selected regions.
           </p>
         </div>
 
@@ -531,22 +695,118 @@ export default function Sequences() {
       <Alert variant="info" className="border-0 shadow-sm">
         <strong>Tip:</strong> Drag across the sequence viewer to select a
         region, then use the selected region to create an annotation, primer,
-        translation, or highlight without manually typing start/end
-        coordinates.
+        translation, or highlight without manually typing start/end coordinates.
       </Alert>
 
       <Row className="g-4 mb-4">
         <Col lg={4}>
           <Card className="app-card mb-4 border-0 shadow-sm">
             <Card.Body>
+              <div className="toolbar-row mb-3">
+                <h5 className="section-title mb-0">Saved Workspaces</h5>
+                <Badge bg="dark">{savedSequences.length}</Badge>
+              </div>
+
+              {saveMessage && <Alert variant="success">{saveMessage}</Alert>}
+              {saveError && <Alert variant="danger">{saveError}</Alert>}
+
+              <div className="soft-card mb-3">
+                <div className="feed-meta">Current Workspace</div>
+                <div className="fw-semibold">
+                  {name || "Untitled workspace"}
+                </div>
+                <div className="small text-muted">
+                  {selectedSequenceId
+                    ? `Saved workspace ID: ${selectedSequenceId}`
+                    : "Not saved yet"}
+                </div>
+              </div>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Load saved workspace</Form.Label>
+                <Form.Select
+                  value={selectedSequenceId}
+                  disabled={loadingWorkspace}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedSequenceId(id);
+
+                    if (id) {
+                      loadSequenceWorkspace(id);
+                    }
+                  }}
+                >
+                  <option value="">New unsaved workspace</option>
+
+                  {savedSequences.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} — {item.sequence_type} —{" "}
+                      {item.sequence.length} bp
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+
+              <div className="d-grid gap-2">
+                <Button
+                  variant="dark"
+                  onClick={saveSequenceWorkspace}
+                  disabled={saving || !name || !cleanSequence}
+                >
+                  {saving
+                    ? "Saving..."
+                    : selectedSequenceId
+                    ? "Update Workspace"
+                    : "Save Workspace"}
+                </Button>
+
+                <Button variant="outline-dark" onClick={startNewWorkspace}>
+                  Start New Workspace
+                </Button>
+
+                <Button variant="outline-secondary" onClick={loadSavedSequences}>
+                  Refresh Saved List
+                </Button>
+              </div>
+            </Card.Body>
+          </Card>
+
+          <Card className="app-card mb-4 border-0 shadow-sm">
+            <Card.Body>
               <h5 className="section-title">Sequence Setup</h5>
 
               <Form.Group className="mb-3">
-                <Form.Label>Sequence Name</Form.Label>
+                <Form.Label>Workspace Name</Form.Label>
                 <Form.Control
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  placeholder="Example: GFP construct review"
                 />
+                <div className="form-text">
+                  This name is used in the saved workspace dropdown.
+                </div>
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Description</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Sequence Type</Form.Label>
+                <Form.Select
+                  value={sequenceType}
+                  onChange={(e) => setSequenceType(e.target.value)}
+                >
+                  <option value="DNA">DNA</option>
+                  <option value="RNA">RNA</option>
+                  <option value="PROTEIN">Protein</option>
+                </Form.Select>
               </Form.Group>
 
               <Form.Group className="mb-3">
@@ -704,13 +964,9 @@ export default function Sequences() {
 
                 <div className="d-flex flex-wrap gap-2">
                   <Badge bg="dark">{sequenceLength} bp</Badge>
-                  <Badge bg="primary">
-                    {annotations.length} annotations
-                  </Badge>
+                  <Badge bg="primary">{annotations.length} annotations</Badge>
                   <Badge bg="secondary">{primers.length} primers</Badge>
-                  <Badge bg="success">
-                    {translations.length} translations
-                  </Badge>
+                  <Badge bg="success">{translations.length} translations</Badge>
                   <Badge bg="warning" text="dark">
                     {highlights.length} highlights
                   </Badge>
@@ -1133,18 +1389,7 @@ export default function Sequences() {
                       <tr key={`${item.start}-${item.end}-${index}`}>
                         <td>{formatRange(item)}</td>
                         <td>
-                          <span
-                            style={{
-                              display: "inline-block",
-                              width: "18px",
-                              height: "18px",
-                              borderRadius: "6px",
-                              background: item.color,
-                              border: "1px solid #d1d5db",
-                              verticalAlign: "middle",
-                              marginRight: "8px",
-                            }}
-                          />
+                          <ColorSwatch color={item.color} />
                           {item.color}
                         </td>
                         <td>
@@ -1340,9 +1585,15 @@ export default function Sequences() {
               <JsonPreview
                 title="Workspace JSON Preview"
                 data={{
+                  selectedSequenceId,
                   name,
+                  description,
+                  sequenceType,
                   sequenceLength,
                   viewer,
+                  showComplement,
+                  rotateOnScroll,
+                  zoom,
                   annotations,
                   primers,
                   translations,
