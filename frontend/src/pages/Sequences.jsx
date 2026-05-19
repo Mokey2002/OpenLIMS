@@ -16,63 +16,21 @@ const demoSequence =
   "TTGACGGCTAGCTCAGTCCTAGGTACAGTGCTAGCGGATCCATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGCACCACCGGCAAGCTGCCCGTGCCCTGGCCCACCCTCGTGACCACCCTGACCTACGGCGTGCAGTGCTTCAGCCGCTACCCCGACCACATGAAGCAGCACGACTTCTTCAAGTCCGCCATGCCCGAAGGCTACGTCCAGGAGCGCACCATCTTCTTCAAGGACGACGGCAACTACAAGACCCGCGCCGAGGTGAAGTTCGAGGGCGACACCCTGGTGAACCGCATCGAGCTGAAGGGCATCGACTTCAAGGAGGACGGCAACATCCTGGGGCACAAGCTGGAGTACAACTACAACAGCCACAACGTCTATATCATGGCCGACAAGCAGAAGAACGGCATCAAGGTGAACTTCAAGATCCGCCACAACATCGAGGACGGCAGCGTGCAGCTCGCCGACCACTACCAGCAGAACACCCCCATCGGCGACGGCCCCGTGCTGCTGCCCGACAACCACTACCTGAGCACCCAGTCCGCCCTGAGCAAAGACCCCAACGAGAAGCGCGATCACATGGTCCTGCTGGAGTTCGTGACCGCCGCCGGGATCACTCTCGGCATGGACGAGCTGTACAAGTAA";
 
 const defaultAnnotations = [
-  {
-    name: "Promoter",
-    start: 0,
-    end: 35,
-    direction: 1,
-    color: "#2563eb",
-  },
-  {
-    name: "BamHI",
-    start: 37,
-    end: 43,
-    direction: 1,
-    color: "#f97316",
-  },
-  {
-    name: "GFP CDS",
-    start: 43,
-    end: 763,
-    direction: 1,
-    color: "#22c55e",
-  },
+  { name: "Promoter", start: 0, end: 35, direction: 1, color: "#2563eb" },
+  { name: "BamHI", start: 37, end: 43, direction: 1, color: "#f97316" },
+  { name: "GFP CDS", start: 43, end: 763, direction: 1, color: "#22c55e" },
 ];
 
 const defaultPrimers = [
-  {
-    name: "GFP Forward",
-    start: 43,
-    end: 63,
-    direction: 1,
-    color: "#9333ea",
-  },
-  {
-    name: "GFP Reverse",
-    start: 730,
-    end: 760,
-    direction: -1,
-    color: "#db2777",
-  },
+  { name: "GFP Forward", start: 43, end: 63, direction: 1, color: "#9333ea" },
+  { name: "GFP Reverse", start: 730, end: 760, direction: -1, color: "#db2777" },
 ];
 
 const defaultTranslations = [
-  {
-    name: "GFP Translation",
-    start: 43,
-    end: 763,
-    direction: 1,
-    color: "#16a34a",
-  },
+  { name: "GFP Translation", start: 43, end: 763, direction: 1, color: "#16a34a" },
 ];
 
-const defaultHighlights = [
-  {
-    start: 43,
-    end: 63,
-    color: "#fde047",
-  },
-];
+const defaultHighlights = [{ start: 43, end: 63, color: "#fde047" }];
 
 const defaultEnzymes = ["EcoRI", "BamHI", "HindIII", "PstI", "XhoI"];
 
@@ -124,55 +82,6 @@ function formatRange(item) {
   return `${item.start}–${item.end}`;
 }
 
-function SelectionDetails({ selection }) {
-  if (!selection) {
-    return (
-      <div className="empty-state">
-        Click or drag on the sequence viewer to inspect a region.
-      </div>
-    );
-  }
-
-  return (
-    <div className="soft-card">
-      <div className="feed-meta mb-2">Selected Region</div>
-
-      <div>
-        <strong>Start:</strong> {selection.start ?? "-"}
-      </div>
-
-      <div>
-        <strong>End:</strong> {selection.end ?? "-"}
-      </div>
-
-      <div>
-        <strong>Length:</strong> {selection.length ?? "-"}
-      </div>
-
-      {selection.name && (
-        <div>
-          <strong>Name:</strong> {selection.name}
-        </div>
-      )}
-
-      {selection.type && (
-        <div>
-          <strong>Type:</strong> {selection.type}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function JsonPreview({ title, data }) {
-  return (
-    <details className="mt-3">
-      <summary className="feed-meta">{title}</summary>
-      <pre className="app-pre mt-2">{JSON.stringify(data, null, 2)}</pre>
-    </details>
-  );
-}
-
 function ColorSwatch({ color }) {
   return (
     <span
@@ -187,6 +96,41 @@ function ColorSwatch({ color }) {
         marginRight: "8px",
       }}
     />
+  );
+}
+
+function SelectionDetails({ selection }) {
+  if (!selection) {
+    return (
+      <div className="empty-state">
+        Click or drag on the sequence viewer to inspect a region.
+      </div>
+    );
+  }
+
+  return (
+    <div className="soft-card">
+      <div className="feed-meta mb-2">Selected Region</div>
+      <div>
+        <strong>Start:</strong> {selection.start ?? "-"}
+      </div>
+      <div>
+        <strong>End:</strong> {selection.end ?? "-"}
+      </div>
+      <div>
+        <strong>Length:</strong> {selection.length ?? "-"}
+      </div>
+      {selection.name && (
+        <div>
+          <strong>Name:</strong> {selection.name}
+        </div>
+      )}
+      {selection.type && (
+        <div>
+          <strong>Type:</strong> {selection.type}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -233,13 +177,24 @@ function FeatureTable({ items, type, onRemove }) {
   );
 }
 
+function JsonPreview({ title, data }) {
+  return (
+    <details className="mt-3">
+      <summary className="feed-meta">{title}</summary>
+      <pre className="app-pre mt-2">{JSON.stringify(data, null, 2)}</pre>
+    </details>
+  );
+}
+
 export default function Sequences() {
   const [name, setName] = useState("Demo GFP Construct");
-  const [description, setDescription] = useState(
-    "Saved from SeqViz workspace"
-  );
+  const [description, setDescription] = useState("Saved from SeqViz workspace");
   const [sequenceType, setSequenceType] = useState("DNA");
   const [sequence, setSequence] = useState(demoSequence);
+
+  const [projectId, setProjectId] = useState("");
+  const [projects, setProjects] = useState([]);
+
   const [viewer, setViewer] = useState("both");
   const [showComplement, setShowComplement] = useState(true);
   const [rotateOnScroll, setRotateOnScroll] = useState(false);
@@ -250,10 +205,10 @@ export default function Sequences() {
   const [translations, setTranslations] = useState(defaultTranslations);
   const [highlights, setHighlights] = useState(defaultHighlights);
   const [enzymes, setEnzymes] = useState(defaultEnzymes);
+  const [bpColors, setBpColors] = useState(defaultBpColors);
 
   const [selection, setSelection] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
-
   const [searchQuery, setSearchQuery] = useState("ATG");
   const [searchMismatch, setSearchMismatch] = useState(0);
 
@@ -304,10 +259,7 @@ export default function Sequences() {
     color: "#dbeafe",
   });
 
-  const [bpColors, setBpColors] = useState(defaultBpColors);
-
   const cleanSequence = useMemo(() => cleanSequenceText(sequence), [sequence]);
-
   const sequenceLength = cleanSequence.length;
 
   const search = useMemo(() => {
@@ -321,7 +273,28 @@ export default function Sequences() {
 
   useEffect(() => {
     loadSavedSequences();
+    loadProjects();
   }, []);
+
+  async function loadProjects() {
+    try {
+      const data = await apiGet("/api/projects/");
+      setProjects(data.results || data || []);
+    } catch (e) {
+      setSaveError(e.message || String(e));
+    }
+  }
+
+  async function loadSavedSequences() {
+    setSaveError("");
+
+    try {
+      const data = await apiGet("/api/sequences/");
+      setSavedSequences(data.results || data || []);
+    } catch (e) {
+      setSaveError(e.message || String(e));
+    }
+  }
 
   function hasSelectionRange() {
     return (
@@ -380,6 +353,7 @@ export default function Sequences() {
     setDescription("Saved from SeqViz workspace");
     setSequenceType("DNA");
     setSequence(demoSequence);
+    setProjectId("");
     setViewer("both");
     setShowComplement(true);
     setRotateOnScroll(false);
@@ -414,7 +388,6 @@ export default function Sequences() {
         color: item.color || "#22c55e",
         metadata: {},
       })),
-
       ...primers.map((item) => ({
         feature_type: "PRIMER",
         name: item.name || "",
@@ -424,7 +397,6 @@ export default function Sequences() {
         color: item.color || "#9333ea",
         metadata: {},
       })),
-
       ...translations.map((item) => ({
         feature_type: "TRANSLATION",
         name: item.name || "",
@@ -434,7 +406,6 @@ export default function Sequences() {
         color: item.color || "#16a34a",
         metadata: {},
       })),
-
       ...highlights.map((item) => ({
         feature_type: "HIGHLIGHT",
         name: item.name || "",
@@ -447,17 +418,6 @@ export default function Sequences() {
     ];
   }
 
-  async function loadSavedSequences() {
-    setSaveError("");
-
-    try {
-      const data = await apiGet("/api/sequences/");
-      setSavedSequences(data.results || data || []);
-    } catch (e) {
-      setSaveError(e.message || String(e));
-    }
-  }
-
   async function saveSequenceWorkspace() {
     setSaveMessage("");
     setSaveError("");
@@ -468,6 +428,7 @@ export default function Sequences() {
       description,
       sequence_type: sequenceType,
       sequence: cleanSequence,
+      project: projectId || null,
       viewer,
       show_complement: showComplement,
       rotate_on_scroll: rotateOnScroll,
@@ -512,6 +473,7 @@ export default function Sequences() {
       setDescription(data.description || "");
       setSequenceType(data.sequence_type || "DNA");
       setSequence(data.sequence);
+      setProjectId(data.project ? String(data.project) : "");
       setViewer(data.viewer || "both");
       setShowComplement(Boolean(data.show_complement));
       setRotateOnScroll(Boolean(data.rotate_on_scroll));
@@ -536,7 +498,6 @@ export default function Sequences() {
 
   function addAnnotation(e) {
     e.preventDefault();
-
     if (!isValidNamedRange(annotationForm, sequenceLength)) return;
 
     setAnnotations((prev) => [
@@ -561,7 +522,6 @@ export default function Sequences() {
 
   function addPrimer(e) {
     e.preventDefault();
-
     if (!isValidNamedRange(primerForm, sequenceLength)) return;
 
     setPrimers((prev) => [
@@ -586,7 +546,6 @@ export default function Sequences() {
 
   function addTranslation(e) {
     e.preventDefault();
-
     if (!isValidNamedRange(translationForm, sequenceLength)) return;
 
     setTranslations((prev) => [
@@ -611,7 +570,6 @@ export default function Sequences() {
 
   function addHighlight(e) {
     e.preventDefault();
-
     if (!isValidRange(highlightForm, sequenceLength)) return;
 
     setHighlights((prev) => [
@@ -630,7 +588,6 @@ export default function Sequences() {
     e.preventDefault();
 
     const value = enzymeName.trim();
-
     if (!value) return;
 
     setEnzymes((prev) => [...prev, value]);
@@ -673,6 +630,10 @@ export default function Sequences() {
     }));
   }
 
+  const selectedProject = projects.find(
+    (project) => String(project.id) === String(projectId)
+  );
+
   return (
     <div className="w-100">
       <div className="page-header">
@@ -680,7 +641,8 @@ export default function Sequences() {
           <h1 className="page-title">Sequences</h1>
           <p className="page-subtitle">
             Saveable SeqViz workspaces for annotations, primers, translations,
-            enzyme sites, highlights, search, and selected regions.
+            enzyme sites, highlights, search, selected regions, and project
+            linkage.
           </p>
         </div>
 
@@ -719,6 +681,11 @@ export default function Sequences() {
                   {selectedSequenceId
                     ? `Saved workspace ID: ${selectedSequenceId}`
                     : "Not saved yet"}
+                </div>
+                <div className="small text-muted">
+                  {selectedProject
+                    ? `Linked project: ${selectedProject.code} — ${selectedProject.name}`
+                    : "No linked project"}
                 </div>
               </div>
 
@@ -784,6 +751,25 @@ export default function Sequences() {
                 />
                 <div className="form-text">
                   This name is used in the saved workspace dropdown.
+                </div>
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Linked Project</Form.Label>
+                <Form.Select
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                >
+                  <option value="">No linked project</option>
+
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.code} — {project.name}
+                    </option>
+                  ))}
+                </Form.Select>
+                <div className="form-text">
+                  Optional: link this sequence workspace to a project.
                 </div>
               </Form.Group>
 
@@ -1586,6 +1572,10 @@ export default function Sequences() {
                 title="Workspace JSON Preview"
                 data={{
                   selectedSequenceId,
+                  projectId,
+                  linkedProject: selectedProject
+                    ? `${selectedProject.code} — ${selectedProject.name}`
+                    : null,
                   name,
                   description,
                   sequenceType,
