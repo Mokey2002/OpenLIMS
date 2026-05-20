@@ -530,6 +530,42 @@ export default function Sequences() {
     }
   }
 
+  async function duplicateSequenceWorkspace() {
+    setSaveMessage("");
+    setSaveError("");
+    setSaving(true);
+
+    const payload = {
+      name: `${name} Copy`,
+      description,
+      sequence_type: sequenceType,
+      sequence: cleanSequence,
+      project: projectId || null,
+      viewer,
+      show_complement: showComplement,
+      rotate_on_scroll: rotateOnScroll,
+      zoom,
+      enzymes,
+      bp_colors: bpColors,
+      features: buildFeaturesPayload(),
+    };
+
+    try {
+      const saved = await apiPost("/api/sequences/", payload);
+
+      setSelectedSequenceId(String(saved.id));
+      setSearchParams({ workspace: String(saved.id) });
+      setName(saved.name);
+      setSaveMessage(`Duplicated workspace as "${saved.name}".`);
+
+      await loadSavedSequences();
+    } catch (e) {
+      setSaveError(e.message || String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function loadSequenceWorkspace(id) {
     if (!id) return;
 
@@ -834,6 +870,16 @@ export default function Sequences() {
                     ? "Update Workspace"
                     : "Save Workspace"}
                 </Button>
+
+                {selectedSequenceId && (
+                  <Button
+                    variant="outline-secondary"
+                    onClick={duplicateSequenceWorkspace}
+                    disabled={saving}
+                  >
+                    Duplicate Workspace
+                  </Button>
+                )}
 
                 {selectedSequenceId && (
                   <Button
