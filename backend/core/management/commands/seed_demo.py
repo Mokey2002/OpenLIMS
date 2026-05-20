@@ -3,13 +3,15 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils import timezone
 
-from projects.models import Project
+#from projects.models import Project
 from inventory.models import Location, Container
 from samples.models import Sample
 from results.models import WorkItem, Result
 from imports.models import InstrumentProfile, InstrumentColumnMapping, ImportJob
 from events.models import Event
 from notifications.models import Notification
+from sequences.models import Sequence, SequenceFeature
+from projects.models import Project, ProjectPost
 
 
 User = get_user_model()
@@ -446,6 +448,188 @@ class Command(BaseCommand):
                 "link": "/",
             },
         )
+                # --------------------------------------------------
+        # Demo sequence workspace linked to PRJ-ALPHA
+        # --------------------------------------------------
+        demo_sequence_text = (
+            "TTGACGGCTAGCTCAGTCCTAGGTACAGTGCTAGCGGATCCATGGTGAGCAAGGGCGAGGAG"
+            "CTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTC"
+            "AGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGC"
+            "ACCACCGGCAAGCTGCCCGTGCCCTGGCCCACCCTCGTGACCACCCTGACCTACGGCGTGCAG"
+            "TGCTTCAGCCGCTACCCCGACCACATGAAGCAGCACGACTTCTTCAAGTCCGCCATGCCCGA"
+            "AGGCTACGTCCAGGAGCGCACCATCTTCTTCAAGGACGACGGCAACTACAAGACCCGCGCCGA"
+            "GGTGAAGTTCGAGGGCGACACCCTGGTGAACCGCATCGAGCTGAAGGGCATCGACTTCAAGGA"
+            "GGACGGCAACATCCTGGGGCACAAGCTGGAGTACAACTACAACAGCCACAACGTCTATATCAT"
+            "GGCCGACAAGCAGAAGAACGGCATCAAGGTGAACTTCAAGATCCGCCACAACATCGAGGACGG"
+            "CAGCGTGCAGCTCGCCGACCACTACCAGCAGAACACCCCCATCGGCGACGGCCCCGTGCTGCT"
+            "GCCCGACAACCACTACCTGAGCACCCAGTCCGCCCTGAGCAAAGACCCCAACGAGAAGCGCGA"
+            "TCACATGGTCCTGCTGGAGTTCGTGACCGCCGCCGGGATCACTCTCGGCATGGACGAGCTGTA"
+            "CAAGTAA"
+        )
+
+        sequence_workspace, _ = Sequence.objects.update_or_create(
+            name="Alpha GFP Construct Review",
+            project=project_alpha,
+            defaults={
+                "description": "Demo SeqViz workspace linked to the Alpha Assay Validation project.",
+                "sequence_type": "DNA",
+                "sequence": demo_sequence_text,
+                "sample": samples[0] if samples else None,
+                "viewer": "both",
+                "show_complement": True,
+                "rotate_on_scroll": False,
+                "zoom": 50,
+                "enzymes": ["EcoRI", "BamHI", "HindIII", "PstI", "XhoI"],
+                "bp_colors": {
+                    "A": "#ef4444",
+                    "T": "#3b82f6",
+                    "G": "#22c55e",
+                    "C": "#f59e0b",
+                },
+                "created_by": peter,
+            },
+        )
+
+        sequence_workspace.features.all().delete()
+
+        demo_features = [
+            {
+                "feature_type": "ANNOTATION",
+                "name": "Promoter",
+                "start": 0,
+                "end": 35,
+                "direction": 1,
+                "color": "#2563eb",
+                "metadata": {},
+            },
+            {
+                "feature_type": "ANNOTATION",
+                "name": "BamHI",
+                "start": 37,
+                "end": 43,
+                "direction": 1,
+                "color": "#f97316",
+                "metadata": {},
+            },
+            {
+                "feature_type": "ANNOTATION",
+                "name": "GFP CDS",
+                "start": 43,
+                "end": 763,
+                "direction": 1,
+                "color": "#22c55e",
+                "metadata": {},
+            },
+            {
+                "feature_type": "PRIMER",
+                "name": "GFP Forward",
+                "start": 43,
+                "end": 63,
+                "direction": 1,
+                "color": "#9333ea",
+                "metadata": {},
+            },
+            {
+                "feature_type": "PRIMER",
+                "name": "GFP Reverse",
+                "start": 730,
+                "end": 760,
+                "direction": -1,
+                "color": "#db2777",
+                "metadata": {},
+            },
+            {
+                "feature_type": "TRANSLATION",
+                "name": "GFP Translation",
+                "start": 43,
+                "end": 763,
+                "direction": 1,
+                "color": "#16a34a",
+                "metadata": {},
+            },
+            {
+                "feature_type": "HIGHLIGHT",
+                "name": "QC Review Region",
+                "start": 120,
+                "end": 180,
+                "direction": 1,
+                "color": "#fde047",
+                "metadata": {},
+            },
+        ]
+
+        for feature_data in demo_features:
+            SequenceFeature.objects.create(
+                sequence_record=sequence_workspace,
+                **feature_data,
+            )
+
+        Event.objects.get_or_create(
+            entity_type="Sequence",
+            entity_id=str(sequence_workspace.id),
+            action="SEQUENCE_WORKSPACE_SEEDED",
+            defaults={
+                "actor": peter,
+                "payload": {
+                    "sequence_id": sequence_workspace.id,
+                    "name": sequence_workspace.name,
+                    "project_id": project_alpha.id,
+                    "features_count": len(demo_features),
+                },
+            },
+        )
+                # --------------------------------------------------
+        # Demo project feed posts
+        # --------------------------------------------------
+        demo_project_posts = [
+            {
+                "project": project_alpha,
+                "author": admin,
+                "note": (
+                    "Initial project setup is complete. Alpha validation samples "
+                    "S-ALPHA-001 through S-ALPHA-003 are assigned to BOX-A1."
+                ),
+            },
+            {
+                "project": project_alpha,
+                "author": peter,
+                "note": (
+                    "NovaFlex import completed for the Alpha sample set. "
+                    "Concentration, purity, yield, and QC flag values are now available."
+                ),
+            },
+            {
+                "project": project_alpha,
+                "author": viewer,
+                "note": (
+                    "Review note: S-ALPHA-003 appears to need QC review because "
+                    "purity and yield are lower than the expected range."
+                ),
+            },
+            {
+                "project": project_beta,
+                "author": admin,
+                "note": (
+                    "Beta Stability Study has been initialized. Samples are linked "
+                    "to storage locations for tracking."
+                ),
+            },
+            {
+                "project": project_beta,
+                "author": peter,
+                "note": (
+                    "Storage check completed. Beta samples are currently assigned "
+                    "to BOX-B1 in Fridge B."
+                ),
+            },
+        ]
+
+        for post_data in demo_project_posts:
+            ProjectPost.objects.get_or_create(
+                project=post_data["project"],
+                author=post_data["author"],
+                note=post_data["note"],
+            )
 
         self.stdout.write(self.style.SUCCESS("Demo data seeded successfully."))
         self.stdout.write("")
