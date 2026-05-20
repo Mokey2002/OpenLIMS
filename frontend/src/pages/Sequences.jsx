@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Alert,
   Badge,
@@ -10,27 +11,70 @@ import {
   Table,
 } from "react-bootstrap";
 import { SeqViz } from "seqviz";
-import { apiGet, apiPatch, apiPost } from "../api";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../api";
 
 const demoSequence =
   "TTGACGGCTAGCTCAGTCCTAGGTACAGTGCTAGCGGATCCATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGCACCACCGGCAAGCTGCCCGTGCCCTGGCCCACCCTCGTGACCACCCTGACCTACGGCGTGCAGTGCTTCAGCCGCTACCCCGACCACATGAAGCAGCACGACTTCTTCAAGTCCGCCATGCCCGAAGGCTACGTCCAGGAGCGCACCATCTTCTTCAAGGACGACGGCAACTACAAGACCCGCGCCGAGGTGAAGTTCGAGGGCGACACCCTGGTGAACCGCATCGAGCTGAAGGGCATCGACTTCAAGGAGGACGGCAACATCCTGGGGCACAAGCTGGAGTACAACTACAACAGCCACAACGTCTATATCATGGCCGACAAGCAGAAGAACGGCATCAAGGTGAACTTCAAGATCCGCCACAACATCGAGGACGGCAGCGTGCAGCTCGCCGACCACTACCAGCAGAACACCCCCATCGGCGACGGCCCCGTGCTGCTGCCCGACAACCACTACCTGAGCACCCAGTCCGCCCTGAGCAAAGACCCCAACGAGAAGCGCGATCACATGGTCCTGCTGGAGTTCGTGACCGCCGCCGGGATCACTCTCGGCATGGACGAGCTGTACAAGTAA";
 
 const defaultAnnotations = [
-  { name: "Promoter", start: 0, end: 35, direction: 1, color: "#2563eb" },
-  { name: "BamHI", start: 37, end: 43, direction: 1, color: "#f97316" },
-  { name: "GFP CDS", start: 43, end: 763, direction: 1, color: "#22c55e" },
+  {
+    name: "Promoter",
+    start: 0,
+    end: 35,
+    direction: 1,
+    color: "#2563eb",
+  },
+  {
+    name: "BamHI",
+    start: 37,
+    end: 43,
+    direction: 1,
+    color: "#f97316",
+  },
+  {
+    name: "GFP CDS",
+    start: 43,
+    end: 763,
+    direction: 1,
+    color: "#22c55e",
+  },
 ];
 
 const defaultPrimers = [
-  { name: "GFP Forward", start: 43, end: 63, direction: 1, color: "#9333ea" },
-  { name: "GFP Reverse", start: 730, end: 760, direction: -1, color: "#db2777" },
+  {
+    name: "GFP Forward",
+    start: 43,
+    end: 63,
+    direction: 1,
+    color: "#9333ea",
+  },
+  {
+    name: "GFP Reverse",
+    start: 730,
+    end: 760,
+    direction: -1,
+    color: "#db2777",
+  },
 ];
 
 const defaultTranslations = [
-  { name: "GFP Translation", start: 43, end: 763, direction: 1, color: "#16a34a" },
+  {
+    name: "GFP Translation",
+    start: 43,
+    end: 763,
+    direction: 1,
+    color: "#16a34a",
+  },
 ];
 
-const defaultHighlights = [{ start: 43, end: 63, color: "#fde047" }];
+const defaultHighlights = [
+  {
+    name: "QC Review Region",
+    start: 120,
+    end: 180,
+    color: "#fde047",
+  },
+];
 
 const defaultEnzymes = ["EcoRI", "BamHI", "HindIII", "PstI", "XhoI"];
 
@@ -111,26 +155,40 @@ function SelectionDetails({ selection }) {
   return (
     <div className="soft-card">
       <div className="feed-meta mb-2">Selected Region</div>
+
       <div>
         <strong>Start:</strong> {selection.start ?? "-"}
       </div>
+
       <div>
         <strong>End:</strong> {selection.end ?? "-"}
       </div>
+
       <div>
         <strong>Length:</strong> {selection.length ?? "-"}
       </div>
+
       {selection.name && (
         <div>
           <strong>Name:</strong> {selection.name}
         </div>
       )}
+
       {selection.type && (
         <div>
           <strong>Type:</strong> {selection.type}
         </div>
       )}
     </div>
+  );
+}
+
+function JsonPreview({ title, data }) {
+  return (
+    <details className="mt-3">
+      <summary className="feed-meta">{title}</summary>
+      <pre className="app-pre mt-2">{JSON.stringify(data, null, 2)}</pre>
+    </details>
   );
 }
 
@@ -153,8 +211,8 @@ function FeatureTable({ items, type, onRemove }) {
 
       <tbody>
         {items.map((item, index) => (
-          <tr key={`${type}-${item.name}-${index}`}>
-            <td>{item.name}</td>
+          <tr key={`${type}-${item.name || item.start}-${index}`}>
+            <td>{item.name || "-"}</td>
             <td>{formatRange(item)}</td>
             <td>{item.direction === -1 ? "REV" : "FWD"}</td>
             <td>
@@ -177,16 +235,9 @@ function FeatureTable({ items, type, onRemove }) {
   );
 }
 
-function JsonPreview({ title, data }) {
-  return (
-    <details className="mt-3">
-      <summary className="feed-meta">{title}</summary>
-      <pre className="app-pre mt-2">{JSON.stringify(data, null, 2)}</pre>
-    </details>
-  );
-}
-
 export default function Sequences() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [name, setName] = useState("Demo GFP Construct");
   const [description, setDescription] = useState("Saved from SeqViz workspace");
   const [sequenceType, setSequenceType] = useState("DNA");
@@ -244,6 +295,7 @@ export default function Sequences() {
   });
 
   const [highlightForm, setHighlightForm] = useState({
+    name: "Selected Highlight",
     start: "",
     end: "",
     color: "#fde047",
@@ -262,6 +314,10 @@ export default function Sequences() {
   const cleanSequence = useMemo(() => cleanSequenceText(sequence), [sequence]);
   const sequenceLength = cleanSequence.length;
 
+  const selectedProject = projects.find(
+    (project) => String(project.id) === String(projectId)
+  );
+
   const search = useMemo(() => {
     if (!searchQuery.trim()) return {};
 
@@ -272,9 +328,19 @@ export default function Sequences() {
   }, [searchQuery, searchMismatch]);
 
   useEffect(() => {
-    loadSavedSequences();
-    loadProjects();
+    loadInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function loadInitialData() {
+    await Promise.all([loadSavedSequences(), loadProjects()]);
+
+    const workspaceId = searchParams.get("workspace");
+
+    if (workspaceId) {
+      await loadSequenceWorkspace(workspaceId);
+    }
+  }
 
   async function loadProjects() {
     try {
@@ -345,6 +411,7 @@ export default function Sequences() {
       ...prev,
       start: selection.start,
       end: selection.end,
+      name: prev.name || "Selected Highlight",
     }));
   }
 
@@ -372,6 +439,7 @@ export default function Sequences() {
 
   function startNewWorkspace() {
     setSelectedSequenceId("");
+    setSearchParams({});
     setSaveMessage("");
     setSaveError("");
     resetDemo();
@@ -388,6 +456,7 @@ export default function Sequences() {
         color: item.color || "#22c55e",
         metadata: {},
       })),
+
       ...primers.map((item) => ({
         feature_type: "PRIMER",
         name: item.name || "",
@@ -397,6 +466,7 @@ export default function Sequences() {
         color: item.color || "#9333ea",
         metadata: {},
       })),
+
       ...translations.map((item) => ({
         feature_type: "TRANSLATION",
         name: item.name || "",
@@ -406,6 +476,7 @@ export default function Sequences() {
         color: item.color || "#16a34a",
         metadata: {},
       })),
+
       ...highlights.map((item) => ({
         feature_type: "HIGHLIGHT",
         name: item.name || "",
@@ -447,6 +518,7 @@ export default function Sequences() {
       } else {
         saved = await apiPost("/api/sequences/", payload);
         setSelectedSequenceId(String(saved.id));
+        setSearchParams({ workspace: String(saved.id) });
         setSaveMessage(`Saved "${saved.name}" successfully.`);
       }
 
@@ -469,6 +541,7 @@ export default function Sequences() {
       const data = await apiGet(`/api/sequences/${id}/workspace/`);
 
       setSelectedSequenceId(String(data.id));
+      setSearchParams({ workspace: String(data.id) });
       setName(data.name);
       setDescription(data.description || "");
       setSequenceType(data.sequence_type || "DNA");
@@ -496,8 +569,37 @@ export default function Sequences() {
     }
   }
 
+  async function deleteSequenceWorkspace() {
+    if (!selectedSequenceId) return;
+
+    const confirmed = window.confirm(
+      `Delete workspace "${name}"? This cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setSaveMessage("");
+    setSaveError("");
+    setSaving(true);
+
+    try {
+      await apiDelete(`/api/sequences/${selectedSequenceId}/`);
+
+      setSaveMessage(`Deleted "${name}".`);
+      setSelectedSequenceId("");
+      setSearchParams({});
+      resetDemo();
+      await loadSavedSequences();
+    } catch (e) {
+      setSaveError(e.message || String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function addAnnotation(e) {
     e.preventDefault();
+
     if (!isValidNamedRange(annotationForm, sequenceLength)) return;
 
     setAnnotations((prev) => [
@@ -522,6 +624,7 @@ export default function Sequences() {
 
   function addPrimer(e) {
     e.preventDefault();
+
     if (!isValidNamedRange(primerForm, sequenceLength)) return;
 
     setPrimers((prev) => [
@@ -546,6 +649,7 @@ export default function Sequences() {
 
   function addTranslation(e) {
     e.preventDefault();
+
     if (!isValidNamedRange(translationForm, sequenceLength)) return;
 
     setTranslations((prev) => [
@@ -570,6 +674,7 @@ export default function Sequences() {
 
   function addHighlight(e) {
     e.preventDefault();
+
     if (!isValidRange(highlightForm, sequenceLength)) return;
 
     setHighlights((prev) => [
@@ -578,6 +683,7 @@ export default function Sequences() {
     ]);
 
     setHighlightForm({
+      name: "Selected Highlight",
       start: "",
       end: "",
       color: "#fde047",
@@ -588,6 +694,7 @@ export default function Sequences() {
     e.preventDefault();
 
     const value = enzymeName.trim();
+
     if (!value) return;
 
     setEnzymes((prev) => [...prev, value]);
@@ -630,10 +737,6 @@ export default function Sequences() {
     }));
   }
 
-  const selectedProject = projects.find(
-    (project) => String(project.id) === String(projectId)
-  );
-
   return (
     <div className="w-100">
       <div className="page-header">
@@ -674,14 +777,17 @@ export default function Sequences() {
 
               <div className="soft-card mb-3">
                 <div className="feed-meta">Current Workspace</div>
+
                 <div className="fw-semibold">
                   {name || "Untitled workspace"}
                 </div>
+
                 <div className="small text-muted">
                   {selectedSequenceId
                     ? `Saved workspace ID: ${selectedSequenceId}`
                     : "Not saved yet"}
                 </div>
+
                 <div className="small text-muted">
                   {selectedProject
                     ? `Linked project: ${selectedProject.code} — ${selectedProject.name}`
@@ -700,6 +806,8 @@ export default function Sequences() {
 
                     if (id) {
                       loadSequenceWorkspace(id);
+                    } else {
+                      setSearchParams({});
                     }
                   }}
                 >
@@ -726,6 +834,16 @@ export default function Sequences() {
                     ? "Update Workspace"
                     : "Save Workspace"}
                 </Button>
+
+                {selectedSequenceId && (
+                  <Button
+                    variant="outline-danger"
+                    onClick={deleteSequenceWorkspace}
+                    disabled={saving}
+                  >
+                    Delete Workspace
+                  </Button>
+                )}
 
                 <Button variant="outline-dark" onClick={startNewWorkspace}>
                   Start New Workspace
@@ -1364,6 +1482,7 @@ export default function Sequences() {
                 <Table responsive hover className="app-table mt-3">
                   <thead>
                     <tr>
+                      <th>Name</th>
                       <th>Range</th>
                       <th>Color</th>
                       <th></th>
@@ -1373,6 +1492,7 @@ export default function Sequences() {
                   <tbody>
                     {highlights.map((item, index) => (
                       <tr key={`${item.start}-${item.end}-${index}`}>
+                        <td>{item.name || "-"}</td>
                         <td>{formatRange(item)}</td>
                         <td>
                           <ColorSwatch color={item.color} />
