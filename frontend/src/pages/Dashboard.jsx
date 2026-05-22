@@ -35,6 +35,12 @@ function actionVariant(action) {
       return "secondary";
     case "RESULTS_IMPORTED":
       return "dark";
+    case "SEQUENCE_WORKSPACE_CREATED":
+      return "success";
+    case "SEQUENCE_WORKSPACE_UPDATED":
+      return "primary";
+    case "SEQUENCE_WORKSPACE_DELETED":
+      return "danger";
     default:
       return "secondary";
   }
@@ -42,13 +48,11 @@ function actionVariant(action) {
 
 function InfoTooltip({ text }) {
   return (
-    <OverlayTrigger
-      placement="top"
-      overlay={<Tooltip>{text}</Tooltip>}
-    >
+    <OverlayTrigger placement="top" overlay={<Tooltip>{text}</Tooltip>}>
       <span
         aria-label="More information"
         role="button"
+        onClick={(e) => e.preventDefault()}
         style={{
           cursor: "help",
           marginLeft: "6px",
@@ -63,20 +67,36 @@ function InfoTooltip({ text }) {
   );
 }
 
-function MetricCard({ title, value, note, tooltip }) {
-  return (
+function MetricCard({ title, value, note, tooltip, to }) {
+  const content = (
     <Card className="app-card metric-card h-100">
       <Card.Body>
-        <div className="metric-label">
-          {title}
-          {tooltip && <InfoTooltip text={tooltip} />}
+        <div className="d-flex justify-content-between align-items-start gap-2">
+          <div>
+            <div className="metric-label">
+              {title}
+              {tooltip && <InfoTooltip text={tooltip} />}
+            </div>
+
+            <div className="metric-value">{value}</div>
+
+            {note ? <div className="metric-note">{note}</div> : null}
+          </div>
+
+          <Badge bg="light" text="dark">
+            Open
+          </Badge>
         </div>
-
-        <div className="metric-value">{value}</div>
-
-        {note ? <div className="metric-note">{note}</div> : null}
       </Card.Body>
     </Card>
+  );
+
+  if (!to) return content;
+
+  return (
+    <Link to={to} className="text-decoration-none dashboard-card-link">
+      {content}
+    </Link>
   );
 }
 
@@ -178,6 +198,7 @@ export default function Dashboard() {
           title="Total Samples"
           value={samples.length}
           note={`${statusCounts.REPORTED} reported`}
+          to="/samples"
           tooltip="Samples are the main lab records tracked through OpenLIMS. They can be linked to projects, containers, results, imports, events, and sequence workspaces."
         />
 
@@ -185,6 +206,7 @@ export default function Dashboard() {
           title="Work Items"
           value={workItems.length}
           note={`${statusCounts.IN_PROGRESS} samples in progress`}
+          to="/work-items"
           tooltip="Work items represent lab tasks or testing steps that need to be completed for samples, such as processing, QC review, or result generation."
         />
 
@@ -192,6 +214,7 @@ export default function Dashboard() {
           title={isAdmin ? "Visible Projects" : "My Projects"}
           value={myProjects.length}
           note={`${projects.length} total projects`}
+          to="/projects"
           tooltip="Projects group related samples, project notes, team members, imports, results, and saved sequence workspaces together."
         />
 
@@ -199,6 +222,7 @@ export default function Dashboard() {
           title="Events Logged"
           value={events.length}
           note={`${recentEvents.length} recent items below`}
+          to="/events"
           tooltip="Events are the audit trail. They record important activity such as sample creation, updates, project posts, imports, and result processing."
         />
       </div>
@@ -213,63 +237,88 @@ export default function Dashboard() {
                   <InfoTooltip text="The sample pipeline shows where samples are in the lab workflow, from intake to in-progress processing, QC review, reporting, and archiving." />
                 </h5>
 
-                <span className="feed-meta">
+                <Link to="/samples" className="text-decoration-none">
                   {samples.length} total samples
-                </span>
+                </Link>
               </div>
 
-              <div className="soft-card mb-3">
-                <div className="d-flex justify-content-between mb-2">
-                  <span className="fw-semibold">
-                    Reported
-                    <InfoTooltip text="Reported samples have completed processing and have final results available." />
-                  </span>
-                  <span className="feed-meta">{statusCounts.REPORTED}</span>
+              <Link to="/samples?status=REPORTED" className="text-decoration-none">
+                <div className="soft-card mb-3">
+                  <div className="d-flex justify-content-between mb-2">
+                    <span className="fw-semibold">
+                      Reported
+                      <InfoTooltip text="Reported samples have completed processing and have final results available." />
+                    </span>
+                    <span className="feed-meta">{statusCounts.REPORTED}</span>
+                  </div>
+                  <ProgressBar now={reportedPercent} />
                 </div>
-                <ProgressBar now={reportedPercent} />
-              </div>
+              </Link>
 
-              <div className="soft-card mb-3">
-                <div className="d-flex justify-content-between mb-2">
-                  <span className="fw-semibold">
-                    In Progress
-                    <InfoTooltip text="In-progress samples are actively being processed or reviewed by the lab team." />
-                  </span>
-                  <span className="feed-meta">{statusCounts.IN_PROGRESS}</span>
+              <Link
+                to="/samples?status=IN_PROGRESS"
+                className="text-decoration-none"
+              >
+                <div className="soft-card mb-3">
+                  <div className="d-flex justify-content-between mb-2">
+                    <span className="fw-semibold">
+                      In Progress
+                      <InfoTooltip text="In-progress samples are actively being processed or reviewed by the lab team." />
+                    </span>
+                    <span className="feed-meta">
+                      {statusCounts.IN_PROGRESS}
+                    </span>
+                  </div>
+                  <ProgressBar now={inProgressPercent} variant="info" />
                 </div>
-                <ProgressBar now={inProgressPercent} variant="info" />
-              </div>
+              </Link>
 
-              <div className="soft-card mb-3">
-                <div className="d-flex justify-content-between mb-2">
-                  <span className="fw-semibold">
-                    QC
-                    <InfoTooltip text="QC samples need quality control review before they can be reported or archived." />
-                  </span>
-                  <span className="feed-meta">{statusCounts.QC}</span>
+              <Link to="/samples?status=QC" className="text-decoration-none">
+                <div className="soft-card mb-3">
+                  <div className="d-flex justify-content-between mb-2">
+                    <span className="fw-semibold">
+                      QC
+                      <InfoTooltip text="QC samples need quality control review before they can be reported or archived." />
+                    </span>
+                    <span className="feed-meta">{statusCounts.QC}</span>
+                  </div>
+                  <ProgressBar now={qcPercent} variant="warning" />
                 </div>
-                <ProgressBar now={qcPercent} variant="warning" />
-              </div>
+              </Link>
 
               <div className="row g-3 mt-1">
                 <div className="col-md-6">
-                  <div className="soft-card">
-                    <div className="feed-meta mb-1">
-                      Received
-                      <InfoTooltip text="Received samples have been entered into OpenLIMS but may not have started processing yet." />
+                  <Link
+                    to="/samples?status=RECEIVED"
+                    className="text-decoration-none"
+                  >
+                    <div className="soft-card h-100">
+                      <div className="feed-meta mb-1">
+                        Received
+                        <InfoTooltip text="Received samples have been entered into OpenLIMS but may not have started processing yet." />
+                      </div>
+                      <div className="fs-4 fw-bold">
+                        {statusCounts.RECEIVED}
+                      </div>
                     </div>
-                    <div className="fs-4 fw-bold">{statusCounts.RECEIVED}</div>
-                  </div>
+                  </Link>
                 </div>
 
                 <div className="col-md-6">
-                  <div className="soft-card">
-                    <div className="feed-meta mb-1">
-                      Archived
-                      <InfoTooltip text="Archived samples are completed records kept for history, traceability, and audit purposes." />
+                  <Link
+                    to="/samples?status=ARCHIVED"
+                    className="text-decoration-none"
+                  >
+                    <div className="soft-card h-100">
+                      <div className="feed-meta mb-1">
+                        Archived
+                        <InfoTooltip text="Archived samples are completed records kept for history, traceability, and audit purposes." />
+                      </div>
+                      <div className="fs-4 fw-bold">
+                        {statusCounts.ARCHIVED}
+                      </div>
                     </div>
-                    <div className="fs-4 fw-bold">{statusCounts.ARCHIVED}</div>
-                  </div>
+                  </Link>
                 </div>
               </div>
             </Card.Body>
