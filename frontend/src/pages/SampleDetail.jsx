@@ -11,6 +11,7 @@ import {
   Table,
 } from "react-bootstrap";
 import { apiGet, apiPatch, apiPost, apiPostForm } from "../api";
+import { canWrite, readOnlyMessage } from "../authz";
 
 function statusVariant(status) {
   switch (status) {
@@ -228,6 +229,7 @@ export default function SampleDetail() {
   const [containers, setContainers] = useState([]);
   const [sampleAttachments, setSampleAttachments] = useState([]);
   const [sampleSequences, setSampleSequences] = useState([]);
+  const [me, setMe] = useState(null);
 
   const [err, setErr] = useState("");
   const [success, setSuccess] = useState("");
@@ -251,6 +253,7 @@ export default function SampleDetail() {
         containersData,
         attachmentsData,
         sequencesData,
+        meData,
       ] = await Promise.all([
         apiGet(`/api/samples/${id}/`),
         apiGet(`/api/samples/${id}/allowed-transitions/`),
@@ -259,6 +262,7 @@ export default function SampleDetail() {
         apiGet("/api/containers/"),
         apiGet(`/api/sample-attachments/?sample=${id}`),
         apiGet(`/api/sequences/?sample=${id}`),
+        apiGet("/api/me/"),
       ]);
 
       const eventList = eventsData.results || eventsData || [];
@@ -274,6 +278,7 @@ export default function SampleDetail() {
       setSelectedContainer(sampleData.container || "");
       setSampleAttachments(attachmentList);
       setSampleSequences(sequenceList);
+      setMe(meData);
 
       const sampleEvents = eventList.filter((event) => {
         const payload = event.payload || {};
@@ -296,6 +301,8 @@ export default function SampleDetail() {
   }, [id]);
 
   async function doTransition(newStatus) {
+    if (!userCanWrite) return;
+
     setErr("");
     setSuccess("");
 
@@ -313,6 +320,8 @@ export default function SampleDetail() {
 
   async function createWorkItem(e) {
     e.preventDefault();
+
+    if (!userCanWrite) return;
     setErr("");
     setSuccess("");
 
@@ -344,6 +353,8 @@ export default function SampleDetail() {
   }
 
   async function addResult(workItemId) {
+    if (!userCanWrite) return;
+
     const form = resultForms[workItemId] || {};
     setErr("");
     setSuccess("");
@@ -389,6 +400,8 @@ export default function SampleDetail() {
   async function uploadSampleAttachment(e) {
     e.preventDefault();
 
+    if (!userCanWrite) return;
+
     if (!selectedAttachmentFile) return;
 
     setErr("");
@@ -411,6 +424,8 @@ export default function SampleDetail() {
 
   async function assignContainer(e) {
     e.preventDefault();
+
+    if (!userCanWrite) return;
     setErr("");
     setSuccess("");
 
@@ -464,6 +479,8 @@ export default function SampleDetail() {
   }, [sortedEvents]);
 
   const projectId = sample?.project || sample?.project_id;
+  const userCanWrite = canWrite(me);
+  const readOnlyText = readOnlyMessage(me);
 
   if (!sample) {
     return (
@@ -495,6 +512,7 @@ export default function SampleDetail() {
 
       {err && <Alert variant="danger">{err}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
+      {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
 
       <div className="stat-grid mb-4">
         <Card className="app-card metric-card h-100">
@@ -599,64 +617,68 @@ export default function SampleDetail() {
               </div>
             </div>
 
-            <div className="col-lg-4">
-              <h5 className="section-title">Status Actions</h5>
+            {userCanWrite && (
+              <div className="col-lg-4">
+                <h5 className="section-title">Status Actions</h5>
 
-              <div className="inline-actions">
-                {allowed.length === 0 ? (
-                  <span className="empty-state">No further transitions.</span>
-                ) : (
-                  allowed.map((status) => (
-                    <Button
-                      key={status}
-                      variant="dark"
-                      size="sm"
-                      onClick={() => doTransition(status)}
-                    >
-                      Move to {status}
-                    </Button>
-                  ))
-                )}
+                <div className="inline-actions">
+                  {allowed.length === 0 ? (
+                    <span className="empty-state">No further transitions.</span>
+                  ) : (
+                    allowed.map((status) => (
+                      <Button
+                        key={status}
+                        variant="dark"
+                        size="sm"
+                        onClick={() => doTransition(status)}
+                      >
+                        Move to {status}
+                      </Button>
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </Card.Body>
       </Card>
 
       <div className="row g-4 mb-4">
-        <div className="col-lg-5">
-          <Card className="app-card h-100">
-            <Card.Body>
-              <h5 className="section-title">Storage Assignment</h5>
+        {userCanWrite && (
+          <div className="col-lg-5">
+            <Card className="app-card h-100">
+              <Card.Body>
+                <h5 className="section-title">Storage Assignment</h5>
 
-              <Form onSubmit={assignContainer}>
-                <Row className="g-2 align-items-center">
-                  <Col md={8}>
-                    <Form.Select
-                      value={selectedContainer}
-                      onChange={(e) => setSelectedContainer(e.target.value)}
-                    >
-                      <option value="">Unassigned</option>
+                <Form onSubmit={assignContainer}>
+                  <Row className="g-2 align-items-center">
+                    <Col md={8}>
+                      <Form.Select
+                        value={selectedContainer}
+                        onChange={(e) => setSelectedContainer(e.target.value)}
+                      >
+                        <option value="">Unassigned</option>
 
-                      {containers.map((container) => (
-                        <option key={container.id} value={container.id}>
-                          {container.container_id} ({container.kind}) —{" "}
-                          {container.location_name || container.location}
-                        </option>
-                      ))}
-                    </Form.Select>
-                  </Col>
+                        {containers.map((container) => (
+                          <option key={container.id} value={container.id}>
+                            {container.container_id} ({container.kind}) —{" "}
+                            {container.location_name || container.location}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
 
-                  <Col md={4}>
-                    <Button type="submit" variant="dark" className="w-100">
-                      Save
-                    </Button>
-                  </Col>
-                </Row>
-              </Form>
-            </Card.Body>
-          </Card>
-        </div>
+                    <Col md={4}>
+                      <Button type="submit" variant="dark" className="w-100">
+                        Save
+                      </Button>
+                    </Col>
+                  </Row>
+                </Form>
+              </Card.Body>
+            </Card>
+          </div>
+        )}
 
         <div className="col-lg-7">
           <Card className="app-card h-100">
@@ -800,24 +822,26 @@ export default function SampleDetail() {
             <Card.Body>
               <h5 className="section-title">Sample Attachments</h5>
 
-              <Form onSubmit={uploadSampleAttachment} className="mb-4">
-                <Row className="g-2 align-items-center">
-                  <Col md={8}>
-                    <Form.Control
-                      type="file"
-                      onChange={(e) =>
-                        setSelectedAttachmentFile(e.target.files?.[0] || null)
-                      }
-                    />
-                  </Col>
+              {userCanWrite && (
+                <Form onSubmit={uploadSampleAttachment} className="mb-4">
+                  <Row className="g-2 align-items-center">
+                    <Col md={8}>
+                      <Form.Control
+                        type="file"
+                        onChange={(e) =>
+                          setSelectedAttachmentFile(e.target.files?.[0] || null)
+                        }
+                      />
+                    </Col>
 
-                  <Col md={4}>
-                    <Button type="submit" variant="dark" className="w-100">
-                      Upload
-                    </Button>
-                  </Col>
-                </Row>
-              </Form>
+                    <Col md={4}>
+                      <Button type="submit" variant="dark" className="w-100">
+                        Upload
+                      </Button>
+                    </Col>
+                  </Row>
+                </Form>
+              )}
 
               {sampleAttachments.length === 0 ? (
                 <div className="empty-state">No attachments yet.</div>
@@ -859,36 +883,38 @@ export default function SampleDetail() {
             <Card.Body>
               <h5 className="section-title">Work Items</h5>
 
-              <Form onSubmit={createWorkItem} className="mb-4">
-                <Row className="g-2">
-                  <Col md={4}>
-                    <Form.Control
-                      placeholder="Work item name"
-                      value={newWorkItemName}
-                      onChange={(e) => setNewWorkItemName(e.target.value)}
-                    />
-                  </Col>
+              {userCanWrite && (
+                <Form onSubmit={createWorkItem} className="mb-4">
+                  <Row className="g-2">
+                    <Col md={4}>
+                      <Form.Control
+                        placeholder="Work item name"
+                        value={newWorkItemName}
+                        onChange={(e) => setNewWorkItemName(e.target.value)}
+                      />
+                    </Col>
 
-                  <Col md={6}>
-                    <Form.Control
-                      placeholder="Notes"
-                      value={newWorkItemNotes}
-                      onChange={(e) => setNewWorkItemNotes(e.target.value)}
-                    />
-                  </Col>
+                    <Col md={6}>
+                      <Form.Control
+                        placeholder="Notes"
+                        value={newWorkItemNotes}
+                        onChange={(e) => setNewWorkItemNotes(e.target.value)}
+                      />
+                    </Col>
 
-                  <Col md={2}>
-                    <Button
-                      type="submit"
-                      variant="dark"
-                      className="w-100"
-                      disabled={!newWorkItemName}
-                    >
-                      Add
-                    </Button>
-                  </Col>
-                </Row>
-              </Form>
+                    <Col md={2}>
+                      <Button
+                        type="submit"
+                        variant="dark"
+                        className="w-100"
+                        disabled={!newWorkItemName}
+                      >
+                        Add
+                      </Button>
+                    </Col>
+                  </Row>
+                </Form>
+              )}
 
               {workItems.length === 0 ? (
                 <div className="empty-state">No work items yet.</div>
@@ -949,8 +975,9 @@ export default function SampleDetail() {
                           )}
                         </div>
 
-                        <div className="soft-card">
-                          <div className="feed-meta mb-2">Add Result</div>
+                        {userCanWrite && (
+                          <div className="soft-card">
+                            <div className="feed-meta mb-2">Add Result</div>
 
                           <Row className="g-2">
                             <Col md={3}>
@@ -1046,7 +1073,8 @@ export default function SampleDetail() {
                               </Button>
                             </Col>
                           </Row>
-                        </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

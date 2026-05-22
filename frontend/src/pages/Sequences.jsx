@@ -12,6 +12,7 @@ import {
 } from "react-bootstrap";
 import { SeqViz } from "seqviz";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api";
+import { canWrite, readOnlyMessage } from "../authz";
 
 const demoSequence =
   "TTGACGGCTAGCTCAGTCCTAGGTACAGTGCTAGCGGATCCATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGCACCACCGGCAAGCTGCCCGTGCCCTGGCCCACCCTCGTGACCACCCTGACCTACGGCGTGCAGTGCTTCAGCCGCTACCCCGACCACATGAAGCAGCACGACTTCTTCAAGTCCGCCATGCCCGAAGGCTACGTCCAGGAGCGCACCATCTTCTTCAAGGACGACGGCAACTACAAGACCCGCGCCGAGGTGAAGTTCGAGGGCGACACCCTGGTGAACCGCATCGAGCTGAAGGGCATCGACTTCAAGGAGGACGGCAACATCCTGGGGCACAAGCTGGAGTACAACTACAACAGCCACAACGTCTATATCATGGCCGACAAGCAGAAGAACGGCATCAAGGTGAACTTCAAGATCCGCCACAACATCGAGGACGGCAGCGTGCAGCTCGCCGACCACTACCAGCAGAACACCCCCATCGGCGACGGCCCCGTGCTGCTGCCCGACAACCACTACCTGAGCACCCAGTCCGCCCTGAGCAAAGACCCCAACGAGAAGCGCGATCACATGGTCCTGCTGGAGTTCGTGACCGCCGCCGGGATCACTCTCGGCATGGACGAGCTGTACAAGTAA";
@@ -192,7 +193,7 @@ function JsonPreview({ title, data }) {
   );
 }
 
-function FeatureTable({ items, type, onRemove }) {
+function FeatureTable({ items, type, onRemove, canEdit }) {
   if (items.length === 0) {
     return <div className="empty-state mt-3">No {type} added yet.</div>;
   }
@@ -205,7 +206,7 @@ function FeatureTable({ items, type, onRemove }) {
           <th>Range</th>
           <th>Dir</th>
           <th>Color</th>
-          <th></th>
+          {canEdit && <th></th>}
         </tr>
       </thead>
 
@@ -219,15 +220,17 @@ function FeatureTable({ items, type, onRemove }) {
               <ColorSwatch color={item.color} />
               {item.color}
             </td>
-            <td>
-              <Button
-                variant="outline-danger"
-                size="sm"
-                onClick={() => onRemove(index)}
-              >
-                Remove
-              </Button>
-            </td>
+            {canEdit && (
+              <td>
+                <Button
+                  variant="outline-danger"
+                  size="sm"
+                  onClick={() => onRemove(index)}
+                >
+                  Remove
+                </Button>
+              </td>
+            )}
           </tr>
         ))}
       </tbody>
@@ -265,6 +268,7 @@ export default function Sequences() {
 
   const [savedSequences, setSavedSequences] = useState([]);
   const [selectedSequenceId, setSelectedSequenceId] = useState("");
+  const [me, setMe] = useState(null);
   const [saveMessage, setSaveMessage] = useState("");
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -327,13 +331,22 @@ export default function Sequences() {
     };
   }, [searchQuery, searchMismatch]);
 
+  const userCanWrite = canWrite(me);
+  const readOnlyText = readOnlyMessage(me);
+
   useEffect(() => {
     loadInitialData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadInitialData() {
-    await Promise.all([loadSavedSequences(), loadProjects()]);
+    const [meData] = await Promise.all([
+      apiGet("/api/me/"),
+      loadSavedSequences(),
+      loadProjects(),
+    ]);
+
+    setMe(meData);
 
     const workspaceId = searchParams.get("workspace");
 
@@ -490,6 +503,8 @@ export default function Sequences() {
   }
 
   async function saveSequenceWorkspace() {
+    if (!userCanWrite) return;
+
     setSaveMessage("");
     setSaveError("");
     setSaving(true);
@@ -531,6 +546,8 @@ export default function Sequences() {
   }
 
   async function duplicateSequenceWorkspace() {
+    if (!userCanWrite) return;
+
     setSaveMessage("");
     setSaveError("");
     setSaving(true);
@@ -606,6 +623,8 @@ export default function Sequences() {
   }
 
   async function deleteSequenceWorkspace() {
+    if (!userCanWrite) return;
+
     if (!selectedSequenceId) return;
 
     const confirmed = window.confirm(
@@ -636,6 +655,8 @@ export default function Sequences() {
   function addAnnotation(e) {
     e.preventDefault();
 
+    if (!userCanWrite) return;
+
     if (!isValidNamedRange(annotationForm, sequenceLength)) return;
 
     setAnnotations((prev) => [
@@ -660,6 +681,8 @@ export default function Sequences() {
 
   function addPrimer(e) {
     e.preventDefault();
+
+    if (!userCanWrite) return;
 
     if (!isValidNamedRange(primerForm, sequenceLength)) return;
 
@@ -686,6 +709,8 @@ export default function Sequences() {
   function addTranslation(e) {
     e.preventDefault();
 
+    if (!userCanWrite) return;
+
     if (!isValidNamedRange(translationForm, sequenceLength)) return;
 
     setTranslations((prev) => [
@@ -711,6 +736,8 @@ export default function Sequences() {
   function addHighlight(e) {
     e.preventDefault();
 
+    if (!userCanWrite) return;
+
     if (!isValidRange(highlightForm, sequenceLength)) return;
 
     setHighlights((prev) => [
@@ -729,6 +756,8 @@ export default function Sequences() {
   function addEnzyme(e) {
     e.preventDefault();
 
+    if (!userCanWrite) return;
+
     const value = enzymeName.trim();
 
     if (!value) return;
@@ -739,6 +768,8 @@ export default function Sequences() {
 
   function addCustomEnzyme(e) {
     e.preventDefault();
+
+    if (!userCanWrite) return;
 
     if (!customEnzyme.name.trim() || !customEnzyme.rseq.trim()) return;
 
@@ -798,6 +829,8 @@ export default function Sequences() {
         region, then use the selected region to create an annotation, primer,
         translation, or highlight without manually typing start/end coordinates.
       </Alert>
+
+      {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
 
       <Row className="g-4 mb-4">
         <Col lg={4}>
@@ -862,7 +895,7 @@ export default function Sequences() {
                 <Button
                   variant="dark"
                   onClick={saveSequenceWorkspace}
-                  disabled={saving || !name || !cleanSequence}
+                  disabled={!userCanWrite || saving || !name || !cleanSequence}
                 >
                   {saving
                     ? "Saving..."
@@ -871,7 +904,7 @@ export default function Sequences() {
                     : "Save Workspace"}
                 </Button>
 
-                {selectedSequenceId && (
+                {userCanWrite && selectedSequenceId && (
                   <Button
                     variant="outline-secondary"
                     onClick={duplicateSequenceWorkspace}
@@ -881,7 +914,7 @@ export default function Sequences() {
                   </Button>
                 )}
 
-                {selectedSequenceId && (
+                {userCanWrite && selectedSequenceId && (
                   <Button
                     variant="outline-danger"
                     onClick={deleteSequenceWorkspace}
@@ -1063,7 +1096,7 @@ export default function Sequences() {
                 <Button
                   variant="outline-primary"
                   size="sm"
-                  disabled={!hasSelectionRange()}
+                  disabled={!userCanWrite || !hasSelectionRange()}
                   onClick={useSelectionForAnnotation}
                 >
                   Use for Annotation
@@ -1072,7 +1105,7 @@ export default function Sequences() {
                 <Button
                   variant="outline-secondary"
                   size="sm"
-                  disabled={!hasSelectionRange()}
+                  disabled={!userCanWrite || !hasSelectionRange()}
                   onClick={useSelectionForPrimer}
                 >
                   Use for Primer
@@ -1081,7 +1114,7 @@ export default function Sequences() {
                 <Button
                   variant="outline-success"
                   size="sm"
-                  disabled={!hasSelectionRange()}
+                  disabled={!userCanWrite || !hasSelectionRange()}
                   onClick={useSelectionForTranslation}
                 >
                   Use for Translation
@@ -1090,7 +1123,7 @@ export default function Sequences() {
                 <Button
                   variant="outline-warning"
                   size="sm"
-                  disabled={!hasSelectionRange()}
+                  disabled={!userCanWrite || !hasSelectionRange()}
                   onClick={useSelectionForHighlight}
                 >
                   Use for Highlight
@@ -1251,7 +1284,12 @@ export default function Sequences() {
                   </Col>
 
                   <Col md={1}>
-                    <Button type="submit" variant="dark" className="w-100">
+                    <Button
+                      type="submit"
+                      variant="dark"
+                      className="w-100"
+                      disabled={!userCanWrite}
+                    >
                       Add
                     </Button>
                   </Col>
@@ -1262,6 +1300,7 @@ export default function Sequences() {
                 items={annotations}
                 type="annotation"
                 onRemove={(index) => removeItem(setAnnotations, index)}
+                canEdit={userCanWrite}
               />
             </Card.Body>
           </Card>
@@ -1347,7 +1386,12 @@ export default function Sequences() {
                   </Col>
 
                   <Col md={1}>
-                    <Button type="submit" variant="dark" className="w-100">
+                    <Button
+                      type="submit"
+                      variant="dark"
+                      className="w-100"
+                      disabled={!userCanWrite}
+                    >
                       Add
                     </Button>
                   </Col>
@@ -1358,6 +1402,7 @@ export default function Sequences() {
                 items={primers}
                 type="primer"
                 onRemove={(index) => removeItem(setPrimers, index)}
+                canEdit={userCanWrite}
               />
             </Card.Body>
           </Card>
@@ -1445,7 +1490,12 @@ export default function Sequences() {
                   </Col>
 
                   <Col md={1}>
-                    <Button type="submit" variant="dark" className="w-100">
+                    <Button
+                      type="submit"
+                      variant="dark"
+                      className="w-100"
+                      disabled={!userCanWrite}
+                    >
                       Add
                     </Button>
                   </Col>
@@ -1456,6 +1506,7 @@ export default function Sequences() {
                 items={translations}
                 type="translation"
                 onRemove={(index) => removeItem(setTranslations, index)}
+                canEdit={userCanWrite}
               />
             </Card.Body>
           </Card>
@@ -1515,7 +1566,12 @@ export default function Sequences() {
                   </Col>
 
                   <Col md={2}>
-                    <Button type="submit" variant="dark" className="w-100">
+                    <Button
+                      type="submit"
+                      variant="dark"
+                      className="w-100"
+                      disabled={!userCanWrite}
+                    >
                       Add
                     </Button>
                   </Col>
@@ -1531,7 +1587,7 @@ export default function Sequences() {
                       <th>Name</th>
                       <th>Range</th>
                       <th>Color</th>
-                      <th></th>
+                      {userCanWrite && <th></th>}
                     </tr>
                   </thead>
 
@@ -1544,15 +1600,17 @@ export default function Sequences() {
                           <ColorSwatch color={item.color} />
                           {item.color}
                         </td>
-                        <td>
-                          <Button
-                            variant="outline-danger"
-                            size="sm"
-                            onClick={() => removeItem(setHighlights, index)}
-                          >
-                            Remove
-                          </Button>
-                        </td>
+                        {userCanWrite && (
+                          <td>
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              onClick={() => removeItem(setHighlights, index)}
+                            >
+                              Remove
+                            </Button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -1585,7 +1643,12 @@ export default function Sequences() {
                   </Col>
 
                   <Col md={3}>
-                    <Button type="submit" variant="dark" className="w-100">
+                    <Button
+                      type="submit"
+                      variant="dark"
+                      className="w-100"
+                      disabled={!userCanWrite}
+                    >
                       Add
                     </Button>
                   </Col>
@@ -1664,7 +1727,12 @@ export default function Sequences() {
                   </Col>
 
                   <Col md={1}>
-                    <Button type="submit" variant="dark" className="w-100">
+                    <Button
+                      type="submit"
+                      variant="dark"
+                      className="w-100"
+                      disabled={!userCanWrite}
+                    >
                       Add
                     </Button>
                   </Col>
@@ -1679,7 +1747,7 @@ export default function Sequences() {
                     <tr>
                       <th>Enzyme</th>
                       <th>Type</th>
-                      <th></th>
+                      {userCanWrite && <th></th>}
                     </tr>
                   </thead>
 
@@ -1698,15 +1766,17 @@ export default function Sequences() {
                             ? "Built-in"
                             : enzyme.rseq}
                         </td>
-                        <td>
-                          <Button
-                            variant="outline-danger"
-                            size="sm"
-                            onClick={() => removeItem(setEnzymes, index)}
-                          >
-                            Remove
-                          </Button>
-                        </td>
+                        {userCanWrite && (
+                          <td>
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              onClick={() => removeItem(setEnzymes, index)}
+                            >
+                              Remove
+                            </Button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -1728,6 +1798,7 @@ export default function Sequences() {
                     <Form.Control
                       type="color"
                       value={bpColors[base]}
+                      disabled={!userCanWrite}
                       onChange={(e) => updateBpColor(base, e.target.value)}
                     />
                   </Col>
