@@ -12,6 +12,7 @@ import {
 } from "react-bootstrap";
 import { apiGet, apiPatch, apiPostForm } from "../api";
 import ProjectSequences from "../components/ProjectSequences";
+import { canWrite, isAdmin, readOnlyMessage } from "../authz";
 
 function formatTimestamp(ts) {
   try {
@@ -64,7 +65,7 @@ export default function ProjectDetail() {
 
       setSelectedMembers(initialMembers);
 
-      if (meData?.roles?.includes("admin")) {
+      if (isAdmin(meData)) {
         const usersData = await apiGet("/api/users/");
         setUsers(usersData.results || usersData || []);
       }
@@ -77,11 +78,15 @@ export default function ProjectDetail() {
     load();
   }, [id]);
 
-  const isAdmin = me?.roles?.includes("admin");
+  const userIsAdmin = isAdmin(me);
+  const userCanWrite = canWrite(me);
+  const readOnlyText = readOnlyMessage(me);
 
   async function createPost(e) {
     e.preventDefault();
     setErr("");
+
+    if (!userCanWrite) return;
 
     try {
       const formData = new FormData();
@@ -123,9 +128,7 @@ export default function ProjectDetail() {
   const filteredUsers = useMemo(() => {
     const q = memberQuery.trim().toLowerCase();
 
-    if (!q) {
-      return [];
-    }
+    if (!q) return [];
 
     return users
       .filter((user) => !selectedMembers.some((member) => member.id === user.id))
@@ -140,6 +143,11 @@ export default function ProjectDetail() {
   async function saveMembers() {
     setErr("");
     setSavingMembers(true);
+
+    if (!userIsAdmin) {
+      setSavingMembers(false);
+      return;
+    }
 
     try {
       const updated = await apiPatch(`/api/projects/${id}/`, {
@@ -168,6 +176,7 @@ export default function ProjectDetail() {
           </div>
 
           {err && <Alert variant="danger">{err}</Alert>}
+          {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
 
           <Card className="app-card mb-4">
             <Card.Body>
@@ -192,7 +201,7 @@ export default function ProjectDetail() {
                   </div>
                 </div>
 
-                {isAdmin && (
+                {userIsAdmin && (
                   <div className="col-lg-4">
                     <h5 className="section-title">Manage Team</h5>
 
@@ -278,38 +287,40 @@ export default function ProjectDetail() {
             <Card.Body>
               <h5 className="section-title">Project Feed</h5>
 
-              <Form onSubmit={createPost} className="mb-4">
-                <Row className="g-2">
-                  <Col md={8}>
-                    <Form.Control
-                      as="textarea"
-                      rows={3}
-                      placeholder="Post a note to this project"
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                    />
-                  </Col>
+              {userCanWrite && (
+                <Form onSubmit={createPost} className="mb-4">
+                  <Row className="g-2">
+                    <Col md={8}>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        placeholder="Post a note to this project"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                      />
+                    </Col>
 
-                  <Col md={2}>
-                    <Form.Control
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => setImage(e.target.files?.[0] || null)}
-                    />
-                  </Col>
+                    <Col md={2}>
+                      <Form.Control
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setImage(e.target.files?.[0] || null)}
+                      />
+                    </Col>
 
-                  <Col md={2}>
-                    <Button
-                      type="submit"
-                      variant="dark"
-                      className="w-100"
-                      disabled={!note && !image}
-                    >
-                      Post
-                    </Button>
-                  </Col>
-                </Row>
-              </Form>
+                    <Col md={2}>
+                      <Button
+                        type="submit"
+                        variant="dark"
+                        className="w-100"
+                        disabled={!note && !image}
+                      >
+                        Post
+                      </Button>
+                    </Col>
+                  </Row>
+                </Form>
+              )}
 
               {posts.length === 0 ? (
                 <div className="empty-state">No posts yet.</div>

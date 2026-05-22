@@ -12,6 +12,7 @@ import {
 } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost, apiPostForm } from "../api";
+import { canWrite, isAdmin, readOnlyMessage } from "../authz";
 
 function statusVariant(status) {
   switch (status) {
@@ -115,7 +116,9 @@ export default function Imports() {
     return () => clearInterval(interval);
   }, [jobs]);
 
-  const isAdmin = me?.roles?.includes("admin");
+  const userIsAdmin = isAdmin(me);
+  const userCanWrite = canWrite(me);
+  const readOnlyText = readOnlyMessage(me);
 
   const selectedProfile = useMemo(
     () => profiles.find((p) => String(p.id) === String(mappingInstrument)),
@@ -125,6 +128,8 @@ export default function Imports() {
   async function createProfile(e) {
     e.preventDefault();
     setErr("");
+
+    if (!userIsAdmin) return;
 
     try {
       await apiPost("/api/instrument-profiles/", {
@@ -150,6 +155,8 @@ export default function Imports() {
   async function createMapping(e) {
     e.preventDefault();
     setErr("");
+
+    if (!userIsAdmin) return;
 
     try {
       await apiPost("/api/instrument-mappings/", {
@@ -183,6 +190,11 @@ export default function Imports() {
     setPreviewData(null);
     setPreviewLoading(true);
 
+    if (!userCanWrite) {
+      setPreviewLoading(false);
+      return;
+    }
+
     try {
       const formData = new FormData();
       formData.append("instrument", uploadInstrument);
@@ -200,6 +212,8 @@ export default function Imports() {
   async function uploadImportJob(e) {
     e.preventDefault();
     setErr("");
+
+    if (!userCanWrite) return;
 
     try {
       const formData = new FormData();
@@ -234,8 +248,9 @@ export default function Imports() {
       </div>
 
       {err && <Alert variant="danger">{err}</Alert>}
+      {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
 
-      {isAdmin && (
+      {userIsAdmin && (
         <div className="row g-4 mb-4">
           <div className="col-lg-5">
             <Card className="app-card h-100">
@@ -441,6 +456,7 @@ export default function Imports() {
                 <Form.Select
                   value={uploadInstrument}
                   onChange={(e) => setUploadInstrument(e.target.value)}
+                  disabled={!userCanWrite}
                 >
                   <option value="">Select instrument</option>
                   {profiles.map((p) => (
@@ -455,6 +471,7 @@ export default function Imports() {
                 <Form.Select
                   value={uploadProject}
                   onChange={(e) => setUploadProject(e.target.value)}
+                  disabled={!userCanWrite}
                 >
                   <option value="">No project</option>
                   {projects.map((p) => (
@@ -469,6 +486,7 @@ export default function Imports() {
                 <Form.Control
                   type="file"
                   accept=".csv,text/csv"
+                  disabled={!userCanWrite}
                   onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
                 />
               </Col>
@@ -481,7 +499,12 @@ export default function Imports() {
                   variant="outline-dark"
                   className="w-100"
                   onClick={previewImport}
-                  disabled={!uploadInstrument || !uploadFile || previewLoading}
+                  disabled={
+                    !userCanWrite ||
+                    !uploadInstrument ||
+                    !uploadFile ||
+                    previewLoading
+                  }
                 >
                   {previewLoading ? "Previewing..." : "Preview Import"}
                 </Button>
@@ -492,7 +515,7 @@ export default function Imports() {
                   type="submit"
                   variant="dark"
                   className="w-100"
-                  disabled={!uploadInstrument || !uploadFile}
+                  disabled={!userCanWrite || !uploadInstrument || !uploadFile}
                 >
                   Queue Import
                 </Button>
@@ -564,9 +587,9 @@ export default function Imports() {
                           <td>{row.valid_result_cells}</td>
                           <td>
                             {row.errors?.length > 0
-                              ? row.errors.map((e, idx) => (
+                              ? row.errors.map((error, idx) => (
                                   <div key={idx} className="text-danger small">
-                                    {e.column}: {e.reason}
+                                    {error.column}: {error.reason}
                                   </div>
                                 ))
                               : "-"}
@@ -638,6 +661,7 @@ export default function Imports() {
                           label={`${percent}%`}
                           variant={job.status === "FAILED" ? "danger" : "dark"}
                         />
+
                         <div className="feed-meta mt-1">
                           {job.progress_message || "-"}
                         </div>
