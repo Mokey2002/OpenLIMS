@@ -71,6 +71,12 @@ export default function Imports() {
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  const [sequenceUploadInstrument, setSequenceUploadInstrument] = useState("");
+  const [sequenceUploadProject, setSequenceUploadProject] = useState("");
+  const [sequenceUploadFile, setSequenceUploadFile] = useState(null);
+  const [sequenceImportLoading, setSequenceImportLoading] = useState(false);
+  const [sequenceImportSummary, setSequenceImportSummary] = useState(null);
+
   async function load() {
     setErr("");
 
@@ -95,6 +101,10 @@ export default function Imports() {
 
       if (!mappingInstrument && profileList.length > 0) {
         setMappingInstrument(String(profileList[0].id));
+      }
+
+      if (!sequenceUploadInstrument && profileList.length > 0) {
+        setSequenceUploadInstrument(String(profileList[0].id));
       }
     } catch (e) {
       setErr(e.message || String(e));
@@ -232,13 +242,52 @@ export default function Imports() {
     }
   }
 
+  async function uploadFastaSequenceImport(e) {
+    e.preventDefault();
+
+    setErr("");
+    setSequenceImportSummary(null);
+    setSequenceImportLoading(true);
+
+    if (!userCanWrite) {
+      setSequenceImportLoading(false);
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+
+      formData.append("instrument", sequenceUploadInstrument);
+
+      if (sequenceUploadProject) {
+        formData.append("project", sequenceUploadProject);
+      }
+
+      formData.append("uploaded_file", sequenceUploadFile);
+
+      const data = await apiPostForm(
+        "/api/import-jobs/sequence-fasta-import/",
+        formData
+      );
+
+      setSequenceUploadFile(null);
+      setSequenceImportSummary(data.summary || {});
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setSequenceImportLoading(false);
+    }
+  }
+
   return (
     <div className="w-100">
       <div className="page-header">
         <div>
           <h1 className="page-title">Imports</h1>
           <p className="page-subtitle">
-            Manage instrument profiles, mappings, and async ingestion runs.
+            Manage instrument profiles, mappings, CSV ingestion, and FASTA
+            sequence imports.
           </p>
         </div>
 
@@ -605,6 +654,133 @@ export default function Imports() {
         </Card.Body>
       </Card>
 
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <h5 className="section-title">Run FASTA Sequence Import</h5>
+
+          <p className="text-muted">
+            Upload FASTA records from a sequencer. The first token in each FASTA
+            header should match an existing sample ID, such as S-ALPHA-001.
+          </p>
+
+          <Form onSubmit={uploadFastaSequenceImport}>
+            <Row className="g-2 align-items-center mb-3">
+              <Col md={4}>
+                <Form.Select
+                  value={sequenceUploadInstrument}
+                  onChange={(e) => setSequenceUploadInstrument(e.target.value)}
+                  disabled={!userCanWrite}
+                >
+                  <option value="">Select sequencer/instrument</option>
+
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code} - {p.name}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Col>
+
+              <Col md={4}>
+                <Form.Select
+                  value={sequenceUploadProject}
+                  onChange={(e) => setSequenceUploadProject(e.target.value)}
+                  disabled={!userCanWrite}
+                >
+                  <option value="">Use sample project</option>
+
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code} - {p.name}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Col>
+
+              <Col md={4}>
+                <Form.Control
+                  type="file"
+                  accept=".fasta,.fa,.fna,text/plain"
+                  disabled={!userCanWrite}
+                  onChange={(e) =>
+                    setSequenceUploadFile(e.target.files?.[0] || null)
+                  }
+                />
+              </Col>
+            </Row>
+
+            <Button
+              type="submit"
+              variant="dark"
+              className="w-100"
+              disabled={
+                !userCanWrite ||
+                !sequenceUploadInstrument ||
+                !sequenceUploadFile ||
+                sequenceImportLoading
+              }
+            >
+              {sequenceImportLoading
+                ? "Importing FASTA..."
+                : "Import FASTA Sequences"}
+            </Button>
+          </Form>
+
+          {sequenceImportSummary && (
+            <Card className="app-card mt-4">
+              <Card.Body>
+                <h5 className="section-title">FASTA Import Summary</h5>
+
+                <div className="row g-3 mb-3">
+                  <div className="col-md-3">
+                    <div className="soft-card">
+                      <div className="feed-meta">Records Processed</div>
+                      <div className="fw-semibold">
+                        {sequenceImportSummary.records_processed ?? 0}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-md-3">
+                    <div className="soft-card">
+                      <div className="feed-meta">Sequences Created</div>
+                      <div className="fw-semibold">
+                        {sequenceImportSummary.sequences_created ?? 0}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-md-3">
+                    <div className="soft-card">
+                      <div className="feed-meta">Samples Matched</div>
+                      <div className="fw-semibold">
+                        {sequenceImportSummary.samples_matched ?? 0}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-md-3">
+                    <div className="soft-card">
+                      <div className="feed-meta">Unmatched</div>
+                      <div className="fw-semibold">
+                        {sequenceImportSummary.unmatched_records?.length ?? 0}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {sequenceImportSummary.unmatched_records?.length > 0 && (
+                  <Alert variant="warning" className="mb-0">
+                    Some FASTA records did not match existing samples. Make sure
+                    the first token in the FASTA header is the sample ID.
+                  </Alert>
+                )}
+              </Card.Body>
+            </Card>
+          )}
+        </Card.Body>
+      </Card>
+
       <Card className="app-card">
         <Card.Body>
           <h5 className="section-title">Import History</h5>
@@ -674,6 +850,23 @@ export default function Imports() {
                           <span className="text-danger">
                             {job.summary.error}
                           </span>
+                        ) : job.source_type === "SEQUENCE_FASTA" ? (
+                          <div className="small">
+                            <div>
+                              Records: {job.summary?.records_processed ?? 0}
+                            </div>
+                            <div>
+                              Sequences created:{" "}
+                              {job.summary?.sequences_created ?? 0}
+                            </div>
+                            <div>
+                              Samples matched: {job.summary?.samples_matched ?? 0}
+                            </div>
+                            <div>
+                              Unmatched:{" "}
+                              {job.summary?.unmatched_records?.length ?? 0}
+                            </div>
+                          </div>
                         ) : (
                           <div className="small">
                             <div>Rows: {job.summary?.rows_processed ?? 0}</div>

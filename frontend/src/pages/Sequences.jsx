@@ -804,6 +804,80 @@ export default function Sequences() {
     }));
   }
 
+
+  function downloadTextFile(filename, content, mimeType = "text/plain") {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = filename;
+    link.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  function wrapFastaSequence(value, width = 80) {
+    const cleaned = cleanSequenceText(value);
+    const lines = [];
+
+    for (let i = 0; i < cleaned.length; i += width) {
+      lines.push(cleaned.slice(i, i + width));
+    }
+
+    return lines.join("\n");
+  }
+
+  function safeDownloadName(value, fallback) {
+    return (value || fallback)
+      .replace(/[^a-zA-Z0-9._-]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  }
+
+  function exportFasta() {
+    if (!cleanSequence) return;
+
+    const safeName = name || "openlims-sequence";
+    const fasta = `>${safeName}\n${wrapFastaSequence(cleanSequence)}\n`;
+
+    downloadTextFile(
+      `${safeDownloadName(safeName, "openlims-sequence")}.fasta`,
+      fasta,
+      "text/plain"
+    );
+  }
+
+  function exportWorkspaceJson() {
+    const safeName = name || "openlims-workspace";
+
+    const workspace = {
+      id: selectedSequenceId || null,
+      name,
+      description,
+      sequence_type: sequenceType,
+      sequence: cleanSequence,
+      project: projectId || null,
+      project_code: selectedProject?.code || null,
+      project_name: selectedProject?.name || null,
+      viewer,
+      show_complement: showComplement,
+      rotate_on_scroll: rotateOnScroll,
+      zoom,
+      enzymes,
+      bp_colors: bpColors,
+      annotations,
+      primers,
+      translations,
+      highlights,
+    };
+
+    downloadTextFile(
+      `${safeDownloadName(safeName, "openlims-workspace")}.workspace.json`,
+      JSON.stringify(workspace, null, 2),
+      "application/json"
+    );
+  }
+
   return (
     <div className="w-100">
       <div className="page-header">
@@ -926,6 +1000,23 @@ export default function Sequences() {
 
                 <Button variant="outline-dark" onClick={startNewWorkspace}>
                   Start New Workspace
+                </Button>
+
+
+                <Button
+                  variant="outline-primary"
+                  onClick={exportFasta}
+                  disabled={!cleanSequence}
+                >
+                  Export FASTA
+                </Button>
+
+                <Button
+                  variant="outline-primary"
+                  onClick={exportWorkspaceJson}
+                  disabled={!cleanSequence}
+                >
+                  Export Workspace JSON
                 </Button>
 
                 <Button variant="outline-secondary" onClick={loadSavedSequences}>

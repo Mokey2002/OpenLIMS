@@ -14,6 +14,8 @@ from core.permissions import (
     IsAuthenticatedReadOnlyOrTechAdminWrite,
 )
 from events.models import Event
+from samples.models import Sample
+from sequences.models import Sequence
 
 from .models import InstrumentProfile, InstrumentColumnMapping, ImportJob
 from .serializers import (
@@ -163,8 +165,6 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         skipped_rows = []
         preview_rows = []
 
-        from samples.models import Sample
-
         for row in reader:
             rows_processed += 1
 
@@ -223,6 +223,59 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             "preview_rows": preview_rows[:20],
         }
 
+    def _parse_fasta_records(self, uploaded_file):
+        uploaded_file.seek(0)
+        decoded = uploaded_file.read().decode("utf-8")
+        uploaded_file.seek(0)
+
+        records = []
+        current_header = None
+        current_lines = []
+
+        for raw_line in decoded.splitlines():
+            line = raw_line.strip()
+
+            if not line:
+                continue
+
+            if line.startswith(">"):
+                if current_header:
+                    sequence = "".join(current_lines).replace(" ", "").upper()
+                    records.append({
+                        "header": current_header,
+                        "name": current_header,
+                        "sample_code": current_header.split()[0],
+                        "sequence": sequence,
+                    })
+
+                current_header = line[1:].strip()
+                current_lines = []
+            else:
+                current_lines.append(line)
+
+        if current_header:
+            sequence = "".join(current_lines).replace(" ", "").upper()
+            records.append({
+                "header": current_header,
+                "name": current_header,
+                "sample_code": current_header.split()[0],
+                "sequence": sequence,
+            })
+
+        return records
+
+    def _infer_sequence_type(self, sequence):
+        sequence = sequence.upper()
+        sequence_chars = set(sequence)
+
+        if sequence_chars.issubset(set("ACGTN")):
+            return "DNA"
+
+        if sequence_chars.issubset(set("ACGUN")):
+            return "RNA"
+
+        return "PROTEIN"
+
     @action(detail=False, methods=["post"], url_path="preview")
     def preview(self, request):
         instrument_id = request.data.get("instrument")
@@ -251,6 +304,197 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         summary["instrument_name"] = instrument.name
 
         return Response(summary)
+
+    @action(detail=False, methods=["post"], url_path="sequence-fasta-import")
+    def sequence_fasta_import(self, request):
+        instrument_id = request.data.get("instrument")
+        project_id = request.data.get("project")
+        uploaded_file = request.data.get("uploaded_file")
+
+        if not instrument_id or not uploaded_file:
+            return Response(
+                {"detail": "instrument and uploaded_file are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            instrument = InstrumentProfile.objects.get(id=instrument_id)
+        except InstrumentProfile.DoesNotExist:
+            return Response(
+                {"detail": "Instrument not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            records = self._parse_fasta_records(uploaded_file)
+        except UnicodeDecodeError:
+            return Response(
+                {"detail": "Unable to read FASTA file. Expected UTF-8 text."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not records:
+            return Response(
+                {"detail": "No FASTA records found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        actor = request.user if request.user.is_authenticated else None
+
+        job = ImportJob.objects.create(
+            instrument=instrument,
+            project_id=project_id if project_id else None,
+            uploaded_file=uploaded_file,
+            uploaded_by=actor,
+            source_type="SEQUENCE_FASTA",
+            status="RUNNING",
+            progress_current=0,
+            progress_total=len(records),
+            progress_message="Processing FASTA sequence import",
+            summary={},
+        )
+
+        created_sequence_ids = []
+        matched_sample_ids = []
+        unmatched_records = []
+        skipped_records = []
+
+        try:
+            with transaction.atomic():
+                for index, record in enumerate(records, start=1):
+                    job.progress_current = index
+                    job.progress_message = (
+                        f"Processing FASTA record {index} of {len(records)}"
+                    )
+                    job.save(
+                        update_fields=[
+                            "progress_current",
+                            "progress_message",
+                        ]
+                    )
+
+                    sample_code = record["sample_code"]
+                    sequence_text = record["sequence"]
+
+                    if not sequence_text:
+                        skipped_records.append({
+                            "header": record["header"],
+                            "reason": "Empty sequence",
+                        })
+                        continue
+
+                    sample = (
+                        Sample.objects
+                        .select_related("project")
+                        .filter(sample_id=sample_code)
+                        .first()
+                    )
+
+                    if not sample:
+                        unmatched_records.append({
+                            "header": record["header"],
+                            "sample_code": sample_code,
+                            "reason": "No matching sample found",
+                        })
+                        continue
+
+                    linked_project = sample.project or job.project
+
+                    sequence_record = Sequence.objects.create(
+                        name=record["name"],
+                        description=(
+                            f"Imported from FASTA file via Import Job #{job.id}."
+                        ),
+                        sequence_type=self._infer_sequence_type(sequence_text),
+                        sequence=sequence_text,
+                        sample=sample,
+                        project=linked_project,
+                        import_job=job,
+                        source_type="FASTA_IMPORT",
+                        source_metadata={
+                            "header": record["header"],
+                            "sample_code": sample_code,
+                            "instrument_code": instrument.code,
+                            "instrument_name": instrument.name,
+                            "import_job_id": job.id,
+                            "filename": uploaded_file.name,
+                        },
+                        created_by=actor,
+                    )
+
+                    created_sequence_ids.append(sequence_record.id)
+                    matched_sample_ids.append(sample.id)
+
+                    event_payload = {
+                        "sequence_id": sequence_record.id,
+                        "sequence_name": sequence_record.name,
+                        "sample_id": sample.id,
+                        "sample_code": sample.sample_id,
+                        "project_id": linked_project.id if linked_project else None,
+                        "import_job_id": job.id,
+                        "instrument_code": instrument.code,
+                        "source_type": "FASTA_IMPORT",
+                    }
+
+                    Event.objects.create(
+                        entity_type="Sequence",
+                        entity_id=str(sequence_record.id),
+                        action="SEQUENCE_IMPORTED",
+                        actor=actor,
+                        payload=event_payload,
+                    )
+
+                    Event.objects.create(
+                        entity_type="Sample",
+                        entity_id=str(sample.id),
+                        action="SEQUENCE_IMPORTED",
+                        actor=actor,
+                        payload=event_payload,
+                    )
+
+                summary = {
+                    "source_type": "SEQUENCE_FASTA",
+                    "records_processed": len(records),
+                    "sequences_created": len(created_sequence_ids),
+                    "samples_matched": len(set(matched_sample_ids)),
+                    "unmatched_records": unmatched_records,
+                    "skipped_records": skipped_records,
+                    "created_sequence_ids": created_sequence_ids,
+                    "matched_sample_ids": list(set(matched_sample_ids)),
+                }
+
+                job.status = "COMPLETED"
+                job.summary = summary
+                job.progress_current = len(records)
+                job.progress_total = len(records)
+                job.progress_message = "FASTA sequence import completed"
+                job.save()
+
+                Event.objects.create(
+                    entity_type="ImportJob",
+                    entity_id=str(job.id),
+                    action="SEQUENCE_IMPORT_COMPLETED",
+                    actor=actor,
+                    payload={
+                        "job_id": job.id,
+                        "instrument_code": instrument.code,
+                        **summary,
+                    },
+                )
+
+        except Exception as e:
+            job.status = "FAILED"
+            job.summary = {"error": str(e)}
+            job.progress_message = f"FASTA sequence import failed: {str(e)}"
+            job.save()
+
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        serializer = self.get_serializer(job)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def perform_create(self, serializer):
         job = serializer.save(
@@ -305,8 +549,6 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             )
 
         sample_ids = list(set(sample_ids))
-
-        from samples.models import Sample
 
         samples = (
             Sample.objects
