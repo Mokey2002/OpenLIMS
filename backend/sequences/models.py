@@ -9,6 +9,13 @@ class Sequence(models.Model):
         ("PROTEIN", "Protein"),
     ]
 
+    SOURCE_TYPE_CHOICES = [
+        ("MANUAL", "Manual"),
+        ("FASTA_IMPORT", "FASTA Import"),
+        ("FASTQ_IMPORT", "FASTQ Import"),
+        ("GENBANK_IMPORT", "GenBank Import"),
+    ]
+
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
 
@@ -35,6 +42,21 @@ class Sequence(models.Model):
         blank=True,
         related_name="sequences",
     )
+
+    import_job = models.ForeignKey(
+        "imports.ImportJob",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sequences",
+    )
+
+    source_type = models.CharField(
+        max_length=30,
+        choices=SOURCE_TYPE_CHOICES,
+        default="MANUAL",
+    )
+    source_metadata = models.JSONField(default=dict, blank=True)
 
     viewer = models.CharField(max_length=50, default="both")
     show_complement = models.BooleanField(default=True)
