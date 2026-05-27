@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'imports',
     'notifications',
     'sequences',
+    'alignments'
 ]
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
