@@ -9,6 +9,7 @@ from core.views import UserLiteViewSet, UserAdminViewSet
 from imports.views import InstrumentProfileViewSet,InstrumentColumnMappingViewSet,ImportJobViewSet
 from notifications.views import NotificationViewSet
 from sequences.views import SequenceViewSet
+from alignments.views import AlignmentJobViewSet
 
 router = DefaultRouter()
 router.register(r"samples", SampleViewSet, basename="sample")
@@ -30,5 +31,5 @@ router.register(r"instrument-mappings", InstrumentColumnMappingViewSet, basename
 router.register(r"import-jobs", ImportJobViewSet, basename="import-job")
 router.register(r"notifications",NotificationViewSet, basename="notification")
 router.register(r"sequences", SequenceViewSet, basename="sequence")
-
+router.register(r"alignment-jobs", AlignmentJobViewSet, basename="alignment-job")
 urlpatterns = router.urls

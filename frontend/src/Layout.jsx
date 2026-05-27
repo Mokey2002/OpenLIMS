@@ -94,7 +94,10 @@ export default function Layout() {
                   Imports
                 </Nav.Link>
               )}
-
+              
+              <Nav.Link as={NavLink} to="/alignments">
+                Alignments
+              </Nav.Link>
               <Nav.Link as={NavLink} to="/notifications">
                 Notifications{" "}
                 {unreadCount > 0 && <Badge bg="danger">{unreadCount}</Badge>}

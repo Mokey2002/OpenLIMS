@@ -15,6 +15,7 @@ import Notifications from "./pages/Notifications";
 import { isLoggedIn } from "./auth";
 import ImportDetail from "./pages/ImportDetail"; 
 import Sequences from "./pages/Sequences";
+import Alignments from "./pages/Alignments";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -46,7 +47,7 @@ export default function App() {
           <Route path="imports" element={<Imports />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="imports/:id" element={<ImportDetail />} />
-          
+          <Route path="/alignments" element={<Alignments />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
