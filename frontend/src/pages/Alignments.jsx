@@ -12,12 +12,41 @@ import {
 import { apiGet, apiPost } from "../api";
 import { canWrite, readOnlyMessage } from "../authz";
 
-function parseFasta(value) {
+function formatTimestamp(ts) {
+  if (!ts) return "-";
+
+  try {
+    return new Date(ts).toLocaleString();
+  } catch {
+    return ts;
+  }
+}
+
+function downloadTextFile(filename, content, mimeType = "text/plain") {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+  link.click();
+
+  URL.revokeObjectURL(url);
+}
+
+function safeFilename(value) {
+  return String(value || "openlims-alignment")
+    .trim()
+    .replaceAll(" ", "_")
+    .replace(/[^a-zA-Z0-9_.-]/g, "");
+}
+
+function parseFastaRecords(fastaText) {
   const records = [];
   let currentName = "";
   let currentLines = [];
 
-  for (const rawLine of String(value || "").split(/\r?\n/)) {
+  for (const rawLine of String(fastaText || "").split(/\r?\n/)) {
     const line = rawLine.trim();
 
     if (!line) continue;
@@ -47,53 +76,174 @@ function parseFasta(value) {
   return records;
 }
 
-function formatTimestamp(ts) {
-  if (!ts) return "-";
-
-  try {
-    return new Date(ts).toLocaleString();
-  } catch {
-    return ts;
+function statusVariant(status) {
+  switch (status) {
+    case "COMPLETED":
+      return "success";
+    case "FAILED":
+      return "danger";
+    case "RUNNING":
+      return "primary";
+    case "PENDING":
+      return "warning";
+    default:
+      return "secondary";
   }
 }
 
-function downloadTextFile(filename, content, mimeType = "text/plain") {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
+function baseStyle(base) {
+  const upper = String(base || "").toUpperCase();
 
-  link.href = url;
-  link.download = filename;
-  link.click();
+  const styles = {
+    A: { background: "#fee2e2", color: "#991b1b" },
+    T: { background: "#dbeafe", color: "#1e3a8a" },
+    U: { background: "#dbeafe", color: "#1e3a8a" },
+    G: { background: "#dcfce7", color: "#166534" },
+    C: { background: "#fef3c7", color: "#92400e" },
+    "-": { background: "#f3f4f6", color: "#6b7280" },
+    N: { background: "#ede9fe", color: "#5b21b6" },
+  };
 
-  URL.revokeObjectURL(url);
+  return (
+    styles[upper] || {
+      background: "#f8fafc",
+      color: "#111827",
+    }
+  );
+}
+
+function chunkSequence(sequence, chunkSize = 80) {
+  const chunks = [];
+
+  for (let i = 0; i < sequence.length; i += chunkSize) {
+    chunks.push({
+      start: i,
+      end: Math.min(i + chunkSize, sequence.length),
+      text: sequence.slice(i, i + chunkSize),
+    });
+  }
+
+  return chunks;
+}
+
+function AlignmentGrid({ records }) {
+  if (records.length === 0) {
+    return <div className="empty-state">No aligned FASTA records found.</div>;
+  }
+
+  const maxLength = Math.max(...records.map((record) => record.sequence.length));
+  const chunks = chunkSequence("X".repeat(maxLength), 80);
+
+  return (
+    <div className="d-grid gap-4">
+      {chunks.map((chunk) => (
+        <div key={`${chunk.start}-${chunk.end}`} className="soft-card">
+          <div className="feed-meta mb-2">
+            Columns {chunk.start + 1}–{chunk.end}
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <Table responsive className="app-table mb-0">
+              <tbody>
+                {records.map((record, rowIndex) => {
+                  const sequenceChunk = record.sequence
+                    .padEnd(maxLength, "-")
+                    .slice(chunk.start, chunk.end);
+
+                  return (
+                    <tr key={`${record.name}-${rowIndex}-${chunk.start}`}>
+                      <td
+                        className="fw-semibold"
+                        style={{
+                          minWidth: "220px",
+                          maxWidth: "220px",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          verticalAlign: "top",
+                        }}
+                        title={record.name}
+                      >
+                        {record.name}
+                      </td>
+
+                      <td>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: `repeat(${sequenceChunk.length}, 18px)`,
+                            gap: "2px",
+                            fontFamily:
+                              "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                            fontSize: "0.75rem",
+                          }}
+                        >
+                          {sequenceChunk.split("").map((base, index) => {
+                            const style = baseStyle(base);
+
+                            return (
+                              <span
+                                key={`${record.name}-${chunk.start}-${index}`}
+                                title={`Column ${chunk.start + index + 1}: ${base}`}
+                                style={{
+                                  ...style,
+                                  width: "18px",
+                                  height: "22px",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  borderRadius: "4px",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {base}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function Alignments() {
   const [me, setMe] = useState(null);
   const [projects, setProjects] = useState([]);
   const [sequences, setSequences] = useState([]);
-  const [jobs, setJobs] = useState([]);
+  const [alignmentJobs, setAlignmentJobs] = useState([]);
 
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedSequenceIds, setSelectedSequenceIds] = useState([]);
-  const [name, setName] = useState("Alpha Clustal Omega Alignment");
-
   const [selectedJobId, setSelectedJobId] = useState("");
+
+  const [alignmentName, setAlignmentName] = useState(
+    "OpenLIMS Clustal Omega Alignment"
+  );
   const [err, setErr] = useState("");
   const [success, setSuccess] = useState("");
   const [running, setRunning] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   async function load() {
     setErr("");
+    setLoading(true);
 
     try {
-      const [meData, projectsData, sequencesData, jobsData] = await Promise.all([
-        apiGet("/api/me/"),
-        apiGet("/api/projects/"),
-        apiGet("/api/sequences/"),
-        apiGet("/api/alignment-jobs/"),
-      ]);
+      const [meData, projectsData, sequencesData, jobsData] =
+        await Promise.all([
+          apiGet("/api/me/"),
+          apiGet("/api/projects/"),
+          apiGet("/api/sequences/"),
+          apiGet("/api/alignment-jobs/"),
+        ]);
 
       const projectList = projectsData.results || projectsData || [];
       const sequenceList = sequencesData.results || sequencesData || [];
@@ -102,7 +252,7 @@ export default function Alignments() {
       setMe(meData);
       setProjects(projectList);
       setSequences(sequenceList);
-      setJobs(jobList);
+      setAlignmentJobs(jobList);
 
       if (!selectedProjectId && projectList.length > 0) {
         setSelectedProjectId(String(projectList[0].id));
@@ -113,6 +263,8 @@ export default function Alignments() {
       }
     } catch (e) {
       setErr(e.message || String(e));
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -132,27 +284,44 @@ export default function Alignments() {
     );
   }, [sequences, selectedProjectId]);
 
+  const selectedProject = useMemo(() => {
+    return projects.find(
+      (project) => String(project.id) === String(selectedProjectId)
+    );
+  }, [projects, selectedProjectId]);
+
   const selectedJob = useMemo(() => {
-    return jobs.find((job) => String(job.id) === String(selectedJobId));
-  }, [jobs, selectedJobId]);
+    return alignmentJobs.find((job) => String(job.id) === String(selectedJobId));
+  }, [alignmentJobs, selectedJobId]);
 
   const alignmentRecords = useMemo(() => {
-    return parseFasta(selectedJob?.aligned_fasta || "");
+    return parseFastaRecords(selectedJob?.aligned_fasta || "");
   }, [selectedJob]);
 
-  const alignmentLength = useMemo(() => {
+  const alignmentColumns = useMemo(() => {
     if (alignmentRecords.length === 0) return 0;
+
     return Math.max(...alignmentRecords.map((record) => record.sequence.length));
   }, [alignmentRecords]);
 
   function toggleSequence(sequenceId) {
-    const value = String(sequenceId);
+    const id = String(sequenceId);
 
     setSelectedSequenceIds((prev) =>
-      prev.includes(value)
-        ? prev.filter((item) => item !== value)
-        : [...prev, value]
+      prev.includes(id)
+        ? prev.filter((currentId) => currentId !== id)
+        : [...prev, id]
     );
+  }
+
+  function selectAllVisibleSequences() {
+    setSelectedSequenceIds(
+      filteredSequences.map((sequence) => String(sequence.id))
+    );
+  }
+
+  function clearSelectedSequences() {
+    setSelectedSequenceIds([]);
   }
 
   async function runAlignment(e) {
@@ -162,12 +331,12 @@ export default function Alignments() {
     setSuccess("");
 
     if (!userCanWrite) {
-      setErr("Read-only access: you cannot run alignments.");
+      setErr("Read-only access: you cannot run sequence alignments.");
       return;
     }
 
     if (selectedSequenceIds.length < 2) {
-      setErr("Select at least 2 sequences to align.");
+      setErr("Select at least 2 sequence workspaces to run an alignment.");
       return;
     }
 
@@ -175,17 +344,16 @@ export default function Alignments() {
 
     try {
       const payload = {
-        name,
+        name: alignmentName,
         project: selectedProjectId || null,
         sequence_ids: selectedSequenceIds.map((id) => Number(id)),
         tool: "CLUSTAL_OMEGA",
       };
 
-      const created = await apiPost("/api/alignment-jobs/", payload);
+      const createdJob = await apiPost("/api/alignment-jobs/", payload);
 
-      setSuccess(`Alignment completed: ${created.name}`);
-      setSelectedJobId(String(created.id));
-      setSelectedSequenceIds([]);
+      setSuccess(`Alignment "${createdJob.name}" completed.`);
+      setSelectedJobId(String(createdJob.id));
 
       await load();
     } catch (e) {
@@ -198,10 +366,8 @@ export default function Alignments() {
   function downloadAlignedFasta() {
     if (!selectedJob?.aligned_fasta) return;
 
-    const safeName = selectedJob.name || `alignment-${selectedJob.id}`;
-
     downloadTextFile(
-      `${safeName.replaceAll(" ", "_")}.aligned.fasta`,
+      `${safeFilename(selectedJob.name)}.aligned.fasta`,
       selectedJob.aligned_fasta,
       "text/plain"
     );
@@ -210,17 +376,11 @@ export default function Alignments() {
   function downloadAlignmentJson() {
     if (!selectedJob) return;
 
-    const safeName = selectedJob.name || `alignment-${selectedJob.id}`;
-
     downloadTextFile(
-      `${safeName.replaceAll(" ", "_")}.alignment.json`,
+      `${safeFilename(selectedJob.name)}.alignment.json`,
       JSON.stringify(selectedJob, null, 2),
       "application/json"
     );
-  }
-
-  function openExternalViewer() {
-    window.open("https://fast.alignmentviewer.org/", "_blank", "noreferrer");
   }
 
   return (
@@ -229,18 +389,31 @@ export default function Alignments() {
         <div>
           <h1 className="page-title">Alignments</h1>
           <p className="page-subtitle">
-            Run Clustal Omega on saved sequence workspaces and review aligned
-            FASTA output.
+            Run Clustal Omega alignments and view aligned FASTA in OpenLIMS.
           </p>
         </div>
 
         <div className="inline-actions">
           <Button variant="outline-dark" size="sm" onClick={load}>
-            Refresh
+            {loading ? "Refreshing..." : "Refresh"}
           </Button>
 
-          <Button variant="outline-secondary" size="sm" onClick={openExternalViewer}>
-            Open Fast AlignmentViewer
+          <Button
+            variant="outline-primary"
+            size="sm"
+            onClick={downloadAlignedFasta}
+            disabled={!selectedJob?.aligned_fasta}
+          >
+            Download FASTA
+          </Button>
+
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={downloadAlignmentJson}
+            disabled={!selectedJob}
+          >
+            Download JSON
           </Button>
         </div>
       </div>
@@ -250,7 +423,7 @@ export default function Alignments() {
       {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
 
       <Row className="g-4 mb-4">
-        <Col lg={5}>
+        <Col lg={4}>
           <Card className="app-card h-100">
             <Card.Body>
               <h5 className="section-title">Create Alignment</h5>
@@ -259,8 +432,8 @@ export default function Alignments() {
                 <Form.Group className="mb-3">
                   <Form.Label>Alignment Name</Form.Label>
                   <Form.Control
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    value={alignmentName}
+                    onChange={(e) => setAlignmentName(e.target.value)}
                     disabled={!userCanWrite}
                   />
                 </Form.Group>
@@ -284,48 +457,58 @@ export default function Alignments() {
                   </Form.Select>
                 </Form.Group>
 
-                <div className="toolbar-row mb-2">
-                  <div className="feed-meta">Select sequences</div>
-                  <Badge bg="dark">{selectedSequenceIds.length} selected</Badge>
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <Form.Label className="mb-0">Sequence Workspaces</Form.Label>
+
+                  <div className="d-flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline-secondary"
+                      size="sm"
+                      onClick={selectAllVisibleSequences}
+                      disabled={!userCanWrite || filteredSequences.length === 0}
+                    >
+                      Select All
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="outline-secondary"
+                      size="sm"
+                      onClick={clearSelectedSequences}
+                      disabled={!userCanWrite}
+                    >
+                      Clear
+                    </Button>
+                  </div>
                 </div>
 
                 <div
-                  className="d-grid gap-2 mb-3"
-                  style={{ maxHeight: "420px", overflowY: "auto" }}
+                  className="soft-card mb-3"
+                  style={{ maxHeight: "360px", overflowY: "auto" }}
                 >
                   {filteredSequences.length === 0 ? (
                     <div className="empty-state">
-                      No sequences found for this project.
+                      No sequence workspaces found for this project.
                     </div>
                   ) : (
-                    filteredSequences.map((sequence) => {
-                      const checked = selectedSequenceIds.includes(
-                        String(sequence.id)
-                      );
-
-                      return (
-                        <div key={sequence.id} className="soft-card">
-                          <Form.Check
-                            type="checkbox"
-                            checked={checked}
-                            disabled={!userCanWrite}
-                            onChange={() => toggleSequence(sequence.id)}
-                            label={
-                              <span>
-                                <span className="fw-semibold">
-                                  {sequence.name}
-                                </span>
-                                <span className="text-muted small d-block">
-                                  {sequence.sample_code || "No sample"} ·{" "}
-                                  {sequence.sequence_type} ·{" "}
-                                  {sequence.sequence?.length ?? 0} bp
-                                </span>
-                              </span>
-                            }
-                          />
-                        </div>
-                      );
-                    })
+                    <div className="d-grid gap-2">
+                      {filteredSequences.map((sequence) => (
+                        <Form.Check
+                          key={sequence.id}
+                          type="checkbox"
+                          id={`sequence-${sequence.id}`}
+                          label={`${sequence.name} (${sequence.sequence_type}, ${
+                            sequence.sequence?.length ?? 0
+                          } bp)`}
+                          checked={selectedSequenceIds.includes(
+                            String(sequence.id)
+                          )}
+                          disabled={!userCanWrite}
+                          onChange={() => toggleSequence(sequence.id)}
+                        />
+                      ))}
+                    </div>
                   )}
                 </div>
 
@@ -336,64 +519,68 @@ export default function Alignments() {
                   disabled={
                     !userCanWrite ||
                     running ||
-                    !name ||
+                    !alignmentName ||
                     selectedSequenceIds.length < 2
                   }
                 >
-                  {running ? "Running Clustal Omega..." : "Run Clustal Omega"}
+                  {running
+                    ? "Running Clustal Omega..."
+                    : `Run Clustal Omega (${selectedSequenceIds.length})`}
                 </Button>
               </Form>
             </Card.Body>
           </Card>
         </Col>
 
-        <Col lg={7}>
+        <Col lg={8}>
           <Card className="app-card h-100">
             <Card.Body>
               <div className="toolbar-row mb-3">
-                <h5 className="section-title mb-0">Alignment Jobs</h5>
-                <Badge bg="dark">{jobs.length}</Badge>
+                <div>
+                  <h5 className="section-title mb-0">Alignment Jobs</h5>
+                  <div className="feed-meta">
+                    Previous Clustal Omega alignment runs.
+                  </div>
+                </div>
+
+                <Badge bg="dark">{alignmentJobs.length}</Badge>
               </div>
 
-              {jobs.length === 0 ? (
+              {alignmentJobs.length === 0 ? (
                 <div className="empty-state">No alignment jobs yet.</div>
               ) : (
                 <Table responsive hover className="app-table">
                   <thead>
                     <tr>
                       <th>Name</th>
+                      <th>Project</th>
                       <th>Status</th>
                       <th>Tool</th>
-                      <th>Sequences</th>
                       <th>Created</th>
                       <th></th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {jobs.map((job) => (
+                    {alignmentJobs.map((job) => (
                       <tr key={job.id}>
                         <td className="fw-semibold">{job.name}</td>
+                        <td>{job.project_code || selectedProject?.code || "-"}</td>
                         <td>
-                          <Badge
-                            bg={
-                              job.status === "COMPLETED"
-                                ? "success"
-                                : job.status === "FAILED"
-                                ? "danger"
-                                : "warning"
-                            }
-                          >
+                          <Badge bg={statusVariant(job.status)}>
                             {job.status}
                           </Badge>
                         </td>
-                        <td>{job.tool}</td>
-                        <td>{job.sequence_count}</td>
+                        <td>{job.tool || "CLUSTAL_OMEGA"}</td>
                         <td>{formatTimestamp(job.created_at)}</td>
                         <td>
                           <Button
+                            variant={
+                              String(selectedJobId) === String(job.id)
+                                ? "dark"
+                                : "outline-dark"
+                            }
                             size="sm"
-                            variant="outline-dark"
                             onClick={() => setSelectedJobId(String(job.id))}
                           >
                             View
@@ -409,117 +596,91 @@ export default function Alignments() {
         </Col>
       </Row>
 
+      <div className="stat-grid mb-4">
+        <Card className="app-card metric-card h-100">
+          <Card.Body>
+            <div className="metric-label">Selected Sequences</div>
+            <div className="metric-value">{selectedSequenceIds.length}</div>
+            <div className="metric-note">Used for new alignment</div>
+          </Card.Body>
+        </Card>
+
+        <Card className="app-card metric-card h-100">
+          <Card.Body>
+            <div className="metric-label">Aligned Records</div>
+            <div className="metric-value">{alignmentRecords.length}</div>
+            <div className="metric-note">Records in selected result</div>
+          </Card.Body>
+        </Card>
+
+        <Card className="app-card metric-card h-100">
+          <Card.Body>
+            <div className="metric-label">Alignment Columns</div>
+            <div className="metric-value">{alignmentColumns}</div>
+            <div className="metric-note">Longest aligned sequence</div>
+          </Card.Body>
+        </Card>
+
+        <Card className="app-card metric-card h-100">
+          <Card.Body>
+            <div className="metric-label">Viewer</div>
+            <div className="metric-value" style={{ fontSize: "1.4rem" }}>
+              OpenLIMS
+            </div>
+            <div className="metric-note">Color-coded alignment grid</div>
+          </Card.Body>
+        </Card>
+      </div>
+
       <Card className="app-card mb-4">
         <Card.Body>
           <div className="toolbar-row mb-3">
             <div>
-              <h5 className="section-title mb-0">Alignment Result</h5>
+              <h5 className="section-title mb-0">Alignment Preview</h5>
               <div className="feed-meta">
-                {selectedJob
-                  ? `${selectedJob.name} · ${alignmentRecords.length} sequences · ${alignmentLength} columns`
-                  : "Select an alignment job to view results."}
+                Color-coded alignment grid generated from Clustal Omega output.
               </div>
             </div>
 
-            <div className="inline-actions">
-              <Button
-                variant="outline-dark"
-                size="sm"
-                onClick={downloadAlignedFasta}
-                disabled={!selectedJob?.aligned_fasta}
-              >
-                Download FASTA
-              </Button>
-
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                onClick={downloadAlignmentJson}
-                disabled={!selectedJob}
-              >
-                Download JSON
-              </Button>
-            </div>
+            {selectedJob && (
+              <Badge bg={statusVariant(selectedJob.status)}>
+                {selectedJob.status}
+              </Badge>
+            )}
           </div>
 
           {!selectedJob ? (
-            <div className="empty-state">No alignment selected.</div>
+            <div className="empty-state">Select an alignment job to view.</div>
           ) : selectedJob.status === "FAILED" ? (
             <Alert variant="danger">
               {selectedJob.error_message || "Alignment failed."}
             </Alert>
-          ) : alignmentRecords.length === 0 ? (
-            <div className="empty-state">No aligned FASTA available yet.</div>
-          ) : (
-            <div
-              style={{
-                overflowX: "auto",
-                border: "1px solid #e5e7eb",
-                borderRadius: "14px",
-                padding: "14px",
-                background: "#ffffff",
-              }}
-            >
-              <Table responsive hover className="app-table mb-0">
-                <thead>
-                  <tr>
-                    <th style={{ minWidth: "220px" }}>Sequence</th>
-                    <th>Aligned FASTA</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {alignmentRecords.map((record, index) => (
-                    <tr key={`${record.name}-${index}`}>
-                      <td className="fw-semibold">{record.name}</td>
-                      <td>
-                        <code
-                          style={{
-                            whiteSpace: "pre",
-                            fontFamily:
-                              "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                          }}
-                        >
-                          {record.sequence}
-                        </code>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
+          ) : !selectedJob.aligned_fasta ? (
+            <div className="empty-state">
+              This job does not have aligned FASTA output yet.
             </div>
+          ) : (
+            <AlignmentGrid records={alignmentRecords} />
           )}
         </Card.Body>
       </Card>
 
       <Card className="app-card">
         <Card.Body>
-          <h5 className="section-title">Fast AlignmentViewer</h5>
-          <p className="text-muted">
-            Use the download button above to download aligned FASTA, then open it
-            in the external AlignmentViewer if you want a dedicated interactive
-            visualization.
-          </p>
-
-          <div
-            style={{
-              height: "520px",
-              border: "1px solid #e5e7eb",
-              borderRadius: "14px",
-              overflow: "hidden",
-              background: "#ffffff",
-            }}
-          >
-            <iframe
-              title="Fast AlignmentViewer"
-              src="https://fast.alignmentviewer.org/"
-              style={{
-                border: 0,
-                width: "100%",
-                height: "100%",
-              }}
-            />
+          <div className="toolbar-row mb-3">
+            <div>
+              <h5 className="section-title mb-0">Aligned FASTA</h5>
+              <div className="feed-meta">
+                Raw aligned FASTA returned by Clustal Omega.
+              </div>
+            </div>
           </div>
+
+          {!selectedJob?.aligned_fasta ? (
+            <div className="empty-state">No aligned FASTA selected.</div>
+          ) : (
+            <pre className="app-pre">{selectedJob.aligned_fasta}</pre>
+          )}
         </Card.Body>
       </Card>
     </div>
