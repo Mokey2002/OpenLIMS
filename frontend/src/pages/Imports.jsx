@@ -29,6 +29,19 @@ function statusVariant(status) {
   }
 }
 
+function sourceVariant(sourceType) {
+  switch (sourceType) {
+    case "API":
+      return "dark";
+    case "SEQUENCE_FASTA":
+      return "info";
+    case "UPLOAD":
+      return "secondary";
+    default:
+      return "secondary";
+  }
+}
+
 function formatTimestamp(ts) {
   try {
     return new Date(ts).toLocaleString();
@@ -74,6 +87,8 @@ export default function Imports() {
   const [sequenceUploadInstrument, setSequenceUploadInstrument] = useState("");
   const [sequenceUploadProject, setSequenceUploadProject] = useState("");
   const [sequenceUploadFile, setSequenceUploadFile] = useState(null);
+  const [sequencePreviewLoading, setSequencePreviewLoading] = useState(false);
+  const [sequencePreviewData, setSequencePreviewData] = useState(null);
   const [sequenceImportLoading, setSequenceImportLoading] = useState(false);
   const [sequenceImportSummary, setSequenceImportSummary] = useState(null);
 
@@ -99,12 +114,17 @@ export default function Imports() {
         setUploadInstrument(String(profileList[0].id));
       }
 
-      if (!mappingInstrument && profileList.length > 0) {
-        setMappingInstrument(String(profileList[0].id));
+      if (!sequenceUploadInstrument && profileList.length > 0) {
+        const fastaProfile =
+          profileList.find((p) => p.code === "FASTA-SEQ") ||
+          profileList.find((p) => p.code === "MISEQ") ||
+          profileList[0];
+
+        setSequenceUploadInstrument(String(fastaProfile.id));
       }
 
-      if (!sequenceUploadInstrument && profileList.length > 0) {
-        setSequenceUploadInstrument(String(profileList[0].id));
+      if (!mappingInstrument && profileList.length > 0) {
+        setMappingInstrument(String(profileList[0].id));
       }
     } catch (e) {
       setErr(e.message || String(e));
@@ -113,6 +133,7 @@ export default function Imports() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -124,6 +145,7 @@ export default function Imports() {
 
     const interval = setInterval(load, 3000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobs]);
 
   const userIsAdmin = isAdmin(me);
@@ -242,6 +264,41 @@ export default function Imports() {
     }
   }
 
+  async function previewFastaSequenceImport() {
+    setErr("");
+    setSequenceImportSummary(null);
+    setSequencePreviewData(null);
+    setSequencePreviewLoading(true);
+
+    if (!userCanWrite) {
+      setSequencePreviewLoading(false);
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+
+      formData.append("instrument", sequenceUploadInstrument);
+
+      if (sequenceUploadProject) {
+        formData.append("project", sequenceUploadProject);
+      }
+
+      formData.append("uploaded_file", sequenceUploadFile);
+
+      const data = await apiPostForm(
+        "/api/import-jobs/sequence-fasta-preview/",
+        formData
+      );
+
+      setSequencePreviewData(data);
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setSequencePreviewLoading(false);
+    }
+  }
+
   async function uploadFastaSequenceImport(e) {
     e.preventDefault();
 
@@ -250,6 +307,12 @@ export default function Imports() {
     setSequenceImportLoading(true);
 
     if (!userCanWrite) {
+      setSequenceImportLoading(false);
+      return;
+    }
+
+    if (!sequencePreviewData) {
+      setErr("Preview the FASTA import before confirming.");
       setSequenceImportLoading(false);
       return;
     }
@@ -271,7 +334,9 @@ export default function Imports() {
       );
 
       setSequenceUploadFile(null);
+      setSequencePreviewData(null);
       setSequenceImportSummary(data.summary || {});
+
       await load();
     } catch (e) {
       setErr(e.message || String(e));
@@ -286,8 +351,8 @@ export default function Imports() {
         <div>
           <h1 className="page-title">Imports</h1>
           <p className="page-subtitle">
-            Manage instrument profiles, mappings, CSV ingestion, and FASTA
-            sequence imports.
+            Manage instrument profiles, mappings, result imports, and sequence
+            imports.
           </p>
         </div>
 
@@ -497,7 +562,7 @@ export default function Imports() {
 
       <Card className="app-card mb-4">
         <Card.Body>
-          <h5 className="section-title">Run CSV Import</h5>
+          <h5 className="section-title">Run CSV Result Import</h5>
 
           <Form onSubmit={uploadImportJob}>
             <Row className="g-2 align-items-center mb-3">
@@ -549,13 +614,10 @@ export default function Imports() {
                   className="w-100"
                   onClick={previewImport}
                   disabled={
-                    !userCanWrite ||
-                    !uploadInstrument ||
-                    !uploadFile ||
-                    previewLoading
+                    !userCanWrite || !uploadInstrument || !uploadFile || previewLoading
                   }
                 >
-                  {previewLoading ? "Previewing..." : "Preview Import"}
+                  {previewLoading ? "Previewing..." : "Preview CSV Import"}
                 </Button>
               </Col>
 
@@ -566,7 +628,7 @@ export default function Imports() {
                   className="w-100"
                   disabled={!userCanWrite || !uploadInstrument || !uploadFile}
                 >
-                  Queue Import
+                  Queue CSV Import
                 </Button>
               </Col>
             </Row>
@@ -575,7 +637,7 @@ export default function Imports() {
           {previewData && (
             <Card className="app-card mt-4">
               <Card.Body>
-                <h5 className="section-title">Preview</h5>
+                <h5 className="section-title">CSV Import Preview</h5>
 
                 <div className="row g-3 mb-3">
                   <div className="col-md-3">
@@ -668,7 +730,11 @@ export default function Imports() {
               <Col md={4}>
                 <Form.Select
                   value={sequenceUploadInstrument}
-                  onChange={(e) => setSequenceUploadInstrument(e.target.value)}
+                  onChange={(e) => {
+                    setSequenceUploadInstrument(e.target.value);
+                    setSequencePreviewData(null);
+                    setSequenceImportSummary(null);
+                  }}
                   disabled={!userCanWrite}
                 >
                   <option value="">Select sequencer/instrument</option>
@@ -684,7 +750,11 @@ export default function Imports() {
               <Col md={4}>
                 <Form.Select
                   value={sequenceUploadProject}
-                  onChange={(e) => setSequenceUploadProject(e.target.value)}
+                  onChange={(e) => {
+                    setSequenceUploadProject(e.target.value);
+                    setSequencePreviewData(null);
+                    setSequenceImportSummary(null);
+                  }}
                   disabled={!userCanWrite}
                 >
                   <option value="">Use sample project</option>
@@ -702,29 +772,173 @@ export default function Imports() {
                   type="file"
                   accept=".fasta,.fa,.fna,text/plain"
                   disabled={!userCanWrite}
-                  onChange={(e) =>
-                    setSequenceUploadFile(e.target.files?.[0] || null)
-                  }
+                  onChange={(e) => {
+                    setSequenceUploadFile(e.target.files?.[0] || null);
+                    setSequencePreviewData(null);
+                    setSequenceImportSummary(null);
+                  }}
                 />
               </Col>
             </Row>
 
-            <Button
-              type="submit"
-              variant="dark"
-              className="w-100"
-              disabled={
-                !userCanWrite ||
-                !sequenceUploadInstrument ||
-                !sequenceUploadFile ||
-                sequenceImportLoading
-              }
-            >
-              {sequenceImportLoading
-                ? "Importing FASTA..."
-                : "Import FASTA Sequences"}
-            </Button>
+            <Row className="g-2">
+              <Col md={6}>
+                <Button
+                  type="button"
+                  variant="outline-dark"
+                  className="w-100"
+                  onClick={previewFastaSequenceImport}
+                  disabled={
+                    !userCanWrite ||
+                    !sequenceUploadInstrument ||
+                    !sequenceUploadFile ||
+                    sequencePreviewLoading
+                  }
+                >
+                  {sequencePreviewLoading ? "Previewing..." : "Preview FASTA Import"}
+                </Button>
+              </Col>
+
+              <Col md={6}>
+                <Button
+                  type="submit"
+                  variant="dark"
+                  className="w-100"
+                  disabled={
+                    !userCanWrite ||
+                    !sequenceUploadInstrument ||
+                    !sequenceUploadFile ||
+                    !sequencePreviewData ||
+                    sequencePreviewData.will_create_count === 0 ||
+                    sequenceImportLoading
+                  }
+                >
+                  {sequenceImportLoading
+                    ? "Importing FASTA..."
+                    : `Confirm Import ${
+                        sequencePreviewData
+                          ? `(${sequencePreviewData.will_create_count})`
+                          : ""
+                      }`}
+                </Button>
+              </Col>
+            </Row>
           </Form>
+
+          {sequencePreviewData && (
+            <Card className="app-card mt-4">
+              <Card.Body>
+                <h5 className="section-title">FASTA Import Preview</h5>
+
+                <div className="row g-3 mb-4">
+                  <div className="col-md-3">
+                    <div className="soft-card">
+                      <div className="feed-meta">Records Found</div>
+                      <div className="fw-semibold">
+                        {sequencePreviewData.records_processed}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-md-3">
+                    <div className="soft-card">
+                      <div className="feed-meta">Matched Samples</div>
+                      <div className="fw-semibold">
+                        {sequencePreviewData.matched_count}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-md-3">
+                    <div className="soft-card">
+                      <div className="feed-meta">Will Create</div>
+                      <div className="fw-semibold">
+                        {sequencePreviewData.will_create_count}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-md-3">
+                    <div className="soft-card">
+                      <div className="feed-meta">Unmatched</div>
+                      <div className="fw-semibold">
+                        {sequencePreviewData.unmatched_count}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {sequencePreviewData.matched_records?.length > 0 && (
+                  <>
+                    <div className="feed-meta mb-2">Matched Records</div>
+
+                    <Table responsive hover className="app-table">
+                      <thead>
+                        <tr>
+                          <th>Header</th>
+                          <th>Sample</th>
+                          <th>Project</th>
+                          <th>Type</th>
+                          <th>Length</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {sequencePreviewData.matched_records.map((record) => (
+                          <tr key={`${record.row}-${record.header}`}>
+                            <td>{record.header}</td>
+                            <td>{record.sample_code}</td>
+                            <td>{record.project_code || "-"}</td>
+                            <td>{record.sequence_type}</td>
+                            <td>{record.sequence_length} bp</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </>
+                )}
+
+                {sequencePreviewData.unmatched_records?.length > 0 && (
+                  <>
+                    <Alert variant="warning" className="mt-3">
+                      <strong>Unmatched FASTA records:</strong> These records
+                      will be skipped because the first token in the FASTA
+                      header does not match an existing sample ID.
+                    </Alert>
+
+                    <Table responsive hover className="app-table">
+                      <thead>
+                        <tr>
+                          <th>Header</th>
+                          <th>Sample Token</th>
+                          <th>Length</th>
+                          <th>Reason</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {sequencePreviewData.unmatched_records.map((record) => (
+                          <tr key={`${record.row}-${record.header}`}>
+                            <td>{record.header}</td>
+                            <td>{record.sample_code}</td>
+                            <td>{record.sequence_length} bp</td>
+                            <td>{record.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </>
+                )}
+
+                {sequencePreviewData.skipped_records?.length > 0 && (
+                  <Alert variant="secondary" className="mt-3 mb-0">
+                    {sequencePreviewData.skipped_records.length} empty records
+                    will be skipped.
+                  </Alert>
+                )}
+              </Card.Body>
+            </Card>
+          )}
 
           {sequenceImportSummary && (
             <Card className="app-card mt-4">
@@ -818,9 +1032,7 @@ export default function Imports() {
                       </td>
 
                       <td>
-                        <Badge
-                          bg={job.source_type === "API" ? "dark" : "secondary"}
-                        >
+                        <Badge bg={sourceVariant(job.source_type)}>
                           {job.source_type || "UPLOAD"}
                         </Badge>
                       </td>
@@ -860,7 +1072,8 @@ export default function Imports() {
                               {job.summary?.sequences_created ?? 0}
                             </div>
                             <div>
-                              Samples matched: {job.summary?.samples_matched ?? 0}
+                              Samples matched:{" "}
+                              {job.summary?.samples_matched ?? 0}
                             </div>
                             <div>
                               Unmatched:{" "}

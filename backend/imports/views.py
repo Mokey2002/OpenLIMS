@@ -144,10 +144,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         return {"ok": True, "normalized": raw_value}
 
     def _parse_preview(self, instrument, uploaded_file):
-        mappings = {
-            m.source_column: m
-            for m in instrument.column_mappings.all()
-        }
+        mappings = {m.source_column: m for m in instrument.column_mappings.all()}
 
         uploaded_file.seek(0)
         decoded = uploaded_file.read().decode("utf-8")
@@ -268,10 +265,10 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         sequence = sequence.upper()
         sequence_chars = set(sequence)
 
-        if sequence_chars.issubset(set("ACGTN")):
+        if sequence_chars.issubset(set("ACGTN-")):
             return "DNA"
 
-        if sequence_chars.issubset(set("ACGUN")):
+        if sequence_chars.issubset(set("ACGUN-")):
             return "RNA"
 
         return "PROTEIN"
@@ -304,6 +301,105 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         summary["instrument_name"] = instrument.name
 
         return Response(summary)
+
+    @action(detail=False, methods=["post"], url_path="sequence-fasta-preview")
+    def sequence_fasta_preview(self, request):
+        instrument_id = request.data.get("instrument")
+        project_id = request.data.get("project")
+        uploaded_file = request.data.get("uploaded_file")
+
+        if not instrument_id or not uploaded_file:
+            return Response(
+                {"detail": "instrument and uploaded_file are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            instrument = InstrumentProfile.objects.get(id=instrument_id)
+        except InstrumentProfile.DoesNotExist:
+            return Response(
+                {"detail": "Instrument not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            records = self._parse_fasta_records(uploaded_file)
+        except UnicodeDecodeError:
+            return Response(
+                {"detail": "Unable to read FASTA file. Expected UTF-8 text."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        matched_records = []
+        unmatched_records = []
+        skipped_records = []
+
+        for index, record in enumerate(records, start=1):
+            sample_code = record["sample_code"]
+            sequence_text = record["sequence"]
+
+            if not sequence_text:
+                skipped_records.append({
+                    "row": index,
+                    "header": record["header"],
+                    "sample_code": sample_code,
+                    "reason": "Empty sequence",
+                })
+                continue
+
+            sample = (
+                Sample.objects
+                .select_related("project")
+                .filter(sample_id=sample_code)
+                .first()
+            )
+
+            if not sample:
+                unmatched_records.append({
+                    "row": index,
+                    "header": record["header"],
+                    "sample_code": sample_code,
+                    "sequence_length": len(sequence_text),
+                    "reason": "No matching sample found",
+                })
+                continue
+
+            linked_project = sample.project
+
+            if project_id and not linked_project:
+                linked_project_id = int(project_id)
+                linked_project_code = None
+            else:
+                linked_project_id = linked_project.id if linked_project else None
+                linked_project_code = linked_project.code if linked_project else None
+
+            matched_records.append({
+                "row": index,
+                "header": record["header"],
+                "name": record["name"],
+                "sample_id": sample.id,
+                "sample_code": sample.sample_id,
+                "project_id": linked_project_id,
+                "project_code": linked_project_code,
+                "sequence_type": self._infer_sequence_type(sequence_text),
+                "sequence_length": len(sequence_text),
+                "will_create": True,
+            })
+
+        return Response({
+            "instrument_id": instrument.id,
+            "instrument_code": instrument.code,
+            "instrument_name": instrument.name,
+            "project_id": project_id,
+            "records_processed": len(records),
+            "matched_count": len(matched_records),
+            "unmatched_count": len(unmatched_records),
+            "skipped_count": len(skipped_records),
+            "will_create_count": len(matched_records),
+            "matched_records": matched_records,
+            "unmatched_records": unmatched_records,
+            "skipped_records": skipped_records,
+        })
 
     @action(detail=False, methods=["post"], url_path="sequence-fasta-import")
     def sequence_fasta_import(self, request):
@@ -344,7 +440,6 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         job = ImportJob.objects.create(
             instrument=instrument,
             project_id=project_id if project_id else None,
-            uploaded_file=uploaded_file,
             uploaded_by=actor,
             source_type="SEQUENCE_FASTA",
             status="RUNNING",
@@ -425,23 +520,21 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                     created_sequence_ids.append(sequence_record.id)
                     matched_sample_ids.append(sample.id)
 
-                    event_payload = {
-                        "sequence_id": sequence_record.id,
-                        "sequence_name": sequence_record.name,
-                        "sample_id": sample.id,
-                        "sample_code": sample.sample_id,
-                        "project_id": linked_project.id if linked_project else None,
-                        "import_job_id": job.id,
-                        "instrument_code": instrument.code,
-                        "source_type": "FASTA_IMPORT",
-                    }
-
                     Event.objects.create(
                         entity_type="Sequence",
                         entity_id=str(sequence_record.id),
                         action="SEQUENCE_IMPORTED",
                         actor=actor,
-                        payload=event_payload,
+                        payload={
+                            "sequence_id": sequence_record.id,
+                            "sequence_name": sequence_record.name,
+                            "sample_id": sample.id,
+                            "sample_code": sample.sample_id,
+                            "project_id": linked_project.id if linked_project else None,
+                            "import_job_id": job.id,
+                            "instrument_code": instrument.code,
+                            "source_type": "FASTA_IMPORT",
+                        },
                     )
 
                     Event.objects.create(
@@ -449,7 +542,16 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                         entity_id=str(sample.id),
                         action="SEQUENCE_IMPORTED",
                         actor=actor,
-                        payload=event_payload,
+                        payload={
+                            "sequence_id": sequence_record.id,
+                            "sequence_name": sequence_record.name,
+                            "sample_id": sample.id,
+                            "sample_code": sample.sample_id,
+                            "project_id": linked_project.id if linked_project else None,
+                            "import_job_id": job.id,
+                            "instrument_code": instrument.code,
+                            "source_type": "FASTA_IMPORT",
+                        },
                     )
 
                 summary = {
