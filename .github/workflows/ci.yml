@@ -65,3 +65,10 @@ jobs:
         if: always()
         run: |
           docker compose -p openlims -f deploy/docker-compose.yml down -v
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
