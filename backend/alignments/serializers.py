@@ -19,6 +19,7 @@ class AlignmentJobSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     sequence_count = serializers.SerializerMethodField()
+    sequences_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = AlignmentJob
@@ -30,6 +31,7 @@ class AlignmentJobSerializer(serializers.ModelSerializer):
             "project_name",
             "sequence_ids",
             "sequence_count",
+            "sequences_detail",
             "tool",
             "status",
             "input_fasta",
@@ -44,6 +46,7 @@ class AlignmentJobSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "sequence_count",
+            "sequences_detail",
             "status",
             "input_fasta",
             "aligned_fasta",
@@ -58,27 +61,59 @@ class AlignmentJobSerializer(serializers.ModelSerializer):
     def get_sequence_count(self, obj):
         return obj.sequences.count()
 
+    def get_sequences_detail(self, obj):
+        return [
+            {
+                "id": sequence.id,
+                "name": sequence.name,
+                "sample": sequence.sample_id,
+                "sample_code": (
+                    sequence.sample.sample_id if sequence.sample else None
+                ),
+                "project": sequence.project_id,
+                "project_code": (
+                    sequence.project.code if sequence.project else None
+                ),
+                "sequence_type": sequence.sequence_type,
+                "length": len(sequence.sequence or ""),
+            }
+            for sequence in obj.sequences.select_related("sample", "project").all()
+        ]
+
     def validate_tool(self, value):
         if value != "CLUSTAL_OMEGA":
-            raise serializers.ValidationError("Only CLUSTAL_OMEGA is supported right now.")
+            raise serializers.ValidationError(
+                "Only CLUSTAL_OMEGA is supported right now."
+            )
 
         return value
 
     def validate_sequence_ids(self, value):
         if len(value) < 2:
-            raise serializers.ValidationError("Select at least 2 sequences to align.")
+            raise serializers.ValidationError(
+                "Select at least 2 sequences to align."
+            )
 
         unique_ids = list(dict.fromkeys(value))
 
         if len(unique_ids) != len(value):
-            raise serializers.ValidationError("Duplicate sequence IDs are not allowed.")
+            raise serializers.ValidationError(
+                "Duplicate sequence IDs are not allowed."
+            )
 
         sequences = list(Sequence.objects.filter(id__in=unique_ids))
 
         if len(sequences) != len(unique_ids):
             found_ids = {sequence.id for sequence in sequences}
-            missing = [sequence_id for sequence_id in unique_ids if sequence_id not in found_ids]
-            raise serializers.ValidationError(f"Sequences not found: {missing}")
+            missing = [
+                sequence_id
+                for sequence_id in unique_ids
+                if sequence_id not in found_ids
+            ]
+
+            raise serializers.ValidationError(
+                f"Sequences not found: {missing}"
+            )
 
         sequence_types = {sequence.sequence_type for sequence in sequences}
 
