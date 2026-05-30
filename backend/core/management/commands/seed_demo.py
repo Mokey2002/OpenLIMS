@@ -39,47 +39,112 @@ def get_or_create_safe(model, lookup, defaults=None):
     return obj, created
 
 
-def set_password(user, password):
+def create_demo_user(username, password, group, *, email, first_name, last_name, is_admin=False):
+    user, _ = User.objects.get_or_create(
+        username=username,
+        defaults={
+            "email": email,
+            "first_name": first_name,
+            "last_name": last_name,
+        },
+    )
+
+    user.email = email
+    user.first_name = first_name
+    user.last_name = last_name
     user.set_password(password)
+    user.is_staff = is_admin
+    user.is_superuser = is_admin
     user.is_active = True
     user.save()
 
+    user.groups.add(group)
 
-def result_defaults(value):
+    return user
+
+
+def set_result_value(work_item, key, value):
     if isinstance(value, bool):
-        return {
+        defaults = {
             "value_type": "BOOLEAN",
             "value_boolean": value,
             "value_number": None,
             "value_string": "",
         }
-
-    if isinstance(value, (int, float)):
-        return {
+    elif isinstance(value, (int, float)):
+        defaults = {
             "value_type": "NUMBER",
             "value_number": value,
             "value_string": "",
             "value_boolean": None,
         }
+    else:
+        defaults = {
+            "value_type": "STRING",
+            "value_string": str(value),
+            "value_number": None,
+            "value_boolean": None,
+        }
 
-    return {
-        "value_type": "STRING",
-        "value_string": str(value),
-        "value_number": None,
-        "value_boolean": None,
-    }
-
-
-def upsert_result(work_item, key, value):
     Result.objects.update_or_create(
         work_item=work_item,
         key=key,
-        defaults=clean_kwargs(Result, result_defaults(value)),
+        defaults=clean_kwargs(Result, defaults),
     )
 
 
+def create_or_update_instrument(instrument_config):
+    """Create or update an instrument by code or name.
+
+    This keeps seed_demo safe to run multiple times, even if an older
+    demo database already has an instrument with the same unique name.
+    """
+    code = instrument_config["code"]
+    name = instrument_config["name"]
+
+    instrument = InstrumentProfile.objects.filter(code=code).first()
+
+    if instrument is None:
+        instrument = InstrumentProfile.objects.filter(name=name).first()
+
+    defaults = {
+        "code": code,
+        "name": name,
+        "delimiter": instrument_config["delimiter"],
+        "has_header": instrument_config["has_header"],
+        "sample_id_column": instrument_config["sample_id_column"],
+    }
+
+    if instrument is None:
+        instrument = InstrumentProfile.objects.create(
+            **clean_kwargs(InstrumentProfile, defaults)
+        )
+    else:
+        for field_name, value in clean_kwargs(InstrumentProfile, defaults).items():
+            setattr(instrument, field_name, value)
+        instrument.save()
+
+    for source_column, target_key, value_type, min_value, max_value, allowed_values in instrument_config["mappings"]:
+        InstrumentColumnMapping.objects.update_or_create(
+            instrument=instrument,
+            source_column=source_column,
+            defaults=clean_kwargs(
+                InstrumentColumnMapping,
+                {
+                    "target_key": target_key,
+                    "value_type": value_type,
+                    "min_value": min_value,
+                    "max_value": max_value,
+                    "allowed_values": allowed_values,
+                },
+            ),
+        )
+
+    return instrument
+
+
 class Command(BaseCommand):
-    help = "Seed OpenLIMS with demo data"
+    help = "Seed OpenLIMS with realistic demo data"
 
     def handle(self, *args, **options):
         self.stdout.write("Seeding OpenLIMS demo data...")
@@ -94,36 +159,54 @@ class Command(BaseCommand):
         # --------------------------------------------------
         # Users
         # --------------------------------------------------
-        admin, _ = User.objects.get_or_create(
-            username="admin",
-            defaults={"email": "admin@example.com"},
+        director = create_demo_user(
+            "director",
+            "Director123!",
+            admin_group,
+            email="director@example.com",
+            first_name="Dana",
+            last_name="Director",
+            is_admin=True,
         )
-        admin.set_password("Admin123456!")
-        admin.is_staff = True
-        admin.is_superuser = True
-        admin.is_active = True
-        admin.save()
-        admin.groups.add(admin_group)
 
-        peter, _ = User.objects.get_or_create(
-            username="peter",
-            defaults={"email": "peter@example.com"},
+        peter = create_demo_user(
+            "peter",
+            "peter123",
+            tech_group,
+            email="peter.tech@example.com",
+            first_name="Peter",
+            last_name="Nguyen",
         )
-        peter.set_password("peter123")
-        peter.is_staff = False
-        peter.is_superuser = False
-        peter.is_active = True
-        peter.save()
-        peter.groups.add(tech_group)
 
-        viewer, _ = User.objects.get_or_create(
-            username="viewer",
-            defaults={"email": "viewer@example.com"},
+        maria = create_demo_user(
+            "maria",
+            "maria123",
+            tech_group,
+            email="maria.tech@example.com",
+            first_name="Maria",
+            last_name="Chen",
         )
-        viewer.set_password("viewer123")
-        viewer.is_active = True
-        viewer.save()
-        viewer.groups.add(viewer_group)
+
+        michael = create_demo_user(
+            "michael",
+            "michael123",
+            tech_group,
+            email="michael.tech@example.com",
+            first_name="Michael",
+            last_name="Patel",
+        )
+
+        viewer = create_demo_user(
+            "viewer",
+            "viewer123",
+            viewer_group,
+            email="viewer@example.com",
+            first_name="Vivian",
+            last_name="Reviewer",
+        )
+
+        # Keep old variable names so older seed sections stay readable.
+        admin = director
 
         # --------------------------------------------------
         # Projects
@@ -133,7 +216,10 @@ class Command(BaseCommand):
             {"code": "PRJ-ALPHA"},
             {
                 "name": "Alpha Assay Validation",
-                "description": "Demo validation project for instrument-imported assay results.",
+                "description": (
+                    "Demo validation project for instrument-imported assay results, "
+                    "sequence workspaces, and Clustal Omega alignments."
+                ),
                 "status": "ACTIVE",
             },
         )
@@ -152,16 +238,16 @@ class Command(BaseCommand):
             Project,
             {"code": "PRJ-GAMMA"},
             {
-                "name": "Gamma Endotoxin Release Testing",
-                "description": "Demo project for LAL/endotoxin release testing and qPCR confirmation.",
+                "name": "Gamma Sequencing Run",
+                "description": "Demo sequencing project for MiSeq and Sanger QC review.",
                 "status": "ACTIVE",
             },
         )
 
         if hasattr(project_alpha, "members"):
-            project_alpha.members.add(admin, peter)
-            project_beta.members.add(admin, peter, viewer)
-            project_gamma.members.add(admin, peter)
+            project_alpha.members.add(director, peter, maria, michael, viewer)
+            project_beta.members.add(director, peter, maria, michael, viewer)
+            project_gamma.members.add(director, peter, maria, michael)
 
         # --------------------------------------------------
         # Inventory
@@ -184,12 +270,12 @@ class Command(BaseCommand):
             },
         )
 
-        incubator, _ = get_or_create_safe(
+        sequencing_bench, _ = get_or_create_safe(
             Location,
-            {"name": "Incubator C"},
+            {"name": "Sequencing Bench"},
             {
-                "description": "Controlled-temperature assay incubator",
-                "room": "Lab 103",
+                "description": "Bench used for sequencing prep and sample staging.",
+                "room": "Lab 201",
             },
         )
 
@@ -199,7 +285,7 @@ class Command(BaseCommand):
             {
                 "kind": "96-well box",
                 "location": freezer,
-                "description": "Demo sample box in Freezer A",
+                "description": "Alpha validation sample box in Freezer A",
             },
         )
 
@@ -209,17 +295,17 @@ class Command(BaseCommand):
             {
                 "kind": "Tube rack",
                 "location": fridge,
-                "description": "Demo rack in Fridge B",
+                "description": "Beta stability sample rack in Fridge B",
             },
         )
 
         rack_c, _ = get_or_create_safe(
             Container,
-            {"container_id": "PLATE-C1"},
+            {"container_id": "SEQ-RACK-1"},
             {
-                "kind": "96-well plate",
-                "location": incubator,
-                "description": "Demo plate for endotoxin and qPCR testing",
+                "kind": "Sequencing prep rack",
+                "location": sequencing_bench,
+                "description": "Rack for sequencing prep samples.",
             },
         )
 
@@ -234,10 +320,10 @@ class Command(BaseCommand):
                 "has_header": True,
                 "sample_id_column": "sample_id",
                 "mappings": [
-                    {"source_column": "concentration", "target_key": "concentration", "value_type": "NUMBER", "min_value": 0, "max_value": 100},
-                    {"source_column": "purity", "target_key": "purity", "value_type": "NUMBER", "min_value": 0, "max_value": 100},
-                    {"source_column": "yield", "target_key": "yield", "value_type": "NUMBER", "min_value": 0, "max_value": 100},
-                    {"source_column": "qc_flag", "target_key": "qc_flag", "value_type": "STRING", "allowed_values": ["PASS", "FAIL", "REVIEW"]},
+                    ("concentration", "concentration", "NUMBER", 0, 100, None),
+                    ("purity", "purity", "NUMBER", 0, 100, None),
+                    ("yield", "yield", "NUMBER", 0, 100, None),
+                    ("qc_flag", "qc_flag", "STRING", None, None, ["PASS", "FAIL", "REVIEW"]),
                 ],
             },
             {
@@ -247,10 +333,10 @@ class Command(BaseCommand):
                 "has_header": True,
                 "sample_id_column": "sample_id",
                 "mappings": [
-                    {"source_column": "read_count", "target_key": "read_count", "value_type": "NUMBER", "min_value": 0, "max_value": 10000000},
-                    {"source_column": "mean_q_score", "target_key": "mean_q_score", "value_type": "NUMBER", "min_value": 0, "max_value": 50},
-                    {"source_column": "percent_q30", "target_key": "percent_q30", "value_type": "NUMBER", "min_value": 0, "max_value": 100},
-                    {"source_column": "sequencing_status", "target_key": "sequencing_status", "value_type": "STRING", "allowed_values": ["PASS", "FAIL", "REVIEW"]},
+                    ("read_count", "read_count", "NUMBER", 0, 10000000, None),
+                    ("mean_q_score", "mean_q_score", "NUMBER", 0, 50, None),
+                    ("percent_q30", "percent_q30", "NUMBER", 0, 100, None),
+                    ("sequencing_status", "sequencing_status", "STRING", None, None, ["PASS", "FAIL", "REVIEW"]),
                 ],
             },
             {
@@ -260,9 +346,9 @@ class Command(BaseCommand):
                 "has_header": True,
                 "sample_id_column": "sample_id",
                 "mappings": [
-                    {"source_column": "read_length", "target_key": "read_length", "value_type": "NUMBER", "min_value": 0, "max_value": 1200},
-                    {"source_column": "quality_score", "target_key": "quality_score", "value_type": "NUMBER", "min_value": 0, "max_value": 100},
-                    {"source_column": "basecalling_status", "target_key": "basecalling_status", "value_type": "STRING", "allowed_values": ["PASS", "FAIL", "REVIEW"]},
+                    ("read_length", "read_length", "NUMBER", 0, 1200, None),
+                    ("quality_score", "quality_score", "NUMBER", 0, 100, None),
+                    ("basecalling_status", "basecalling_status", "STRING", None, None, ["PASS", "FAIL", "REVIEW"]),
                 ],
             },
             {
@@ -272,21 +358,21 @@ class Command(BaseCommand):
                 "has_header": True,
                 "sample_id_column": "sample_id",
                 "mappings": [
-                    {"source_column": "endotoxin_eu_ml", "target_key": "endotoxin_eu_ml", "value_type": "NUMBER", "min_value": 0, "max_value": 1000},
-                    {"source_column": "spike_recovery_percent", "target_key": "spike_recovery_percent", "value_type": "NUMBER", "min_value": 0, "max_value": 200},
-                    {"source_column": "lal_status", "target_key": "lal_status", "value_type": "STRING", "allowed_values": ["PASS", "FAIL", "REVIEW"]},
+                    ("endotoxin_eu_ml", "endotoxin_eu_ml", "NUMBER", 0, 1000, None),
+                    ("spike_recovery_percent", "spike_recovery_percent", "NUMBER", 0, 200, None),
+                    ("lal_status", "lal_status", "STRING", None, None, ["PASS", "FAIL", "REVIEW"]),
                 ],
             },
             {
-                "code": "SPECTRAMAX",
+                "code": "PLATEREADER",
                 "name": "Molecular Devices SpectraMax Plate Reader",
                 "delimiter": ",",
                 "has_header": True,
                 "sample_id_column": "sample_id",
                 "mappings": [
-                    {"source_column": "abs_450", "target_key": "abs_450", "value_type": "NUMBER", "min_value": 0, "max_value": 5},
-                    {"source_column": "abs_570", "target_key": "abs_570", "value_type": "NUMBER", "min_value": 0, "max_value": 5},
-                    {"source_column": "plate_qc_status", "target_key": "plate_qc_status", "value_type": "STRING", "allowed_values": ["PASS", "FAIL", "REVIEW"]},
+                    ("abs_450", "abs_450", "NUMBER", 0, 5, None),
+                    ("abs_570", "abs_570", "NUMBER", 0, 5, None),
+                    ("plate_qc_status", "plate_qc_status", "STRING", None, None, ["PASS", "FAIL", "REVIEW"]),
                 ],
             },
             {
@@ -296,9 +382,9 @@ class Command(BaseCommand):
                 "has_header": True,
                 "sample_id_column": "sample_id",
                 "mappings": [
-                    {"source_column": "ct_value", "target_key": "ct_value", "value_type": "NUMBER", "min_value": 0, "max_value": 45},
-                    {"source_column": "delta_ct", "target_key": "delta_ct", "value_type": "NUMBER", "min_value": -50, "max_value": 50},
-                    {"source_column": "qpcr_status", "target_key": "qpcr_status", "value_type": "STRING", "allowed_values": ["PASS", "FAIL", "REVIEW"]},
+                    ("ct_value", "ct_value", "NUMBER", 0, 45, None),
+                    ("delta_ct", "delta_ct", "NUMBER", -50, 50, None),
+                    ("qpcr_status", "qpcr_status", "STRING", None, None, ["PASS", "FAIL", "REVIEW"]),
                 ],
             },
             {
@@ -308,10 +394,10 @@ class Command(BaseCommand):
                 "has_header": True,
                 "sample_id_column": "sample_id",
                 "mappings": [
-                    {"source_column": "nucleic_acid_concentration", "target_key": "nucleic_acid_concentration", "value_type": "NUMBER", "min_value": 0, "max_value": 10000},
-                    {"source_column": "a260_280", "target_key": "a260_280", "value_type": "NUMBER", "min_value": 0, "max_value": 5},
-                    {"source_column": "a260_230", "target_key": "a260_230", "value_type": "NUMBER", "min_value": 0, "max_value": 5},
-                    {"source_column": "nanodrop_status", "target_key": "nanodrop_status", "value_type": "STRING", "allowed_values": ["PASS", "FAIL", "REVIEW"]},
+                    ("a260_a280", "a260_a280", "NUMBER", 0, 5, None),
+                    ("a260_a230", "a260_a230", "NUMBER", 0, 5, None),
+                    ("ng_ul", "ng_ul", "NUMBER", 0, 5000, None),
+                    ("nanodrop_status", "nanodrop_status", "STRING", None, None, ["PASS", "FAIL", "REVIEW"]),
                 ],
             },
             {
@@ -321,23 +407,9 @@ class Command(BaseCommand):
                 "has_header": True,
                 "sample_id_column": "sample_id",
                 "mappings": [
-                    {"source_column": "rin", "target_key": "rin", "value_type": "NUMBER", "min_value": 0, "max_value": 10},
-                    {"source_column": "fragment_size_bp", "target_key": "fragment_size_bp", "value_type": "NUMBER", "min_value": 0, "max_value": 50000},
-                    {"source_column": "rna_concentration", "target_key": "rna_concentration", "value_type": "NUMBER", "min_value": 0, "max_value": 10000},
-                    {"source_column": "bioanalyzer_status", "target_key": "bioanalyzer_status", "value_type": "STRING", "allowed_values": ["PASS", "FAIL", "REVIEW"]},
-                ],
-            },
-            {
-                "code": "CYTATION5",
-                "name": "BioTek Cytation 5 Cell Imaging Reader",
-                "delimiter": ",",
-                "has_header": True,
-                "sample_id_column": "sample_id",
-                "mappings": [
-                    {"source_column": "cell_count", "target_key": "cell_count", "value_type": "NUMBER", "min_value": 0, "max_value": 10000000},
-                    {"source_column": "viability_percent", "target_key": "viability_percent", "value_type": "NUMBER", "min_value": 0, "max_value": 100},
-                    {"source_column": "fluorescence_intensity", "target_key": "fluorescence_intensity", "value_type": "NUMBER", "min_value": 0, "max_value": 100000000},
-                    {"source_column": "imaging_status", "target_key": "imaging_status", "value_type": "STRING", "allowed_values": ["PASS", "FAIL", "REVIEW"]},
+                    ("rin", "rin", "NUMBER", 0, 10, None),
+                    ("fragment_size_bp", "fragment_size_bp", "NUMBER", 0, 10000, None),
+                    ("bioanalyzer_status", "bioanalyzer_status", "STRING", None, None, ["PASS", "FAIL", "REVIEW"]),
                 ],
             },
             {
@@ -347,9 +419,10 @@ class Command(BaseCommand):
                 "has_header": True,
                 "sample_id_column": "sample_id",
                 "mappings": [
-                    {"source_column": "transfer_volume_ul", "target_key": "transfer_volume_ul", "value_type": "NUMBER", "min_value": 0, "max_value": 1000},
-                    {"source_column": "pipette_error_count", "target_key": "pipette_error_count", "value_type": "NUMBER", "min_value": 0, "max_value": 100},
-                    {"source_column": "liquid_handler_status", "target_key": "liquid_handler_status", "value_type": "STRING", "allowed_values": ["PASS", "FAIL", "REVIEW"]},
+                    ("transfer_volume_ul", "transfer_volume_ul", "NUMBER", 0, 1000, None),
+                    ("source_well", "source_well", "STRING", None, None, None),
+                    ("destination_well", "destination_well", "STRING", None, None, None),
+                    ("transfer_status", "transfer_status", "STRING", None, None, ["PASS", "FAIL", "REVIEW"]),
                 ],
             },
             {
@@ -365,29 +438,18 @@ class Command(BaseCommand):
         instruments = {}
 
         for instrument_config in instrument_configs:
-            instrument, _ = get_or_create_safe(
-                InstrumentProfile,
-                {"code": instrument_config["code"]},
-                {
-                    "name": instrument_config["name"],
-                    "delimiter": instrument_config["delimiter"],
-                    "has_header": instrument_config["has_header"],
-                    "sample_id_column": instrument_config["sample_id_column"],
-                },
-            )
+            instrument = create_or_update_instrument(instrument_config)
             instruments[instrument_config["code"]] = instrument
 
-            for mapping in instrument_config["mappings"]:
-                get_or_create_safe(
-                    InstrumentColumnMapping,
-                    {
-                        "instrument": instrument,
-                        "source_column": mapping["source_column"],
-                    },
-                    mapping,
-                )
-
         novaflex = instruments["NOVAFLEX"]
+        miseq = instruments["MISEQ"]
+        sanger = instruments["SANGER-3500"]
+        endosafe = instruments["ENDOSAFE"]
+        platereader = instruments["PLATEREADER"]
+        qpcr = instruments["QPCR-7500"]
+        nanodrop = instruments["NANODROP"]
+        bioanalyzer = instruments["BIOANALYZER"]
+        hamilton = instruments["HAMILTON-STAR"]
 
         # --------------------------------------------------
         # Samples
@@ -405,7 +467,6 @@ class Command(BaseCommand):
         ]
 
         samples = []
-        sample_by_code = {}
 
         for row in sample_data:
             sample, created = get_or_create_safe(
@@ -414,14 +475,13 @@ class Command(BaseCommand):
                 row,
             )
             samples.append(sample)
-            sample_by_code[sample.sample_id] = sample
 
             if created:
                 Event.objects.create(
                     entity_type="Sample",
                     entity_id=str(sample.id),
                     action="CREATED",
-                    actor=admin,
+                    actor=director,
                     payload={
                         "sample_id": sample.id,
                         "sample_code": sample.sample_id,
@@ -431,169 +491,269 @@ class Command(BaseCommand):
                     },
                 )
 
+        sample_by_code = {sample.sample_id: sample for sample in samples}
+
         # --------------------------------------------------
         # Work items + results
         # --------------------------------------------------
-        result_values = {
-            "S-ALPHA-001": {"concentration": 12.4, "purity": 97.1, "yield": 88.0, "qc_flag": "PASS"},
-            "S-ALPHA-002": {"concentration": 10.2, "purity": 95.8, "yield": 79.3, "qc_flag": "PASS"},
-            "S-ALPHA-003": {"concentration": 6.5, "purity": 89.2, "yield": 61.0, "qc_flag": "REVIEW"},
-            "S-ALPHA-004": {"concentration": 9.8, "purity": 93.0, "yield": 73.6, "qc_flag": "PASS"},
-            "S-BETA-001": {"concentration": 15.1, "purity": 98.4, "yield": 91.2, "qc_flag": "PASS"},
-            "S-BETA-002": {"concentration": 4.7, "purity": 76.8, "yield": 44.9, "qc_flag": "FAIL"},
-            "S-BETA-003": {"concentration": 7.3, "purity": 81.2, "yield": 52.1, "qc_flag": "REVIEW"},
-            "S-GAMMA-001": {"concentration": 11.9, "purity": 96.4, "yield": 82.4, "qc_flag": "PASS"},
-            "S-GAMMA-002": {"concentration": 5.9, "purity": 87.5, "yield": 58.7, "qc_flag": "REVIEW"},
-        }
-
-        for sample in samples:
-            work_item, _ = get_or_create_safe(
-                WorkItem,
-                {"sample": sample, "name": "NovaFlex Import Results"},
-                {"status": "COMPLETED", "notes": "Demo imported instrument results."},
-            )
-
-            values = result_values.get(sample.sample_id, {})
-            for key, value in values.items():
-                upsert_result(work_item, key, value)
-
-        # --------------------------------------------------
-        # Additional demo results from real-style lab instruments
-        # --------------------------------------------------
-        extra_instrument_results = {
+        result_sets = {
             "S-ALPHA-001": {
-                "Illumina MiSeq QC": {"read_count": 185420, "mean_q_score": 37.8, "percent_q30": 92.4, "sequencing_status": "PASS"},
-                "Thermo Fisher NanoDrop One": {"nucleic_acid_concentration": 42.6, "a260_280": 1.91, "a260_230": 2.04, "nanodrop_status": "PASS"},
-                "Endosafe Endotoxin Test": {"endotoxin_eu_ml": 0.03, "spike_recovery_percent": 96.2, "lal_status": "PASS"},
-                "qPCR Quantification": {"ct_value": 21.4, "delta_ct": -1.2, "qpcr_status": "PASS"},
+                "NovaFlex Import Results": {
+                    "concentration": 12.4,
+                    "purity": 97.1,
+                    "yield": 88.0,
+                    "qc_flag": "PASS",
+                },
+                "Illumina MiSeq QC": {
+                    "read_count": 185420,
+                    "mean_q_score": 37.8,
+                    "percent_q30": 92.4,
+                    "sequencing_status": "PASS",
+                },
+                "Endosafe Endotoxin Test": {
+                    "endotoxin_eu_ml": 0.03,
+                    "spike_recovery_percent": 96.2,
+                    "lal_status": "PASS",
+                },
+                "NanoDrop Purity Check": {
+                    "a260_a280": 1.89,
+                    "a260_a230": 2.11,
+                    "ng_ul": 84.2,
+                    "nanodrop_status": "PASS",
+                },
             },
             "S-ALPHA-002": {
-                "Illumina MiSeq QC": {"read_count": 163900, "mean_q_score": 35.9, "percent_q30": 88.7, "sequencing_status": "PASS"},
-                "Thermo Fisher NanoDrop One": {"nucleic_acid_concentration": 38.2, "a260_280": 1.87, "a260_230": 1.91, "nanodrop_status": "PASS"},
-                "Endosafe Endotoxin Test": {"endotoxin_eu_ml": 0.08, "spike_recovery_percent": 91.1, "lal_status": "PASS"},
-                "qPCR Quantification": {"ct_value": 23.8, "delta_ct": 0.4, "qpcr_status": "PASS"},
+                "NovaFlex Import Results": {
+                    "concentration": 10.2,
+                    "purity": 95.8,
+                    "yield": 79.3,
+                    "qc_flag": "PASS",
+                },
+                "Illumina MiSeq QC": {
+                    "read_count": 163900,
+                    "mean_q_score": 35.9,
+                    "percent_q30": 88.7,
+                    "sequencing_status": "PASS",
+                },
+                "qPCR Quantification": {
+                    "ct_value": 23.8,
+                    "delta_ct": 0.4,
+                    "qpcr_status": "PASS",
+                },
             },
             "S-ALPHA-003": {
-                "Illumina MiSeq QC": {"read_count": 78400, "mean_q_score": 26.1, "percent_q30": 61.8, "sequencing_status": "REVIEW"},
-                "Thermo Fisher NanoDrop One": {"nucleic_acid_concentration": 19.4, "a260_280": 1.62, "a260_230": 1.14, "nanodrop_status": "REVIEW"},
-                "Endosafe Endotoxin Test": {"endotoxin_eu_ml": 0.42, "spike_recovery_percent": 72.5, "lal_status": "REVIEW"},
-                "qPCR Quantification": {"ct_value": 32.6, "delta_ct": 8.1, "qpcr_status": "REVIEW"},
+                "NovaFlex Import Results": {
+                    "concentration": 6.5,
+                    "purity": 89.2,
+                    "yield": 61.0,
+                    "qc_flag": "REVIEW",
+                },
+                "Illumina MiSeq QC": {
+                    "read_count": 78400,
+                    "mean_q_score": 26.1,
+                    "percent_q30": 61.8,
+                    "sequencing_status": "REVIEW",
+                },
+                "Endosafe Endotoxin Test": {
+                    "endotoxin_eu_ml": 0.42,
+                    "spike_recovery_percent": 72.5,
+                    "lal_status": "REVIEW",
+                },
             },
             "S-ALPHA-004": {
-                "Illumina MiSeq QC": {"read_count": 149250, "mean_q_score": 34.7, "percent_q30": 86.2, "sequencing_status": "PASS"},
-                "Agilent Bioanalyzer RNA QC": {"rin": 8.4, "fragment_size_bp": 742, "rna_concentration": 38.8, "bioanalyzer_status": "PASS"},
-                "Hamilton STAR Liquid Transfer": {"transfer_volume_ul": 25.0, "pipette_error_count": 0, "liquid_handler_status": "PASS"},
+                "NovaFlex Import Results": {
+                    "concentration": 13.8,
+                    "purity": 96.4,
+                    "yield": 84.6,
+                    "qc_flag": "PASS",
+                },
+                "Hamilton STAR Transfer Log": {
+                    "transfer_volume_ul": 25.0,
+                    "source_well": "A04",
+                    "destination_well": "D04",
+                    "transfer_status": "PASS",
+                },
             },
             "S-BETA-001": {
-                "SpectraMax Plate Reader": {"abs_450": 1.42, "abs_570": 0.18, "plate_qc_status": "PASS"},
-                "Sanger Sequencing QC": {"read_length": 847, "quality_score": 88.2, "basecalling_status": "PASS"},
-                "BioTek Cytation 5 Imaging": {"cell_count": 145200, "viability_percent": 94.2, "fluorescence_intensity": 48250, "imaging_status": "PASS"},
+                "SpectraMax Plate Reader": {
+                    "abs_450": 1.42,
+                    "abs_570": 0.18,
+                    "plate_qc_status": "PASS",
+                },
+                "Sanger Sequencing QC": {
+                    "read_length": 847,
+                    "quality_score": 88.2,
+                    "basecalling_status": "PASS",
+                },
             },
             "S-BETA-002": {
-                "SpectraMax Plate Reader": {"abs_450": 0.37, "abs_570": 0.28, "plate_qc_status": "FAIL"},
-                "Sanger Sequencing QC": {"read_length": 312, "quality_score": 48.5, "basecalling_status": "REVIEW"},
-                "BioTek Cytation 5 Imaging": {"cell_count": 68400, "viability_percent": 62.7, "fluorescence_intensity": 11800, "imaging_status": "REVIEW"},
+                "SpectraMax Plate Reader": {
+                    "abs_450": 0.37,
+                    "abs_570": 0.28,
+                    "plate_qc_status": "FAIL",
+                },
+                "Sanger Sequencing QC": {
+                    "read_length": 312,
+                    "quality_score": 48.5,
+                    "basecalling_status": "REVIEW",
+                },
             },
             "S-BETA-003": {
-                "SpectraMax Plate Reader": {"abs_450": 0.88, "abs_570": 0.21, "plate_qc_status": "REVIEW"},
-                "Agilent Bioanalyzer RNA QC": {"rin": 5.6, "fragment_size_bp": 510, "rna_concentration": 14.1, "bioanalyzer_status": "REVIEW"},
+                "Bioanalyzer RNA QC": {
+                    "rin": 7.8,
+                    "fragment_size_bp": 1540,
+                    "bioanalyzer_status": "PASS",
+                },
             },
             "S-GAMMA-001": {
-                "Endosafe Endotoxin Test": {"endotoxin_eu_ml": 0.11, "spike_recovery_percent": 102.5, "lal_status": "PASS"},
-                "qPCR Quantification": {"ct_value": 24.1, "delta_ct": 0.8, "qpcr_status": "PASS"},
+                "MiSeq Run QC": {
+                    "read_count": 211004,
+                    "mean_q_score": 38.6,
+                    "percent_q30": 94.1,
+                    "sequencing_status": "PASS",
+                },
             },
             "S-GAMMA-002": {
-                "Endosafe Endotoxin Test": {"endotoxin_eu_ml": 0.91, "spike_recovery_percent": 68.4, "lal_status": "REVIEW"},
-                "qPCR Quantification": {"ct_value": 36.7, "delta_ct": 11.4, "qpcr_status": "REVIEW"},
+                "MiSeq Run QC": {
+                    "read_count": 99021,
+                    "mean_q_score": 31.2,
+                    "percent_q30": 78.6,
+                    "sequencing_status": "REVIEW",
+                },
             },
         }
 
-        for sample in samples:
-            sample_results = extra_instrument_results.get(sample.sample_id, {})
-            for work_item_name, values in sample_results.items():
+        for sample_code, work_items in result_sets.items():
+            sample = sample_by_code[sample_code]
+
+            for work_item_name, values in work_items.items():
                 work_item, _ = get_or_create_safe(
                     WorkItem,
-                    {"sample": sample, "name": work_item_name},
-                    {"status": "COMPLETED", "notes": "Demo result set from a real-style lab instrument."},
+                    {
+                        "sample": sample,
+                        "name": work_item_name,
+                    },
+                    {
+                        "status": "COMPLETED",
+                        "notes": "Demo result set from a lab instrument.",
+                    },
                 )
+
                 for key, value in values.items():
-                    upsert_result(work_item, key, value)
+                    set_result_value(work_item, key, value)
 
         # --------------------------------------------------
         # Demo import jobs
         # --------------------------------------------------
-        touched_sample_ids = [sample.id for sample in samples]
-        created_sample_ids = [sample_by_code["S-ALPHA-001"].id, sample_by_code["S-ALPHA-002"].id]
-        matched_sample_ids = [sample.id for sample in samples if sample.id not in created_sample_ids]
-
-        import_job, _ = get_or_create_safe(
-            ImportJob,
-            {"instrument": novaflex, "run_id": "DEMO-RUN-001"},
+        demo_import_jobs = [
             {
+                "instrument": novaflex,
+                "run_id": "DEMO-RUN-001",
                 "project": project_alpha,
                 "uploaded_by": peter,
-                "source_type": "UPLOAD",
-                "status": "COMPLETED",
-                "progress_current": len(samples),
-                "progress_total": len(samples),
-                "progress_message": "Demo NovaFlex import completed",
-                "summary": {
-                    "rows_processed": len(samples),
-                    "samples_created": 2,
-                    "samples_matched": len(samples) - 2,
-                    "results_created": len(samples) * 4,
-                    "skipped_rows": [
-                        {
-                            "row": 10,
-                            "sample_id": "S-DEMO-BAD",
-                            "column": "concentration",
-                            "reason": "Invalid NUMBER 'bad-value'",
-                        }
-                    ],
-                    "project_id": project_alpha.id,
-                    "created_sample_ids": created_sample_ids,
-                    "matched_sample_ids": matched_sample_ids,
-                    "touched_sample_ids": touched_sample_ids,
-                },
+                "rows_processed": 4,
+                "results_created": 16,
+                "message": "NovaFlex demo import completed",
+                "sample_codes": ["S-ALPHA-001", "S-ALPHA-002", "S-ALPHA-003", "S-ALPHA-004"],
             },
-        )
-
-        Event.objects.get_or_create(
-            entity_type="ImportJob",
-            entity_id=str(import_job.id),
-            action="RESULTS_IMPORTED",
-            defaults={
-                "actor": peter,
-                "payload": {
-                    "instrument_code": novaflex.code,
-                    "instrument_name": novaflex.name,
-                    "run_id": "DEMO-RUN-001",
-                    "rows_processed": len(samples),
-                    "results_created": len(samples) * 4,
-                    "touched_sample_ids": touched_sample_ids,
-                },
+            {
+                "instrument": miseq,
+                "run_id": "MISEQ-RUN-2026-001",
+                "project": project_alpha,
+                "uploaded_by": maria,
+                "rows_processed": 3,
+                "results_created": 12,
+                "message": "MiSeq sequencing QC import completed",
+                "sample_codes": ["S-ALPHA-001", "S-ALPHA-002", "S-ALPHA-003"],
             },
-        )
-
-        demo_import_jobs = [
-            {"instrument": instruments["MISEQ"], "run_id": "MISEQ-RUN-2026-001", "project": project_alpha, "rows_processed": 4, "results_created": 16, "message": "MiSeq sequencing QC import completed", "sample_ids": [sample_by_code[k].id for k in ["S-ALPHA-001", "S-ALPHA-002", "S-ALPHA-003", "S-ALPHA-004"]]},
-            {"instrument": instruments["NANODROP"], "run_id": "NANODROP-RUN-2026-001", "project": project_alpha, "rows_processed": 3, "results_created": 12, "message": "NanoDrop purity import completed", "sample_ids": [sample_by_code[k].id for k in ["S-ALPHA-001", "S-ALPHA-002", "S-ALPHA-003"]]},
-            {"instrument": instruments["ENDOSAFE"], "run_id": "ENDOSAFE-RUN-2026-001", "project": project_gamma, "rows_processed": 5, "results_created": 15, "message": "Endotoxin test import completed", "sample_ids": [sample_by_code[k].id for k in ["S-ALPHA-001", "S-ALPHA-002", "S-ALPHA-003", "S-GAMMA-001", "S-GAMMA-002"]]},
-            {"instrument": instruments["QPCR-7500"], "run_id": "QPCR-RUN-2026-001", "project": project_gamma, "rows_processed": 5, "results_created": 15, "message": "qPCR quantification import completed", "sample_ids": [sample_by_code[k].id for k in ["S-ALPHA-001", "S-ALPHA-002", "S-ALPHA-003", "S-GAMMA-001", "S-GAMMA-002"]]},
-            {"instrument": instruments["SPECTRAMAX"], "run_id": "PLATE-RUN-2026-001", "project": project_beta, "rows_processed": 3, "results_created": 9, "message": "SpectraMax plate reader import completed", "sample_ids": [sample_by_code[k].id for k in ["S-BETA-001", "S-BETA-002", "S-BETA-003"]]},
-            {"instrument": instruments["SANGER-3500"], "run_id": "SANGER-RUN-2026-001", "project": project_beta, "rows_processed": 2, "results_created": 6, "message": "Sanger sequencing QC import completed", "sample_ids": [sample_by_code[k].id for k in ["S-BETA-001", "S-BETA-002"]]},
-            {"instrument": instruments["BIOANALYZER"], "run_id": "BIOANALYZER-RUN-2026-001", "project": project_beta, "rows_processed": 2, "results_created": 8, "message": "Bioanalyzer RNA QC import completed", "sample_ids": [sample_by_code[k].id for k in ["S-ALPHA-004", "S-BETA-003"]]},
-            {"instrument": instruments["CYTATION5"], "run_id": "CYTATION-RUN-2026-001", "project": project_beta, "rows_processed": 2, "results_created": 8, "message": "Cytation imaging import completed", "sample_ids": [sample_by_code[k].id for k in ["S-BETA-001", "S-BETA-002"]]},
-            {"instrument": instruments["HAMILTON-STAR"], "run_id": "HAMILTON-RUN-2026-001", "project": project_alpha, "rows_processed": 1, "results_created": 3, "message": "Liquid handler transfer log import completed", "sample_ids": [sample_by_code["S-ALPHA-004"].id]},
+            {
+                "instrument": endosafe,
+                "run_id": "ENDOSAFE-RUN-2026-001",
+                "project": project_alpha,
+                "uploaded_by": michael,
+                "rows_processed": 2,
+                "results_created": 6,
+                "message": "Endotoxin import completed",
+                "sample_codes": ["S-ALPHA-001", "S-ALPHA-003"],
+            },
+            {
+                "instrument": qpcr,
+                "run_id": "QPCR-RUN-2026-001",
+                "project": project_alpha,
+                "uploaded_by": maria,
+                "rows_processed": 1,
+                "results_created": 3,
+                "message": "qPCR quantification import completed",
+                "sample_codes": ["S-ALPHA-002"],
+            },
+            {
+                "instrument": nanodrop,
+                "run_id": "NANODROP-RUN-2026-001",
+                "project": project_alpha,
+                "uploaded_by": peter,
+                "rows_processed": 1,
+                "results_created": 4,
+                "message": "NanoDrop purity import completed",
+                "sample_codes": ["S-ALPHA-001"],
+            },
+            {
+                "instrument": platereader,
+                "run_id": "PLATE-RUN-2026-001",
+                "project": project_beta,
+                "uploaded_by": michael,
+                "rows_processed": 2,
+                "results_created": 6,
+                "message": "SpectraMax plate reader import completed",
+                "sample_codes": ["S-BETA-001", "S-BETA-002"],
+            },
+            {
+                "instrument": sanger,
+                "run_id": "SANGER-RUN-2026-001",
+                "project": project_beta,
+                "uploaded_by": maria,
+                "rows_processed": 2,
+                "results_created": 6,
+                "message": "Sanger sequencing QC import completed",
+                "sample_codes": ["S-BETA-001", "S-BETA-002"],
+            },
+            {
+                "instrument": bioanalyzer,
+                "run_id": "BIOANALYZER-RUN-2026-001",
+                "project": project_beta,
+                "uploaded_by": peter,
+                "rows_processed": 1,
+                "results_created": 3,
+                "message": "Bioanalyzer RNA QC import completed",
+                "sample_codes": ["S-BETA-003"],
+            },
+            {
+                "instrument": hamilton,
+                "run_id": "HAMILTON-RUN-2026-001",
+                "project": project_alpha,
+                "uploaded_by": michael,
+                "rows_processed": 1,
+                "results_created": 4,
+                "message": "Hamilton STAR transfer log import completed",
+                "sample_codes": ["S-ALPHA-004"],
+            },
         ]
 
         for job_data in demo_import_jobs:
-            demo_job, _ = get_or_create_safe(
+            sample_ids = [
+                sample_by_code[code].id
+                for code in job_data["sample_codes"]
+                if code in sample_by_code
+            ]
+
+            import_job, _ = get_or_create_safe(
                 ImportJob,
-                {"instrument": job_data["instrument"], "run_id": job_data["run_id"]},
+                {
+                    "instrument": job_data["instrument"],
+                    "run_id": job_data["run_id"],
+                },
                 {
                     "project": job_data["project"],
-                    "uploaded_by": peter,
+                    "uploaded_by": job_data["uploaded_by"],
                     "source_type": "UPLOAD",
                     "status": "COMPLETED",
                     "progress_current": job_data["rows_processed"],
@@ -602,83 +762,36 @@ class Command(BaseCommand):
                     "summary": {
                         "rows_processed": job_data["rows_processed"],
                         "samples_created": 0,
-                        "samples_matched": len(job_data["sample_ids"]),
+                        "samples_matched": len(sample_ids),
                         "results_created": job_data["results_created"],
                         "skipped_rows": [],
                         "project_id": job_data["project"].id,
                         "created_sample_ids": [],
-                        "matched_sample_ids": job_data["sample_ids"],
-                        "touched_sample_ids": job_data["sample_ids"],
+                        "matched_sample_ids": sample_ids,
+                        "touched_sample_ids": sample_ids,
                     },
                 },
             )
 
             Event.objects.get_or_create(
                 entity_type="ImportJob",
-                entity_id=str(demo_job.id),
+                entity_id=str(import_job.id),
                 action="RESULTS_IMPORTED",
                 defaults={
-                    "actor": peter,
+                    "actor": job_data["uploaded_by"],
                     "payload": {
                         "instrument_code": job_data["instrument"].code,
                         "instrument_name": job_data["instrument"].name,
                         "run_id": job_data["run_id"],
                         "rows_processed": job_data["rows_processed"],
                         "results_created": job_data["results_created"],
-                        "touched_sample_ids": job_data["sample_ids"],
+                        "touched_sample_ids": sample_ids,
                     },
                 },
             )
 
-            for sample_id in job_data["sample_ids"]:
-                Event.objects.get_or_create(
-                    entity_type="Sample",
-                    entity_id=str(sample_id),
-                    action="RESULTS_IMPORTED",
-                    defaults={
-                        "actor": peter,
-                        "payload": {
-                            "sample_id": sample_id,
-                            "source": "instrument_import",
-                            "instrument_code": job_data["instrument"].code,
-                            "import_job_id": demo_job.id,
-                            "run_id": job_data["run_id"],
-                        },
-                    },
-                )
-
         # --------------------------------------------------
-        # Notifications
-        # --------------------------------------------------
-        Notification.objects.get_or_create(
-            user=peter,
-            title="Demo import completed",
-            defaults={
-                "message": "Demo imports completed across sequencing, endotoxin, qPCR, plate reader, and NanoDrop instruments.",
-                "link": f"/imports/{import_job.id}",
-            },
-        )
-
-        Notification.objects.get_or_create(
-            user=admin,
-            title="Demo environment ready",
-            defaults={
-                "message": "OpenLIMS demo data has been seeded successfully.",
-                "link": "/",
-            },
-        )
-
-        Notification.objects.get_or_create(
-            user=peter,
-            title="QC review needed",
-            defaults={
-                "message": "S-ALPHA-003 and S-GAMMA-002 have REVIEW instrument results.",
-                "link": "/analyze",
-            },
-        )
-
-        # --------------------------------------------------
-        # Demo sequence workspace linked to PRJ-ALPHA
+        # Demo sequence workspaces
         # --------------------------------------------------
         demo_sequence_text = (
             "TTGACGGCTAGCTCAGTCCTAGGTACAGTGCTAGCGGATCCATGGTGAGCAAGGGCGAGGAG"
@@ -699,88 +812,121 @@ class Command(BaseCommand):
         sequence_workspace, _ = Sequence.objects.update_or_create(
             name="Alpha GFP Construct Review",
             project=project_alpha,
-            defaults=clean_kwargs(
-                Sequence,
-                {
-                    "description": "Demo SeqViz workspace linked to the Alpha Assay Validation project.",
-                    "sequence_type": "DNA",
-                    "sequence": demo_sequence_text,
-                    "sample": sample_by_code.get("S-ALPHA-001"),
-                    "viewer": "both",
-                    "show_complement": True,
-                    "rotate_on_scroll": False,
-                    "zoom": 50,
-                    "enzymes": ["EcoRI", "BamHI", "HindIII", "PstI", "XhoI"],
-                    "bp_colors": {"A": "#ef4444", "T": "#3b82f6", "G": "#22c55e", "C": "#f59e0b"},
-                    "created_by": peter,
-                    "source_type": "MANUAL",
-                    "source_metadata": {"demo": True, "purpose": "seqviz_demo"},
+            defaults={
+                "description": "Demo SeqViz workspace linked to the Alpha Assay Validation project.",
+                "sequence_type": "DNA",
+                "sequence": demo_sequence_text,
+                "sample": sample_by_code.get("S-ALPHA-001"),
+                "viewer": "both",
+                "show_complement": True,
+                "rotate_on_scroll": False,
+                "zoom": 50,
+                "enzymes": ["EcoRI", "BamHI", "HindIII", "PstI", "XhoI"],
+                "bp_colors": {
+                    "A": "#ef4444",
+                    "T": "#3b82f6",
+                    "G": "#22c55e",
+                    "C": "#f59e0b",
                 },
-            ),
+                "created_by": maria,
+                "source_type": "MANUAL",
+                "source_metadata": {"demo": True, "purpose": "seqviz_demo"},
+            },
         )
 
         sequence_workspace.features.all().delete()
 
         demo_features = [
-            {"feature_type": "ANNOTATION", "name": "Promoter", "start": 0, "end": 35, "direction": 1, "color": "#2563eb", "metadata": {}},
-            {"feature_type": "ANNOTATION", "name": "BamHI", "start": 37, "end": 43, "direction": 1, "color": "#f97316", "metadata": {}},
-            {"feature_type": "ANNOTATION", "name": "GFP CDS", "start": 43, "end": 763, "direction": 1, "color": "#22c55e", "metadata": {}},
-            {"feature_type": "PRIMER", "name": "GFP Forward", "start": 43, "end": 63, "direction": 1, "color": "#9333ea", "metadata": {}},
-            {"feature_type": "PRIMER", "name": "GFP Reverse", "start": 730, "end": 760, "direction": -1, "color": "#db2777", "metadata": {}},
-            {"feature_type": "TRANSLATION", "name": "GFP Translation", "start": 43, "end": 763, "direction": 1, "color": "#16a34a", "metadata": {}},
-            {"feature_type": "HIGHLIGHT", "name": "QC Review Region", "start": 120, "end": 180, "direction": 1, "color": "#fde047", "metadata": {}},
+            ("ANNOTATION", "Promoter", 0, 35, 1, "#2563eb", {}),
+            ("ANNOTATION", "BamHI", 37, 43, 1, "#f97316", {}),
+            ("ANNOTATION", "GFP CDS", 43, 763, 1, "#22c55e", {}),
+            ("PRIMER", "GFP Forward", 43, 63, 1, "#9333ea", {}),
+            ("PRIMER", "GFP Reverse", 730, 760, -1, "#db2777", {}),
+            ("TRANSLATION", "GFP Translation", 43, 763, 1, "#16a34a", {}),
+            ("HIGHLIGHT", "QC Review Region", 120, 180, 1, "#fde047", {}),
         ]
 
-        for feature_data in demo_features:
-            SequenceFeature.objects.create(sequence_record=sequence_workspace, **feature_data)
+        for feature_type, name, start, end, direction, color, metadata in demo_features:
+            SequenceFeature.objects.create(
+                sequence_record=sequence_workspace,
+                feature_type=feature_type,
+                name=name,
+                start=start,
+                end=end,
+                direction=direction,
+                color=color,
+                metadata=metadata,
+            )
 
-        Event.objects.get_or_create(
-            entity_type="Sequence",
-            entity_id=str(sequence_workspace.id),
-            action="SEQUENCE_WORKSPACE_SEEDED",
-            defaults={
-                "actor": peter,
-                "payload": {
-                    "sequence_id": sequence_workspace.id,
-                    "name": sequence_workspace.name,
-                    "project_id": project_alpha.id,
-                    "features_count": len(demo_features),
-                },
-            },
-        )
-
-        # --------------------------------------------------
-        # Additional demo sequences for alignment workflow
-        # --------------------------------------------------
         alignment_demo_sequences = [
-            {"name": "S-ALPHA-001 GFP Reference", "sample": sample_by_code.get("S-ALPHA-001"), "sequence": "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGCACCACCGGCAAG"},
-            {"name": "S-ALPHA-002 GFP Variant A", "sample": sample_by_code.get("S-ALPHA-002"), "sequence": "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGCACCACCGGCAA"},
-            {"name": "S-ALPHA-003 GFP Variant B", "sample": sample_by_code.get("S-ALPHA-003"), "sequence": "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGCACCGGCAAG"},
-            {"name": "S-ALPHA-004 MiSeq Consensus Read", "sample": sample_by_code.get("S-ALPHA-004"), "sequence": "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAG"},
+            {
+                "name": "S-ALPHA-001 GFP Reference",
+                "sample": sample_by_code.get("S-ALPHA-001"),
+                "sequence": (
+                    "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAG"
+                    "CTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGG"
+                    "CGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGCACCACCGGCAAG"
+                ),
+                "created_by": maria,
+            },
+            {
+                "name": "S-ALPHA-002 GFP Variant A",
+                "sample": sample_by_code.get("S-ALPHA-002"),
+                "sequence": (
+                    "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAG"
+                    "CTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGG"
+                    "CGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGCACCACCGGCAA"
+                ),
+                "created_by": peter,
+            },
+            {
+                "name": "S-ALPHA-003 GFP Variant B",
+                "sample": sample_by_code.get("S-ALPHA-003"),
+                "sequence": (
+                    "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAG"
+                    "CTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGG"
+                    "CGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGCACCGGCAAG"
+                ),
+                "created_by": michael,
+            },
+            {
+                "name": "S-ALPHA-004 MiSeq Consensus Read",
+                "sample": sample_by_code.get("S-ALPHA-004"),
+                "sequence": (
+                    "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAG"
+                    "CTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAG"
+                ),
+                "created_by": maria,
+            },
         ]
 
         for item in alignment_demo_sequences:
             sequence_record, _ = Sequence.objects.update_or_create(
                 name=item["name"],
-                defaults=clean_kwargs(
-                    Sequence,
-                    {
-                        "description": "Demo sequence for Clustal Omega alignment workflow.",
-                        "sequence_type": "DNA",
-                        "sequence": item["sequence"],
-                        "sample": item["sample"],
-                        "project": project_alpha,
-                        "viewer": "both",
-                        "show_complement": True,
-                        "rotate_on_scroll": False,
-                        "zoom": 50,
-                        "enzymes": ["EcoRI", "BamHI", "HindIII"],
-                        "bp_colors": {"A": "#ef4444", "T": "#3b82f6", "G": "#22c55e", "C": "#f59e0b"},
-                        "created_by": peter,
-                        "source_type": "MANUAL",
-                        "source_metadata": {"demo": True, "purpose": "alignment_demo"},
+                defaults={
+                    "description": "Demo sequence for Clustal Omega alignment workflow.",
+                    "sequence_type": "DNA",
+                    "sequence": item["sequence"],
+                    "sample": item["sample"],
+                    "project": project_alpha,
+                    "viewer": "both",
+                    "show_complement": True,
+                    "rotate_on_scroll": False,
+                    "zoom": 50,
+                    "enzymes": ["EcoRI", "BamHI", "HindIII"],
+                    "bp_colors": {
+                        "A": "#ef4444",
+                        "T": "#3b82f6",
+                        "G": "#22c55e",
+                        "C": "#f59e0b",
                     },
-                ),
+                    "created_by": item["created_by"],
+                    "source_type": "MANUAL",
+                    "source_metadata": {
+                        "demo": True,
+                        "purpose": "alignment_demo",
+                    },
+                },
             )
 
             Event.objects.get_or_create(
@@ -788,7 +934,7 @@ class Command(BaseCommand):
                 entity_id=str(sequence_record.id),
                 action="SEQUENCE_WORKSPACE_SEEDED",
                 defaults={
-                    "actor": peter,
+                    "actor": item["created_by"],
                     "payload": {
                         "sequence_id": sequence_record.id,
                         "name": sequence_record.name,
@@ -803,13 +949,78 @@ class Command(BaseCommand):
         # Demo project feed posts
         # --------------------------------------------------
         demo_project_posts = [
-            {"project": project_alpha, "author": admin, "note": "Initial project setup is complete. Alpha validation samples S-ALPHA-001 through S-ALPHA-004 are assigned to BOX-A1."},
-            {"project": project_alpha, "author": peter, "note": "NovaFlex, MiSeq, NanoDrop, Endosafe, qPCR, and Hamilton demo imports have completed for the Alpha sample set."},
-            {"project": project_alpha, "author": viewer, "note": "Review note: S-ALPHA-003 appears to need QC review due to lower sequencing quality and endotoxin recovery."},
-            {"project": project_beta, "author": admin, "note": "Beta Stability Study has been initialized. Samples are linked to storage locations for tracking."},
-            {"project": project_beta, "author": peter, "note": "SpectraMax, Sanger, Bioanalyzer, and Cytation demo results are available for review."},
-            {"project": project_gamma, "author": admin, "note": "Gamma Endotoxin Release Testing is ready for endotoxin and qPCR review."},
-            {"project": project_gamma, "author": peter, "note": "S-GAMMA-002 is flagged for review due to elevated endotoxin and high Ct value."},
+            {
+                "project": project_alpha,
+                "author": director,
+                "note": (
+                    "Alpha Assay Validation is ready for review. Please focus on "
+                    "S-ALPHA-003 because the QC metrics are lower than expected."
+                ),
+            },
+            {
+                "project": project_alpha,
+                "author": peter,
+                "note": (
+                    "NovaFlex import completed for the Alpha sample set. "
+                    "Concentration, purity, yield, and QC flag values are available."
+                ),
+            },
+            {
+                "project": project_alpha,
+                "author": maria,
+                "note": (
+                    "MiSeq sequencing QC was imported. S-ALPHA-001 and S-ALPHA-002 "
+                    "look good, but S-ALPHA-003 should be reviewed before reporting."
+                ),
+            },
+            {
+                "project": project_alpha,
+                "author": michael,
+                "note": (
+                    "Endosafe results are attached. S-ALPHA-003 has elevated endotoxin "
+                    "and should stay in QC until reviewed."
+                ),
+            },
+            {
+                "project": project_alpha,
+                "author": maria,
+                "note": (
+                    "FASTA sequence workspaces were linked to the Alpha samples. "
+                    "I queued a Clustal Omega alignment for the GFP variants."
+                ),
+            },
+            {
+                "project": project_alpha,
+                "author": viewer,
+                "note": (
+                    "Review note: I can view the linked sequence workspaces and results, "
+                    "but I do not have write access to modify the records."
+                ),
+            },
+            {
+                "project": project_beta,
+                "author": director,
+                "note": (
+                    "Beta Stability Study has been initialized. Samples are linked "
+                    "to storage locations for tracking."
+                ),
+            },
+            {
+                "project": project_beta,
+                "author": michael,
+                "note": (
+                    "Storage check completed. Beta samples are assigned to BOX-B1 "
+                    "in Fridge B."
+                ),
+            },
+            {
+                "project": project_gamma,
+                "author": maria,
+                "note": (
+                    "Gamma sequencing run is staged. MiSeq QC will be reviewed after "
+                    "the next import completes."
+                ),
+            },
         ]
 
         for post_data in demo_project_posts:
@@ -819,9 +1030,50 @@ class Command(BaseCommand):
                 note=post_data["note"],
             )
 
+        # --------------------------------------------------
+        # Notifications
+        # --------------------------------------------------
+        Notification.objects.get_or_create(
+            user=peter,
+            title="NovaFlex import completed",
+            defaults={
+                "message": "NovaFlex demo import completed for Alpha samples.",
+                "link": "/imports",
+            },
+        )
+
+        Notification.objects.get_or_create(
+            user=maria,
+            title="Sequencing review needed",
+            defaults={
+                "message": "S-ALPHA-003 has sequencing QC values that need review.",
+                "link": "/projects",
+            },
+        )
+
+        Notification.objects.get_or_create(
+            user=michael,
+            title="Endotoxin review needed",
+            defaults={
+                "message": "S-ALPHA-003 has elevated endotoxin results.",
+                "link": "/projects",
+            },
+        )
+
+        Notification.objects.get_or_create(
+            user=director,
+            title="Demo environment ready",
+            defaults={
+                "message": "OpenLIMS demo data has been seeded successfully.",
+                "link": "/",
+            },
+        )
+
         self.stdout.write(self.style.SUCCESS("Demo data seeded successfully."))
         self.stdout.write("")
         self.stdout.write("Demo users:")
-        self.stdout.write("  admin / Admin123456!")
+        self.stdout.write("  director / Director123!")
         self.stdout.write("  peter / peter123")
+        self.stdout.write("  maria / maria123")
+        self.stdout.write("  michael / michael123")
         self.stdout.write("  viewer / viewer123")
