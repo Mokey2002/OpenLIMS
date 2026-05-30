@@ -2,9 +2,10 @@ import csv
 import io
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from rest_framework import status, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
@@ -13,15 +14,20 @@ from core.permissions import (
     IsAuthenticatedReadOnlyAdminWrite,
     IsAuthenticatedReadOnlyOrTechAdminWrite,
 )
+from core.upload_validators import (
+    validate_fasta_records,
+    validate_text_file,
+    validate_uploaded_file,
+)
 from events.models import Event
 from samples.models import Sample
 from sequences.models import Sequence
 
-from .models import InstrumentProfile, InstrumentColumnMapping, ImportJob
+from .models import ImportJob, InstrumentColumnMapping, InstrumentProfile
 from .serializers import (
-    InstrumentProfileSerializer,
-    InstrumentColumnMappingSerializer,
     ImportJobSerializer,
+    InstrumentColumnMappingSerializer,
+    InstrumentProfileSerializer,
 )
 from .tasks import process_import_job, process_rows
 
@@ -41,8 +47,7 @@ class InstrumentProfileViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return (
-            InstrumentProfile.objects
-            .prefetch_related("column_mappings")
+            InstrumentProfile.objects.prefetch_related("column_mappings")
             .all()
             .order_by("name")
         )
@@ -63,8 +68,7 @@ class InstrumentColumnMappingViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return (
-            InstrumentColumnMapping.objects
-            .select_related("instrument")
+            InstrumentColumnMapping.objects.select_related("instrument")
             .all()
             .order_by("instrument__name", "source_column")
         )
@@ -86,8 +90,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return (
-            ImportJob.objects
-            .select_related("instrument", "uploaded_by", "project")
+            ImportJob.objects.select_related("instrument", "uploaded_by", "project")
             .all()
             .order_by("-created_at")
         )
@@ -168,10 +171,15 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             sample_code = row.get(instrument.sample_id_column)
 
             if not sample_code:
-                skipped_rows.append({
-                    "row": rows_processed,
-                    "reason": f"Missing sample ID column '{instrument.sample_id_column}'",
-                })
+                skipped_rows.append(
+                    {
+                        "row": rows_processed,
+                        "reason": (
+                            f"Missing sample ID column "
+                            f"'{instrument.sample_id_column}'"
+                        ),
+                    }
+                )
                 continue
 
             sample_code = str(sample_code).strip()
@@ -194,22 +202,26 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                 validation = self._validate_mapped_value(mapping, raw_value)
 
                 if not validation["ok"]:
-                    row_errors.append({
-                        "column": source_column,
-                        "reason": validation["reason"],
-                    })
+                    row_errors.append(
+                        {
+                            "column": source_column,
+                            "reason": validation["reason"],
+                        }
+                    )
                     continue
 
                 row_valid_cells += 1
                 valid_result_cells += 1
 
-            preview_rows.append({
-                "row": rows_processed,
-                "sample_id": sample_code,
-                "exists": sample_exists,
-                "valid_result_cells": row_valid_cells,
-                "errors": row_errors,
-            })
+            preview_rows.append(
+                {
+                    "row": rows_processed,
+                    "sample_id": sample_code,
+                    "exists": sample_exists,
+                    "valid_result_cells": row_valid_cells,
+                    "errors": row_errors,
+                }
+            )
 
         return {
             "rows_processed": rows_processed,
@@ -238,12 +250,14 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             if line.startswith(">"):
                 if current_header:
                     sequence = "".join(current_lines).replace(" ", "").upper()
-                    records.append({
-                        "header": current_header,
-                        "name": current_header,
-                        "sample_code": current_header.split()[0],
-                        "sequence": sequence,
-                    })
+                    records.append(
+                        {
+                            "header": current_header,
+                            "name": current_header,
+                            "sample_code": current_header.split()[0],
+                            "sequence": sequence,
+                        }
+                    )
 
                 current_header = line[1:].strip()
                 current_lines = []
@@ -252,12 +266,14 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
         if current_header:
             sequence = "".join(current_lines).replace(" ", "").upper()
-            records.append({
-                "header": current_header,
-                "name": current_header,
-                "sample_code": current_header.split()[0],
-                "sequence": sequence,
-            })
+            records.append(
+                {
+                    "header": current_header,
+                    "name": current_header,
+                    "sample_code": current_header.split()[0],
+                    "sequence": sequence,
+                }
+            )
 
         return records
 
@@ -273,6 +289,12 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
         return "PROTEIN"
 
+    def _validation_error_response(self, error):
+        return Response(
+            {"detail": error.messages if hasattr(error, "messages") else str(error)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     @action(detail=False, methods=["post"], url_path="preview")
     def preview(self, request):
         instrument_id = request.data.get("instrument")
@@ -285,10 +307,19 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             )
 
         try:
+            validate_uploaded_file(
+                uploaded_file,
+                allowed_extensions=[".csv", ".tsv", ".txt"],
+            )
+            validate_text_file(uploaded_file)
+        except ValidationError as e:
+            return self._validation_error_response(e)
+
+        try:
             instrument = (
-                InstrumentProfile.objects
-                .prefetch_related("column_mappings")
-                .get(id=instrument_id)
+                InstrumentProfile.objects.prefetch_related("column_mappings").get(
+                    id=instrument_id
+                )
             )
         except InstrumentProfile.DoesNotExist:
             return Response(
@@ -315,6 +346,15 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             )
 
         try:
+            validate_uploaded_file(
+                uploaded_file,
+                allowed_extensions=[".fasta", ".fa", ".fna", ".txt"],
+            )
+            validate_text_file(uploaded_file)
+        except ValidationError as e:
+            return self._validation_error_response(e)
+
+        try:
             instrument = InstrumentProfile.objects.get(id=instrument_id)
         except InstrumentProfile.DoesNotExist:
             return Response(
@@ -324,11 +364,14 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
         try:
             records = self._parse_fasta_records(uploaded_file)
+            validate_fasta_records(records)
         except UnicodeDecodeError:
             return Response(
                 {"detail": "Unable to read FASTA file. Expected UTF-8 text."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        except ValidationError as e:
+            return self._validation_error_response(e)
 
         matched_records = []
         unmatched_records = []
@@ -339,29 +382,32 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             sequence_text = record["sequence"]
 
             if not sequence_text:
-                skipped_records.append({
-                    "row": index,
-                    "header": record["header"],
-                    "sample_code": sample_code,
-                    "reason": "Empty sequence",
-                })
+                skipped_records.append(
+                    {
+                        "row": index,
+                        "header": record["header"],
+                        "sample_code": sample_code,
+                        "reason": "Empty sequence",
+                    }
+                )
                 continue
 
             sample = (
-                Sample.objects
-                .select_related("project")
+                Sample.objects.select_related("project")
                 .filter(sample_id=sample_code)
                 .first()
             )
 
             if not sample:
-                unmatched_records.append({
-                    "row": index,
-                    "header": record["header"],
-                    "sample_code": sample_code,
-                    "sequence_length": len(sequence_text),
-                    "reason": "No matching sample found",
-                })
+                unmatched_records.append(
+                    {
+                        "row": index,
+                        "header": record["header"],
+                        "sample_code": sample_code,
+                        "sequence_length": len(sequence_text),
+                        "reason": "No matching sample found",
+                    }
+                )
                 continue
 
             linked_project = sample.project
@@ -373,33 +419,37 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                 linked_project_id = linked_project.id if linked_project else None
                 linked_project_code = linked_project.code if linked_project else None
 
-            matched_records.append({
-                "row": index,
-                "header": record["header"],
-                "name": record["name"],
-                "sample_id": sample.id,
-                "sample_code": sample.sample_id,
-                "project_id": linked_project_id,
-                "project_code": linked_project_code,
-                "sequence_type": self._infer_sequence_type(sequence_text),
-                "sequence_length": len(sequence_text),
-                "will_create": True,
-            })
+            matched_records.append(
+                {
+                    "row": index,
+                    "header": record["header"],
+                    "name": record["name"],
+                    "sample_id": sample.id,
+                    "sample_code": sample.sample_id,
+                    "project_id": linked_project_id,
+                    "project_code": linked_project_code,
+                    "sequence_type": self._infer_sequence_type(sequence_text),
+                    "sequence_length": len(sequence_text),
+                    "will_create": True,
+                }
+            )
 
-        return Response({
-            "instrument_id": instrument.id,
-            "instrument_code": instrument.code,
-            "instrument_name": instrument.name,
-            "project_id": project_id,
-            "records_processed": len(records),
-            "matched_count": len(matched_records),
-            "unmatched_count": len(unmatched_records),
-            "skipped_count": len(skipped_records),
-            "will_create_count": len(matched_records),
-            "matched_records": matched_records,
-            "unmatched_records": unmatched_records,
-            "skipped_records": skipped_records,
-        })
+        return Response(
+            {
+                "instrument_id": instrument.id,
+                "instrument_code": instrument.code,
+                "instrument_name": instrument.name,
+                "project_id": project_id,
+                "records_processed": len(records),
+                "matched_count": len(matched_records),
+                "unmatched_count": len(unmatched_records),
+                "skipped_count": len(skipped_records),
+                "will_create_count": len(matched_records),
+                "matched_records": matched_records,
+                "unmatched_records": unmatched_records,
+                "skipped_records": skipped_records,
+            }
+        )
 
     @action(detail=False, methods=["post"], url_path="sequence-fasta-import")
     def sequence_fasta_import(self, request):
@@ -414,6 +464,15 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             )
 
         try:
+            validate_uploaded_file(
+                uploaded_file,
+                allowed_extensions=[".fasta", ".fa", ".fna", ".txt"],
+            )
+            validate_text_file(uploaded_file)
+        except ValidationError as e:
+            return self._validation_error_response(e)
+
+        try:
             instrument = InstrumentProfile.objects.get(id=instrument_id)
         except InstrumentProfile.DoesNotExist:
             return Response(
@@ -423,17 +482,14 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
         try:
             records = self._parse_fasta_records(uploaded_file)
+            validate_fasta_records(records)
         except UnicodeDecodeError:
             return Response(
                 {"detail": "Unable to read FASTA file. Expected UTF-8 text."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        if not records:
-            return Response(
-                {"detail": "No FASTA records found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        except ValidationError as e:
+            return self._validation_error_response(e)
 
         actor = request.user if request.user.is_authenticated else None
 
@@ -472,25 +528,28 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                     sequence_text = record["sequence"]
 
                     if not sequence_text:
-                        skipped_records.append({
-                            "header": record["header"],
-                            "reason": "Empty sequence",
-                        })
+                        skipped_records.append(
+                            {
+                                "header": record["header"],
+                                "reason": "Empty sequence",
+                            }
+                        )
                         continue
 
                     sample = (
-                        Sample.objects
-                        .select_related("project")
+                        Sample.objects.select_related("project")
                         .filter(sample_id=sample_code)
                         .first()
                     )
 
                     if not sample:
-                        unmatched_records.append({
-                            "header": record["header"],
-                            "sample_code": sample_code,
-                            "reason": "No matching sample found",
-                        })
+                        unmatched_records.append(
+                            {
+                                "header": record["header"],
+                                "sample_code": sample_code,
+                                "reason": "No matching sample found",
+                            }
+                        )
                         continue
 
                     linked_project = sample.project or job.project
@@ -599,6 +658,19 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def perform_create(self, serializer):
+        uploaded_file = self.request.data.get("uploaded_file")
+
+        try:
+            validate_uploaded_file(
+                uploaded_file,
+                allowed_extensions=[".csv", ".tsv", ".txt"],
+            )
+            validate_text_file(uploaded_file)
+        except ValidationError as e:
+            raise serializers.ValidationError(
+                {"uploaded_file": e.messages if hasattr(e, "messages") else str(e)}
+            )
+
         job = serializer.save(
             uploaded_by=self.request.user,
             source_type="UPLOAD",
@@ -622,15 +694,17 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         elif job.progress_total:
             percent = round((job.progress_current / job.progress_total) * 100)
 
-        return Response({
-            "id": job.id,
-            "status": job.status,
-            "progress_current": job.progress_current,
-            "progress_total": job.progress_total,
-            "progress_percent": percent,
-            "progress_message": job.progress_message,
-            "summary": job.summary,
-        })
+        return Response(
+            {
+                "id": job.id,
+                "status": job.status,
+                "progress_current": job.progress_current,
+                "progress_total": job.progress_total,
+                "progress_percent": percent,
+                "progress_message": job.progress_message,
+                "summary": job.summary,
+            }
+        )
 
     @action(detail=True, methods=["get"], url_path="summary")
     def summary(self, request, pk=None):
@@ -653,8 +727,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         sample_ids = list(set(sample_ids))
 
         samples = (
-            Sample.objects
-            .filter(id__in=sample_ids)
+            Sample.objects.filter(id__in=sample_ids)
             .select_related("project", "container")
             .order_by("sample_id")
         )
@@ -672,21 +745,21 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             else:
                 import_action = "TOUCHED"
 
-            data.append({
-                "id": sample.id,
-                "sample_id": sample.sample_id,
-                "status": sample.status,
-                "project_id": sample.project_id,
-                "project_code": sample.project.code if sample.project else None,
-                "container_id": sample.container_id,
-                "container_code": (
-                    sample.container.container_id
-                    if sample.container
-                    else None
-                ),
-                "import_action": import_action,
-                "created_at": sample.created_at,
-            })
+            data.append(
+                {
+                    "id": sample.id,
+                    "sample_id": sample.sample_id,
+                    "status": sample.status,
+                    "project_id": sample.project_id,
+                    "project_code": sample.project.code if sample.project else None,
+                    "container_id": sample.container_id,
+                    "container_code": (
+                        sample.container.container_id if sample.container else None
+                    ),
+                    "import_action": import_action,
+                    "created_at": sample.created_at,
+                }
+            )
 
         return Response(data)
 
@@ -782,9 +855,9 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
         try:
             instrument = (
-                InstrumentProfile.objects
-                .prefetch_related("column_mappings")
-                .get(code=instrument_code)
+                InstrumentProfile.objects.prefetch_related("column_mappings").get(
+                    code=instrument_code
+                )
             )
         except InstrumentProfile.DoesNotExist:
             return Response(
