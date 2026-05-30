@@ -3,11 +3,12 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite
+from events.models import Event
 from sequences.models import Sequence
 
 from .models import AlignmentJob
 from .serializers import AlignmentJobSerializer
-from .services import run_clustal_omega_alignment
+from .tasks import run_alignment_job
 
 
 class AlignmentJobViewSet(viewsets.ModelViewSet):
@@ -20,6 +21,7 @@ class AlignmentJobViewSet(viewsets.ModelViewSet):
             .select_related("project", "created_by")
             .prefetch_related("sequences")
             .all()
+            .order_by("-created_at")
         )
 
         project_id = self.request.query_params.get("project")
@@ -38,6 +40,7 @@ class AlignmentJobViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
 
         sequence_ids = serializer.validated_data.pop("sequence_ids", [])
+
         sequences = list(
             Sequence.objects
             .select_related("sample", "project")
@@ -61,16 +64,36 @@ class AlignmentJobViewSet(viewsets.ModelViewSet):
             **serializer.validated_data,
             created_by=actor,
             status="PENDING",
+            input_fasta="",
+            aligned_fasta="",
+            summary={},
+            error_message="",
         )
+
         job.sequences.set(sequences)
 
-        run_clustal_omega_alignment(job, actor=actor)
+        Event.objects.create(
+            entity_type="AlignmentJob",
+            entity_id=str(job.id),
+            action="ALIGNMENT_QUEUED",
+            actor=actor,
+            payload={
+                "alignment_job_id": job.id,
+                "name": job.name,
+                "tool": job.tool,
+                "project_id": job.project_id,
+                "sequence_ids": [sequence.id for sequence in sequences],
+            },
+        )
+
+        run_alignment_job.delay(job.id)
 
         output_serializer = self.get_serializer(job)
         headers = self.get_success_headers(output_serializer.data)
+
         return Response(
             output_serializer.data,
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_202_ACCEPTED,
             headers=headers,
         )
 

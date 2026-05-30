@@ -91,6 +91,21 @@ function statusVariant(status) {
   }
 }
 
+function statusText(status) {
+  switch (status) {
+    case "PENDING":
+      return "Queued";
+    case "RUNNING":
+      return "Running";
+    case "COMPLETED":
+      return "Completed";
+    case "FAILED":
+      return "Failed";
+    default:
+      return status || "Unknown";
+  }
+}
+
 function baseStyle(base) {
   const upper = String(base || "").toUpperCase();
 
@@ -232,9 +247,12 @@ export default function Alignments() {
   const [running, setRunning] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function load() {
+  async function load({ silent = false } = {}) {
     setErr("");
-    setLoading(true);
+
+    if (!silent) {
+      setLoading(true);
+    }
 
     try {
       const [meData, projectsData, sequencesData, jobsData] =
@@ -264,7 +282,9 @@ export default function Alignments() {
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }
 
@@ -272,6 +292,21 @@ export default function Alignments() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const hasActiveJob = alignmentJobs.some(
+      (job) => job.status === "PENDING" || job.status === "RUNNING"
+    );
+
+    if (!hasActiveJob) return;
+
+    const interval = setInterval(() => {
+      load({ silent: true });
+    }, 3000);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alignmentJobs]);
 
   const userCanWrite = canWrite(me);
   const readOnlyText = readOnlyMessage(me);
@@ -293,6 +328,12 @@ export default function Alignments() {
   const selectedJob = useMemo(() => {
     return alignmentJobs.find((job) => String(job.id) === String(selectedJobId));
   }, [alignmentJobs, selectedJobId]);
+
+  const activeJobCount = useMemo(() => {
+    return alignmentJobs.filter(
+      (job) => job.status === "PENDING" || job.status === "RUNNING"
+    ).length;
+  }, [alignmentJobs]);
 
   const alignmentRecords = useMemo(() => {
     return parseFastaRecords(selectedJob?.aligned_fasta || "");
@@ -352,7 +393,7 @@ export default function Alignments() {
 
       const createdJob = await apiPost("/api/alignment-jobs/", payload);
 
-      setSuccess(`Alignment "${createdJob.name}" completed.`);
+      setSuccess(`Alignment "${createdJob.name}" was queued.`);
       setSelectedJobId(String(createdJob.id));
 
       await load();
@@ -389,12 +430,12 @@ export default function Alignments() {
         <div>
           <h1 className="page-title">Alignments</h1>
           <p className="page-subtitle">
-            Run Clustal Omega alignments and view aligned FASTA in OpenLIMS.
+            Queue Clustal Omega alignment jobs and view aligned FASTA in OpenLIMS.
           </p>
         </div>
 
         <div className="inline-actions">
-          <Button variant="outline-dark" size="sm" onClick={load}>
+          <Button variant="outline-dark" size="sm" onClick={() => load()}>
             {loading ? "Refreshing..." : "Refresh"}
           </Button>
 
@@ -421,6 +462,13 @@ export default function Alignments() {
       {err && <Alert variant="danger">{err}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
       {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
+
+      {activeJobCount > 0 && (
+        <Alert variant="warning">
+          {activeJobCount} alignment job{activeJobCount === 1 ? " is" : "s are"} currently queued or running.
+          This page will refresh automatically.
+        </Alert>
+      )}
 
       <Row className="g-4 mb-4">
         <Col lg={4}>
@@ -524,8 +572,8 @@ export default function Alignments() {
                   }
                 >
                   {running
-                    ? "Running Clustal Omega..."
-                    : `Run Clustal Omega (${selectedSequenceIds.length})`}
+                    ? "Queueing Clustal Omega..."
+                    : `Queue Clustal Omega (${selectedSequenceIds.length})`}
                 </Button>
               </Form>
             </Card.Body>
@@ -539,7 +587,7 @@ export default function Alignments() {
                 <div>
                   <h5 className="section-title mb-0">Alignment Jobs</h5>
                   <div className="feed-meta">
-                    Previous Clustal Omega alignment runs.
+                    Previous and active Clustal Omega alignment jobs.
                   </div>
                 </div>
 
@@ -568,7 +616,7 @@ export default function Alignments() {
                         <td>{job.project_code || selectedProject?.code || "-"}</td>
                         <td>
                           <Badge bg={statusVariant(job.status)}>
-                            {job.status}
+                            {statusText(job.status)}
                           </Badge>
                         </td>
                         <td>{job.tool || "CLUSTAL_OMEGA"}</td>
@@ -623,11 +671,9 @@ export default function Alignments() {
 
         <Card className="app-card metric-card h-100">
           <Card.Body>
-            <div className="metric-label">Viewer</div>
-            <div className="metric-value" style={{ fontSize: "1.4rem" }}>
-              OpenLIMS
-            </div>
-            <div className="metric-note">Color-coded alignment grid</div>
+            <div className="metric-label">Active Jobs</div>
+            <div className="metric-value">{activeJobCount}</div>
+            <div className="metric-note">Pending or running</div>
           </Card.Body>
         </Card>
       </div>
@@ -644,7 +690,7 @@ export default function Alignments() {
 
             {selectedJob && (
               <Badge bg={statusVariant(selectedJob.status)}>
-                {selectedJob.status}
+                {statusText(selectedJob.status)}
               </Badge>
             )}
           </div>
@@ -655,6 +701,14 @@ export default function Alignments() {
             <Alert variant="danger">
               {selectedJob.error_message || "Alignment failed."}
             </Alert>
+          ) : selectedJob.status === "PENDING" ? (
+            <div className="empty-state">
+              This alignment is queued and waiting for the Celery worker.
+            </div>
+          ) : selectedJob.status === "RUNNING" ? (
+            <div className="empty-state">
+              Clustal Omega is running. The result will appear automatically.
+            </div>
           ) : !selectedJob.aligned_fasta ? (
             <div className="empty-state">
               This job does not have aligned FASTA output yet.
