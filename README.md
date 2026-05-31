@@ -755,38 +755,6 @@ Restore backup:
 cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.prod.yml exec -T db psql -U openlims openlims
 ```
 
----
-
-## 🚀 AWS Deployment Notes
-
-After merging to `main`:
-
-```bash
-ssh ubuntu@16.146.193.92
-cd ~/OpenLIMS
-
-git checkout main
-git pull origin main
-
-docker compose -p openlims -f deploy/docker-compose.prod.yml up -d --build api worker
-docker compose -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py migrate
-docker compose -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py check
-
-cd frontend
-npm install
-npm run build
-
-cd ~/OpenLIMS
-docker compose -p openlims -f deploy/docker-compose.prod.yml restart caddy
-```
-
-Seed demo data on AWS:
-
-```bash
-docker compose -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py seed_demo
-```
-
----
 
 ## 🏢 Enterprise Feature Roadmap
 
