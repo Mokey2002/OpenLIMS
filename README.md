@@ -1,8 +1,8 @@
 # 🧪 OpenLIMS
 
-OpenLIMS is a lightweight, modular, production-inspired **Laboratory Information Management System (LIMS)** designed to support real lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, audit trails, notifications, and result analysis.
+OpenLIMS is a lightweight, modular, production-style **Laboratory Information Management System (LIMS)** designed to support real lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence workspaces, audit trails, notifications, result analysis, and alignment workflows.
 
-The goal of OpenLIMS is to provide a configurable, easy-to-deploy LIMS foundation for real laboratory workflows.
+OpenLIMS is currently a **production-style prototype**, not a fully validated clinical or regulated production LIMS. The goal is to provide a practical, configurable, easy-to-deploy foundation for laboratory workflow software.
 
 ---
 
@@ -14,57 +14,185 @@ OpenLIMS is currently deployed here:
 http://16.146.193.92
 ```
 
+### Demo Users
+
+```text
+director / Director123!   Admin/director access
+peter    / peter123       Lab tech access
+maria    / maria123       Lab tech access
+michael  / michael123     Lab tech access
+viewer   / viewer123      Read-only access
+```
+
 ---
 
-## 🚀 Features
+## 🚀 Core Features
+
+### Role-Based Access Control
+
+OpenLIMS uses JWT authentication and role-based permissions.
+
+Current roles:
+
+| Role | Purpose |
+|---|---|
+| `admin` / Director | Full administrative access |
+| `tech` | Lab workflow access |
+| `viewer` | Read-only access |
+
+Director/admin users can manage users, system settings, instrument profiles, imports, samples, sequences, projects, and audit workflows.
+
+Tech users can perform lab workflow actions such as updating samples, running imports, managing sequence workspaces, and queueing alignments.
+
+Viewer users can inspect dashboards, samples, projects, audit events, imports, sequences, and alignments without write access.
+
+---
 
 ### Sample Management
-- Track samples through lifecycle states:
-  - `RECEIVED`
-  - `IN_PROGRESS`
-  - `QC`
-  - `REPORTED`
-  - `ARCHIVED`
+
+OpenLIMS supports sample lifecycle tracking with statuses such as:
+
+```text
+RECEIVED
+IN_PROGRESS
+QC
+REPORTED
+ARCHIVED
+```
+
+Users can:
+
+- Create and track samples
 - Assign samples to projects
 - Assign samples to containers and storage locations
 - Upload sample attachments
-- View sample work items, results, and timeline events
+- View sample work items, results, and audit timeline events
+- Link samples to sequence workspaces and import jobs
+
+---
 
 ### Project Management
+
+Projects act as shared workspaces for lab teams.
+
+Users can:
+
 - Create projects
 - Assign users to projects
-- Restrict project visibility by membership
-- Add project notes and images
+- Restrict visibility by project membership
+- Add project notes/feed posts
+- Link samples, imports, sequences, and alignments to a project
 - Notify project members when updates are posted
 
-### Inventory Management
-- Create storage locations
-- Create containers
-- Link containers to locations
-- Assign samples to containers
+Demo project feed data includes multiple users posting on the same project, such as director, Peter, Maria, Michael, and viewer accounts.
 
-### Instrument Data Ingestion
+---
+
+### Inventory Management
+
+OpenLIMS supports basic lab inventory organization:
+
+- Storage locations
+- Containers
+- Container-to-location assignment
+- Sample-to-container assignment
+
+Example structures:
+
+```text
+Freezer A → BOX-A1 → S-ALPHA-001
+Fridge B  → BOX-B1 → S-BETA-001
+Sequencing Bench → SEQ-RACK-1 → S-GAMMA-001
+```
+
+---
+
+## 🧬 Sequence Workspaces
+
+OpenLIMS includes sequence workspace support for DNA, RNA, and protein records.
+
+Users can:
+
+- Create sequence workspaces
+- Link sequences to samples
+- Link sequences to projects
+- Store sequence metadata
+- View sequence features such as annotations, primers, translations, and highlights
+- Import FASTA records into sequence workspaces
+
+Sequence workspaces are designed to support workflows like:
+
+```text
+Sample → FASTA import → Sequence workspace → Alignment job → Audit event
+```
+
+---
+
+## 🧬 FASTA Import Preview and Confirm
+
+OpenLIMS supports a safer FASTA import workflow:
+
+```text
+Upload FASTA
+   ↓
+Preview records
+   ↓
+Show matched samples
+   ↓
+Show unmatched records
+   ↓
+Confirm import
+   ↓
+Create sequence workspaces
+```
+
+The preview step helps prevent accidental bad imports by showing:
+
+- Records found
+- Matched samples
+- Unmatched samples
+- Records that will create sequence workspaces
+- Skipped records
+
+---
+
+## 🧪 Instrument Data Ingestion
+
 OpenLIMS supports two ingestion workflows:
 
-1. **CSV upload through the UI**
-2. **Direct instrument/API push**
+1. CSV upload through the UI
+2. Direct instrument/API push
 
 Instrument profiles define how incoming data should be interpreted.
 
-Each instrument can define:
-- instrument name
-- instrument code
-- delimiter
-- sample ID column
-- column mappings
-- validation rules
-- numeric min/max rules
-- allowed values
+Each instrument profile can define:
 
-### Async CSV Import Processing
+- Instrument name
+- Instrument code
+- Delimiter
+- Sample ID column
+- Column mappings
+- Numeric min/max validation
+- Allowed values
+
+Demo instrument profiles include:
+
+- NovaFlex Analyzer
+- Illumina MiSeq Sequencer
+- Applied Biosystems 3500 Sanger Sequencer
+- Charles River Endosafe Nexus
+- Molecular Devices SpectraMax Plate Reader
+- Applied Biosystems 7500 qPCR System
+- Thermo Fisher NanoDrop One
+- Agilent 2100 Bioanalyzer
+- Hamilton STAR Liquid Handler
+- Generic FASTA Sequencer
+
+---
+
+## ⚙️ Async Import Processing
+
 CSV imports are processed asynchronously using **Celery** and **Redis**.
-
-This prevents large imports from blocking API requests.
 
 ```text
 User uploads CSV
@@ -82,74 +210,108 @@ Worker creates samples, work items, and results
 Worker marks job COMPLETED or FAILED
 ```
 
-### Import Job Tracking
-Each import job tracks:
-- status
-- source type
-- run ID
-- progress current
-- progress total
-- progress message
-- rows processed
-- samples created
-- samples matched
-- results created
-- skipped rows
-- linked samples
+Import jobs track:
 
-Supported statuses:
+- Status
+- Source type
+- Run ID
+- Progress current
+- Progress total
+- Progress message
+- Rows processed
+- Samples created
+- Samples matched
+- Results created
+- Skipped rows
+- Linked samples
+
+Supported status flow:
 
 ```text
 PENDING → RUNNING → COMPLETED
                   ↘ FAILED
 ```
 
-### Retry Failed Imports
-Failed or completed CSV imports can be retried without uploading the file again.
+---
 
-The original uploaded file is stored with the `ImportJob`, so retry reprocesses the same file.
+## 🧬 Async Clustal Omega Alignments
+
+OpenLIMS supports sequence alignment jobs using **Clustal Omega**.
+
+Alignment jobs run asynchronously through Celery:
 
 ```text
-Original CSV upload
+User selects 2+ sequence workspaces
    ↓
-ImportJob stores uploaded_file
+Django API creates AlignmentJob as PENDING
    ↓
-Import fails
+Celery worker runs Clustal Omega
    ↓
-User clicks Retry Import
+Job updates to RUNNING
    ↓
-Celery reprocesses the same stored file
+Aligned FASTA is stored
+   ↓
+Job updates to COMPLETED or FAILED
+   ↓
+User receives notification
 ```
 
-### Import-to-Sample Lineage
-OpenLIMS links import jobs to the samples they created or matched.
+The frontend polls active jobs and shows:
 
-This allows users to answer:
-
-- Which import created this sample?
-- Which samples were touched by this run?
-- Which instrument run produced these results?
-
-The import summary stores:
-
-```json
-{
-  "created_sample_ids": [1, 2],
-  "matched_sample_ids": [3],
-  "touched_sample_ids": [1, 2, 3]
-}
+```text
+PENDING → RUNNING → COMPLETED / FAILED
 ```
 
-### Audit Trail / Chain of Custody
+Alignment results include:
+
+- Input FASTA
+- Aligned FASTA
+- Sequence count
+- Alignment summary
+- Downloadable aligned FASTA
+- Color-coded alignment preview
+
+---
+
+## 📊 Analysis
+
+The analysis page supports:
+
+- Selecting projects
+- Selecting samples
+- Choosing numeric result metrics
+- Viewing trends over time
+- Exporting chart data as CSV
+
+This helps users inspect imported results such as:
+
+- Concentration
+- Purity
+- Yield
+- qPCR Ct values
+- MiSeq Q-scores
+- Endotoxin values
+- Plate reader absorbance
+
+---
+
+## 🧾 Audit Trail and Chain of Custody
+
 OpenLIMS records important actions as audit events.
 
 Examples:
-- sample created
-- sample status changed
-- sample container changed
-- attachment uploaded
-- results imported
-- import retry queued
+
+- Sample created
+- Sample status changed
+- Sample container changed
+- Attachment uploaded
+- Results imported
+- Import retry queued
+- Sequence imported
+- Alignment queued
+- Alignment completed
+- Settings updated
+- Settings reset to defaults
 
 Audit events can include before/after values:
 
@@ -165,40 +327,100 @@ Audit events can include before/after values:
 }
 ```
 
-### Notifications
-OpenLIMS includes notifications for key activity:
-- import completed
-- import failed
-- project post created
-- user-relevant workflow events
+### Audit Log Export
 
-### Analysis
-The analysis page supports:
-- selecting projects
-- selecting samples
-- choosing numeric result metrics
-- graphing values over time
-- exporting chart data as CSV
+The Events page supports audit export:
+
+```text
+Export CSV
+Export JSON
+```
+
+Audit logs can be filtered by:
+
+- Entity type
+- Action
+- Actor
+- Search term
+- Date range
+
+This is one of the enterprise-style features added to support governance and traceability.
+
+---
+
+## 🔔 Notifications
+
+OpenLIMS includes notifications for key activity:
+
+- Import completed
+- Import failed
+- Project post created
+- Sequencing review needed
+- Endotoxin review needed
+- Alignment completed
+- Alignment failed
+- Demo environment seeded
+
+---
+
+## 🛠 Admin Settings
+
+OpenLIMS includes an admin/director settings page for system-level configuration.
+
+Settings include:
+
+### General Settings
+
+- Lab name
+- Organization name
+- Default timezone
+- Default sample status
+
+### Import Settings
+
+- Max upload size
+- Require import preview
+- Allowed FASTA extensions
+
+### Sequence and Alignment Settings
+
+- Enable alignment jobs
+- Max sequences per alignment
+- Max sequence length
+
+### Security Settings
+
+- Viewer read-only mode
+- Require audit reason for critical changes
+
+Settings changes are logged to the audit event log.
 
 ---
 
 ## 🧱 Architecture
 
 ```text
-React Frontend
+React + Vite Frontend
    ↓
-Django REST API
+Django REST Framework API
    ↓
 PostgreSQL
 
 Async processing:
 Django API
    ↓
-Redis Queue
+Redis
    ↓
 Celery Worker
    ↓
 PostgreSQL
+
+Alignment processing:
+Celery Worker
+   ↓
+Clustal Omega
+   ↓
+AlignmentJob result
 ```
 
 ### Production Runtime Architecture
@@ -210,27 +432,28 @@ Caddy Reverse Proxy
    ↓
 React Static Frontend
    ↓
-Django API running with Gunicorn
+Django API / Gunicorn
    ↓
 PostgreSQL
 
-Celery Worker
-   ↓
 Redis
    ↓
-PostgreSQL
+Celery Worker
+   ↓
+Clustal Omega
 ```
 
 ### Services
 
 | Service | Purpose |
 |---|---|
-| React | Frontend UI |
+| React + Vite | Frontend UI |
 | Django REST Framework | API and business logic |
 | PostgreSQL | Primary database |
 | Redis | Celery broker/result backend |
-| Celery Worker | Background CSV import processing |
-| Caddy | Reverse proxy, static file server |
+| Celery Worker | Background imports and alignments |
+| Clustal Omega | Sequence alignment engine |
+| Caddy | Reverse proxy and static file serving |
 | Docker Compose | Service orchestration |
 
 ---
@@ -244,9 +467,13 @@ PostgreSQL
 | `inventory` | Locations and containers |
 | `imports` | Instrument profiles, mappings, import jobs |
 | `results` | Work items and structured results |
-| `events` | Audit trail |
+| `events` | Audit trail and audit export |
 | `notifications` | User alerts |
 | `custom_fields` | Configurable fields |
+| `sequences` | Sequence workspaces and features |
+| `alignments` | Clustal Omega alignment jobs |
+| `settings_app` | Admin system settings |
+| `core` | Users, roles, permissions, shared utilities |
 
 ---
 
@@ -270,6 +497,26 @@ Celery worker processes CSV rows
 Samples, work items, and results are created
    ↓
 ImportJob summary is updated
+```
+
+### FASTA Import Workflow
+
+```text
+Frontend Import Page
+   ↓
+Upload FASTA
+   ↓
+POST /api/import-jobs/sequence-fasta-preview/
+   ↓
+Preview matched/unmatched records
+   ↓
+Confirm import
+   ↓
+POST /api/import-jobs/sequence-fasta-import/
+   ↓
+Sequence workspaces created
+   ↓
+Events logged
 ```
 
 ### Instrument API Push Workflow
@@ -315,21 +562,21 @@ curl -X POST http://localhost:8000/api/import-jobs/instrument-ingest/ \
 ## 🔐 Authentication and Permissions
 
 OpenLIMS uses:
+
 - JWT authentication for users
-- shared API key authentication for instrument ingestion
-- role-based permissions
+- Shared API key authentication for instrument ingestion
+- Role-based API permissions
+- Backend permission tests
 
 Current roles:
-- `admin`
-- `tech`
-- `viewer`
 
-Admin users can:
-- manage users
-- manage instruments
-- manage mappings
-- view and manage imports
-- access admin-only workflows
+| Role | Demo User | Access |
+|---|---|---|
+| Director/Admin | `director` | Full system access |
+| Tech | `peter`, `maria`, `michael` | Lab workflow access |
+| Viewer | `viewer` | Read-only access |
+
+Backend tests help verify that viewer users cannot perform write actions.
 
 ---
 
@@ -351,7 +598,7 @@ cp deploy/.env.example deploy/.env
 Example local environment:
 
 ```env
-DEBUG=1
+DJANGO_DEBUG=1
 DJANGO_SECRET_KEY=dev-secret-key
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 
@@ -376,21 +623,28 @@ docker compose -p openlims -f deploy/docker-compose.yml up -d --build
 ### 4. Run migrations
 
 ```bash
-docker compose -p openlims -f deploy/docker-compose.yml run --rm api python manage.py migrate
+docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py migrate
 ```
 
-### 5. Create superuser
+### 5. Seed demo data
 
 ```bash
-docker compose -p openlims -f deploy/docker-compose.yml run --rm api python manage.py createsuperuser
+docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py seed_demo
 ```
 
-### 6. Open app
+### 6. Create superuser if needed
+
+```bash
+docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py createsuperuser
+```
+
+### 7. Open app
 
 ```text
 Frontend: http://localhost:5173
 API:      http://localhost:8000
 Admin:    http://localhost:8000/admin
+Health:   http://localhost:8000/health/
 ```
 
 ---
@@ -400,30 +654,41 @@ Admin:    http://localhost:8000/admin
 Run all tests:
 
 ```bash
-docker compose -p openlims -f deploy/docker-compose.yml run --rm api pytest -v
+docker compose -p openlims -f deploy/docker-compose.yml exec api pytest -v
 ```
 
-Run import tests:
+Run Django checks:
 
 ```bash
-docker compose -p openlims -f deploy/docker-compose.yml run --rm api pytest imports/tests/ -v
+docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py check
+```
+
+Run frontend build:
+
+```bash
+cd frontend
+npm install
+npm run build
 ```
 
 Test coverage includes:
-- instrument API ingest
+
+- Instrument API ingest
 - CSV import workflow
-- duplicate run protection
-- import retry validation
-- project permissions
-- sample transitions
-- workflow tests
-- notification behavior
+- Duplicate run protection
+- Import retry validation
+- FASTA import validation
+- Backend permissions
+- Project permissions
+- Sample transitions
+- Notifications
+- Alignment workflow behavior
 
 ---
 
 ## ✅ CI/CD
 
-OpenLIMS can run tests through GitHub Actions.
+OpenLIMS uses GitHub Actions for CI.
 
 Typical CI flow:
 
@@ -439,6 +704,39 @@ Check migrations
 Run migrations
    ↓
 Run pytest
+   ↓
+Install frontend dependencies
+   ↓
+Build frontend
+```
+
+---
+
+## 🩺 Health Checks
+
+The health endpoint checks important runtime dependencies:
+
+```text
+Database
+Redis/cache
+Clustal Omega
+```
+
+Example:
+
+```bash
+curl http://localhost:8000/health/
+```
+
+Example response:
+
+```json
+{
+  "status": "ok",
+  "db_ok": true,
+  "redis_ok": true,
+  "clustalo_ok": true
+}
 ```
 
 ---
@@ -459,48 +757,112 @@ cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.pr
 
 ---
 
-## 🧭 Roadmap
+## 🚀 AWS Deployment Notes
 
-### Short Term
-- Result edit history
-- WebSocket progress updates
-- Async API ingest
-- Celery retry policies
-- Instrument adapter framework
-- Advanced search
+After merging to `main`:
 
-### Long Term
-- Per-instrument API keys
-- Multi-tenant labs
-- S3 file storage
-- External LIMS/LIS integrations
-- Kafka-based ingestion
-- Workflow engine
-- Report generation
+```bash
+ssh ubuntu@16.146.193.92
+cd ~/OpenLIMS
+
+git checkout main
+git pull origin main
+
+docker compose -p openlims -f deploy/docker-compose.prod.yml up -d --build api worker
+docker compose -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py migrate
+docker compose -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py check
+
+cd frontend
+npm install
+npm run build
+
+cd ~/OpenLIMS
+docker compose -p openlims -f deploy/docker-compose.prod.yml restart caddy
+```
+
+Seed demo data on AWS:
+
+```bash
+docker compose -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py seed_demo
+```
+
+---
+
+## 🏢 Enterprise Feature Roadmap
+
+These are the enterprise-style OpenLIMS features being implemented in order:
+
+| # | Feature | Status |
+|---|---|---|
+| 1 | Admin Settings page | ✅ Added |
+| 2 | Audit log export | ✅ Added |
+| 3 | User management improvements | In progress |
+| 4 | QC approval workflow | Planned |
+| 5 | Project dashboard | Planned |
+| 6 | Bulk sample actions | Planned |
+| 7 | Reports page | Planned |
+| 8 | System status dashboard | Planned |
+
+---
+
+## 🔒 Production Readiness Status
+
+OpenLIMS is currently best described as:
+
+```text
+Production-style open-source LIMS prototype
+```
+
+It includes several production-shaped patterns:
+
+- Dockerized services
+- PostgreSQL database
+- Redis + Celery async jobs
+- Role-based access control
+- Audit event logging
+- Audit log export
+- Health checks
+- Upload validation
+- CI tests
+- Frontend build checks
+- Admin settings
+- AWS deployment
+
+Remaining production-readiness work:
+
+- More backend permission coverage
+- QC approval workflow
+- S3 or external file storage
+- Formal backup/restore documentation
+- System status dashboard
+- Monitoring and alerting
+- Secure production settings review
+- More complete user management
+- More robust reporting/export workflows
 
 ---
 
 ## 📌 Project Goals
 
 OpenLIMS aims to be:
-- lightweight
-- deployable
-- configurable
-- open-source friendly
-- production-shaped
-- useful for real lab workflows
-- easy to run locally or on low-cost cloud infrastructure
+
+- Lightweight
+- Deployable
+- Configurable
+- Open-source friendly
+- Production-shaped
+- Useful for real lab workflows
+- Easy to run locally or on low-cost cloud infrastructure
+
 
 ---
 
 ## 👨‍💻 Author
 
-Eduardo L  
-
+Eduardo L
 
 ---
 
 ## 📄 License
 
 Apache 2.0
-
