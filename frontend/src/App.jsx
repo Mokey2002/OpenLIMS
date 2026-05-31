@@ -13,9 +13,10 @@ import Users from "./pages/Users";
 import Imports from "./pages/Imports";
 import Notifications from "./pages/Notifications";
 import { isLoggedIn } from "./auth";
-import ImportDetail from "./pages/ImportDetail"; 
+import ImportDetail from "./pages/ImportDetail";
 import Sequences from "./pages/Sequences";
 import Alignments from "./pages/Alignments";
+import AdminSettings from "./pages/AdminSettings";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -26,6 +27,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+
         <Route
           path="/"
           element={
@@ -41,14 +43,16 @@ export default function App() {
           <Route path="events" element={<Events />} />
           <Route path="analyze" element={<Analyze />} />
           <Route path="projects" element={<Projects />} />
-          <Route path="sequences" element={<Sequences />} />
           <Route path="projects/:id" element={<ProjectDetail />} />
+          <Route path="sequences" element={<Sequences />} />
+          <Route path="alignments" element={<Alignments />} />
           <Route path="users" element={<Users />} />
+          <Route path="settings" element={<AdminSettings />} />
           <Route path="imports" element={<Imports />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="imports/:id" element={<ImportDetail />} />
-          <Route path="/alignments" element={<Alignments />} />
         </Route>
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
