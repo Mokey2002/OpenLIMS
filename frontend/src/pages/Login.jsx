@@ -5,22 +5,40 @@ import { login } from "../api";
 
 const demoAccounts = [
   {
-    label: "Admin",
-    username: "admin",
-    password: "Admin123456!",
-    badge: "Full Access",
+    label: "Director",
+    username: "director",
+    password: "Director123!",
+    badge: "Admin Access",
     variant: "dark",
     description:
-      "Full demo access. Can manage users, project teams, imports, samples, sequences, and admin workflows.",
+      "Lab director access. Can manage users, project teams, admin settings, imports, samples, sequences, alignments, and audit workflows.",
   },
   {
-    label: "Tech",
+    label: "Tech Peter",
     username: "peter",
     password: "peter123",
-    badge: "Lab Workflow",
+    badge: "Lab Tech",
     variant: "outline-dark",
     description:
-      "Lab user access. Can run imports, update samples, add results, upload attachments, and manage sequence workspaces.",
+      "Lab workflow access. Can run imports, update samples, add results, upload attachments, and manage sequence workspaces.",
+  },
+  {
+    label: "Tech Maria",
+    username: "maria",
+    password: "maria123",
+    badge: "Lab Tech",
+    variant: "outline-dark",
+    description:
+      "Lab workflow access focused on sequencing QC, FASTA imports, sequence workspaces, and alignment review.",
+  },
+  {
+    label: "Tech Michael",
+    username: "michael",
+    password: "michael123",
+    badge: "Lab Tech",
+    variant: "outline-dark",
+    description:
+      "Lab workflow access focused on endotoxin review, instrument results, sample QC, and project updates.",
   },
   {
     label: "Viewer",
@@ -29,7 +47,7 @@ const demoAccounts = [
     badge: "Read Only",
     variant: "outline-secondary",
     description:
-      "Read-only demo access. Can view dashboards, samples, projects, events, analysis, and sequences but cannot make changes.",
+      "Read-only demo access. Can view dashboards, samples, projects, events, analysis, sequences, and alignments but cannot make changes.",
   },
 ];
 
@@ -83,7 +101,7 @@ export default function Login() {
           "linear-gradient(135deg, #f8fafc 0%, #eef2ff 45%, #f8fafc 100%)",
       }}
     >
-      <div className="w-100 px-3" style={{ maxWidth: "1020px" }}>
+      <div className="w-100 px-3" style={{ maxWidth: "1120px" }}>
         <div className="text-center mb-4">
           <div
             className="mx-auto mb-3 d-flex align-items-center justify-content-center"
@@ -104,7 +122,7 @@ export default function Login() {
           <h1 className="fw-bold mb-2">OpenLIMS</h1>
 
           <p className="text-muted mb-0">
-            Demo login for lab users, viewers, and administrators.
+            Demo login for directors, lab techs, and read-only reviewers.
           </p>
         </div>
 
@@ -155,8 +173,8 @@ export default function Login() {
                 <Alert variant="light" className="border mt-4 mb-0">
                   <div className="fw-semibold mb-1">Demo recommendation</div>
                   <div className="small text-muted">
-                    Start as Viewer to see read-only access, then try Tech or
-                    Admin to compare permissions.
+                    Start as Viewer to see read-only access, then try a Lab Tech
+                    or Director to compare permissions.
                   </div>
                 </Alert>
               </Card.Body>
@@ -177,7 +195,7 @@ export default function Login() {
                   {demoAccounts.map((account) => (
                     <div key={account.label} className="soft-card">
                       <div className="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-                        <div style={{ maxWidth: "440px" }}>
+                        <div style={{ maxWidth: "520px" }}>
                           <div className="d-flex align-items-center gap-2 mb-1">
                             <strong>{account.label}</strong>
                             <Badge bg="light" text="dark">
@@ -212,9 +230,9 @@ export default function Login() {
                 </div>
 
                 <Alert variant="info" className="mt-4 mb-0">
-                  <strong>Role differences:</strong> Viewer is read-only, Tech
-                  can perform lab workflows, and Admin can manage users and
-                  project teams.
+                  <strong>Role differences:</strong> Viewer is read-only, Lab
+                  Techs can perform lab workflows, and Director can manage users,
+                  settings, and admin workflows.
                 </Alert>
               </Card.Body>
             </Card>
