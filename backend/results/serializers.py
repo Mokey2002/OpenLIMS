@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import WorkItem, Result,SampleAttachment
+
+from .models import WorkItem, Result, SampleAttachment
 
 
 class ResultSerializer(serializers.ModelSerializer):
@@ -28,21 +29,31 @@ class ResultSerializer(serializers.ModelSerializer):
 
         if value_type == "STRING":
             if not attrs.get("value_string"):
-                raise serializers.ValidationError({"value_string": "Required for STRING results."})
+                raise serializers.ValidationError(
+                    {"value_string": "Required for STRING results."}
+                )
 
         elif value_type == "NUMBER":
             if attrs.get("value_number") is None:
-                raise serializers.ValidationError({"value_number": "Required for NUMBER results."})
+                raise serializers.ValidationError(
+                    {"value_number": "Required for NUMBER results."}
+                )
 
         elif value_type == "BOOLEAN":
             if attrs.get("value_boolean") is None:
-                raise serializers.ValidationError({"value_boolean": "Required for BOOLEAN results."})
+                raise serializers.ValidationError(
+                    {"value_boolean": "Required for BOOLEAN results."}
+                )
 
         return attrs
 
 
 class WorkItemSerializer(serializers.ModelSerializer):
     results = ResultSerializer(many=True, read_only=True)
+    reviewed_by_username = serializers.CharField(
+        source="reviewed_by.username",
+        read_only=True,
+    )
 
     class Meta:
         model = WorkItem
@@ -52,10 +63,40 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "name",
             "status",
             "notes",
+            "qc_status",
+            "reviewed_by",
+            "reviewed_by_username",
+            "reviewed_at",
+            "review_note",
             "created_at",
             "results",
         ]
-        read_only_fields = ["id", "created_at", "results"]
+        read_only_fields = [
+            "id",
+            "reviewed_by",
+            "reviewed_by_username",
+            "reviewed_at",
+            "review_note",
+            "created_at",
+            "results",
+        ]
+
+
+class WorkItemQCReviewSerializer(serializers.Serializer):
+    qc_status = serializers.ChoiceField(
+        choices=[
+            WorkItem.QC_APPROVED,
+            WorkItem.QC_REJECTED,
+            WorkItem.QC_RERUN_REQUIRED,
+            WorkItem.QC_PENDING_REVIEW,
+        ]
+    )
+    review_note = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=2000,
+    )
+
 
 class SampleAttachmentSerializer(serializers.ModelSerializer):
     filename = serializers.SerializerMethodField()

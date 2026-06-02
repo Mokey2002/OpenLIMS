@@ -45,6 +45,36 @@ function workItemVariant(status) {
   }
 }
 
+function qcVariant(status) {
+  switch (status) {
+    case "APPROVED":
+      return "success";
+    case "REJECTED":
+      return "danger";
+    case "RERUN_REQUIRED":
+      return "warning";
+    case "PENDING_REVIEW":
+      return "secondary";
+    default:
+      return "light";
+  }
+}
+
+function qcLabel(status) {
+  switch (status) {
+    case "APPROVED":
+      return "Approved";
+    case "REJECTED":
+      return "Rejected";
+    case "RERUN_REQUIRED":
+      return "Re-run Required";
+    case "PENDING_REVIEW":
+      return "Pending Review";
+    default:
+      return status || "Pending Review";
+  }
+}
+
 function actionVariant(action) {
   switch (action) {
     case "CREATED":
@@ -69,6 +99,16 @@ function actionVariant(action) {
       return "primary";
     case "SEQUENCE_WORKSPACE_DELETED":
       return "danger";
+    case "QC_APPROVED":
+      return "success";
+    case "QC_REJECTED":
+      return "danger";
+    case "QC_RERUN_REQUIRED":
+      return "warning";
+    case "QC_PENDING_REVIEW":
+      return "secondary";
+    case "QC_REVIEW_UPDATED":
+      return "info";
     default:
       return "secondary";
   }
@@ -140,6 +180,22 @@ function getTimelineTitle(event) {
 
   if (event.action === "SEQUENCE_WORKSPACE_DELETED") {
     return "Sequence workspace deleted";
+  }
+
+  if (event.action === "QC_APPROVED") {
+    return `QC approved for ${payload.work_item_name || "work item"}`;
+  }
+
+  if (event.action === "QC_REJECTED") {
+    return `QC rejected for ${payload.work_item_name || "work item"}`;
+  }
+
+  if (event.action === "QC_RERUN_REQUIRED") {
+    return `Re-run requested for ${payload.work_item_name || "work item"}`;
+  }
+
+  if (event.action === "QC_PENDING_REVIEW") {
+    return `QC marked pending for ${payload.work_item_name || "work item"}`;
   }
 
   return event.action;
@@ -237,6 +293,7 @@ export default function SampleDetail() {
   const [newWorkItemName, setNewWorkItemName] = useState("");
   const [newWorkItemNotes, setNewWorkItemNotes] = useState("");
   const [resultForms, setResultForms] = useState({});
+  const [reviewNotes, setReviewNotes] = useState({});
 
   const [selectedAttachmentFile, setSelectedAttachmentFile] = useState(null);
   const [selectedContainer, setSelectedContainer] = useState("");
@@ -298,7 +355,62 @@ export default function SampleDetail() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  const projectId = sample?.project || sample?.project_id;
+  const userCanWrite = canWrite(me);
+  const readOnlyText = readOnlyMessage(me);
+
+  const sortedEvents = useMemo(() => {
+    return [...events].sort(
+      (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+    );
+  }, [events]);
+
+  const resultRows = useMemo(() => {
+    const rows = [];
+
+    for (const workItem of workItems) {
+      for (const result of workItem.results || []) {
+        rows.push({
+          id: result.id,
+          workItemId: workItem.id,
+          workItemName: workItem.name,
+          key: result.key,
+          value: resultDisplayValue(result),
+          valueType: result.value_type,
+        });
+      }
+    }
+
+    return rows;
+  }, [workItems]);
+
+  const importEvents = useMemo(() => {
+    return sortedEvents.filter((event) => {
+      const payload = event.payload || {};
+
+      return (
+        event.action === "RESULTS_IMPORTED" ||
+        event.action === "IMPORT_RETRY_QUEUED" ||
+        payload.import_job_id
+      );
+    });
+  }, [sortedEvents]);
+
+  const qcStats = useMemo(() => {
+    return {
+      pending: workItems.filter((item) => item.qc_status === "PENDING_REVIEW")
+        .length,
+      approved: workItems.filter((item) => item.qc_status === "APPROVED")
+        .length,
+      rejected: workItems.filter((item) => item.qc_status === "REJECTED")
+        .length,
+      rerun: workItems.filter((item) => item.qc_status === "RERUN_REQUIRED")
+        .length,
+    };
+  }, [workItems]);
 
   async function doTransition(newStatus) {
     if (!userCanWrite) return;
@@ -322,6 +434,7 @@ export default function SampleDetail() {
     e.preventDefault();
 
     if (!userCanWrite) return;
+
     setErr("");
     setSuccess("");
 
@@ -397,11 +510,41 @@ export default function SampleDetail() {
     }
   }
 
+  function updateReviewNote(workItemId, value) {
+    setReviewNotes((prev) => ({
+      ...prev,
+      [workItemId]: value,
+    }));
+  }
+
+  async function reviewWorkItem(workItemId, qcStatus) {
+    if (!userCanWrite) return;
+
+    setErr("");
+    setSuccess("");
+
+    try {
+      await apiPost(`/api/work-items/${workItemId}/qc-review/`, {
+        qc_status: qcStatus,
+        review_note: reviewNotes[workItemId] || "",
+      });
+
+      setReviewNotes((prev) => ({
+        ...prev,
+        [workItemId]: "",
+      }));
+
+      setSuccess(`QC review updated to ${qcLabel(qcStatus)}.`);
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
   async function uploadSampleAttachment(e) {
     e.preventDefault();
 
     if (!userCanWrite) return;
-
     if (!selectedAttachmentFile) return;
 
     setErr("");
@@ -426,6 +569,7 @@ export default function SampleDetail() {
     e.preventDefault();
 
     if (!userCanWrite) return;
+
     setErr("");
     setSuccess("");
 
@@ -440,47 +584,6 @@ export default function SampleDetail() {
       setErr(e.message || String(e));
     }
   }
-
-  const sortedEvents = useMemo(() => {
-    return [...events].sort(
-      (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-    );
-  }, [events]);
-
-  const resultRows = useMemo(() => {
-    const rows = [];
-
-    for (const workItem of workItems) {
-      for (const result of workItem.results || []) {
-        rows.push({
-          id: result.id,
-          workItemId: workItem.id,
-          workItemName: workItem.name,
-          key: result.key,
-          value: resultDisplayValue(result),
-          valueType: result.value_type,
-        });
-      }
-    }
-
-    return rows;
-  }, [workItems]);
-
-  const importEvents = useMemo(() => {
-    return sortedEvents.filter((event) => {
-      const payload = event.payload || {};
-
-      return (
-        event.action === "RESULTS_IMPORTED" ||
-        event.action === "IMPORT_RETRY_QUEUED" ||
-        payload.import_job_id
-      );
-    });
-  }, [sortedEvents]);
-
-  const projectId = sample?.project || sample?.project_id;
-  const userCanWrite = canWrite(me);
-  const readOnlyText = readOnlyMessage(me);
 
   if (!sample) {
     return (
@@ -502,8 +605,8 @@ export default function SampleDetail() {
         <div>
           <h1 className="page-title">{sample.sample_id}</h1>
           <p className="page-subtitle">
-            Complete sample record with workflow, results, storage, files,
-            sequences, and chain of custody.
+            Complete sample record with workflow, results, QC review, storage,
+            files, sequences, and chain of custody.
           </p>
         </div>
 
@@ -533,9 +636,11 @@ export default function SampleDetail() {
 
         <Card className="app-card metric-card h-100">
           <Card.Body>
-            <div className="metric-label">Attachments</div>
-            <div className="metric-value">{sampleAttachments.length}</div>
-            <div className="metric-note">Uploaded files</div>
+            <div className="metric-label">QC Pending</div>
+            <div className="metric-value">{qcStats.pending}</div>
+            <div className="metric-note">
+              Approved: {qcStats.approved} · Re-run: {qcStats.rerun}
+            </div>
           </Card.Body>
         </Card>
 
@@ -935,11 +1040,31 @@ export default function SampleDetail() {
                           <div>
                             <div className="fw-semibold">{workItem.name}</div>
                             <div className="feed-meta">{workItem.notes}</div>
+
+                            {workItem.reviewed_by_username && (
+                              <div className="feed-meta mt-1">
+                                Reviewed by {workItem.reviewed_by_username} at{" "}
+                                {formatTimestamp(workItem.reviewed_at)}
+                              </div>
+                            )}
+
+                            {workItem.review_note && (
+                              <div className="small mt-2">
+                                <strong>Review note:</strong>{" "}
+                                {workItem.review_note}
+                              </div>
+                            )}
                           </div>
 
-                          <Badge bg={workItemVariant(workItem.status)}>
-                            {workItem.status}
-                          </Badge>
+                          <div className="d-flex gap-2 flex-wrap">
+                            <Badge bg={workItemVariant(workItem.status)}>
+                              {workItem.status}
+                            </Badge>
+
+                            <Badge bg={qcVariant(workItem.qc_status)}>
+                              {qcLabel(workItem.qc_status)}
+                            </Badge>
+                          </div>
                         </div>
 
                         <div className="mb-3">
@@ -976,103 +1101,162 @@ export default function SampleDetail() {
                         </div>
 
                         {userCanWrite && (
+                          <div className="soft-card mb-3">
+                            <div className="feed-meta mb-2">QC Review</div>
+
+                            <Form.Control
+                              as="textarea"
+                              rows={2}
+                              className="mb-2"
+                              placeholder="Optional review note..."
+                              value={reviewNotes[workItem.id] || ""}
+                              onChange={(e) =>
+                                updateReviewNote(workItem.id, e.target.value)
+                              }
+                            />
+
+                            <div className="inline-actions">
+                              <Button
+                                size="sm"
+                                variant="outline-success"
+                                onClick={() =>
+                                  reviewWorkItem(workItem.id, "APPROVED")
+                                }
+                              >
+                                Approve
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                onClick={() =>
+                                  reviewWorkItem(workItem.id, "REJECTED")
+                                }
+                              >
+                                Reject
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline-warning"
+                                onClick={() =>
+                                  reviewWorkItem(workItem.id, "RERUN_REQUIRED")
+                                }
+                              >
+                                Request Re-run
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline-secondary"
+                                onClick={() =>
+                                  reviewWorkItem(workItem.id, "PENDING_REVIEW")
+                                }
+                              >
+                                Mark Pending
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {userCanWrite && (
                           <div className="soft-card">
                             <div className="feed-meta mb-2">Add Result</div>
 
-                          <Row className="g-2">
-                            <Col md={3}>
-                              <Form.Control
-                                placeholder="Key"
-                                value={form.key}
-                                onChange={(e) =>
-                                  updateResultForm(
-                                    workItem.id,
-                                    "key",
-                                    e.target.value
-                                  )
-                                }
-                              />
-                            </Col>
-
-                            <Col md={3}>
-                              <Form.Select
-                                value={form.value_type}
-                                onChange={(e) =>
-                                  updateResultForm(
-                                    workItem.id,
-                                    "value_type",
-                                    e.target.value
-                                  )
-                                }
-                              >
-                                <option value="STRING">STRING</option>
-                                <option value="NUMBER">NUMBER</option>
-                                <option value="BOOLEAN">BOOLEAN</option>
-                              </Form.Select>
-                            </Col>
-
-                            {form.value_type === "STRING" && (
-                              <Col md={4}>
+                            <Row className="g-2">
+                              <Col md={3}>
                                 <Form.Control
-                                  placeholder="Value"
-                                  value={form.value_string}
+                                  placeholder="Key"
+                                  value={form.key}
                                   onChange={(e) =>
                                     updateResultForm(
                                       workItem.id,
-                                      "value_string",
+                                      "key",
                                       e.target.value
                                     )
                                   }
                                 />
                               </Col>
-                            )}
 
-                            {form.value_type === "NUMBER" && (
-                              <Col md={4}>
-                                <Form.Control
-                                  type="number"
-                                  placeholder="Value"
-                                  value={form.value_number}
-                                  onChange={(e) =>
-                                    updateResultForm(
-                                      workItem.id,
-                                      "value_number",
-                                      e.target.value
-                                    )
-                                  }
-                                />
-                              </Col>
-                            )}
-
-                            {form.value_type === "BOOLEAN" && (
-                              <Col md={4}>
+                              <Col md={3}>
                                 <Form.Select
-                                  value={form.value_boolean}
+                                  value={form.value_type}
                                   onChange={(e) =>
                                     updateResultForm(
                                       workItem.id,
-                                      "value_boolean",
+                                      "value_type",
                                       e.target.value
                                     )
                                   }
                                 >
-                                  <option value="true">True</option>
-                                  <option value="false">False</option>
+                                  <option value="STRING">STRING</option>
+                                  <option value="NUMBER">NUMBER</option>
+                                  <option value="BOOLEAN">BOOLEAN</option>
                                 </Form.Select>
                               </Col>
-                            )}
 
-                            <Col md={2}>
-                              <Button
-                                variant="outline-dark"
-                                className="w-100"
-                                onClick={() => addResult(workItem.id)}
-                                disabled={!form.key}
-                              >
-                                Save
-                              </Button>
-                            </Col>
-                          </Row>
+                              {form.value_type === "STRING" && (
+                                <Col md={4}>
+                                  <Form.Control
+                                    placeholder="Value"
+                                    value={form.value_string}
+                                    onChange={(e) =>
+                                      updateResultForm(
+                                        workItem.id,
+                                        "value_string",
+                                        e.target.value
+                                      )
+                                    }
+                                  />
+                                </Col>
+                              )}
+
+                              {form.value_type === "NUMBER" && (
+                                <Col md={4}>
+                                  <Form.Control
+                                    type="number"
+                                    placeholder="Value"
+                                    value={form.value_number}
+                                    onChange={(e) =>
+                                      updateResultForm(
+                                        workItem.id,
+                                        "value_number",
+                                        e.target.value
+                                      )
+                                    }
+                                  />
+                                </Col>
+                              )}
+
+                              {form.value_type === "BOOLEAN" && (
+                                <Col md={4}>
+                                  <Form.Select
+                                    value={form.value_boolean}
+                                    onChange={(e) =>
+                                      updateResultForm(
+                                        workItem.id,
+                                        "value_boolean",
+                                        e.target.value
+                                      )
+                                    }
+                                  >
+                                    <option value="true">True</option>
+                                    <option value="false">False</option>
+                                  </Form.Select>
+                                </Col>
+                              )}
+
+                              <Col md={2}>
+                                <Button
+                                  variant="outline-dark"
+                                  className="w-100"
+                                  onClick={() => addResult(workItem.id)}
+                                  disabled={!form.key}
+                                >
+                                  Save
+                                </Button>
+                              </Col>
+                            </Row>
                           </div>
                         )}
                       </div>
