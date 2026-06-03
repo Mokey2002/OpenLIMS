@@ -109,6 +109,12 @@ export default function Layout() {
                 </Nav.Link>
               )}
 
+              {userIsAdmin && (
+                <Nav.Link as={NavLink} to="/system-status">
+                  System Status
+                </Nav.Link>
+              )}
+
               <Nav.Link as={NavLink} to="/notifications">
                 Notifications{" "}
                 {unreadCount > 0 && <Badge bg="danger">{unreadCount}</Badge>}
