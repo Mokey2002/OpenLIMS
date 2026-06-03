@@ -17,6 +17,7 @@ import ImportDetail from "./pages/ImportDetail";
 import Sequences from "./pages/Sequences";
 import Alignments from "./pages/Alignments";
 import AdminSettings from "./pages/AdminSettings";
+import Reports from "./pages/Reports";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -46,6 +47,7 @@ export default function App() {
           <Route path="projects/:id" element={<ProjectDetail />} />
           <Route path="sequences" element={<Sequences />} />
           <Route path="alignments" element={<Alignments />} />
+          <Route path="reports" element={<Reports />} />
           <Route path="users" element={<Users />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="imports" element={<Imports />} />
