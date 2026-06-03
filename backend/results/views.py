@@ -23,17 +23,21 @@ class WorkItemViewSet(ModelViewSet):
     def get_queryset(self):
         queryset = (
             WorkItem.objects
-            .select_related("sample", "reviewed_by")
+            .select_related("sample", "sample__project", "reviewed_by")
             .prefetch_related("results")
             .all()
             .order_by("-created_at")
         )
 
         sample_id = self.request.query_params.get("sample")
+        project_id = self.request.query_params.get("project")
         qc_status = self.request.query_params.get("qc_status")
 
         if sample_id:
             queryset = queryset.filter(sample_id=sample_id)
+
+        if project_id:
+            queryset = queryset.filter(sample__project_id=project_id)
 
         if qc_status:
             queryset = queryset.filter(qc_status=qc_status)
@@ -53,8 +57,16 @@ class WorkItemViewSet(ModelViewSet):
         before = {
             "qc_status": work_item.qc_status,
             "review_note": work_item.review_note,
-            "reviewed_by": work_item.reviewed_by.username if work_item.reviewed_by else None,
-            "reviewed_at": work_item.reviewed_at.isoformat() if work_item.reviewed_at else None,
+            "reviewed_by": (
+                work_item.reviewed_by.username
+                if work_item.reviewed_by
+                else None
+            ),
+            "reviewed_at": (
+                work_item.reviewed_at.isoformat()
+                if work_item.reviewed_at
+                else None
+            ),
         }
 
         work_item.qc_status = new_qc_status
@@ -74,7 +86,11 @@ class WorkItemViewSet(ModelViewSet):
             "qc_status": work_item.qc_status,
             "review_note": work_item.review_note,
             "reviewed_by": request.user.username,
-            "reviewed_at": work_item.reviewed_at.isoformat() if work_item.reviewed_at else None,
+            "reviewed_at": (
+                work_item.reviewed_at.isoformat()
+                if work_item.reviewed_at
+                else None
+            ),
         }
 
         action_name = "QC_REVIEW_UPDATED"
@@ -97,10 +113,22 @@ class WorkItemViewSet(ModelViewSet):
                 "work_item_id": work_item.id,
                 "work_item_name": work_item.name,
                 "sample_id": work_item.sample_id,
-                "sample_code": work_item.sample.sample_id if work_item.sample else None,
+                "sample_code": (
+                    work_item.sample.sample_id if work_item.sample else None
+                ),
+                "project_id": (
+                    work_item.sample.project_id
+                    if work_item.sample
+                    else None
+                ),
                 "before": before,
                 "after": after,
-                "changed_fields": ["qc_status", "review_note", "reviewed_by", "reviewed_at"],
+                "changed_fields": [
+                    "qc_status",
+                    "review_note",
+                    "reviewed_by",
+                    "reviewed_at",
+                ],
             },
         )
 
@@ -113,7 +141,14 @@ class WorkItemViewSet(ModelViewSet):
                 "work_item_id": work_item.id,
                 "work_item_name": work_item.name,
                 "sample_id": work_item.sample_id,
-                "sample_code": work_item.sample.sample_id if work_item.sample else None,
+                "sample_code": (
+                    work_item.sample.sample_id if work_item.sample else None
+                ),
+                "project_id": (
+                    work_item.sample.project_id
+                    if work_item.sample
+                    else None
+                ),
                 "qc_status": new_qc_status,
                 "review_note": review_note,
             },
@@ -128,11 +163,25 @@ class ResultViewSet(ModelViewSet):
     serializer_class = ResultSerializer
 
     def get_queryset(self):
-        queryset = Result.objects.all().order_by("-created_at")
+        queryset = (
+            Result.objects
+            .select_related("work_item", "work_item__sample")
+            .all()
+            .order_by("-created_at")
+        )
+
         work_item_id = self.request.query_params.get("work_item")
+        sample_id = self.request.query_params.get("sample")
+        project_id = self.request.query_params.get("project")
 
         if work_item_id:
             queryset = queryset.filter(work_item_id=work_item_id)
+
+        if sample_id:
+            queryset = queryset.filter(work_item__sample_id=sample_id)
+
+        if project_id:
+            queryset = queryset.filter(work_item__sample__project_id=project_id)
 
         return queryset
 
@@ -142,10 +191,20 @@ class SampleAttachmentViewSet(ModelViewSet):
     serializer_class = SampleAttachmentSerializer
 
     def get_queryset(self):
-        queryset = SampleAttachment.objects.all().order_by("-uploaded_at")
+        queryset = (
+            SampleAttachment.objects
+            .select_related("sample")
+            .all()
+            .order_by("-uploaded_at")
+        )
+
         sample_id = self.request.query_params.get("sample")
+        project_id = self.request.query_params.get("project")
 
         if sample_id:
             queryset = queryset.filter(sample_id=sample_id)
+
+        if project_id:
+            queryset = queryset.filter(sample__project_id=project_id)
 
         return queryset
