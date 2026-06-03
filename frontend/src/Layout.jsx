@@ -83,6 +83,14 @@ export default function Layout() {
                 Sequences
               </Nav.Link>
 
+              <Nav.Link as={NavLink} to="/alignments">
+                Alignments
+              </Nav.Link>
+
+              <Nav.Link as={NavLink} to="/reports">
+                Reports
+              </Nav.Link>
+
               {userIsAdmin && (
                 <Nav.Link as={NavLink} to="/users">
                   Users
@@ -94,15 +102,13 @@ export default function Layout() {
                   Imports
                 </Nav.Link>
               )}
+
               {userIsAdmin && (
                 <Nav.Link as={NavLink} to="/settings">
                   Settings
                 </Nav.Link>
               )}
-              
-              <Nav.Link as={NavLink} to="/alignments">
-                Alignments
-              </Nav.Link>
+
               <Nav.Link as={NavLink} to="/notifications">
                 Notifications{" "}
                 {unreadCount > 0 && <Badge bg="danger">{unreadCount}</Badge>}
