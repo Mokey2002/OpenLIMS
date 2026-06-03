@@ -1,3 +1,6 @@
+import csv
+
+from django.http import HttpResponse
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -5,7 +8,6 @@ from rest_framework import status
 
 from .models import Sample, SingleSampleAttachment
 from .serializers import SampleSerializer, SingleSampleAttachmentSerializer
-from .workflows_serializers import SampleTransitionSerializer
 from .workflows import get_allowed_transitions
 
 from custom_fields.models import FieldValue
@@ -18,15 +20,21 @@ class SampleViewSet(ModelViewSet):
     serializer_class = SampleSerializer
 
     def get_queryset(self):
-        queryset = Sample.objects.select_related(
-            "project",
-            "container",
-            "container__location",
-        ).all().order_by("-created_at")
+        queryset = (
+            Sample.objects
+            .select_related(
+                "project",
+                "container",
+                "container__location",
+            )
+            .all()
+            .order_by("-created_at")
+        )
 
         search = self.request.query_params.get("search")
         status_filter = self.request.query_params.get("status")
         project = self.request.query_params.get("project")
+        container = self.request.query_params.get("container")
 
         if search:
             queryset = queryset.filter(sample_id__icontains=search)
@@ -37,8 +45,11 @@ class SampleViewSet(ModelViewSet):
         if project:
             queryset = queryset.filter(project_id=project)
 
+        if container:
+            queryset = queryset.filter(container_id=container)
+
         return queryset
-    
+
     def perform_update(self, serializer):
         sample = self.get_object()
 
@@ -111,13 +122,12 @@ class SampleViewSet(ModelViewSet):
     @action(detail=True, methods=["get"], url_path="allowed-transitions")
     def allowed_transitions(self, request, pk=None):
         sample = self.get_object()
+
         return Response({
             "sample_id": sample.id,
             "current_status": sample.status,
             "allowed_transitions": get_allowed_transitions(sample.status),
         })
-
-
 
     @action(detail=True, methods=["post"], url_path="transition")
     def transition(self, request, pk=None):
@@ -130,21 +140,15 @@ class SampleViewSet(ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        allowed_transitions = {
-            "RECEIVED": ["IN_PROGRESS"],
-            "IN_PROGRESS": ["QC"],
-            "QC": ["REPORTED", "IN_PROGRESS"],
-            "REPORTED": ["ARCHIVED"],
-            "ARCHIVED": [],
-        }
-
         current_status = sample.status
-        allowed = allowed_transitions.get(current_status, [])
+        allowed = get_allowed_transitions(current_status)
 
         if new_status not in allowed:
             return Response(
                 {
-                    "detail": f"Invalid transition from {current_status} to {new_status}.",
+                    "detail": (
+                        f"Invalid transition from {current_status} to {new_status}."
+                    ),
                     "current_status": current_status,
                     "allowed_transitions": allowed,
                 },
@@ -186,7 +190,9 @@ class SampleViewSet(ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         sample = self.get_object()
         old_container_id = sample.container_id
-        old_container_code = sample.container.container_id if sample.container else None
+        old_container_code = (
+            sample.container.container_id if sample.container else None
+        )
 
         response = super().partial_update(request, *args, **kwargs)
 
@@ -204,8 +210,16 @@ class SampleViewSet(ModelViewSet):
                     "old_container_id": old_container_id,
                     "old_container_code": old_container_code,
                     "new_container_id": sample.container_id,
-                    "new_container_code": sample.container.container_id if sample.container else None,
-                    "location_name": sample.container.location.name if sample.container and sample.container.location else None,
+                    "new_container_code": (
+                        sample.container.container_id
+                        if sample.container
+                        else None
+                    ),
+                    "location_name": (
+                        sample.container.location.name
+                        if sample.container and sample.container.location
+                        else None
+                    ),
                 },
             )
 
@@ -216,6 +230,7 @@ class SampleViewSet(ModelViewSet):
         ids = request.data.get("ids", [])
         new_status = request.data.get("status", None)
         new_project = request.data.get("project", None)
+        new_container = request.data.get("container", None)
 
         if not ids:
             return Response(
@@ -223,92 +238,178 @@ class SampleViewSet(ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if new_status is None and new_project is None:
+        if new_status is None and new_project is None and new_container is None:
             return Response(
-                {"detail": "Nothing to update. Provide status and/or project."},
+                {
+                    "detail": (
+                        "Nothing to update. Provide status, project, "
+                        "and/or container."
+                    )
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        samples = Sample.objects.select_related("project").filter(id__in=ids)
+        samples = (
+            Sample.objects
+            .select_related("project", "container", "container__location")
+            .filter(id__in=ids)
+        )
 
         updated_count = 0
         skipped = []
         updated_ids = []
 
         for sample in samples:
-            changed = False
+            before = {
+                "status": sample.status,
+                "project_id": sample.project_id,
+                "container_id": sample.container_id,
+            }
 
-            # workflow-aware status transition
+            changed_fields = []
+
             if new_status is not None:
-                allowed = get_allowed_transitions(sample.status)
-                if new_status in allowed:
-                    old_status = sample.status
-                    sample.status = new_status
-                    changed = True
+                if new_status == sample.status:
+                    pass
+                else:
+                    allowed = get_allowed_transitions(sample.status)
 
-                    Event.objects.create(
-                        entity_type="Sample",
-                        entity_id=str(sample.id),
-                        action="STATUS_CHANGED",
-                        actor=request.user,
-                        payload={
-                            "sample_id": sample.id,
-                            "sample_code": sample.sample_id,
-                            "old_status": old_status,
-                            "new_status": new_status,
-                            "bulk": True,
-                        },
-                    )
-                elif sample.status != new_status:
-                    skipped.append({
-                        "id": sample.id,
-                        "sample_id": sample.sample_id,
-                        "reason": f"Invalid workflow transition from {sample.status} to {new_status}",
-                    })
+                    if new_status in allowed:
+                        sample.status = new_status
+                        changed_fields.append("status")
+                    else:
+                        skipped.append({
+                            "id": sample.id,
+                            "sample_id": sample.sample_id,
+                            "reason": (
+                                f"Invalid workflow transition from "
+                                f"{sample.status} to {new_status}"
+                            ),
+                        })
 
-            # project assignment
-            if new_project is not None and sample.project_id != new_project:
-                old_project = sample.project.code if sample.project else None
-                sample.project_id = new_project
-                changed = True
+            if new_project is not None:
+                normalized_project = new_project or None
+
+                if sample.project_id != normalized_project:
+                    sample.project_id = normalized_project
+                    changed_fields.append("project_id")
+
+            if new_container is not None:
+                normalized_container = new_container or None
+
+                if sample.container_id != normalized_container:
+                    sample.container_id = normalized_container
+                    changed_fields.append("container_id")
+
+            if changed_fields:
+                sample.save()
+
+                after = {
+                    "status": sample.status,
+                    "project_id": sample.project_id,
+                    "container_id": sample.container_id,
+                }
+
+                updated_count += 1
+                updated_ids.append(sample.id)
 
                 Event.objects.create(
                     entity_type="Sample",
                     entity_id=str(sample.id),
-                    action="PROJECT_ASSIGNED",
-                    actor=request.user,
+                    action="BULK_SAMPLE_UPDATED",
+                    actor=request.user if request.user.is_authenticated else None,
                     payload={
                         "sample_id": sample.id,
                         "sample_code": sample.sample_id,
-                        "old_project": old_project,
-                        "new_project_id": new_project,
+                        "before": before,
+                        "after": after,
+                        "changed_fields": changed_fields,
                         "bulk": True,
                     },
                 )
-
-            if changed:
-                sample.save()
-                updated_count += 1
-                updated_ids.append(sample.id)
 
         return Response({
             "updated": updated_count,
             "updated_ids": updated_ids,
             "skipped": skipped,
         })
+
+    @action(detail=False, methods=["post"], url_path="export-selected")
+    def export_selected(self, request):
+        ids = request.data.get("ids", [])
+
+        if not ids:
+            return Response(
+                {"detail": "No sample IDs provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        samples = (
+            Sample.objects
+            .select_related("project", "container", "container__location")
+            .filter(id__in=ids)
+            .order_by("sample_id")
+        )
+
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = (
+            'attachment; filename="openlims-selected-samples.csv"'
+        )
+
+        writer = csv.writer(response)
+        writer.writerow([
+            "id",
+            "sample_id",
+            "status",
+            "project_code",
+            "project_name",
+            "container_code",
+            "location_name",
+            "created_at",
+        ])
+
+        for sample in samples:
+            writer.writerow([
+                sample.id,
+                sample.sample_id,
+                sample.status,
+                sample.project.code if sample.project else "",
+                sample.project.name if sample.project else "",
+                sample.container.container_id if sample.container else "",
+                (
+                    sample.container.location.name
+                    if sample.container and sample.container.location
+                    else ""
+                ),
+                sample.created_at.isoformat() if sample.created_at else "",
+            ])
+
+        return response
+
+
 class SingleSampleAttachmentViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
     serializer_class = SingleSampleAttachmentSerializer
 
     def get_queryset(self):
-        queryset = SingleSampleAttachment.objects.select_related(
-            "sample",
-            "uploaded_by",
-        ).all().order_by("-uploaded_at")
+        queryset = (
+            SingleSampleAttachment.objects
+            .select_related(
+                "sample",
+                "uploaded_by",
+            )
+            .all()
+            .order_by("-uploaded_at")
+        )
 
         sample_id = self.request.query_params.get("sample")
+        project_id = self.request.query_params.get("project")
+
         if sample_id:
             queryset = queryset.filter(sample_id=sample_id)
+
+        if project_id:
+            queryset = queryset.filter(sample__project_id=project_id)
 
         return queryset
 
