@@ -4,9 +4,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APITestCase
 from rest_framework import status
 
-from projects.models import Project
-from samples.models import Sample
 from imports.models import InstrumentProfile
+from projects.models import Project
+from results.models import WorkItem
+from samples.models import Sample
 from sequences.models import Sequence
 
 
@@ -58,6 +59,7 @@ class BackendPermissionTests(APITestCase):
             name="Permission Test Project",
             description="Project used for backend permission tests.",
         )
+        self.project.members.set([self.admin, self.tech, self.viewer])
 
         self.sample = Sample.objects.create(
             sample_id="S-TEST-001",
@@ -83,8 +85,32 @@ class BackendPermissionTests(APITestCase):
             created_by=self.tech,
         )
 
+        self.sequence_2 = Sequence.objects.create(
+            name="Test Sequence 2",
+            description="Second permission test sequence.",
+            sequence_type="DNA",
+            sequence="ATGCGTACCGTAGGCTT",
+            project=self.project,
+            sample=self.sample,
+            created_by=self.tech,
+        )
+
+        self.work_item = WorkItem.objects.create(
+            sample=self.sample,
+            name="Permission QC Work Item",
+            status="COMPLETED",
+            qc_status=WorkItem.QC_PENDING_REVIEW,
+        )
+
     def auth_as(self, user):
         self.client.force_authenticate(user=user)
+
+    def test_viewer_can_read_samples(self):
+        self.auth_as(self.viewer)
+
+        response = self.client.get("/api/samples/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_viewer_cannot_create_sample(self):
         self.auth_as(self.viewer)
@@ -95,6 +121,33 @@ class BackendPermissionTests(APITestCase):
                 "sample_id": "S-VIEWER-BLOCKED",
                 "status": "RECEIVED",
                 "project": self.project.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_viewer_cannot_update_sample(self):
+        self.auth_as(self.viewer)
+
+        response = self.client.patch(
+            f"/api/samples/{self.sample.id}/",
+            {
+                "status": "IN_PROGRESS",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_viewer_cannot_bulk_update_samples(self):
+        self.auth_as(self.viewer)
+
+        response = self.client.post(
+            "/api/samples/bulk-update/",
+            {
+                "ids": [self.sample.id],
+                "status": "IN_PROGRESS",
             },
             format="json",
         )
@@ -118,6 +171,23 @@ class BackendPermissionTests(APITestCase):
             response.status_code,
             [status.HTTP_201_CREATED, status.HTTP_200_OK],
         )
+
+    def test_tech_can_bulk_update_samples(self):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            "/api/samples/bulk-update/",
+            {
+                "ids": [self.sample.id],
+                "status": "IN_PROGRESS",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.sample.refresh_from_db()
+        self.assertEqual(self.sample.status, "IN_PROGRESS")
 
     def test_viewer_cannot_create_sequence(self):
         self.auth_as(self.viewer)
@@ -167,6 +237,38 @@ class BackendPermissionTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_viewer_cannot_qc_review_work_item(self):
+        self.auth_as(self.viewer)
+
+        response = self.client.post(
+            f"/api/work-items/{self.work_item.id}/qc-review/",
+            {
+                "qc_status": "APPROVED",
+                "review_note": "Viewer should not approve QC.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_tech_can_qc_review_work_item(self):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            f"/api/work-items/{self.work_item.id}/qc-review/",
+            {
+                "qc_status": "APPROVED",
+                "review_note": "Tech approval is allowed.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.work_item.refresh_from_db()
+        self.assertEqual(self.work_item.qc_status, WorkItem.QC_APPROVED)
+        self.assertEqual(self.work_item.reviewed_by, self.tech)
 
     def test_viewer_cannot_run_fasta_preview(self):
         self.auth_as(self.viewer)
@@ -233,6 +335,63 @@ class BackendPermissionTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_viewer_cannot_create_import_job(self):
+        self.auth_as(self.viewer)
+
+        upload = SimpleUploadedFile(
+            "viewer-blocked.csv",
+            b"sample_id,result\nS-TEST-001,pass\n",
+            content_type="text/csv",
+        )
+
+        response = self.client.post(
+            "/api/import-jobs/",
+            {
+                "instrument": self.instrument.id,
+                "project": self.project.id,
+                "source_type": "UPLOAD",
+                "uploaded_file": upload,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_viewer_cannot_create_alignment_job(self):
+        self.auth_as(self.viewer)
+
+        response = self.client.post(
+            "/api/alignment-jobs/",
+            {
+                "name": "Viewer Blocked Alignment",
+                "project": self.project.id,
+                "tool": "CLUSTAL_OMEGA",
+                "sequence_ids": [self.sequence.id, self.sequence_2.id],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_tech_can_create_alignment_job(self):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            "/api/alignment-jobs/",
+            {
+                "name": "Tech Alignment",
+                "project": self.project.id,
+                "tool": "CLUSTAL_OMEGA",
+                "sequence_ids": [self.sequence.id, self.sequence_2.id],
+            },
+            format="json",
+        )
+
+        self.assertIn(
+            response.status_code,
+            [status.HTTP_201_CREATED, status.HTTP_202_ACCEPTED],
+        )
+
     def test_admin_can_access_admin_users(self):
         self.auth_as(self.admin)
 
@@ -251,5 +410,47 @@ class BackendPermissionTests(APITestCase):
         self.auth_as(self.viewer)
 
         response = self.client.get("/api/admin-users/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_can_create_user(self):
+        self.auth_as(self.admin)
+
+        response = self.client.post(
+            "/api/admin-users/",
+            {
+                "username": "created_by_admin",
+                "email": "created_by_admin@example.com",
+                "password": "Password123!",
+                "role": "viewer",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_tech_cannot_change_system_settings(self):
+        self.auth_as(self.tech)
+
+        response = self.client.patch(
+            "/api/system-settings/1/",
+            {
+                "lab_name": "Tech Should Not Change This",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_viewer_cannot_change_system_settings(self):
+        self.auth_as(self.viewer)
+
+        response = self.client.patch(
+            "/api/system-settings/1/",
+            {
+                "lab_name": "Viewer Should Not Change This",
+            },
+            format="json",
+        )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
