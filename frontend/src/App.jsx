@@ -19,7 +19,7 @@ import Alignments from "./pages/Alignments";
 import AdminSettings from "./pages/AdminSettings";
 import Reports from "./pages/Reports";
 import SystemStatus from "./pages/SystemStatus";
-
+import Search from "./pages/Search";
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
 }
@@ -55,6 +55,7 @@ export default function App() {
           <Route path="imports" element={<Imports />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="imports/:id" element={<ImportDetail />} />
+          <Route path="search" element={<Search />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

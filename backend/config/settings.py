@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'sequences',
     'alignments',
     'settings_app',
+    'django.contrib.postgres',
 ]
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
