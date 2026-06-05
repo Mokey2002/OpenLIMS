@@ -64,7 +64,7 @@ export default function SystemStatus() {
       let healthData = null;
 
       try {
-        const response = await fetch("/health/");
+        const response = await fetch("api/health/");
         healthData = await response.json();
       } catch (e) {
         healthData = {
