@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Container, Nav, Navbar, Button, Spinner, Badge } from "react-bootstrap";
+import {
+  Container,
+  Nav,
+  Navbar,
+  Button,
+  Spinner,
+  Badge,
+  Form,
+} from "react-bootstrap";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearTokens } from "./auth";
 import { apiGet } from "./api";
@@ -7,9 +15,11 @@ import { isAdmin, isTech } from "./authz";
 
 export default function Layout() {
   const nav = useNavigate();
+
   const [me, setMe] = useState(null);
   const [loadingMe, setLoadingMe] = useState(true);
   const [notifications, setNotifications] = useState([]);
+  const [globalSearch, setGlobalSearch] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -33,6 +43,17 @@ export default function Layout() {
   function logout() {
     clearTokens();
     nav("/login");
+  }
+
+  function submitGlobalSearch(e) {
+    e.preventDefault();
+
+    const q = globalSearch.trim();
+
+    if (!q) return;
+
+    nav(`/search?q=${encodeURIComponent(q)}`);
+    setGlobalSearch("");
   }
 
   const unreadCount = useMemo(
@@ -120,6 +141,16 @@ export default function Layout() {
                 {unreadCount > 0 && <Badge bg="danger">{unreadCount}</Badge>}
               </Nav.Link>
             </Nav>
+
+            <Form className="d-flex me-3 my-2 my-lg-0" onSubmit={submitGlobalSearch}>
+              <Form.Control
+                size="sm"
+                value={globalSearch}
+                onChange={(e) => setGlobalSearch(e.target.value)}
+                placeholder="Search..."
+                style={{ width: "220px" }}
+              />
+            </Form>
 
             <div className="d-flex align-items-center gap-3">
               {loadingMe ? (

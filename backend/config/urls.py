@@ -14,7 +14,7 @@ from django.urls import include, path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from core.views import MeView, OpenLIMSTokenObtainPairView
-
+from core.search_views import GlobalSearchView
 
 def health(request):
     checks = {
@@ -98,6 +98,7 @@ urlpatterns = [
         name="token_refresh",
     ),
     path("api/me/", MeView.as_view(), name="me"),
+    path("api/search/", GlobalSearchView.as_view(), name="global-search"),
 ]
 
 
