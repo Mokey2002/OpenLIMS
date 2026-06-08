@@ -11,6 +11,7 @@ from notifications.views import NotificationViewSet
 from sequences.views import SequenceViewSet
 from alignments.views import AlignmentJobViewSet
 from settings_app.views import SystemSettingsViewSet
+from blast.views import BlastDatabaseViewSet, BlastJobViewSet
 
 router = DefaultRouter()
 router.register(r"samples", SampleViewSet, basename="sample")
@@ -34,4 +35,6 @@ router.register(r"notifications",NotificationViewSet, basename="notification")
 router.register(r"sequences", SequenceViewSet, basename="sequence")
 router.register(r"alignment-jobs", AlignmentJobViewSet, basename="alignment-job")
 router.register(r"system-settings", SystemSettingsViewSet, basename="system-settings")
+router.register(r"blast-databases", BlastDatabaseViewSet, basename="blast-database")
+router.register(r"blast-jobs", BlastJobViewSet, basename="blast-job")
 urlpatterns = router.urls

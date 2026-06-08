@@ -107,6 +107,9 @@ export default function Layout() {
               <Nav.Link as={NavLink} to="/alignments">
                 Alignments
               </Nav.Link>
+              <Nav.Link as={NavLink} to="/blast">
+              BLAST
+            </Nav.Link>
 
               <Nav.Link as={NavLink} to="/reports">
                 Reports
