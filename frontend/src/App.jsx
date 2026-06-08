@@ -20,6 +20,7 @@ import AdminSettings from "./pages/AdminSettings";
 import Reports from "./pages/Reports";
 import SystemStatus from "./pages/SystemStatus";
 import Search from "./pages/Search";
+import Blast from "./pages/Blast";
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
 }
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="notifications" element={<Notifications />} />
           <Route path="imports/:id" element={<ImportDetail />} />
           <Route path="search" element={<Search />} />
+          <Route path="blast" element={<Blast />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-
+from django.core.files.base import ContentFile
 from inventory.models import Location, Container
 from samples.models import Sample
 from results.models import WorkItem, Result
@@ -10,10 +10,84 @@ from events.models import Event
 from notifications.models import Notification
 from sequences.models import Sequence, SequenceFeature
 from projects.models import Project, ProjectPost
-
+from blast.models import BlastDatabase
+from blast.services import build_blast_database
 
 User = get_user_model()
+def seed_blast_demo(project, sample, director):
+    demo_query_sequence = (
+        "ATGCGTACCGTAGGCTAACCGGTTACCGGATCGATCGTACGTAGCTAGCTAGGCTA"
+    )
 
+    demo_reference_fasta = """>BLAST_REF_ALPHA perfect_match_alpha
+ATGCGTACCGTAGGCTAACCGGTTACCGGATCGATCGTACGTAGCTAGCTAGGCTA
+>BLAST_REF_BETA near_match_beta
+ATGCGTACCGTAGGCTAACCGGTTACCGGATCGATCGTACGTAGCTAGCTAGGCTT
+>BLAST_REF_GAMMA distant_match_gamma
+TTTTGTACCGTAGGCTAACCGGTTACCGGATCGATCGTACGTAGCTAGCTAGGCTA
+"""
+
+    sequence, _ = Sequence.objects.update_or_create(
+        name="BLAST Demo Query",
+        project=project,
+        defaults={
+            "description": (
+                "Seeded DNA query sequence designed to match the demo BLAST database."
+            ),
+            "sequence_type": "DNA",
+            "sequence": demo_query_sequence,
+            "sample": sample,
+            "source_type": "MANUAL",
+            "source_metadata": {
+                "demo": True,
+                "purpose": "blast_demo_query",
+            },
+            "created_by": director,
+        },
+    )
+
+    blast_db, _ = BlastDatabase.objects.update_or_create(
+        name="Demo DNA BLAST DB",
+        defaults={
+            "description": "Seeded local DNA BLAST database for demo searches.",
+            "database_type": BlastDatabase.DATABASE_TYPE_DNA,
+            "created_by": director,
+            "status": BlastDatabase.STATUS_NEW,
+            "error_message": "",
+        },
+    )
+
+    blast_db.source_fasta.save(
+        "demo_dna_blast_db.fasta",
+        ContentFile(demo_reference_fasta.encode("utf-8")),
+        save=True,
+    )
+
+    try:
+        build_blast_database(blast_db, actor=director)
+    except Exception as exc:
+        blast_db.status = BlastDatabase.STATUS_FAILED
+        blast_db.error_message = str(exc)
+        blast_db.save(update_fields=["status", "error_message", "updated_at"])
+
+    Event.objects.get_or_create(
+        entity_type="BlastDatabase",
+        entity_id=str(blast_db.id),
+        action="BLAST_DEMO_DATABASE_SEEDED",
+        defaults={
+            "actor": director,
+            "payload": {
+                "blast_database_id": blast_db.id,
+                "name": blast_db.name,
+                "database_type": blast_db.database_type,
+                "status": blast_db.status,
+                "query_sequence_id": sequence.id,
+                "query_sequence_name": sequence.name,
+            },
+        },
+    )
+
+    return sequence, blast_db
 
 def field_exists(model, field_name):
     return any(field.name == field_name for field in model._meta.fields)
@@ -944,6 +1018,14 @@ class Command(BaseCommand):
                     },
                 },
             )
+        # --------------------------------------------------
+        # Demo BLAST database + query sequence
+        # --------------------------------------------------
+        seed_blast_demo(
+            project=project_alpha,
+            sample=sample_by_code.get("S-ALPHA-001"),
+            director=director,
+        )
 
         # --------------------------------------------------
         # Demo project feed posts
