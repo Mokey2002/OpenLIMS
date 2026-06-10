@@ -1,6 +1,6 @@
 # 🧪 OpenLIMS
 
-OpenLIMS is a lightweight, modular, production-style **Laboratory Information Management System (LIMS)** designed to support real lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence workspaces, audit trails, notifications, result analysis, and alignment workflows.
+**OpenLIMS** is a lightweight, modular, production-style Laboratory Information Management System (LIMS) designed to support real lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence workspaces, Clustal Omega alignments, local BLAST search, audit trails, notifications, reporting, and system health monitoring.
 
 OpenLIMS is currently a **production-style prototype**, not a fully validated clinical or regulated production LIMS. The goal is to provide a practical, configurable, easy-to-deploy foundation for laboratory workflow software.
 
@@ -16,13 +16,33 @@ http://16.146.193.92
 
 ### Demo Users
 
-```text
-director / Director123!   Admin/director access
-peter    / peter123       Lab tech access
-maria    / maria123       Lab tech access
-michael  / michael123     Lab tech access
-viewer   / viewer123      Read-only access
-```
+| User | Password | Role |
+|---|---|---|
+| `director` | `Director123!` | Admin / director access |
+| `peter` | `peter123` | Lab tech access |
+| `maria` | `maria123` | Lab tech access |
+| `michael` | `michael123` | Lab tech access |
+| `viewer` | `viewer123` | Read-only access |
+
+---
+
+## 🚀 Current Release
+
+**OpenLIMS v0.8.0 — BLAST Search**
+
+This release adds a local BLAST search workflow and integrates BLAST into the broader OpenLIMS platform.
+
+### v0.8.0 Highlights
+
+- Local BLAST database upload and build workflow
+- BLAST+ integration with `makeblastdb`, `blastn`, and `blastp`
+- Async BLAST jobs through Celery and Redis
+- BLAST hit parsing and result display
+- Seeded demo BLAST database and query sequence
+- BLAST checks in System Status
+- BLAST records in Global Search
+- BLAST summaries and CSV export in Reports
+- BLAST backend permission tests
 
 ---
 
@@ -40,25 +60,23 @@ Current roles:
 | `tech` | Lab workflow access |
 | `viewer` | Read-only access |
 
-Director/admin users can manage users, system settings, instrument profiles, imports, samples, sequences, projects, and audit workflows.
+Director/admin users can manage users, system settings, instrument profiles, imports, samples, sequences, projects, audit workflows, reports, and system health tools.
 
-Tech users can perform lab workflow actions such as updating samples, running imports, managing sequence workspaces, and queueing alignments.
+Tech users can perform lab workflow actions such as updating samples, running imports, managing sequence workspaces, queueing alignments, and running BLAST searches.
 
-Viewer users can inspect dashboards, samples, projects, audit events, imports, sequences, and alignments without write access.
+Viewer users can inspect dashboards, samples, projects, audit events, imports, sequences, alignments, BLAST results, and reports without write access.
 
 ---
 
-### Sample Management
+## 🧫 Sample Management
 
 OpenLIMS supports sample lifecycle tracking with statuses such as:
 
-```text
-RECEIVED
-IN_PROGRESS
-QC
-REPORTED
-ARCHIVED
-```
+- `RECEIVED`
+- `IN_PROGRESS`
+- `QC`
+- `REPORTED`
+- `ARCHIVED`
 
 Users can:
 
@@ -71,7 +89,7 @@ Users can:
 
 ---
 
-### Project Management
+## 📁 Project Management
 
 Projects act as shared workspaces for lab teams.
 
@@ -81,14 +99,12 @@ Users can:
 - Assign users to projects
 - Restrict visibility by project membership
 - Add project notes/feed posts
-- Link samples, imports, sequences, and alignments to a project
+- Link samples, imports, sequences, alignments, and BLAST jobs to projects
 - Notify project members when updates are posted
-
-Demo project feed data includes multiple users posting on the same project, such as director, Peter, Maria, Michael, and viewer accounts.
 
 ---
 
-### Inventory Management
+## 🧊 Inventory Management
 
 OpenLIMS supports basic lab inventory organization:
 
@@ -119,11 +135,12 @@ Users can:
 - Store sequence metadata
 - View sequence features such as annotations, primers, translations, and highlights
 - Import FASTA records into sequence workspaces
+- Use sequence records as inputs for Clustal Omega alignments and BLAST searches
 
 Sequence workspaces are designed to support workflows like:
 
 ```text
-Sample → FASTA import → Sequence workspace → Alignment job → Audit event
+Sample → FASTA import → Sequence workspace → Alignment job → BLAST search → Audit event
 ```
 
 ---
@@ -146,13 +163,7 @@ Confirm import
 Create sequence workspaces
 ```
 
-The preview step helps prevent accidental bad imports by showing:
-
-- Records found
-- Matched samples
-- Unmatched samples
-- Records that will create sequence workspaces
-- Skipped records
+The preview step helps prevent accidental bad imports by showing records found, matched samples, unmatched samples, records that will create sequence workspaces, and skipped records.
 
 ---
 
@@ -163,36 +174,15 @@ OpenLIMS supports two ingestion workflows:
 1. CSV upload through the UI
 2. Direct instrument/API push
 
-Instrument profiles define how incoming data should be interpreted.
+Instrument profiles define how incoming data should be interpreted. Each instrument profile can define an instrument name, instrument code, delimiter, sample ID column, column mappings, numeric min/max validation, and allowed values.
 
-Each instrument profile can define:
-
-- Instrument name
-- Instrument code
-- Delimiter
-- Sample ID column
-- Column mappings
-- Numeric min/max validation
-- Allowed values
-
-Demo instrument profiles include:
-
-- NovaFlex Analyzer
-- Illumina MiSeq Sequencer
-- Applied Biosystems 3500 Sanger Sequencer
-- Charles River Endosafe Nexus
-- Molecular Devices SpectraMax Plate Reader
-- Applied Biosystems 7500 qPCR System
-- Thermo Fisher NanoDrop One
-- Agilent 2100 Bioanalyzer
-- Hamilton STAR Liquid Handler
-- Generic FASTA Sequencer
+Demo instrument profiles include NovaFlex Analyzer, Illumina MiSeq Sequencer, Applied Biosystems 3500 Sanger Sequencer, Charles River Endosafe Nexus, Molecular Devices SpectraMax Plate Reader, Applied Biosystems 7500 qPCR System, Thermo Fisher NanoDrop One, Agilent 2100 Bioanalyzer, Hamilton STAR Liquid Handler, and Generic FASTA Sequencer.
 
 ---
 
 ## ⚙️ Async Import Processing
 
-CSV imports are processed asynchronously using **Celery** and **Redis**.
+CSV imports are processed asynchronously using Celery and Redis.
 
 ```text
 User uploads CSV
@@ -210,88 +200,102 @@ Worker creates samples, work items, and results
 Worker marks job COMPLETED or FAILED
 ```
 
-Import jobs track:
-
-- Status
-- Source type
-- Run ID
-- Progress current
-- Progress total
-- Progress message
-- Rows processed
-- Samples created
-- Samples matched
-- Results created
-- Skipped rows
-- Linked samples
-
-Supported status flow:
-
-```text
-PENDING → RUNNING → COMPLETED
-                  ↘ FAILED
-```
+Import jobs track status, source type, run ID, progress, rows processed, samples created/matched, results created, skipped rows, and linked samples.
 
 ---
 
 ## 🧬 Async Clustal Omega Alignments
 
-OpenLIMS supports sequence alignment jobs using **Clustal Omega**.
+OpenLIMS supports sequence alignment jobs using Clustal Omega. Alignment jobs run asynchronously through Celery and store input FASTA, aligned FASTA, sequence count, alignment summary, and downloadable aligned FASTA.
 
-Alignment jobs run asynchronously through Celery:
+---
 
-```text
-User selects 2+ sequence workspaces
-   ↓
-Django API creates AlignmentJob as PENDING
-   ↓
-Celery worker runs Clustal Omega
-   ↓
-Job updates to RUNNING
-   ↓
-Aligned FASTA is stored
-   ↓
-Job updates to COMPLETED or FAILED
-   ↓
-User receives notification
-```
+## 🔎 Local BLAST Search
 
-The frontend polls active jobs and shows:
+OpenLIMS includes a local BLAST workflow for sequence similarity searches.
 
-```text
-PENDING → RUNNING → COMPLETED / FAILED
-```
+Users can:
 
-Alignment results include:
+- Upload FASTA files as local BLAST databases
+- Build BLAST databases using `makeblastdb`
+- Run nucleotide BLAST searches with `blastn`
+- Run protein BLAST searches with `blastp`
+- Queue BLAST jobs asynchronously through Celery
+- View BLAST job status
+- View parsed BLAST hits
+- Inspect identity, e-value, rank, accession, and aligned regions
+- Use seeded demo data for quick testing
 
-- Input FASTA
-- Aligned FASTA
-- Sequence count
-- Alignment summary
-- Downloadable aligned FASTA
-- Color-coded alignment preview
+### BLAST Demo Workflow
+
+After running `seed_demo`, users can test BLAST with:
+
+| Field | Value |
+|---|---|
+| Query Sequence | `BLAST Demo Query` |
+| BLAST Database | `Demo DNA BLAST DB` |
+| Program | `blastn` |
+
+The seeded database includes a known matching reference so users can confirm that the BLAST workflow is working.
+
+### BLAST APIs
+
+- `GET /api/blast-databases/`
+- `POST /api/blast-databases/`
+- `POST /api/blast-databases/:id/build/`
+- `GET /api/blast-jobs/`
+- `POST /api/blast-jobs/`
+- `GET /api/blast-jobs/:id/hits/`
+
+### BLAST Integration Points
+
+BLAST is integrated into the BLAST page, System Status dashboard, Global Search, Reports page, CSV report export, backend permission tests, demo seed data, and Docker image dependencies.
 
 ---
 
 ## 📊 Analysis
 
-The analysis page supports:
+The analysis page supports selecting projects, selecting samples, choosing numeric result metrics, viewing trends over time, and exporting chart data as CSV.
 
-- Selecting projects
-- Selecting samples
-- Choosing numeric result metrics
-- Viewing trends over time
-- Exporting chart data as CSV
+This helps users inspect imported results such as concentration, purity, yield, qPCR Ct values, MiSeq Q-scores, endotoxin values, and plate reader absorbance.
 
-This helps users inspect imported results such as:
+---
 
-- Concentration
-- Purity
-- Yield
-- qPCR Ct values
-- MiSeq Q-scores
-- Endotoxin values
-- Plate reader absorbance
+## 📈 Reports
+
+OpenLIMS includes a reports page for operational summaries and CSV exports.
+
+Current report areas include:
+
+- Project summary
+- Sample inventory
+- QC review
+- Import summary
+- Alignment summary
+- BLAST summary
+- Audit activity
+
+The BLAST summary includes total BLAST databases, ready BLAST databases, total BLAST jobs, completed BLAST jobs, failed BLAST jobs, total BLAST hits, recent BLAST jobs, and BLAST CSV export.
+
+---
+
+## 🔍 Global Search
+
+OpenLIMS includes a global search endpoint and navbar search experience.
+
+Search can return samples, projects, sequences, alignments, BLAST databases, BLAST jobs, BLAST hits, import jobs, instruments, events, and users for admin users.
+
+Example searches:
+
+```text
+S-ALPHA
+GFP
+BLAST
+Demo DNA
+blastn
+BLAST_REF_ALPHA
+NovaFlex
+```
 
 ---
 
@@ -299,67 +303,15 @@ This helps users inspect imported results such as:
 
 OpenLIMS records important actions as audit events.
 
-Examples:
+Examples include sample created, sample status changed, sample container changed, attachment uploaded, results imported, import retry queued, sequence imported, alignment queued, alignment completed, BLAST database built, BLAST job completed, settings updated, and settings reset to defaults.
 
-- Sample created
-- Sample status changed
-- Sample container changed
-- Attachment uploaded
-- Results imported
-- Import retry queued
-- Sequence imported
-- Alignment queued
-- Alignment completed
-- Settings updated
-- Settings reset to defaults
-
-Audit events can include before/after values:
-
-```json
-{
-  "before": {
-    "status": "RECEIVED"
-  },
-  "after": {
-    "status": "IN_PROGRESS"
-  },
-  "changed_fields": ["status"]
-}
-```
-
-### Audit Log Export
-
-The Events page supports audit export:
-
-```text
-Export CSV
-Export JSON
-```
-
-Audit logs can be filtered by:
-
-- Entity type
-- Action
-- Actor
-- Search term
-- Date range
-
-This is one of the enterprise-style features added to support governance and traceability.
+The Events page supports audit export as CSV and JSON. Audit logs can be filtered by entity type, action, actor, search term, and date range.
 
 ---
 
 ## 🔔 Notifications
 
-OpenLIMS includes notifications for key activity:
-
-- Import completed
-- Import failed
-- Project post created
-- Sequencing review needed
-- Endotoxin review needed
-- Alignment completed
-- Alignment failed
-- Demo environment seeded
+OpenLIMS includes notifications for key activity such as import completed, import failed, project post created, sequencing review needed, endotoxin review needed, alignment completed, alignment failed, BLAST job completed, BLAST job failed, and demo environment seeded.
 
 ---
 
@@ -367,37 +319,50 @@ OpenLIMS includes notifications for key activity:
 
 OpenLIMS includes an admin/director settings page for system-level configuration.
 
-Settings include:
-
-### General Settings
-
-- Lab name
-- Organization name
-- Default timezone
-- Default sample status
-
-### Import Settings
-
-- Max upload size
-- Require import preview
-- Allowed FASTA extensions
-
-### Sequence and Alignment Settings
-
-- Enable alignment jobs
-- Max sequences per alignment
-- Max sequence length
-
-### Security Settings
-
-- Viewer read-only mode
-- Require audit reason for critical changes
+Settings include lab name, organization name, default timezone, default sample status, import settings, FASTA extension settings, sequence/alignment limits, and security settings such as viewer read-only mode and audit reason requirements.
 
 Settings changes are logged to the audit event log.
 
 ---
 
+## 🩺 System Status Dashboard
+
+OpenLIMS includes a system status dashboard and health endpoint.
+
+The health endpoint checks important runtime dependencies:
+
+- Database
+- Redis/cache
+- Clustal Omega
+- `blastn`
+- `blastp`
+- `makeblastdb`
+
+Example:
+
+```bash
+curl http://localhost:8000/api/health/
+```
+
+Example response:
+
+```json
+{
+  "status": "ok",
+  "db_ok": true,
+  "redis_ok": true,
+  "clustalo_ok": true,
+  "blastn_ok": true,
+  "blastp_ok": true,
+  "makeblastdb_ok": true
+}
+```
+
+---
+
 ## 🧱 Architecture
+
+### Application Architecture
 
 ```text
 React + Vite Frontend
@@ -405,8 +370,11 @@ React + Vite Frontend
 Django REST Framework API
    ↓
 PostgreSQL
+```
 
-Async processing:
+### Async Processing
+
+```text
 Django API
    ↓
 Redis
@@ -414,13 +382,26 @@ Redis
 Celery Worker
    ↓
 PostgreSQL
+```
 
-Alignment processing:
+### Alignment Processing
+
+```text
 Celery Worker
    ↓
 Clustal Omega
    ↓
 AlignmentJob result
+```
+
+### BLAST Processing
+
+```text
+Celery Worker
+   ↓
+NCBI BLAST+
+   ↓
+BlastJob + BlastHit results
 ```
 
 ### Production Runtime Architecture
@@ -440,10 +421,12 @@ Redis
    ↓
 Celery Worker
    ↓
-Clustal Omega
+Clustal Omega + BLAST+
 ```
 
-### Services
+---
+
+## 🧩 Services
 
 | Service | Purpose |
 |---|---|
@@ -451,8 +434,9 @@ Clustal Omega
 | Django REST Framework | API and business logic |
 | PostgreSQL | Primary database |
 | Redis | Celery broker/result backend |
-| Celery Worker | Background imports and alignments |
+| Celery Worker | Background imports, alignments, and BLAST jobs |
 | Clustal Omega | Sequence alignment engine |
+| NCBI BLAST+ | Local BLAST database and search engine |
 | Caddy | Reverse proxy and static file serving |
 | Docker Compose | Service orchestration |
 
@@ -472,8 +456,9 @@ Clustal Omega
 | `custom_fields` | Configurable fields |
 | `sequences` | Sequence workspaces and features |
 | `alignments` | Clustal Omega alignment jobs |
+| `blast` | BLAST databases, jobs, and hits |
 | `settings_app` | Admin system settings |
-| `core` | Users, roles, permissions, shared utilities |
+| `core` | Users, roles, permissions, search, shared utilities |
 
 ---
 
@@ -561,14 +546,7 @@ curl -X POST http://localhost:8000/api/import-jobs/instrument-ingest/ \
 
 ## 🔐 Authentication and Permissions
 
-OpenLIMS uses:
-
-- JWT authentication for users
-- Shared API key authentication for instrument ingestion
-- Role-based API permissions
-- Backend permission tests
-
-Current roles:
+OpenLIMS uses JWT authentication for users, shared API key authentication for instrument ingestion, role-based API permissions, and backend permission tests.
 
 | Role | Demo User | Access |
 |---|---|---|
@@ -576,7 +554,7 @@ Current roles:
 | Tech | `peter`, `maria`, `michael` | Lab workflow access |
 | Viewer | `viewer` | Read-only access |
 
-Backend tests help verify that viewer users cannot perform write actions.
+Backend tests help verify that viewer users cannot perform write actions such as creating samples, updating samples, creating sequence workspaces, running imports, creating alignment jobs, creating BLAST databases, building BLAST databases, creating BLAST jobs, changing system settings, or managing users.
 
 ---
 
@@ -644,7 +622,7 @@ docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.p
 Frontend: http://localhost:5173
 API:      http://localhost:8000
 Admin:    http://localhost:8000/admin
-Health:   http://localhost:8000/health/
+Health:   http://localhost:8000/api/health/
 ```
 
 ---
@@ -671,18 +649,7 @@ npm install
 npm run build
 ```
 
-Test coverage includes:
-
-- Instrument API ingest
-- CSV import workflow
-- Duplicate run protection
-- Import retry validation
-- FASTA import validation
-- Backend permissions
-- Project permissions
-- Sample transitions
-- Notifications
-- Alignment workflow behavior
+Test coverage includes instrument API ingest, CSV import workflow, duplicate run protection, import retry validation, FASTA import validation, backend permissions, project permissions, sample transitions, notifications, alignment workflow behavior, BLAST permission tests, and system health checks.
 
 ---
 
@@ -712,35 +679,6 @@ Build frontend
 
 ---
 
-## 🩺 Health Checks
-
-The health endpoint checks important runtime dependencies:
-
-```text
-Database
-Redis/cache
-Clustal Omega
-```
-
-Example:
-
-```bash
-curl http://localhost:8000/health/
-```
-
-Example response:
-
-```json
-{
-  "status": "ok",
-  "db_ok": true,
-  "redis_ok": true,
-  "clustalo_ok": true
-}
-```
-
----
-
 ## 📦 Database Backup
 
 Create backup:
@@ -755,21 +693,28 @@ Restore backup:
 cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.prod.yml exec -T db psql -U openlims openlims
 ```
 
+---
 
 ## 🏢 Enterprise Feature Roadmap
-
-These are the enterprise-style OpenLIMS features being implemented in order:
 
 | # | Feature | Status |
 |---|---|---|
 | 1 | Admin Settings page | ✅ Added |
 | 2 | Audit log export | ✅ Added |
-| 3 | User management improvements | In progress |
-| 4 | QC approval workflow | Planned |
-| 5 | Project dashboard | Planned |
-| 6 | Bulk sample actions | Planned |
-| 7 | Reports page | Planned |
-| 8 | System status dashboard | Planned |
+| 3 | User management improvements | ✅ Added |
+| 4 | QC approval workflow | ✅ Added |
+| 5 | Project dashboard | ✅ Added |
+| 6 | Bulk sample actions | ✅ Added |
+| 7 | Reports page | ✅ Added |
+| 8 | System status dashboard | ✅ Added |
+| 9 | Global search | ✅ Added |
+| 10 | FASTA sequence workflows | ✅ Added |
+| 11 | Clustal Omega alignments | ✅ Added |
+| 12 | Local BLAST search | ✅ Added |
+| 13 | Reason-for-change audit logging | Planned |
+| 14 | S3/external media storage | Planned |
+| 15 | Validation-readiness documentation | Planned |
+| 16 | Monitoring and alerting | Planned |
 
 ---
 
@@ -794,40 +739,38 @@ It includes several production-shaped patterns:
 - CI tests
 - Frontend build checks
 - Admin settings
+- User management
+- QC approval workflow
+- Reports
+- System status dashboard
+- Global search
 - AWS deployment
+- Clustal Omega integration
+- BLAST+ integration
 
 Remaining production-readiness work:
 
-- More backend permission coverage
-- QC approval workflow
+- Reason-for-change enforcement on critical edits
 - S3 or external file storage
-- Formal backup/restore documentation
-- System status dashboard
+- Formal backup/restore procedures
 - Monitoring and alerting
 - Secure production settings review
-- More complete user management
-- More robust reporting/export workflows
+- Expanded permission and regression coverage
+- Validation-readiness documentation
+- Formal regulated-environment validation package
 
 ---
 
 ## 📌 Project Goals
 
-OpenLIMS aims to be:
-
-- Lightweight
-- Deployable
-- Configurable
-- Open-source friendly
-- Production-shaped
-- Useful for real lab workflows
-- Easy to run locally or on low-cost cloud infrastructure
-
+OpenLIMS aims to be lightweight, deployable, configurable, open-source friendly, production-shaped, useful for real lab workflows, easy to run locally or on low-cost cloud infrastructure, and a strong foundation for research lab workflow automation.
 
 ---
 
 ## 👨‍💻 Author
 
-Eduardo L
+**Eduardo L**  
+LinkedIn: https://www.linkedin.com/in/edlemus/
 
 ---
 
