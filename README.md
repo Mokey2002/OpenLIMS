@@ -28,21 +28,24 @@ http://16.146.193.92
 
 ## 🚀 Current Release
 
-**OpenLIMS v0.8.0 — BLAST Search**
+**OpenLIMS v0.9.0 — Real-Time Job Updates**
 
-This release adds a local BLAST search workflow and integrates BLAST into the broader OpenLIMS platform.
+This release adds real-time WebSocket job updates across OpenLIMS background workflows. BLAST jobs, Clustal Omega alignment jobs, and CSV import jobs can now update the frontend automatically without relying on manual refresh or page-level polling.
 
-### v0.8.0 Highlights
+### v0.9.0 Highlights
 
-- Local BLAST database upload and build workflow
-- BLAST+ integration with `makeblastdb`, `blastn`, and `blastp`
-- Async BLAST jobs through Celery and Redis
-- BLAST hit parsing and result display
-- Seeded demo BLAST database and query sequence
-- BLAST checks in System Status
-- BLAST records in Global Search
-- BLAST summaries and CSV export in Reports
-- BLAST backend permission tests
+- Django Channels WebSocket foundation
+- Daphne ASGI runtime for HTTP and WebSocket traffic
+- Redis Pub/Sub channel layer for real-time broadcasts
+- JWT-authenticated WebSocket connections
+- Shared backend broadcast utility for job updates
+- Live BLAST database and BLAST job updates
+- Live Clustal Omega alignment job updates
+- Live CSV import progress and completion updates
+- Frontend real-time job socket hook
+- Live update indicators on BLAST, Alignments, and Imports pages
+- Import page cleanup: removed active-job polling and improved paginated profile loading
+- Instrument profile dropdown fix for newly created profiles
 
 ---
 
@@ -204,9 +207,40 @@ Import jobs track status, source type, run ID, progress, rows processed, samples
 
 ---
 
+## ⚡ Real-Time Job Updates
+
+OpenLIMS v0.9.0 adds real-time job updates using Django Channels, Daphne, Redis Pub/Sub, and JWT-authenticated WebSocket connections.
+
+Supported live workflows:
+
+- CSV import jobs
+- Clustal Omega alignment jobs
+- BLAST database build jobs
+- BLAST search jobs
+
+Real-time flow:
+
+```text
+Celery Worker updates job state
+   ↓
+Backend broadcasts job update
+   ↓
+Redis Pub/Sub channel layer
+   ↓
+Django Channels WebSocket consumer
+   ↓
+React page receives update
+   ↓
+Frontend reloads current job data automatically
+```
+
+The BLAST, Alignments, and Imports pages show a live update status badge. Users can still click Refresh manually, but normal job completion no longer requires manual refresh.
+
+---
+
 ## 🧬 Async Clustal Omega Alignments
 
-OpenLIMS supports sequence alignment jobs using Clustal Omega. Alignment jobs run asynchronously through Celery and store input FASTA, aligned FASTA, sequence count, alignment summary, and downloadable aligned FASTA.
+OpenLIMS supports sequence alignment jobs using Clustal Omega. Alignment jobs run asynchronously through Celery and store input FASTA, aligned FASTA, sequence count, alignment summary, and downloadable aligned FASTA. Alignment status and completion now update live through WebSockets.
 
 ---
 
@@ -221,7 +255,7 @@ Users can:
 - Run nucleotide BLAST searches with `blastn`
 - Run protein BLAST searches with `blastp`
 - Queue BLAST jobs asynchronously through Celery
-- View BLAST job status
+- View BLAST job status with live updates
 - View parsed BLAST hits
 - Inspect identity, e-value, rank, accession, and aligned regions
 - Use seeded demo data for quick testing
@@ -372,6 +406,20 @@ Django REST Framework API
 PostgreSQL
 ```
 
+### Real-Time Architecture
+
+```text
+React WebSocket Client
+   ↓
+Daphne ASGI Server
+   ↓
+Django Channels Consumer
+   ↓
+Redis Pub/Sub Channel Layer
+   ↓
+Celery job update broadcasts
+```
+
 ### Async Processing
 
 ```text
@@ -413,7 +461,7 @@ Caddy Reverse Proxy
    ↓
 React Static Frontend
    ↓
-Django API / Gunicorn
+Django API / Daphne ASGI
    ↓
 PostgreSQL
 
@@ -422,6 +470,12 @@ Redis
 Celery Worker
    ↓
 Clustal Omega + BLAST+
+
+Daphne ASGI
+   ↓
+Django Channels WebSockets
+   ↓
+Redis Pub/Sub
 ```
 
 ---
@@ -432,9 +486,10 @@ Clustal Omega + BLAST+
 |---|---|
 | React + Vite | Frontend UI |
 | Django REST Framework | API and business logic |
+| Daphne | ASGI runtime for HTTP and WebSocket traffic |
 | PostgreSQL | Primary database |
-| Redis | Celery broker/result backend |
-| Celery Worker | Background imports, alignments, and BLAST jobs |
+| Redis | Celery broker/result backend and WebSocket channel layer |
+| Celery Worker | Background imports, alignments, BLAST jobs, and real-time job broadcasts |
 | Clustal Omega | Sequence alignment engine |
 | NCBI BLAST+ | Local BLAST database and search engine |
 | Caddy | Reverse proxy and static file serving |
@@ -649,7 +704,7 @@ npm install
 npm run build
 ```
 
-Test coverage includes instrument API ingest, CSV import workflow, duplicate run protection, import retry validation, FASTA import validation, backend permissions, project permissions, sample transitions, notifications, alignment workflow behavior, BLAST permission tests, and system health checks.
+Test coverage includes instrument API ingest, CSV import workflow, duplicate run protection, import retry validation, FASTA import validation, backend permissions, project permissions, sample transitions, notifications, alignment workflow behavior, BLAST permission tests, and system health checks. Real-time job update behavior can be verified locally by queueing BLAST, alignment, and import jobs and confirming the frontend updates without manual refresh.
 
 ---
 
@@ -711,10 +766,11 @@ cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.pr
 | 10 | FASTA sequence workflows | ✅ Added |
 | 11 | Clustal Omega alignments | ✅ Added |
 | 12 | Local BLAST search | ✅ Added |
-| 13 | Reason-for-change audit logging | Planned |
-| 14 | S3/external media storage | Planned |
-| 15 | Validation-readiness documentation | Planned |
-| 16 | Monitoring and alerting | Planned |
+| 13 | Real-time background job updates | ✅ Added |
+| 14 | Reason-for-change audit logging | Planned |
+| 15 | S3/external media storage | Planned |
+| 16 | Validation-readiness documentation | Planned |
+| 17 | Monitoring and alerting | Planned |
 
 ---
 
@@ -731,6 +787,7 @@ It includes several production-shaped patterns:
 - Dockerized services
 - PostgreSQL database
 - Redis + Celery async jobs
+- Django Channels + WebSocket live job updates
 - Role-based access control
 - Audit event logging
 - Audit log export
@@ -747,6 +804,7 @@ It includes several production-shaped patterns:
 - AWS deployment
 - Clustal Omega integration
 - BLAST+ integration
+- Daphne ASGI runtime
 
 Remaining production-readiness work:
 
