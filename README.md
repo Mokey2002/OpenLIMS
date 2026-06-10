@@ -645,6 +645,8 @@ CELERY_BROKER_URL=redis://redis:6379/0
 CELERY_RESULT_BACKEND=redis://redis:6379/1
 
 INSTRUMENT_API_KEY=my-shared-lab-instrument-key
+Production deployment note:
+OpenLIMS real-time updates require the API container to run Daphne/ASGI and the reverse proxy to forward `/ws/*` to the API service.
 ```
 
 ### 3. Start services
