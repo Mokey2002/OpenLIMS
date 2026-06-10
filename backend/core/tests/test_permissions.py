@@ -1,8 +1,11 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APITestCase
 from rest_framework import status
+from blast.models import BlastDatabase, BlastJob
 
 from imports.models import InstrumentProfile
 from projects.models import Project
@@ -92,6 +95,14 @@ class BackendPermissionTests(APITestCase):
             sequence="ATGCGTACCGTAGGCTT",
             project=self.project,
             sample=self.sample,
+            created_by=self.tech,
+        )
+        self.blast_database = BlastDatabase.objects.create(
+            name="Permission Test BLAST DB",
+            description="BLAST database used for permission tests.",
+            database_type=BlastDatabase.DATABASE_TYPE_DNA,
+            status=BlastDatabase.STATUS_READY,
+            db_path="/tmp/openlims-test-blast-db",
             created_by=self.tech,
         )
 
@@ -391,7 +402,165 @@ class BackendPermissionTests(APITestCase):
             response.status_code,
             [status.HTTP_201_CREATED, status.HTTP_202_ACCEPTED],
         )
+    def test_viewer_can_read_blast_databases(self):
+        self.auth_as(self.viewer)
 
+        response = self.client.get("/api/blast-databases/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_viewer_can_read_blast_jobs(self):
+        self.auth_as(self.viewer)
+
+        response = self.client.get("/api/blast-jobs/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_viewer_cannot_create_blast_database(self):
+        self.auth_as(self.viewer)
+
+        fasta_file = SimpleUploadedFile(
+            "viewer-blocked-blast-db.fasta",
+            b">ref\nATGCGTACCGTAGGCTA\n",
+            content_type="text/plain",
+        )
+
+        response = self.client.post(
+            "/api/blast-databases/",
+            {
+                "name": "Viewer Blocked BLAST DB",
+                "description": "Viewer should not create BLAST databases.",
+                "database_type": BlastDatabase.DATABASE_TYPE_DNA,
+                "source_fasta": fasta_file,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch("blast.views.build_blast_database_task.delay")
+    def test_viewer_cannot_build_blast_database(self, mock_delay):
+        self.auth_as(self.viewer)
+
+        response = self.client.post(
+            f"/api/blast-databases/{self.blast_database.id}/build/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        mock_delay.assert_not_called()
+
+    def test_viewer_cannot_create_blast_job(self):
+        self.auth_as(self.viewer)
+
+        response = self.client.post(
+            "/api/blast-jobs/",
+            {
+                "name": "Viewer Blocked BLAST Job",
+                "project": self.project.id,
+                "query_sequence": self.sequence.id,
+                "database": self.blast_database.id,
+                "program": BlastJob.PROGRAM_BLASTN,
+                "evalue": "10",
+                "max_target_seqs": 10,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_tech_can_create_blast_database(self):
+        self.auth_as(self.tech)
+
+        fasta_file = SimpleUploadedFile(
+            "tech-blast-db.fasta",
+            b">ref\nATGCGTACCGTAGGCTA\n",
+            content_type="text/plain",
+        )
+
+        response = self.client.post(
+            "/api/blast-databases/",
+            {
+                "name": "Tech BLAST DB",
+                "description": "Tech should create BLAST databases.",
+                "database_type": BlastDatabase.DATABASE_TYPE_DNA,
+                "source_fasta": fasta_file,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    @patch("blast.views.build_blast_database_task.delay")
+    def test_tech_can_build_blast_database(self, mock_delay):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            f"/api/blast-databases/{self.blast_database.id}/build/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+
+        self.blast_database.refresh_from_db()
+        self.assertEqual(self.blast_database.status, BlastDatabase.STATUS_BUILDING)
+
+        mock_delay.assert_called_once_with(self.blast_database.id)
+
+    @patch("blast.views.run_blast_job_task.delay")
+    def test_tech_can_create_blast_job(self, mock_delay):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            "/api/blast-jobs/",
+            {
+                "name": "Tech BLAST Job",
+                "project": self.project.id,
+                "query_sequence": self.sequence.id,
+                "database": self.blast_database.id,
+                "program": BlastJob.PROGRAM_BLASTN,
+                "evalue": "10",
+                "max_target_seqs": 10,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+
+        job = BlastJob.objects.get(name="Tech BLAST Job")
+        self.assertEqual(job.status, BlastJob.STATUS_PENDING)
+        self.assertEqual(job.created_by, self.tech)
+
+        mock_delay.assert_called_once_with(job.id)
+
+    @patch("blast.views.run_blast_job_task.delay")
+    def test_admin_can_create_blast_job(self, mock_delay):
+        self.auth_as(self.admin)
+
+        response = self.client.post(
+            "/api/blast-jobs/",
+            {
+                "name": "Admin BLAST Job",
+                "project": self.project.id,
+                "query_sequence": self.sequence.id,
+                "database": self.blast_database.id,
+                "program": BlastJob.PROGRAM_BLASTN,
+                "evalue": "10",
+                "max_target_seqs": 10,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+
+        job = BlastJob.objects.get(name="Admin BLAST Job")
+        self.assertEqual(job.status, BlastJob.STATUS_PENDING)
+        self.assertEqual(job.created_by, self.admin)
+
+        mock_delay.assert_called_once_with(job.id)
+        
     def test_admin_can_access_admin_users(self):
         self.auth_as(self.admin)
 
