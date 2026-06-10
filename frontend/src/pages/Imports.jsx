@@ -13,6 +13,7 @@ import {
 import { Link } from "react-router-dom";
 import { apiGet, apiPost, apiPostForm } from "../api";
 import { canWrite, isAdmin, readOnlyMessage } from "../authz";
+import useJobSocket from "../hooks/useJobSocket";
 
 function statusVariant(status) {
   switch (status) {
@@ -56,12 +57,46 @@ function progressPercent(job) {
   return Math.round((job.progress_current / job.progress_total) * 100);
 }
 
+async function apiGetAllPages(basePath) {
+  const separator = basePath.includes("?") ? "&" : "?";
+  let page = 1;
+  let results = [];
+
+  while (page <= 50) {
+    const data = await apiGet(`${basePath}${separator}page=${page}`);
+
+    if (!data?.results) {
+      return data || [];
+    }
+
+    results = [...results, ...data.results];
+
+    if (!data.next) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return results;
+}
+
+function isImportRealtimeMessage(message) {
+  return [
+    "import_job_update",
+    "import_job_started",
+    "import_job_completed",
+    "import_job_failed",
+  ].includes(message?.type);
+}
+
 export default function Imports() {
   const [me, setMe] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [projects, setProjects] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [err, setErr] = useState("");
+  const [lastLiveUpdate, setLastLiveUpdate] = useState("");
 
   const [profileName, setProfileName] = useState("");
   const [profileCode, setProfileCode] = useState("");
@@ -92,23 +127,32 @@ export default function Imports() {
   const [sequenceImportLoading, setSequenceImportLoading] = useState(false);
   const [sequenceImportSummary, setSequenceImportSummary] = useState(null);
 
+  const { connected } = useJobSocket({
+    onMessage: (message) => {
+      if (!isImportRealtimeMessage(message)) {
+        return;
+      }
+
+      setLastLiveUpdate(message.message || "Import data updated.");
+      load();
+    },
+  });
+
   async function load() {
     setErr("");
 
     try {
-      const [meData, profilesData, jobsData, projectsData] = await Promise.all([
+      const [meData, profileList, jobList, projectList] = await Promise.all([
         apiGet("/api/me/"),
-        apiGet("/api/instrument-profiles/"),
-        apiGet("/api/import-jobs/"),
-        apiGet("/api/projects/"),
+        apiGetAllPages("/api/instrument-profiles/"),
+        apiGetAllPages("/api/import-jobs/"),
+        apiGetAllPages("/api/projects/"),
       ]);
-
-      const profileList = profilesData.results || profilesData || [];
 
       setMe(meData);
       setProfiles(profileList);
-      setJobs(jobsData.results || jobsData || []);
-      setProjects(projectsData.results || projectsData || []);
+      setJobs(jobList);
+      setProjects(projectList);
 
       if (!uploadInstrument && profileList.length > 0) {
         setUploadInstrument(String(profileList[0].id));
@@ -136,18 +180,6 @@ export default function Imports() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const hasActiveJob = jobs.some(
-      (job) => job.status === "PENDING" || job.status === "RUNNING"
-    );
-
-    if (!hasActiveJob) return;
-
-    const interval = setInterval(load, 3000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobs]);
-
   const userIsAdmin = isAdmin(me);
   const userCanWrite = canWrite(me);
   const readOnlyText = readOnlyMessage(me);
@@ -164,7 +196,7 @@ export default function Imports() {
     if (!userIsAdmin) return;
 
     try {
-      await apiPost("/api/instrument-profiles/", {
+      const createdProfile = await apiPost("/api/instrument-profiles/", {
         name: profileName,
         code: profileCode,
         delimiter,
@@ -178,9 +210,44 @@ export default function Imports() {
       setHasHeader(true);
       setSampleIdColumn("sample_id");
 
+      const profileList = await apiGetAllPages("/api/instrument-profiles/");
+      setProfiles(profileList);
+
+      const profileToSelect =
+        profileList.find(
+          (profile) => String(profile.id) === String(createdProfile?.id)
+        ) ||
+        profileList.find(
+          (profile) =>
+            profile.code?.toLowerCase() === createdProfile?.code?.toLowerCase()
+        ) ||
+        profileList.find(
+          (profile) =>
+            profile.code?.toLowerCase() === profileCode.toLowerCase()
+        );
+
+      if (profileToSelect) {
+        setMappingInstrument(String(profileToSelect.id));
+        setUploadInstrument(String(profileToSelect.id));
+        setSequenceUploadInstrument(String(profileToSelect.id));
+      }
+
       await load();
     } catch (e) {
       setErr(e.message || String(e));
+
+      const profileList = await apiGetAllPages("/api/instrument-profiles/");
+      setProfiles(profileList);
+
+      const existingProfile = profileList.find(
+        (profile) => profile.code?.toLowerCase() === profileCode.toLowerCase()
+      );
+
+      if (existingProfile) {
+        setMappingInstrument(String(existingProfile.id));
+        setUploadInstrument(String(existingProfile.id));
+        setSequenceUploadInstrument(String(existingProfile.id));
+      }
     }
   }
 
@@ -244,6 +311,7 @@ export default function Imports() {
   async function uploadImportJob(e) {
     e.preventDefault();
     setErr("");
+    setLastLiveUpdate("");
 
     if (!userCanWrite) return;
 
@@ -257,6 +325,7 @@ export default function Imports() {
 
       setUploadFile(null);
       setPreviewData(null);
+      setLastLiveUpdate("CSV import queued. Progress will update automatically.");
 
       await load();
     } catch (e) {
@@ -356,10 +425,22 @@ export default function Imports() {
           </p>
         </div>
 
-        <Button variant="outline-dark" size="sm" onClick={load}>
-          Refresh
-        </Button>
+        <div className="inline-actions">
+          <Badge bg={connected ? "success" : "secondary"}>
+            {connected ? "Live updates on" : "Live updates off"}
+          </Badge>
+
+          <Button variant="outline-dark" size="sm" onClick={load}>
+            Refresh
+          </Button>
+        </div>
       </div>
+
+      {lastLiveUpdate && (
+        <Alert variant="info" className="mb-4">
+          {lastLiveUpdate}
+        </Alert>
+      )}
 
       {err && <Alert variant="danger">{err}</Alert>}
       {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
@@ -795,7 +876,9 @@ export default function Imports() {
                     sequencePreviewLoading
                   }
                 >
-                  {sequencePreviewLoading ? "Previewing..." : "Preview FASTA Import"}
+                  {sequencePreviewLoading
+                    ? "Previewing..."
+                    : "Preview FASTA Import"}
                 </Button>
               </Col>
 
