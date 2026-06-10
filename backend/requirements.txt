@@ -11,3 +11,6 @@ celery
 redis
 gunicorn
 psycopg2-binary
+channels
+channels-redis
+daphne

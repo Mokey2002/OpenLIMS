@@ -30,6 +30,18 @@ INSTRUMENT_API_KEY = os.getenv("INSTRUMENT_API_KEY", "")
 env = environ.Env(DEBUG=(bool, False))
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
+CHANNEL_REDIS_URL = os.getenv("CHANNEL_REDIS_URL", "redis://redis:6379/2")
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.pubsub.RedisPubSubChannelLayer",
+        "CONFIG": {
+            "hosts": [CHANNEL_REDIS_URL],
+            "prefix": "openlims_ws",
+        },
+    },
+}
+
 DEBUG = env.bool("DJANGO_DEBUG", default=True)
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="change-me")
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
@@ -38,6 +50,7 @@ ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -104,7 +117,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
-
+ASGI_APPLICATION = "config.asgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases

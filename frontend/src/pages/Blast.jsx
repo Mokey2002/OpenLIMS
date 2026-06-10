@@ -11,6 +11,7 @@ import {
   Table,
 } from "react-bootstrap";
 import { apiGet, apiPost, apiPostForm } from "../api";
+import useJobSocket from "../hooks/useJobSocket";
 
 function formatTimestamp(value) {
   if (!value) return "-";
@@ -45,6 +46,19 @@ function programForSequence(sequenceType) {
   return "blastn";
 }
 
+function isBlastRealtimeMessage(message) {
+  return [
+    "blast_job_update",
+    "blast_database_update",
+    "blast_job_started",
+    "blast_job_completed",
+    "blast_job_failed",
+    "blast_database_build_started",
+    "blast_database_build_completed",
+    "blast_database_build_failed",
+  ].includes(message?.type);
+}
+
 export default function Blast() {
   const [databases, setDatabases] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -69,10 +83,27 @@ export default function Blast() {
   const [projectId, setProjectId] = useState("");
 
   const [selectedJobId, setSelectedJobId] = useState(null);
+  const [lastLiveUpdate, setLastLiveUpdate] = useState("");
 
-  async function load() {
+  const { connected } = useJobSocket({
+    onMessage: (message) => {
+      if (!isBlastRealtimeMessage(message)) {
+        return;
+      }
+
+      setLastLiveUpdate(message.message || "BLAST data updated.");
+      load({ silent: true });
+    },
+  });
+
+  async function load(options = {}) {
+    const silent = options.silent === true;
+
     setErr("");
-    setLoading(true);
+
+    if (!silent) {
+      setLoading(true);
+    }
 
     try {
       const [databaseData, jobData, sequenceData, projectData] =
@@ -90,7 +121,9 @@ export default function Blast() {
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }
 
@@ -203,7 +236,7 @@ export default function Blast() {
 
       const created = await apiPost("/api/blast-jobs/", payload);
 
-      setSuccess("BLAST job queued.");
+      setSuccess("BLAST job queued. Results will update automatically.");
       setSelectedJobId(created.id);
       setJobName("");
       setQuerySequenceId("");
@@ -240,13 +273,22 @@ export default function Blast() {
         </div>
 
         <div className="inline-actions">
+          <Badge bg={connected ? "success" : "secondary"}>
+            {connected ? "Live updates on" : "Live updates off"}
+          </Badge>
           <Badge bg="dark">{databases.length} databases</Badge>
           <Badge bg="dark">{jobs.length} jobs</Badge>
-          <Button variant="outline-dark" size="sm" onClick={load}>
+          <Button variant="outline-dark" size="sm" onClick={() => load()}>
             Refresh
           </Button>
         </div>
       </div>
+
+      {lastLiveUpdate && (
+        <Alert variant="info" className="mb-4">
+          {lastLiveUpdate}
+        </Alert>
+      )}
 
       {err && <Alert variant="danger">{err}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
@@ -593,7 +635,8 @@ export default function Blast() {
             </Alert>
           ) : selectedJob.status !== "COMPLETED" ? (
             <Alert variant="info">
-              BLAST job is {selectedJob.status}. Refresh to update results.
+              BLAST job is {selectedJob.status}. Results will update
+              automatically when the job finishes.
             </Alert>
           ) : !selectedJob.hits || selectedJob.hits.length === 0 ? (
             <div className="empty-state">No hits found.</div>
