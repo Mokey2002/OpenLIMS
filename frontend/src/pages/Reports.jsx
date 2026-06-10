@@ -57,6 +57,7 @@ function downloadCsv(filename, headers, rows) {
 
 function statusVariant(status) {
   switch (status) {
+    case "READY":
     case "COMPLETED":
     case "APPROVED":
     case "REPORTED":
@@ -64,9 +65,11 @@ function statusVariant(status) {
     case "FAILED":
     case "REJECTED":
       return "danger";
+    case "BUILDING":
     case "RUNNING":
     case "IN_PROGRESS":
       return "primary";
+    case "NEW":
     case "PENDING":
     case "QC":
     case "RERUN_REQUIRED":
@@ -86,12 +89,34 @@ function countBy(items, getter) {
   }, {});
 }
 
+function getProjectId(value) {
+  if (value === null || value === undefined) return "";
+
+  if (typeof value === "object") {
+    return value.id || "";
+  }
+
+  return value;
+}
+
+function getProjectCode(value) {
+  if (!value) return "";
+
+  if (typeof value === "object") {
+    return value.code || value.name || "";
+  }
+
+  return "";
+}
+
 export default function Reports() {
   const [projects, setProjects] = useState([]);
   const [samples, setSamples] = useState([]);
   const [workItems, setWorkItems] = useState([]);
   const [imports, setImports] = useState([]);
   const [alignments, setAlignments] = useState([]);
+  const [blastDatabases, setBlastDatabases] = useState([]);
+  const [blastJobs, setBlastJobs] = useState([]);
   const [events, setEvents] = useState([]);
 
   const [selectedProjectId, setSelectedProjectId] = useState("");
@@ -109,6 +134,8 @@ export default function Reports() {
         workItemsData,
         importsData,
         alignmentsData,
+        blastDatabasesData,
+        blastJobsData,
         eventsData,
       ] = await Promise.all([
         apiGet("/api/projects/"),
@@ -116,6 +143,8 @@ export default function Reports() {
         apiGet("/api/work-items/"),
         apiGet("/api/import-jobs/"),
         apiGet("/api/alignment-jobs/"),
+        apiGet("/api/blast-databases/"),
+        apiGet("/api/blast-jobs/"),
         apiGet("/api/events/"),
       ]);
 
@@ -124,6 +153,8 @@ export default function Reports() {
       setWorkItems(workItemsData.results || workItemsData || []);
       setImports(importsData.results || importsData || []);
       setAlignments(alignmentsData.results || alignmentsData || []);
+      setBlastDatabases(blastDatabasesData.results || blastDatabasesData || []);
+      setBlastJobs(blastJobsData.results || blastJobsData || []);
       setEvents(eventsData.results || eventsData || []);
     } catch (e) {
       setErr(e.message || String(e));
@@ -163,6 +194,20 @@ export default function Reports() {
     );
   }, [alignments, selectedProjectId]);
 
+  const filteredBlastJobs = useMemo(() => {
+    if (!selectedProjectId) return blastJobs;
+
+    return blastJobs.filter((job) => {
+      const projectId =
+        job.project_id ||
+        job.project ||
+        getProjectId(job.project_detail) ||
+        getProjectId(job.project_obj);
+
+      return String(projectId) === String(selectedProjectId);
+    });
+  }, [blastJobs, selectedProjectId]);
+
   const filteredEvents = useMemo(() => {
     if (!selectedProjectId) return events;
 
@@ -199,6 +244,31 @@ export default function Reports() {
     return countBy(filteredAlignments, (job) => job.status);
   }, [filteredAlignments]);
 
+  const blastDatabaseStatusCounts = useMemo(() => {
+    return countBy(blastDatabases, (database) => database.status);
+  }, [blastDatabases]);
+
+  const blastJobStatusCounts = useMemo(() => {
+    return countBy(filteredBlastJobs, (job) => job.status);
+  }, [filteredBlastJobs]);
+
+  const totalBlastHits = useMemo(() => {
+    return filteredBlastJobs.reduce(
+      (total, job) => total + Number(job.hits_count || 0),
+      0
+    );
+  }, [filteredBlastJobs]);
+
+  const recentBlastJobs = useMemo(() => {
+    return [...filteredBlastJobs]
+      .sort(
+        (a, b) =>
+          new Date(b.created_at || b.updated_at) -
+          new Date(a.created_at || a.updated_at)
+      )
+      .slice(0, 10);
+  }, [filteredBlastJobs]);
+
   const recentEvents = useMemo(() => {
     return [...filteredEvents]
       .sort(
@@ -223,6 +293,16 @@ export default function Reports() {
         (job) => String(job.project) === String(project.id)
       );
 
+      const projectBlastJobs = blastJobs.filter((job) => {
+        const projectId =
+          job.project_id ||
+          job.project ||
+          getProjectId(job.project_detail) ||
+          getProjectId(job.project_obj);
+
+        return String(projectId) === String(project.id);
+      });
+
       return {
         project_id: project.id,
         code: project.code,
@@ -230,6 +310,11 @@ export default function Reports() {
         sample_count: projectSamples.length,
         import_count: projectImports.length,
         alignment_count: projectAlignments.length,
+        blast_job_count: projectBlastJobs.length,
+        blast_hit_count: projectBlastJobs.reduce(
+          (total, job) => total + Number(job.hits_count || 0),
+          0
+        ),
         members: (project.member_usernames || []).join("; "),
         created_at: project.created_at,
       };
@@ -244,6 +329,8 @@ export default function Reports() {
         "sample_count",
         "import_count",
         "alignment_count",
+        "blast_job_count",
+        "blast_hit_count",
         "members",
         "created_at",
       ],
@@ -369,6 +456,57 @@ export default function Reports() {
     );
   }
 
+  function exportBlastSummary() {
+    const rows = filteredBlastJobs.map((job) => ({
+      id: job.id,
+      name: job.name,
+      project_id:
+        job.project_id ||
+        job.project ||
+        getProjectId(job.project_detail) ||
+        getProjectId(job.project_obj),
+      project_code:
+        job.project_code ||
+        getProjectCode(job.project_detail) ||
+        getProjectCode(job.project_obj),
+      program: job.program,
+      status: job.status,
+      query_sequence_id: job.query_sequence || job.query_sequence_id,
+      query_sequence_name: job.query_sequence_name || job.query_name,
+      database_id: job.database || job.database_id,
+      database_name: job.database_name,
+      hits_count: job.hits_count || 0,
+      evalue: job.evalue,
+      max_target_seqs: job.max_target_seqs,
+      created_by: job.created_by_username,
+      created_at: job.created_at,
+      updated_at: job.updated_at,
+    }));
+
+    downloadCsv(
+      "openlims-blast-summary.csv",
+      [
+        "id",
+        "name",
+        "project_id",
+        "project_code",
+        "program",
+        "status",
+        "query_sequence_id",
+        "query_sequence_name",
+        "database_id",
+        "database_name",
+        "hits_count",
+        "evalue",
+        "max_target_seqs",
+        "created_by",
+        "created_at",
+        "updated_at",
+      ],
+      rows
+    );
+  }
+
   function exportAuditActivity() {
     const rows = filteredEvents.map((event) => ({
       id: event.id,
@@ -410,8 +548,8 @@ export default function Reports() {
         <div>
           <h1 className="page-title">Reports</h1>
           <p className="page-subtitle">
-            Generate project, sample, QC, import, alignment, and audit activity
-            reports.
+            Generate project, sample, QC, import, alignment, BLAST, and audit
+            activity reports.
           </p>
         </div>
 
@@ -526,6 +664,10 @@ export default function Reports() {
                   Export Alignment Summary CSV
                 </Button>
 
+                <Button variant="outline-dark" onClick={exportBlastSummary}>
+                  Export BLAST Summary CSV
+                </Button>
+
                 <Button variant="outline-dark" onClick={exportAuditActivity}>
                   Export Audit Activity CSV
                 </Button>
@@ -585,6 +727,125 @@ export default function Reports() {
         </Col>
 
         <Col lg={6}>
+          <Card className="app-card h-100">
+            <Card.Body>
+              <h5 className="section-title">BLAST Summary</h5>
+
+              <Row className="g-3 mb-3">
+                <Col sm={6}>
+                  <div className="soft-card">
+                    <div className="metric-label">BLAST Databases</div>
+                    <div className="metric-value">{blastDatabases.length}</div>
+                    <div className="metric-note">
+                      Ready: {blastDatabaseStatusCounts.READY || 0}
+                    </div>
+                  </div>
+                </Col>
+
+                <Col sm={6}>
+                  <div className="soft-card">
+                    <div className="metric-label">BLAST Jobs</div>
+                    <div className="metric-value">{filteredBlastJobs.length}</div>
+                    <div className="metric-note">
+                      Completed: {blastJobStatusCounts.COMPLETED || 0}
+                    </div>
+                  </div>
+                </Col>
+
+                <Col sm={6}>
+                  <div className="soft-card">
+                    <div className="metric-label">Failed Jobs</div>
+                    <div className="metric-value">
+                      {blastJobStatusCounts.FAILED || 0}
+                    </div>
+                    <div className="metric-note">
+                      Running: {blastJobStatusCounts.RUNNING || 0}
+                    </div>
+                  </div>
+                </Col>
+
+                <Col sm={6}>
+                  <div className="soft-card">
+                    <div className="metric-label">BLAST Hits</div>
+                    <div className="metric-value">{totalBlastHits}</div>
+                    <div className="metric-note">Across matching jobs</div>
+                  </div>
+                </Col>
+              </Row>
+
+              {Object.keys(blastJobStatusCounts).length === 0 ? (
+                <div className="empty-state">No BLAST jobs found.</div>
+              ) : (
+                <div className="d-grid gap-2">
+                  {Object.entries(blastJobStatusCounts).map(([status, count]) => (
+                    <div
+                      key={status}
+                      className="soft-card d-flex justify-content-between align-items-center"
+                    >
+                      <Badge bg={statusVariant(status)}>{status}</Badge>
+                      <strong>{count}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+
+      <Row className="g-4 mb-4">
+        <Col lg={12}>
+          <Card className="app-card h-100">
+            <Card.Body>
+              <h5 className="section-title">Recent BLAST Jobs</h5>
+
+              {recentBlastJobs.length === 0 ? (
+                <div className="empty-state">No BLAST jobs found.</div>
+              ) : (
+                <Table responsive hover className="app-table">
+                  <thead>
+                    <tr>
+                      <th>Job</th>
+                      <th>Program</th>
+                      <th>Query</th>
+                      <th>Database</th>
+                      <th>Status</th>
+                      <th>Hits</th>
+                      <th>Created</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {recentBlastJobs.map((job) => (
+                      <tr key={job.id}>
+                        <td>{job.name}</td>
+                        <td>{job.program}</td>
+                        <td>
+                          {job.query_sequence_name ||
+                            job.query_name ||
+                            job.query_sequence ||
+                            "-"}
+                        </td>
+                        <td>{job.database_name || job.database || "-"}</td>
+                        <td>
+                          <Badge bg={statusVariant(job.status)}>
+                            {job.status}
+                          </Badge>
+                        </td>
+                        <td>{job.hits_count || 0}</td>
+                        <td>{formatTimestamp(job.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+
+      <Row className="g-4 mb-4">
+        <Col lg={12}>
           <Card className="app-card h-100">
             <Card.Body>
               <h5 className="section-title">Recent Audit Activity</h5>
