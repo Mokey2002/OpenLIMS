@@ -227,7 +227,59 @@ export default function SystemStatus() {
             </Card.Body>
           </Card>
         </Col>
+        <Col md={3}>
+          <Card className="app-card metric-card h-100">
+            <Card.Body>
+              <div className="metric-label">BLASTN</div>
+              <div className="metric-value">
+                <Badge bg={healthVariant(health?.blastn_ok)}>
+                  {health?.blastn_ok ? "OK" : "Missing"}
+                </Badge>
+              </div>
+              <div className="metric-note">
+                {health?.blastn_version ||
+                  health?.blastn_error ||
+                  "Nucleotide BLAST search"}
+              </div>
+            </Card.Body>
+          </Card>
+        </Col>
 
+        <Col md={3}>
+          <Card className="app-card metric-card h-100">
+            <Card.Body>
+              <div className="metric-label">BLASTP</div>
+              <div className="metric-value">
+                <Badge bg={healthVariant(health?.blastp_ok)}>
+                  {health?.blastp_ok ? "OK" : "Missing"}
+                </Badge>
+              </div>
+              <div className="metric-note">
+                {health?.blastp_version ||
+                  health?.blastp_error ||
+                  "Protein BLAST search"}
+              </div>
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col md={3}>
+          <Card className="app-card metric-card h-100">
+            <Card.Body>
+              <div className="metric-label">makeblastdb</div>
+              <div className="metric-value">
+                <Badge bg={healthVariant(health?.makeblastdb_ok)}>
+                  {health?.makeblastdb_ok ? "OK" : "Missing"}
+                </Badge>
+              </div>
+              <div className="metric-note">
+                {health?.makeblastdb_version ||
+                  health?.makeblastdb_error ||
+                  "BLAST database builder"}
+              </div>
+            </Card.Body>
+          </Card>
+        </Col>
         <Col md={3}>
           <Card className="app-card metric-card h-100">
             <Card.Body>
