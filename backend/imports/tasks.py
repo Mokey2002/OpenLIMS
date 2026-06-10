@@ -2,7 +2,6 @@ import csv
 import io
 
 from celery import shared_task
-from django.db import transaction
 
 from core.realtime import broadcast_job_update
 from events.models import Event
@@ -67,7 +66,18 @@ def validate_mapped_value(mapping, raw_value):
 
     if mapping.value_type == "BOOLEAN":
         val = raw_value.lower()
-        if val not in ["true", "1", "yes", "pass", "ok", "false", "0", "no", "fail"]:
+
+        if val not in [
+            "true",
+            "1",
+            "yes",
+            "pass",
+            "ok",
+            "false",
+            "0",
+            "no",
+            "fail",
+        ]:
             return {"ok": False, "reason": "Invalid boolean"}
 
         return {"ok": True, "normalized": val in ["true", "1", "yes", "pass", "ok"]}
@@ -105,10 +115,12 @@ def process_rows(job, rows, actor=None):
         sample_code = row.get(instrument.sample_id_column)
 
         if not sample_code:
-            skipped_rows.append({
-                "row": rows_processed,
-                "reason": f"Missing sample ID column '{instrument.sample_id_column}'",
-            })
+            skipped_rows.append(
+                {
+                    "row": rows_processed,
+                    "reason": f"Missing sample ID column '{instrument.sample_id_column}'",
+                }
+            )
             continue
 
         sample_code = str(sample_code).strip()
@@ -186,12 +198,14 @@ def process_rows(job, rows, actor=None):
             validation = validate_mapped_value(mapping, raw_value)
 
             if not validation["ok"]:
-                skipped_rows.append({
-                    "row": rows_processed,
-                    "sample_id": sample_code,
-                    "column": source_column,
-                    "reason": validation["reason"],
-                })
+                skipped_rows.append(
+                    {
+                        "row": rows_processed,
+                        "sample_id": sample_code,
+                        "column": source_column,
+                        "reason": validation["reason"],
+                    }
+                )
                 continue
 
             normalized = validation["normalized"]
@@ -251,7 +265,7 @@ def process_import_job(job_id):
     try:
         job.status = "RUNNING"
         job.progress_message = "Reading CSV file"
-        job.save(update_fields=["status", "progress_message", "updated_at"])
+        job.save(update_fields=["status", "progress_message"])
 
         broadcast_import_job_update(
             job,
@@ -282,7 +296,6 @@ def process_import_job(job_id):
                 "progress_current",
                 "progress_total",
                 "progress_message",
-                "updated_at",
             ]
         )
 
@@ -323,7 +336,6 @@ def process_import_job(job_id):
                 "status",
                 "summary",
                 "progress_message",
-                "updated_at",
             ]
         )
 
