@@ -11,6 +11,7 @@ import {
 } from "react-bootstrap";
 import { apiGet, apiPost } from "../api";
 import { canWrite, readOnlyMessage } from "../authz";
+import useJobSocket from "../hooks/useJobSocket";
 
 function formatTimestamp(ts) {
   if (!ts) return "-";
@@ -141,6 +142,15 @@ function chunkSequence(sequence, chunkSize = 80) {
   return chunks;
 }
 
+function isAlignmentRealtimeMessage(message) {
+  return [
+    "alignment_job_update",
+    "alignment_job_started",
+    "alignment_job_completed",
+    "alignment_job_failed",
+  ].includes(message?.type);
+}
+
 function AlignmentGrid({ records }) {
   if (records.length === 0) {
     return <div className="empty-state">No aligned FASTA records found.</div>;
@@ -246,6 +256,18 @@ export default function Alignments() {
   const [success, setSuccess] = useState("");
   const [running, setRunning] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [lastLiveUpdate, setLastLiveUpdate] = useState("");
+
+  const { connected } = useJobSocket({
+    onMessage: (message) => {
+      if (!isAlignmentRealtimeMessage(message)) {
+        return;
+      }
+
+      setLastLiveUpdate(message.message || "Alignment data updated.");
+      load({ silent: true });
+    },
+  });
 
   async function load({ silent = false } = {}) {
     setErr("");
@@ -292,21 +314,6 @@ export default function Alignments() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    const hasActiveJob = alignmentJobs.some(
-      (job) => job.status === "PENDING" || job.status === "RUNNING"
-    );
-
-    if (!hasActiveJob) return;
-
-    const interval = setInterval(() => {
-      load({ silent: true });
-    }, 3000);
-
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alignmentJobs]);
 
   const userCanWrite = canWrite(me);
   const readOnlyText = readOnlyMessage(me);
@@ -393,7 +400,9 @@ export default function Alignments() {
 
       const createdJob = await apiPost("/api/alignment-jobs/", payload);
 
-      setSuccess(`Alignment "${createdJob.name}" was queued.`);
+      setSuccess(
+        `Alignment "${createdJob.name}" was queued. Results will update automatically.`
+      );
       setSelectedJobId(String(createdJob.id));
 
       await load();
@@ -435,6 +444,10 @@ export default function Alignments() {
         </div>
 
         <div className="inline-actions">
+          <Badge bg={connected ? "success" : "secondary"}>
+            {connected ? "Live updates on" : "Live updates off"}
+          </Badge>
+
           <Button variant="outline-dark" size="sm" onClick={() => load()}>
             {loading ? "Refreshing..." : "Refresh"}
           </Button>
@@ -459,6 +472,12 @@ export default function Alignments() {
         </div>
       </div>
 
+      {lastLiveUpdate && (
+        <Alert variant="info" className="mb-4">
+          {lastLiveUpdate}
+        </Alert>
+      )}
+
       {err && <Alert variant="danger">{err}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
       {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
@@ -466,7 +485,7 @@ export default function Alignments() {
       {activeJobCount > 0 && (
         <Alert variant="warning">
           {activeJobCount} alignment job{activeJobCount === 1 ? " is" : "s are"} currently queued or running.
-          This page will refresh automatically.
+          Results will update automatically.
         </Alert>
       )}
 

@@ -4,12 +4,37 @@ import io
 from celery import shared_task
 from django.db import transaction
 
+from core.realtime import broadcast_job_update
 from events.models import Event
 from notifications.models import Notification
 from samples.models import Sample
 from results.models import WorkItem, Result
 
 from .models import ImportJob
+
+
+def broadcast_import_job_update(job, message):
+    progress_percent = 0
+
+    if job.progress_total:
+        progress_percent = round((job.progress_current / job.progress_total) * 100)
+
+    if job.status == "COMPLETED":
+        progress_percent = 100
+
+    broadcast_job_update(
+        {
+            "type": "import_job_update",
+            "import_job_id": job.id,
+            "job_id": job.id,
+            "status": job.status,
+            "progress_current": job.progress_current,
+            "progress_total": job.progress_total,
+            "progress_percent": progress_percent,
+            "progress_message": job.progress_message,
+            "message": message,
+        }
+    )
 
 
 def validate_mapped_value(mapping, raw_value):
@@ -68,6 +93,11 @@ def process_rows(job, rows, actor=None):
     job.progress_current = 0
     job.progress_message = "Starting import"
     job.save(update_fields=["progress_total", "progress_current", "progress_message"])
+
+    broadcast_import_job_update(
+        job,
+        f"Import started: {instrument.code}",
+    )
 
     for row in rows:
         rows_processed += 1
@@ -192,8 +222,10 @@ def process_rows(job, rows, actor=None):
         job.progress_message = f"Processed {rows_processed} of {len(rows)} rows"
         job.save(update_fields=["progress_current", "progress_message"])
 
-
-
+        broadcast_import_job_update(
+            job,
+            job.progress_message,
+        )
 
     return {
         "rows_processed": rows_processed,
@@ -210,12 +242,21 @@ def process_rows(job, rows, actor=None):
 
 @shared_task
 def process_import_job(job_id):
-    job = ImportJob.objects.select_related("instrument", "project", "uploaded_by").get(id=job_id)
+    job = ImportJob.objects.select_related(
+        "instrument",
+        "project",
+        "uploaded_by",
+    ).get(id=job_id)
 
     try:
         job.status = "RUNNING"
         job.progress_message = "Reading CSV file"
-        job.save(update_fields=["status", "progress_message"])
+        job.save(update_fields=["status", "progress_message", "updated_at"])
+
+        broadcast_import_job_update(
+            job,
+            f"Import running: {job.instrument.code}",
+        )
 
         job.uploaded_file.seek(0)
         decoded = job.uploaded_file.read().decode("utf-8")
@@ -227,42 +268,71 @@ def process_import_job(job_id):
         )
         rows = list(reader)
 
-        with transaction.atomic():
-            summary = process_rows(job, rows, actor=job.uploaded_by)
+        summary = process_rows(job, rows, actor=job.uploaded_by)
 
-            job.status = "COMPLETED"
-            job.summary = summary
-            job.progress_current = summary["rows_processed"]
-            job.progress_total = summary["rows_processed"]
-            job.progress_message = "Import completed"
-            job.save()
+        job.status = "COMPLETED"
+        job.summary = summary
+        job.progress_current = summary["rows_processed"]
+        job.progress_total = summary["rows_processed"]
+        job.progress_message = "Import completed"
+        job.save(
+            update_fields=[
+                "status",
+                "summary",
+                "progress_current",
+                "progress_total",
+                "progress_message",
+                "updated_at",
+            ]
+        )
 
-            Event.objects.create(
-                entity_type="ImportJob",
-                entity_id=str(job.id),
-                action="RESULTS_IMPORTED",
-                actor=job.uploaded_by,
-                payload={
-                    "instrument_code": job.instrument.code,
-                    "instrument_name": job.instrument.name,
-                    "run_id": job.run_id,
-                    **summary,
-                },
+        job.refresh_from_db()
+
+        broadcast_import_job_update(
+            job,
+            f"Import completed: {job.instrument.code}",
+        )
+
+        Event.objects.create(
+            entity_type="ImportJob",
+            entity_id=str(job.id),
+            action="RESULTS_IMPORTED",
+            actor=job.uploaded_by,
+            payload={
+                "instrument_code": job.instrument.code,
+                "instrument_name": job.instrument.name,
+                "run_id": job.run_id,
+                **summary,
+            },
+        )
+
+        if job.uploaded_by:
+            Notification.objects.create(
+                user=job.uploaded_by,
+                title="Import completed",
+                message=f"{job.instrument.code} import finished. {summary['results_created']} results created.",
+                link="/imports",
             )
-
-            if job.uploaded_by:
-                Notification.objects.create(
-                    user=job.uploaded_by,
-                    title="Import completed",
-                    message=f"{job.instrument.code} import finished. {summary['results_created']} results created.",
-                    link="/imports",
-                )
 
     except Exception as e:
         job.status = "FAILED"
         job.summary = {"error": str(e)}
         job.progress_message = f"Import failed: {str(e)}"
-        job.save()
+        job.save(
+            update_fields=[
+                "status",
+                "summary",
+                "progress_message",
+                "updated_at",
+            ]
+        )
+
+        job.refresh_from_db()
+
+        broadcast_import_job_update(
+            job,
+            f"Import failed: {job.instrument.code}",
+        )
 
         if job.uploaded_by:
             Notification.objects.create(
