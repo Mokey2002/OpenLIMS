@@ -115,6 +115,37 @@ class BackendPermissionTests(APITestCase):
 
     def auth_as(self, user):
         self.client.force_authenticate(user=user)
+    def test_admin_can_export_audit_events(self):
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.get("/api/events/export-csv/")
+
+        assert response.status_code == 200
+
+
+    def test_tech_cannot_export_audit_events(self):
+        self.client.force_authenticate(user=self.tech)
+
+        response = self.client.get("/api/events/export-csv/")
+
+        assert response.status_code == 403
+
+
+    def test_viewer_cannot_export_audit_events(self):
+        self.client.force_authenticate(user=self.viewer)
+
+        response = self.client.get("/api/events/export-csv/")
+
+        assert response.status_code == 403
+
+
+    def test_viewer_can_read_audit_events(self):
+        self.client.force_authenticate(user=self.viewer)
+
+        response = self.client.get("/api/events/")
+
+        assert response.status_code == 200
+
 
     def test_viewer_can_read_samples(self):
         self.auth_as(self.viewer)
