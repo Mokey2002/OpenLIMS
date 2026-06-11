@@ -8,7 +8,10 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from core.permissions import IsAuthenticatedReadOnlyAdminWrite
+from core.permissions import (
+    IsAdminOnly,
+    IsAuthenticatedReadOnlyAdminWrite,
+)
 
 from .models import Event
 from .serializers import EventSerializer
@@ -18,12 +21,22 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Audit/event log.
 
-    Users can view events.
-    Admin/director users can export audit logs.
+    Read:
+      - admin
+      - tech
+      - viewer
+
+    Export:
+      - admin only
     """
 
     serializer_class = EventSerializer
-    permission_classes = [IsAuthenticatedReadOnlyAdminWrite]
+
+    def get_permissions(self):
+        if self.action in ["export_csv", "export_json"]:
+            return [IsAdminOnly()]
+
+        return [IsAuthenticatedReadOnlyAdminWrite()]
 
     def get_queryset(self):
         queryset = (
@@ -65,6 +78,7 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
                 | Q(entity_type__icontains=search)
                 | Q(entity_id__icontains=search)
                 | Q(actor__username__icontains=search)
+                | Q(payload__icontains=search)
             )
 
         return queryset
