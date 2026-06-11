@@ -12,6 +12,7 @@ import {
 } from "react-bootstrap";
 import { apiGet } from "../api";
 import { getAccessToken } from "../auth";
+import { isAdmin } from "../authz";
 
 function formatTimestamp(ts) {
   if (!ts) return "-";
@@ -87,6 +88,7 @@ async function downloadAuditExport(format, filters) {
 }
 
 export default function Events() {
+  const [me, setMe] = useState(null);
   const [events, setEvents] = useState([]);
   const [summary, setSummary] = useState(null);
 
@@ -110,11 +112,13 @@ export default function Events() {
     try {
       const queryString = buildQueryString(filters);
 
-      const [eventsData, summaryData] = await Promise.all([
+      const [meData, eventsData, summaryData] = await Promise.all([
+        apiGet("/api/me/"),
         apiGet(`/api/events/${queryString}`),
         apiGet(`/api/events/summary/${queryString}`),
       ]);
 
+      setMe(meData);
       setEvents(eventsData.results || eventsData || []);
       setSummary(summaryData);
     } catch (e) {
@@ -128,6 +132,8 @@ export default function Events() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const userIsAdmin = isAdmin(me);
 
   const entityTypes = useMemo(() => {
     const fromSummary = summary?.entity_types || [];
@@ -190,27 +196,38 @@ export default function Events() {
             Refresh
           </Button>
 
-          <Button
-            variant="outline-primary"
-            size="sm"
-            onClick={() => exportFile("csv")}
-            disabled={Boolean(exporting)}
-          >
-            {exporting === "csv" ? "Exporting..." : "Export CSV"}
-          </Button>
+          {userIsAdmin && (
+            <>
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={() => exportFile("csv")}
+                disabled={Boolean(exporting)}
+              >
+                {exporting === "csv" ? "Exporting..." : "Export CSV"}
+              </Button>
 
-          <Button
-            variant="outline-secondary"
-            size="sm"
-            onClick={() => exportFile("json")}
-            disabled={Boolean(exporting)}
-          >
-            {exporting === "json" ? "Exporting..." : "Export JSON"}
-          </Button>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => exportFile("json")}
+                disabled={Boolean(exporting)}
+              >
+                {exporting === "json" ? "Exporting..." : "Export JSON"}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
       {err && <Alert variant="danger">{err}</Alert>}
+
+      {!userIsAdmin && (
+        <Alert variant="info">
+          Audit export is restricted to admins. You can still view and filter
+          events.
+        </Alert>
+      )}
 
       <Card className="app-card mb-4">
         <Card.Body>
@@ -325,7 +342,9 @@ export default function Events() {
         <Card className="app-card metric-card h-100">
           <Card.Body>
             <div className="metric-label">Matching Events</div>
-            <div className="metric-value">{summary?.total_events ?? events.length}</div>
+            <div className="metric-value">
+              {summary?.total_events ?? events.length}
+            </div>
             <div className="metric-note">Based on current filters</div>
           </Card.Body>
         </Card>
