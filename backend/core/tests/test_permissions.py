@@ -3,11 +3,13 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.files.uploadedfile import SimpleUploadedFile
-from rest_framework.test import APITestCase
 from rest_framework import status
-from blast.models import BlastDatabase, BlastJob
+from rest_framework.test import APITestCase
 
+from alignments.models import AlignmentJob
+from blast.models import BlastDatabase, BlastJob
 from imports.models import InstrumentProfile
+from mass_spec.models import MassSpecRun
 from projects.models import Project
 from results.models import WorkItem
 from samples.models import Sample
@@ -97,6 +99,7 @@ class BackendPermissionTests(APITestCase):
             sample=self.sample,
             created_by=self.tech,
         )
+
         self.blast_database = BlastDatabase.objects.create(
             name="Permission Test BLAST DB",
             description="BLAST database used for permission tests.",
@@ -115,37 +118,173 @@ class BackendPermissionTests(APITestCase):
 
     def auth_as(self, user):
         self.client.force_authenticate(user=user)
+
     def test_admin_can_export_audit_events(self):
-        self.client.force_authenticate(user=self.admin)
+        self.auth_as(self.admin)
 
         response = self.client.get("/api/events/export-csv/")
 
-        assert response.status_code == 200
-
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_tech_cannot_export_audit_events(self):
-        self.client.force_authenticate(user=self.tech)
+        self.auth_as(self.tech)
 
         response = self.client.get("/api/events/export-csv/")
 
-        assert response.status_code == 403
-
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_viewer_cannot_export_audit_events(self):
-        self.client.force_authenticate(user=self.viewer)
+        self.auth_as(self.viewer)
 
         response = self.client.get("/api/events/export-csv/")
 
-        assert response.status_code == 403
-
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_viewer_can_read_audit_events(self):
-        self.client.force_authenticate(user=self.viewer)
+        self.auth_as(self.viewer)
 
         response = self.client.get("/api/events/")
 
-        assert response.status_code == 200
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+    def test_viewer_can_read_mass_spec_runs(self):
+        self.auth_as(self.viewer)
+
+        response = self.client.get("/api/mass-spec-runs/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_viewer_cannot_create_mass_spec_run(self):
+        self.auth_as(self.viewer)
+
+        upload = SimpleUploadedFile(
+            "viewer-blocked.mzML",
+            b"not a real mzML file",
+            content_type="application/octet-stream",
+        )
+
+        response = self.client.post(
+            "/api/mass-spec-runs/",
+            {
+                "name": "Viewer Blocked Mass Spec Run",
+                "project": self.project.id,
+                "sample": self.sample.id,
+                "uploaded_file": upload,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch("mass_spec.views.process_mass_spec_run_task.delay")
+    def test_tech_can_create_mass_spec_run(self, mock_delay):
+        self.auth_as(self.tech)
+
+        upload = SimpleUploadedFile(
+            "tech-upload.mzML",
+            b"not a real mzML file",
+            content_type="application/octet-stream",
+        )
+
+        response = self.client.post(
+            "/api/mass-spec-runs/",
+            {
+                "name": "Tech Mass Spec Run",
+                "project": self.project.id,
+                "sample": self.sample.id,
+                "uploaded_file": upload,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        run = MassSpecRun.objects.get(name="Tech Mass Spec Run")
+        self.assertEqual(run.uploaded_by, self.tech)
+
+        mock_delay.assert_called_once_with(run.id)
+
+    @patch("mass_spec.views.process_mass_spec_run_task.delay")
+    def test_admin_can_create_mass_spec_run(self, mock_delay):
+        self.auth_as(self.admin)
+
+        upload = SimpleUploadedFile(
+            "admin-upload.mzML",
+            b"not a real mzML file",
+            content_type="application/octet-stream",
+        )
+
+        response = self.client.post(
+            "/api/mass-spec-runs/",
+            {
+                "name": "Admin Mass Spec Run",
+                "project": self.project.id,
+                "sample": self.sample.id,
+                "uploaded_file": upload,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        run = MassSpecRun.objects.get(name="Admin Mass Spec Run")
+        self.assertEqual(run.uploaded_by, self.admin)
+
+        mock_delay.assert_called_once_with(run.id)
+
+    def test_viewer_cannot_reprocess_mass_spec_run(self):
+        run = MassSpecRun.objects.create(
+            name="Existing Mass Spec Run",
+            project=self.project,
+            sample=self.sample,
+            uploaded_by=self.tech,
+            uploaded_file="mass_spec/existing.mzML",
+            original_filename="existing.mzML",
+        )
+
+        self.auth_as(self.viewer)
+
+        response = self.client.post(f"/api/mass-spec-runs/{run.id}/reprocess/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch("mass_spec.views.process_mass_spec_run_task.delay")
+    def test_tech_can_reprocess_mass_spec_run(self, mock_delay):
+        run = MassSpecRun.objects.create(
+            name="Existing Mass Spec Run",
+            project=self.project,
+            sample=self.sample,
+            uploaded_by=self.tech,
+            uploaded_file="mass_spec/existing.mzML",
+            original_filename="existing.mzML",
+        )
+
+        self.auth_as(self.tech)
+
+        response = self.client.post(f"/api/mass-spec-runs/{run.id}/reprocess/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        mock_delay.assert_called_once_with(run.id)
+
+    @patch("mass_spec.views.process_mass_spec_run_task.delay")
+    def test_admin_can_reprocess_mass_spec_run(self, mock_delay):
+        run = MassSpecRun.objects.create(
+            name="Existing Admin Mass Spec Run",
+            project=self.project,
+            sample=self.sample,
+            uploaded_by=self.tech,
+            uploaded_file="mass_spec/existing-admin.mzML",
+            original_filename="existing-admin.mzML",
+        )
+
+        self.auth_as(self.admin)
+
+        response = self.client.post(f"/api/mass-spec-runs/{run.id}/reprocess/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        mock_delay.assert_called_once_with(run.id)
 
     def test_viewer_can_read_samples(self):
         self.auth_as(self.viewer)
@@ -433,6 +572,7 @@ class BackendPermissionTests(APITestCase):
             response.status_code,
             [status.HTTP_201_CREATED, status.HTTP_202_ACCEPTED],
         )
+
     def test_viewer_can_read_blast_databases(self):
         self.auth_as(self.viewer)
 
@@ -591,7 +731,7 @@ class BackendPermissionTests(APITestCase):
         self.assertEqual(job.created_by, self.admin)
 
         mock_delay.assert_called_once_with(job.id)
-        
+
     def test_admin_can_access_admin_users(self):
         self.auth_as(self.admin)
 

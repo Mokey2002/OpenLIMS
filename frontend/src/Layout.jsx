@@ -1,17 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Badge,
+  Button,
   Container,
+  Form,
   Nav,
   Navbar,
-  Button,
+  NavDropdown,
   Spinner,
-  Badge,
-  Form,
 } from "react-bootstrap";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearTokens } from "./auth";
 import { apiGet } from "./api";
 import { isAdmin, isTech } from "./authz";
+
+function DropdownItemLink({ to, children }) {
+  return (
+    <NavDropdown.Item as={NavLink} to={to}>
+      {children}
+    </NavDropdown.Item>
+  );
+}
 
 export default function Layout() {
   const nav = useNavigate();
@@ -49,7 +58,6 @@ export default function Layout() {
     e.preventDefault();
 
     const q = globalSearch.trim();
-
     if (!q) return;
 
     nav(`/search?q=${encodeURIComponent(q)}`);
@@ -66,92 +74,86 @@ export default function Layout() {
 
   return (
     <>
-      <Navbar bg="dark" variant="dark" expand="lg" className="mb-4">
+      <Navbar
+        bg="dark"
+        variant="dark"
+        expand="xl"
+        sticky="top"
+        className="mb-4 shadow-sm"
+      >
         <Container fluid className="px-4">
-          <Navbar.Brand as={NavLink} to="/">
-            OpenLIMS
+          <Navbar.Brand
+            as={NavLink}
+            to="/"
+            className="fw-bold d-flex align-items-center gap-2"
+          >
+            <span>OpenLIMS</span>
+            <Badge bg="secondary" className="fw-normal">
+              Demo
+            </Badge>
           </Navbar.Brand>
 
           <Navbar.Toggle aria-controls="openlims-nav" />
 
           <Navbar.Collapse id="openlims-nav">
-            <Nav className="me-auto">
+            <Nav className="me-auto align-items-xl-center">
               <Nav.Link as={NavLink} to="/">
                 Dashboard
               </Nav.Link>
 
-              <Nav.Link as={NavLink} to="/samples">
-                Samples
-              </Nav.Link>
+              <NavDropdown title="Core" id="core-nav">
+                <DropdownItemLink to="/projects">Projects</DropdownItemLink>
+                <DropdownItemLink to="/samples">Samples</DropdownItemLink>
+                <DropdownItemLink to="/inventory">Inventory</DropdownItemLink>
+              </NavDropdown>
 
-              <Nav.Link as={NavLink} to="/inventory">
-                Inventory
-              </Nav.Link>
+              <NavDropdown title="Analysis" id="analysis-nav">
+                <DropdownItemLink to="/analyze">Analyze</DropdownItemLink>
+                <DropdownItemLink to="/sequences">Sequences</DropdownItemLink>
+                <DropdownItemLink to="/alignments">Alignments</DropdownItemLink>
+                <DropdownItemLink to="/blast">BLAST</DropdownItemLink>
+                <DropdownItemLink to="/mass-spec">Mass Spec</DropdownItemLink>
+              </NavDropdown>
 
-              <Nav.Link as={NavLink} to="/events">
-                Events
-              </Nav.Link>
+              <NavDropdown title="Operations" id="operations-nav">
+                {(userIsAdmin || userIsTech) && (
+                  <DropdownItemLink to="/imports">Imports</DropdownItemLink>
+                )}
 
-              <Nav.Link as={NavLink} to="/analyze">
-                Analyze
-              </Nav.Link>
+                <DropdownItemLink to="/events">Audit Events</DropdownItemLink>
+                <DropdownItemLink to="/reports">Reports</DropdownItemLink>
 
-              <Nav.Link as={NavLink} to="/projects">
-                Projects
-              </Nav.Link>
-
-              <Nav.Link as={NavLink} to="/sequences">
-                Sequences
-              </Nav.Link>
-
-              <Nav.Link as={NavLink} to="/alignments">
-                Alignments
-              </Nav.Link>
-              <Nav.Link as={NavLink} to="/blast">
-              BLAST
-            </Nav.Link>
-
-              <Nav.Link as={NavLink} to="/reports">
-                Reports
-              </Nav.Link>
+                <DropdownItemLink to="/notifications">
+                  Notifications{" "}
+                  {unreadCount > 0 && (
+                    <Badge bg="danger" className="ms-1">
+                      {unreadCount}
+                    </Badge>
+                  )}
+                </DropdownItemLink>
+              </NavDropdown>
 
               {userIsAdmin && (
-                <Nav.Link as={NavLink} to="/users">
-                  Users
-                </Nav.Link>
+                <NavDropdown title="Admin" id="admin-nav">
+                  <DropdownItemLink to="/users">Users</DropdownItemLink>
+                  <DropdownItemLink to="/settings">Settings</DropdownItemLink>
+                  <DropdownItemLink to="/system-status">
+                    System Status
+                  </DropdownItemLink>
+                </NavDropdown>
               )}
-
-              {(userIsAdmin || userIsTech) && (
-                <Nav.Link as={NavLink} to="/imports">
-                  Imports
-                </Nav.Link>
-              )}
-
-              {userIsAdmin && (
-                <Nav.Link as={NavLink} to="/settings">
-                  Settings
-                </Nav.Link>
-              )}
-
-              {userIsAdmin && (
-                <Nav.Link as={NavLink} to="/system-status">
-                  System Status
-                </Nav.Link>
-              )}
-
-              <Nav.Link as={NavLink} to="/notifications">
-                Notifications{" "}
-                {unreadCount > 0 && <Badge bg="danger">{unreadCount}</Badge>}
-              </Nav.Link>
             </Nav>
 
-            <Form className="d-flex me-3 my-2 my-lg-0" onSubmit={submitGlobalSearch}>
+            <Form
+              className="d-flex me-xl-3 my-3 my-xl-0"
+              onSubmit={submitGlobalSearch}
+            >
               <Form.Control
                 size="sm"
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.target.value)}
-                placeholder="Search..."
-                style={{ width: "220px" }}
+                placeholder="Search samples, projects..."
+                style={{ minWidth: "260px" }}
               />
             </Form>
 
@@ -159,10 +161,12 @@ export default function Layout() {
               {loadingMe ? (
                 <Spinner animation="border" size="sm" variant="light" />
               ) : (
-                <small className="text-light">
-                  {me?.username || "Unknown user"}
-                  {me?.roles?.length ? ` (${me.roles.join(", ")})` : ""}
-                </small>
+                <div className="text-light small text-xl-end">
+                  <div className="fw-semibold">{me?.username || "Unknown"}</div>
+                  <div className="text-light opacity-75">
+                    {me?.roles?.length ? me.roles.join(", ") : "No role"}
+                  </div>
+                </div>
               )}
 
               <Button variant="outline-light" size="sm" onClick={logout}>

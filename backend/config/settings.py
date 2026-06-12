@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     'settings_app',
     'django.contrib.postgres',
     'blast',
+    'mass_spec',
 ]
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
