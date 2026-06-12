@@ -16,6 +16,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from core.views import MeView, OpenLIMSTokenObtainPairView
 from core.search_views import GlobalSearchView
 
+
 def _check_command(command, version_arg="-version"):
     try:
         result = subprocess.run(
@@ -38,6 +39,21 @@ def _check_command(command, version_arg="-version"):
         }
 
 
+def _check_pyopenms():
+    try:
+        import pyopenms as oms
+
+        return {
+            "ok": True,
+            "version": getattr(oms, "__version__", "unknown"),
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e),
+        }
+
+
 def health(request):
     checks = {
         "db_ok": False,
@@ -46,6 +62,7 @@ def health(request):
         "blastn_ok": False,
         "blastp_ok": False,
         "makeblastdb_ok": False,
+        "pyopenms_ok": False,
     }
 
     try:
@@ -99,6 +116,15 @@ def health(request):
     if makeblastdb.get("error"):
         checks["makeblastdb_error"] = makeblastdb["error"]
 
+    pyopenms = _check_pyopenms()
+    checks["pyopenms_ok"] = pyopenms["ok"]
+
+    if pyopenms.get("version"):
+        checks["pyopenms_version"] = pyopenms["version"]
+
+    if pyopenms.get("error"):
+        checks["pyopenms_error"] = pyopenms["error"]
+
     all_ok = (
         checks["db_ok"]
         and checks["redis_ok"]
@@ -106,6 +132,7 @@ def health(request):
         and checks["blastn_ok"]
         and checks["blastp_ok"]
         and checks["makeblastdb_ok"]
+        and checks["pyopenms_ok"]
     )
 
     return JsonResponse(
@@ -115,6 +142,7 @@ def health(request):
         },
         status=200 if all_ok else 503,
     )
+
 
 def home(request):
     return JsonResponse(

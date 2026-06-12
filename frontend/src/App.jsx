@@ -21,6 +21,9 @@ import Reports from "./pages/Reports";
 import SystemStatus from "./pages/SystemStatus";
 import Search from "./pages/Search";
 import Blast from "./pages/Blast";
+import MassSpec from "./pages/MassSpec";
+import MassSpecDetail from "./pages/MassSpecDetail";
+
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
 }
@@ -58,6 +61,8 @@ export default function App() {
           <Route path="imports/:id" element={<ImportDetail />} />
           <Route path="search" element={<Search />} />
           <Route path="blast" element={<Blast />} />
+          <Route path="mass-spec" element={<MassSpec />} />
+          <Route path="mass-spec/:id" element={<MassSpecDetail />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
