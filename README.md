@@ -1,12 +1,12 @@
-# 🧪 OpenLIMS
+# OpenLIMS
 
-**OpenLIMS** is a lightweight, modular, production-style Laboratory Information Management System (LIMS) designed to support real lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence workspaces, Clustal Omega alignments, local BLAST search, audit trails, notifications, reporting, and system health monitoring.
+OpenLIMS is a lightweight, modular, production-style Laboratory Information Management System (LIMS) designed to support real laboratory workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence workspaces, Clustal Omega alignments, local BLAST search, mass spectrometry preview workflows, audit trails, notifications, reporting, real-time job updates, and system health monitoring.
 
-OpenLIMS is currently a **production-style prototype**, not a fully validated clinical or regulated production LIMS. The goal is to provide a practical, configurable, easy-to-deploy foundation for laboratory workflow software.
+OpenLIMS is currently a production-style prototype, not a fully validated clinical or regulated production LIMS. The goal is to provide a practical, configurable, easy-to-deploy foundation for laboratory workflow software.
 
 ---
 
-## 🌐 Live Demo
+## Live Demo
 
 OpenLIMS is currently deployed here:
 
@@ -26,52 +26,84 @@ http://16.146.193.92
 
 ---
 
-## 🚀 Current Release
+## Current Release
 
-**OpenLIMS v0.9.0 — Real-Time Job Updates**
+# OpenLIMS v0.11.0 — pyOpenMS Mass Spectrometry Preview
 
-This release adds real-time WebSocket job updates across OpenLIMS background workflows. BLAST jobs, Clustal Omega alignment jobs, and CSV import jobs can now update the frontend automatically without relying on manual refresh or page-level polling.
+OpenLIMS v0.11.0 adds an initial mass spectrometry module powered by pyOpenMS. Users can upload mass spectrometry files, process them asynchronously through Celery, view extracted run metadata, inspect MS1/MS2 spectrum counts, and preview a Total Ion Chromatogram (TIC) chart from retention time and total intensity data.
 
-### v0.9.0 Highlights
+### v0.11.0 Highlights
 
-- Django Channels WebSocket foundation
-- Daphne ASGI runtime for HTTP and WebSocket traffic
-- Redis Pub/Sub channel layer for real-time broadcasts
-- JWT-authenticated WebSocket connections
-- Shared backend broadcast utility for job updates
-- Live BLAST database and BLAST job updates
-- Live Clustal Omega alignment job updates
-- Live CSV import progress and completion updates
-- Frontend real-time job socket hook
-- Live update indicators on BLAST, Alignments, and Imports pages
-- Import page cleanup: removed active-job polling and improved paginated profile loading
-- Instrument profile dropdown fix for newly created profiles
+- New Mass Spec module
+- Upload support for `mzML`, `mzXML`, and `mzData` files
+- pyOpenMS-based file processing
+- Celery background processing for mass spec runs
+- Mass spec run list page
+- Mass spec run detail page
+- Total Ion Chromatogram (TIC) preview chart
+- Chromatogram point table
+- Spectra count extraction
+- MS1/MS2 spectrum count extraction
+- Retention time range extraction
+- m/z range extraction
+- Project and sample linking for mass spec runs
+- Reprocess action for uploaded mass spec runs
+- Audit events for upload, processing, reprocessing, and failure states
+- pyOpenMS health check support
+- Docker runtime dependencies for pyOpenMS
+- Backend permission tests for mass spec upload, read, and reprocess access
+
+### Access Control
+
+| Role | Mass Spec Access |
+|---|---|
+| Admin / Director | Upload, view, reprocess |
+| Tech | Upload, view, reprocess |
+| Viewer | View only |
+
+### Supported Mass Spec Workflow
+
+```text
+Upload mzML / mzXML / mzData file
+   ↓
+Create MassSpecRun as PENDING
+   ↓
+Queue Celery processing task
+   ↓
+pyOpenMS loads experiment
+   ↓
+Extract spectra count, MS1/MS2 counts, RT range, m/z range, TIC points
+   ↓
+Store results on MassSpecRun
+   ↓
+Render Mass Spec detail page and TIC chart
+   ↓
+Record audit events
+```
 
 ---
 
-## 🚀 Core Features
+## Core Features
 
-### Role-Based Access Control
+## Role-Based Access Control
 
 OpenLIMS uses JWT authentication and role-based permissions.
 
-Current roles:
-
 | Role | Purpose |
 |---|---|
-| `admin` / Director | Full administrative access |
-| `tech` | Lab workflow access |
-| `viewer` | Read-only access |
+| Admin / Director | Full administrative access |
+| Tech | Lab workflow access |
+| Viewer | Read-only access |
 
 Director/admin users can manage users, system settings, instrument profiles, imports, samples, sequences, projects, audit workflows, reports, and system health tools.
 
-Tech users can perform lab workflow actions such as updating samples, running imports, managing sequence workspaces, queueing alignments, and running BLAST searches.
+Tech users can perform lab workflow actions such as updating samples, running imports, managing sequence workspaces, queueing alignments, running BLAST searches, and processing mass spec runs.
 
-Viewer users can inspect dashboards, samples, projects, audit events, imports, sequences, alignments, BLAST results, and reports without write access.
+Viewer users can inspect dashboards, samples, projects, audit events, imports, sequences, alignments, BLAST results, mass spec runs, and reports without write access.
 
 ---
 
-## 🧫 Sample Management
+## Sample Management
 
 OpenLIMS supports sample lifecycle tracking with statuses such as:
 
@@ -88,11 +120,11 @@ Users can:
 - Assign samples to containers and storage locations
 - Upload sample attachments
 - View sample work items, results, and audit timeline events
-- Link samples to sequence workspaces and import jobs
+- Link samples to sequence workspaces, import jobs, BLAST jobs, and mass spec runs
 
 ---
 
-## 📁 Project Management
+## Project Management
 
 Projects act as shared workspaces for lab teams.
 
@@ -101,13 +133,13 @@ Users can:
 - Create projects
 - Assign users to projects
 - Restrict visibility by project membership
-- Add project notes/feed posts
-- Link samples, imports, sequences, alignments, and BLAST jobs to projects
+- Add project notes and feed posts
+- Link samples, imports, sequences, alignments, BLAST jobs, and mass spec runs to projects
 - Notify project members when updates are posted
 
 ---
 
-## 🧊 Inventory Management
+## Inventory Management
 
 OpenLIMS supports basic lab inventory organization:
 
@@ -126,7 +158,7 @@ Sequencing Bench → SEQ-RACK-1 → S-GAMMA-001
 
 ---
 
-## 🧬 Sequence Workspaces
+## Sequence Workspaces
 
 OpenLIMS includes sequence workspace support for DNA, RNA, and protein records.
 
@@ -140,7 +172,7 @@ Users can:
 - Import FASTA records into sequence workspaces
 - Use sequence records as inputs for Clustal Omega alignments and BLAST searches
 
-Sequence workspaces are designed to support workflows like:
+Example workflow:
 
 ```text
 Sample → FASTA import → Sequence workspace → Alignment job → BLAST search → Audit event
@@ -148,7 +180,7 @@ Sample → FASTA import → Sequence workspace → Alignment job → BLAST searc
 
 ---
 
-## 🧬 FASTA Import Preview and Confirm
+## FASTA Import Preview and Confirm
 
 OpenLIMS supports a safer FASTA import workflow:
 
@@ -170,20 +202,31 @@ The preview step helps prevent accidental bad imports by showing records found, 
 
 ---
 
-## 🧪 Instrument Data Ingestion
+## Instrument Data Ingestion
 
 OpenLIMS supports two ingestion workflows:
 
-1. CSV upload through the UI
-2. Direct instrument/API push
+- CSV upload through the UI
+- Direct instrument/API push
 
 Instrument profiles define how incoming data should be interpreted. Each instrument profile can define an instrument name, instrument code, delimiter, sample ID column, column mappings, numeric min/max validation, and allowed values.
 
-Demo instrument profiles include NovaFlex Analyzer, Illumina MiSeq Sequencer, Applied Biosystems 3500 Sanger Sequencer, Charles River Endosafe Nexus, Molecular Devices SpectraMax Plate Reader, Applied Biosystems 7500 qPCR System, Thermo Fisher NanoDrop One, Agilent 2100 Bioanalyzer, Hamilton STAR Liquid Handler, and Generic FASTA Sequencer.
+Demo instrument profiles include:
+
+- NovaFlex Analyzer
+- Illumina MiSeq Sequencer
+- Applied Biosystems 3500 Sanger Sequencer
+- Charles River Endosafe Nexus
+- Molecular Devices SpectraMax Plate Reader
+- Applied Biosystems 7500 qPCR System
+- Thermo Fisher NanoDrop One
+- Agilent 2100 Bioanalyzer
+- Hamilton STAR Liquid Handler
+- Generic FASTA Sequencer
 
 ---
 
-## ⚙️ Async Import Processing
+## Async Import Processing
 
 CSV imports are processed asynchronously using Celery and Redis.
 
@@ -203,13 +246,13 @@ Worker creates samples, work items, and results
 Worker marks job COMPLETED or FAILED
 ```
 
-Import jobs track status, source type, run ID, progress, rows processed, samples created/matched, results created, skipped rows, and linked samples.
+Import jobs track status, source type, run ID, progress, rows processed, samples created or matched, results created, skipped rows, and linked samples.
 
 ---
 
-## ⚡ Real-Time Job Updates
+## Real-Time Job Updates
 
-OpenLIMS v0.9.0 adds real-time job updates using Django Channels, Daphne, Redis Pub/Sub, and JWT-authenticated WebSocket connections.
+OpenLIMS includes real-time job updates using Django Channels, Daphne, Redis Pub/Sub, and JWT-authenticated WebSocket connections.
 
 Supported live workflows:
 
@@ -234,17 +277,17 @@ React page receives update
 Frontend reloads current job data automatically
 ```
 
-The BLAST, Alignments, and Imports pages show a live update status badge. Users can still click Refresh manually, but normal job completion no longer requires manual refresh.
+The BLAST, Alignments, and Imports pages show live update status badges. Users can still click Refresh manually, but normal job completion no longer requires manual refresh.
 
 ---
 
-## 🧬 Async Clustal Omega Alignments
+## Clustal Omega Alignments
 
-OpenLIMS supports sequence alignment jobs using Clustal Omega. Alignment jobs run asynchronously through Celery and store input FASTA, aligned FASTA, sequence count, alignment summary, and downloadable aligned FASTA. Alignment status and completion now update live through WebSockets.
+OpenLIMS supports sequence alignment jobs using Clustal Omega. Alignment jobs run asynchronously through Celery and store input FASTA, aligned FASTA, sequence count, alignment summary, and downloadable aligned FASTA. Alignment status and completion update live through WebSockets.
 
 ---
 
-## 🔎 Local BLAST Search
+## Local BLAST Search
 
 OpenLIMS includes a local BLAST workflow for sequence similarity searches.
 
@@ -266,28 +309,69 @@ After running `seed_demo`, users can test BLAST with:
 
 | Field | Value |
 |---|---|
-| Query Sequence | `BLAST Demo Query` |
-| BLAST Database | `Demo DNA BLAST DB` |
+| Query Sequence | BLAST Demo Query |
+| BLAST Database | Demo DNA BLAST DB |
 | Program | `blastn` |
-
-The seeded database includes a known matching reference so users can confirm that the BLAST workflow is working.
 
 ### BLAST APIs
 
-- `GET /api/blast-databases/`
-- `POST /api/blast-databases/`
-- `POST /api/blast-databases/:id/build/`
-- `GET /api/blast-jobs/`
-- `POST /api/blast-jobs/`
-- `GET /api/blast-jobs/:id/hits/`
-
-### BLAST Integration Points
-
-BLAST is integrated into the BLAST page, System Status dashboard, Global Search, Reports page, CSV report export, backend permission tests, demo seed data, and Docker image dependencies.
+```text
+GET  /api/blast-databases/
+POST /api/blast-databases/
+POST /api/blast-databases/:id/build/
+GET  /api/blast-jobs/
+POST /api/blast-jobs/
+GET  /api/blast-jobs/:id/hits/
+```
 
 ---
 
-## 📊 Analysis
+## Mass Spectrometry Preview
+
+OpenLIMS v0.11.0 introduces mass spectrometry preview support using pyOpenMS.
+
+Users can:
+
+- Upload `mzML`, `mzXML`, and `mzData` files
+- Link mass spec runs to projects
+- Link mass spec runs to samples
+- Process files asynchronously using Celery
+- View run status and processing errors
+- Reprocess uploaded runs
+- View spectra counts
+- View MS1/MS2 counts
+- View retention time range
+- View m/z range
+- View a TIC chart
+- View raw chromatogram points
+- View audit events for mass spec workflows
+
+### Mass Spec APIs
+
+```text
+GET  /api/mass-spec-runs/
+POST /api/mass-spec-runs/
+GET  /api/mass-spec-runs/:id/
+POST /api/mass-spec-runs/:id/reprocess/
+```
+
+### TIC Preview
+
+The TIC chart is generated from each spectrum by summing intensity values and plotting total intensity against retention time.
+
+```text
+Spectrum RT + intensity values
+   ↓
+Sum intensities per spectrum
+   ↓
+Store chromatogram_data
+   ↓
+Render SVG TIC chart in React
+```
+
+---
+
+## Analysis
 
 The analysis page supports selecting projects, selecting samples, choosing numeric result metrics, viewing trends over time, and exporting chart data as CSV.
 
@@ -295,7 +379,7 @@ This helps users inspect imported results such as concentration, purity, yield, 
 
 ---
 
-## 📈 Reports
+## Reports
 
 OpenLIMS includes a reports page for operational summaries and CSV exports.
 
@@ -309,15 +393,25 @@ Current report areas include:
 - BLAST summary
 - Audit activity
 
-The BLAST summary includes total BLAST databases, ready BLAST databases, total BLAST jobs, completed BLAST jobs, failed BLAST jobs, total BLAST hits, recent BLAST jobs, and BLAST CSV export.
-
 ---
 
-## 🔍 Global Search
+## Global Search
 
 OpenLIMS includes a global search endpoint and navbar search experience.
 
-Search can return samples, projects, sequences, alignments, BLAST databases, BLAST jobs, BLAST hits, import jobs, instruments, events, and users for admin users.
+Search can return:
+
+- Samples
+- Projects
+- Sequences
+- Alignments
+- BLAST databases
+- BLAST jobs
+- BLAST hits
+- Import jobs
+- Instruments
+- Events
+- Users for admin users
 
 Example searches:
 
@@ -333,33 +427,71 @@ NovaFlex
 
 ---
 
-## 🧾 Audit Trail and Chain of Custody
+## Audit Trail and Chain of Custody Foundation
 
 OpenLIMS records important actions as audit events.
 
-Examples include sample created, sample status changed, sample container changed, attachment uploaded, results imported, import retry queued, sequence imported, alignment queued, alignment completed, BLAST database built, BLAST job completed, settings updated, and settings reset to defaults.
+Examples include:
+
+- Sample created
+- Sample status changed
+- Sample container changed
+- Attachment uploaded
+- Results imported
+- Import retry queued
+- Sequence imported
+- Alignment queued
+- Alignment completed
+- BLAST database built
+- BLAST job completed
+- Mass spec uploaded
+- Mass spec processed
+- Mass spec reprocess queued
+- Mass spec failed
+- Settings updated
+- Settings reset to defaults
 
 The Events page supports audit export as CSV and JSON. Audit logs can be filtered by entity type, action, actor, search term, and date range.
 
 ---
 
-## 🔔 Notifications
+## Notifications
 
-OpenLIMS includes notifications for key activity such as import completed, import failed, project post created, sequencing review needed, endotoxin review needed, alignment completed, alignment failed, BLAST job completed, BLAST job failed, and demo environment seeded.
+OpenLIMS includes notifications for key activity such as:
+
+- Import completed
+- Import failed
+- Project post created
+- Sequencing review needed
+- Endotoxin review needed
+- Alignment completed
+- Alignment failed
+- BLAST job completed
+- BLAST job failed
+- Demo environment seeded
 
 ---
 
-## 🛠 Admin Settings
+## Admin Settings
 
 OpenLIMS includes an admin/director settings page for system-level configuration.
 
-Settings include lab name, organization name, default timezone, default sample status, import settings, FASTA extension settings, sequence/alignment limits, and security settings such as viewer read-only mode and audit reason requirements.
+Settings include:
+
+- Lab name
+- Organization name
+- Default timezone
+- Default sample status
+- Import settings
+- FASTA extension settings
+- Sequence/alignment limits
+- Security settings such as viewer read-only mode and audit reason requirements
 
 Settings changes are logged to the audit event log.
 
 ---
 
-## 🩺 System Status Dashboard
+## System Status Dashboard
 
 OpenLIMS includes a system status dashboard and health endpoint.
 
@@ -371,6 +503,7 @@ The health endpoint checks important runtime dependencies:
 - `blastn`
 - `blastp`
 - `makeblastdb`
+- pyOpenMS
 
 Example:
 
@@ -388,13 +521,15 @@ Example response:
   "clustalo_ok": true,
   "blastn_ok": true,
   "blastp_ok": true,
-  "makeblastdb_ok": true
+  "makeblastdb_ok": true,
+  "pyopenms_ok": true,
+  "pyopenms_version": "..."
 }
 ```
 
 ---
 
-## 🧱 Architecture
+## Architecture
 
 ### Application Architecture
 
@@ -452,6 +587,16 @@ NCBI BLAST+
 BlastJob + BlastHit results
 ```
 
+### Mass Spec Processing
+
+```text
+Celery Worker
+   ↓
+pyOpenMS
+   ↓
+MassSpecRun summary + TIC data
+```
+
 ### Production Runtime Architecture
 
 ```text
@@ -469,7 +614,7 @@ Redis
    ↓
 Celery Worker
    ↓
-Clustal Omega + BLAST+
+Clustal Omega + BLAST+ + pyOpenMS
 
 Daphne ASGI
    ↓
@@ -480,7 +625,7 @@ Redis Pub/Sub
 
 ---
 
-## 🧩 Services
+## Services
 
 | Service | Purpose |
 |---|---|
@@ -489,15 +634,16 @@ Redis Pub/Sub
 | Daphne | ASGI runtime for HTTP and WebSocket traffic |
 | PostgreSQL | Primary database |
 | Redis | Celery broker/result backend and WebSocket channel layer |
-| Celery Worker | Background imports, alignments, BLAST jobs, and real-time job broadcasts |
+| Celery Worker | Background imports, alignments, BLAST jobs, mass spec processing, and real-time job broadcasts |
 | Clustal Omega | Sequence alignment engine |
 | NCBI BLAST+ | Local BLAST database and search engine |
+| pyOpenMS | Mass spectrometry file parsing and preview processing |
 | Caddy | Reverse proxy and static file serving |
 | Docker Compose | Service orchestration |
 
 ---
 
-## 🗂️ Main Django Apps
+## Main Django Apps
 
 | App | Responsibility |
 |---|---|
@@ -512,12 +658,13 @@ Redis Pub/Sub
 | `sequences` | Sequence workspaces and features |
 | `alignments` | Clustal Omega alignment jobs |
 | `blast` | BLAST databases, jobs, and hits |
+| `mass_spec` | Mass spectrometry uploads, pyOpenMS processing, TIC preview |
 | `settings_app` | Admin system settings |
 | `core` | Users, roles, permissions, search, shared utilities |
 
 ---
 
-## 🔁 Import Workflows
+## Import Workflows
 
 ### CSV Upload Workflow
 
@@ -599,9 +746,14 @@ curl -X POST http://localhost:8000/api/import-jobs/instrument-ingest/ \
 
 ---
 
-## 🔐 Authentication and Permissions
+## Authentication and Permissions
 
-OpenLIMS uses JWT authentication for users, shared API key authentication for instrument ingestion, role-based API permissions, and backend permission tests.
+OpenLIMS uses:
+
+- JWT authentication for users
+- Shared API key authentication for instrument ingestion
+- Role-based API permissions
+- Backend permission tests
 
 | Role | Demo User | Access |
 |---|---|---|
@@ -609,11 +761,11 @@ OpenLIMS uses JWT authentication for users, shared API key authentication for in
 | Tech | `peter`, `maria`, `michael` | Lab workflow access |
 | Viewer | `viewer` | Read-only access |
 
-Backend tests help verify that viewer users cannot perform write actions such as creating samples, updating samples, creating sequence workspaces, running imports, creating alignment jobs, creating BLAST databases, building BLAST databases, creating BLAST jobs, changing system settings, or managing users.
+Backend tests help verify that viewer users cannot perform write actions such as creating samples, updating samples, creating sequence workspaces, running imports, creating alignment jobs, creating BLAST databases, building BLAST databases, creating BLAST jobs, uploading mass spec files, reprocessing mass spec runs, changing system settings, or managing users.
 
 ---
 
-## 🐳 Local Development
+## Local Development
 
 ### 1. Clone the repository
 
@@ -645,9 +797,9 @@ CELERY_BROKER_URL=redis://redis:6379/0
 CELERY_RESULT_BACKEND=redis://redis:6379/1
 
 INSTRUMENT_API_KEY=my-shared-lab-instrument-key
-Production deployment note:
-OpenLIMS real-time updates require the API container to run Daphne/ASGI and the reverse proxy to forward `/ws/*` to the API service.
 ```
+
+Production deployment note: OpenLIMS real-time updates require the API container to run Daphne/ASGI and the reverse proxy to forward `/ws/*` to the API service.
 
 ### 3. Start services
 
@@ -684,7 +836,68 @@ Health:   http://localhost:8000/api/health/
 
 ---
 
-## 🧪 Running Tests
+## Testing Mass Spec Locally
+
+You can generate a small demo mzML file inside the API container:
+
+```bash
+docker compose -p openlims -f deploy/docker-compose.yml exec -T api python - <<'PY'
+import math
+import random
+import pyopenms as oms
+
+exp = oms.MSExperiment()
+random.seed(42)
+
+for i in range(30):
+    spectrum = oms.MSSpectrum()
+    ms_level = 1 if i % 5 != 0 else 2
+    spectrum.setMSLevel(ms_level)
+    spectrum.setRT(5.0 + i * 2.5)
+
+    peak_shape = math.exp(-((i - 15) ** 2) / 45.0)
+    mz_values = []
+    intensities = []
+
+    for j in range(20):
+        mz_values.append(100.0 + j * 25.0 + random.random())
+        intensity = (1000.0 * peak_shape) + random.uniform(10.0, 80.0)
+        if ms_level == 2:
+            intensity *= 0.45
+        intensities.append(intensity)
+
+    spectrum.set_peaks((mz_values, intensities))
+    exp.addSpectrum(spectrum)
+
+oms.MzMLFile().store("/app/media/demo_curve_mass_spec.mzML", exp)
+print("/app/media/demo_curve_mass_spec.mzML")
+PY
+```
+
+Copy it locally:
+
+```bash
+docker cp openlims-api:/app/media/demo_curve_mass_spec.mzML ./demo_curve_mass_spec.mzML
+```
+
+Upload it from the Mass Spec page:
+
+```text
+http://localhost:5173/mass-spec
+```
+
+Expected result:
+
+```text
+Spectra: 30
+MS1: 24
+MS2: 6
+TIC Points: 30
+```
+
+---
+
+## Running Tests
 
 Run all tests:
 
@@ -706,11 +919,11 @@ npm install
 npm run build
 ```
 
-Test coverage includes instrument API ingest, CSV import workflow, duplicate run protection, import retry validation, FASTA import validation, backend permissions, project permissions, sample transitions, notifications, alignment workflow behavior, BLAST permission tests, and system health checks. Real-time job update behavior can be verified locally by queueing BLAST, alignment, and import jobs and confirming the frontend updates without manual refresh.
+Test coverage includes instrument API ingest, CSV import workflow, duplicate run protection, import retry validation, FASTA import validation, backend permissions, project permissions, sample transitions, notifications, alignment workflow behavior, BLAST permission tests, mass spec permission tests, and system health checks.
 
 ---
 
-## ✅ CI/CD
+## CI/CD
 
 OpenLIMS uses GitHub Actions for CI.
 
@@ -736,7 +949,7 @@ Build frontend
 
 ---
 
-## 📦 Database Backup
+## Database Backup
 
 Create backup:
 
@@ -752,37 +965,36 @@ cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.pr
 
 ---
 
-## 🏢 Enterprise Feature Roadmap
+## Enterprise Feature Roadmap
 
 | # | Feature | Status |
 |---|---|---|
-| 1 | Admin Settings page | ✅ Added |
-| 2 | Audit log export | ✅ Added |
-| 3 | User management improvements | ✅ Added |
-| 4 | QC approval workflow | ✅ Added |
-| 5 | Project dashboard | ✅ Added |
-| 6 | Bulk sample actions | ✅ Added |
-| 7 | Reports page | ✅ Added |
-| 8 | System status dashboard | ✅ Added |
-| 9 | Global search | ✅ Added |
-| 10 | FASTA sequence workflows | ✅ Added |
-| 11 | Clustal Omega alignments | ✅ Added |
-| 12 | Local BLAST search | ✅ Added |
-| 13 | Real-time background job updates | ✅ Added |
-| 14 | Reason-for-change audit logging | Planned |
-| 15 | S3/external media storage | Planned |
-| 16 | Validation-readiness documentation | Planned |
-| 17 | Monitoring and alerting | Planned |
+| 1 | Admin Settings page | Added |
+| 2 | Audit log export | Added |
+| 3 | User management improvements | Added |
+| 4 | QC approval workflow | Added |
+| 5 | Project dashboard | Added |
+| 6 | Bulk sample actions | Added |
+| 7 | Reports page | Added |
+| 8 | System status dashboard | Added |
+| 9 | Global search | Added |
+| 10 | FASTA sequence workflows | Added |
+| 11 | Clustal Omega alignments | Added |
+| 12 | Local BLAST search | Added |
+| 13 | Real-time background job updates | Added |
+| 14 | pyOpenMS mass spectrometry preview | Added |
+| 15 | Sample Detail mass spec integration | Planned |
+| 16 | Peak picking and feature detection | Planned |
+| 17 | Reason-for-change audit logging | Planned |
+| 18 | S3/external media storage | Planned |
+| 19 | Validation-readiness documentation | Planned |
+| 20 | Monitoring and alerting | Planned |
 
 ---
 
-## 🔒 Production Readiness Status
+## Production Readiness Status
 
-OpenLIMS is currently best described as:
-
-```text
-Production-style open-source LIMS prototype
-```
+OpenLIMS is currently best described as a production-style open-source LIMS prototype.
 
 It includes several production-shaped patterns:
 
@@ -806,6 +1018,7 @@ It includes several production-shaped patterns:
 - AWS deployment
 - Clustal Omega integration
 - BLAST+ integration
+- pyOpenMS integration
 - Daphne ASGI runtime
 
 Remaining production-readiness work:
@@ -821,19 +1034,43 @@ Remaining production-readiness work:
 
 ---
 
-## 📌 Project Goals
+## Planned for v0.12.0
 
-OpenLIMS aims to be lightweight, deployable, configurable, open-source friendly, production-shaped, useful for real lab workflows, easy to run locally or on low-cost cloud infrastructure, and a strong foundation for research lab workflow automation.
+- Sample Detail mass spec integration
+- Peak picking
+- Feature detection
+- Consensus maps
+- Protein/peptide ID summaries
+- mzIdentML support
+- FeatureXML/consensusXML parsing
+- Quality metrics
+- Sample comparison
+- Stronger chain-of-custody workflows
 
 ---
 
-## 👨‍💻 Author
+## Project Goals
 
-**Eduardo L**  
+OpenLIMS aims to be:
+
+- Lightweight
+- Deployable
+- Configurable
+- Open-source friendly
+- Production-shaped
+- Useful for real lab workflows
+- Easy to run locally or on low-cost cloud infrastructure
+- A strong foundation for research lab workflow automation
+
+---
+
+## Author
+
+Eduardo L  
 LinkedIn: https://www.linkedin.com/in/edlemus/
 
 ---
 
-## 📄 License
+## License
 
 Apache 2.0
