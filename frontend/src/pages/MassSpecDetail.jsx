@@ -266,6 +266,8 @@ export default function MassSpecDetail() {
     [run]
   );
 
+  const topPeaks = useMemo(() => run?.top_peaks || [], [run]);
+
   if (loading) {
     return (
       <div className="d-flex align-items-center gap-2">
@@ -364,6 +366,42 @@ export default function MassSpecDetail() {
         </Col>
 
         <Col md={3}>
+          <Card className="app-card metric-card h-100">
+            <Card.Body>
+              <div className="metric-label">Peak Count</div>
+              <div className="metric-value">{run.peak_count || 0}</div>
+              <div className="metric-note">Detected / summarized peaks</div>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+
+      <Row className="g-4 mb-4">
+        <Col md={4}>
+          <Card className="app-card metric-card h-100">
+            <Card.Body>
+              <div className="metric-label">Base Peak m/z</div>
+              <div className="metric-value">
+                {formatNumber(run.base_peak_mz)}
+              </div>
+              <div className="metric-note">Highest intensity peak m/z</div>
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col md={4}>
+          <Card className="app-card metric-card h-100">
+            <Card.Body>
+              <div className="metric-label">Base Peak Intensity</div>
+              <div className="metric-value">
+                {formatNumber(run.base_peak_intensity)}
+              </div>
+              <div className="metric-note">Highest peak intensity</div>
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col md={4}>
           <Card className="app-card metric-card h-100">
             <Card.Body>
               <div className="metric-label">TIC Points</div>
@@ -513,6 +551,78 @@ export default function MassSpecDetail() {
         <Card.Body>
           <div className="toolbar-row mb-3">
             <div>
+              <h5 className="section-title mb-0">Peak Summary</h5>
+              <div className="feed-meta">
+                Peak picking summary generated from pyOpenMS processing.
+              </div>
+            </div>
+
+            <Badge bg="dark">{topPeaks.length} top peaks</Badge>
+          </div>
+
+          <Row className="g-3 mb-3">
+            <Col md={4}>
+              <div className="soft-card">
+                <div className="feed-meta">Peak Count</div>
+                <div className="fw-semibold">{run.peak_count || 0}</div>
+              </div>
+            </Col>
+
+            <Col md={4}>
+              <div className="soft-card">
+                <div className="feed-meta">Base Peak m/z</div>
+                <div className="fw-semibold">
+                  {formatNumber(run.base_peak_mz)}
+                </div>
+              </div>
+            </Col>
+
+            <Col md={4}>
+              <div className="soft-card">
+                <div className="feed-meta">Base Peak Intensity</div>
+                <div className="fw-semibold">
+                  {formatNumber(run.base_peak_intensity)}
+                </div>
+              </div>
+            </Col>
+          </Row>
+
+          {topPeaks.length === 0 ? (
+            <div className="empty-state">
+              No top peaks available. Reprocess a completed mass spec run.
+            </div>
+          ) : (
+            <Table responsive hover className="app-table align-middle">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Retention Time</th>
+                  <th>m/z</th>
+                  <th>Intensity</th>
+                  <th>MS Level</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {topPeaks.map((peak, index) => (
+                  <tr key={`${peak.rt}-${peak.mz}-${index}`}>
+                    <td>{index + 1}</td>
+                    <td>{formatNumber(peak.rt)}</td>
+                    <td>{formatNumber(peak.mz)}</td>
+                    <td>{formatNumber(peak.intensity)}</td>
+                    <td>{peak.ms_level || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Card.Body>
+      </Card>
+
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <div className="toolbar-row mb-3">
+            <div>
               <h5 className="section-title mb-0">Chromatogram Points</h5>
               <div className="feed-meta">
                 Raw TIC points extracted from each spectrum.
@@ -529,7 +639,6 @@ export default function MassSpecDetail() {
               <thead>
                 <tr>
                   <th>#</th>
-
                   <th>Retention Time</th>
                   <th>Total Intensity</th>
                   <th>MS Level</th>

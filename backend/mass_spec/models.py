@@ -55,6 +55,11 @@ class MassSpecRun(models.Model):
 
     chromatogram_data = models.JSONField(default=list, blank=True)
 
+    peak_count = models.PositiveIntegerField(default=0)
+    base_peak_mz = models.FloatField(null=True, blank=True)
+    base_peak_intensity = models.FloatField(null=True, blank=True)
+    top_peaks = models.JSONField(default=list, blank=True)
+
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -71,4 +76,3 @@ class MassSpecRun(models.Model):
 
     def __str__(self):
         return self.name
-

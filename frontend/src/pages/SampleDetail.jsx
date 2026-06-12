@@ -75,6 +75,21 @@ function qcLabel(status) {
   }
 }
 
+function massSpecStatusVariant(status) {
+  switch (status) {
+    case "COMPLETED":
+      return "success";
+    case "FAILED":
+      return "danger";
+    case "RUNNING":
+      return "info";
+    case "PENDING":
+      return "secondary";
+    default:
+      return "secondary";
+  }
+}
+
 function actionVariant(action) {
   switch (action) {
     case "CREATED":
@@ -285,6 +300,7 @@ export default function SampleDetail() {
   const [containers, setContainers] = useState([]);
   const [sampleAttachments, setSampleAttachments] = useState([]);
   const [sampleSequences, setSampleSequences] = useState([]);
+  const [massSpecRuns, setMassSpecRuns] = useState([]);
   const [me, setMe] = useState(null);
 
   const [err, setErr] = useState("");
@@ -310,6 +326,7 @@ export default function SampleDetail() {
         containersData,
         attachmentsData,
         sequencesData,
+        massSpecData,
         meData,
       ] = await Promise.all([
         apiGet(`/api/samples/${id}/`),
@@ -319,6 +336,7 @@ export default function SampleDetail() {
         apiGet("/api/containers/"),
         apiGet(`/api/sample-attachments/?sample=${id}`),
         apiGet(`/api/sequences/?sample=${id}`),
+        apiGet(`/api/mass-spec-runs/?sample=${id}`),
         apiGet("/api/me/"),
       ]);
 
@@ -327,6 +345,7 @@ export default function SampleDetail() {
       const containerList = containersData.results || containersData || [];
       const attachmentList = attachmentsData.results || attachmentsData || [];
       const sequenceList = sequencesData.results || sequencesData || [];
+      const massSpecList = massSpecData.results || massSpecData || [];
 
       setSample(sampleData);
       setAllowed(transitionData.allowed_transitions || []);
@@ -335,6 +354,7 @@ export default function SampleDetail() {
       setSelectedContainer(sampleData.container || "");
       setSampleAttachments(attachmentList);
       setSampleSequences(sequenceList);
+      setMassSpecRuns(massSpecList);
       setMe(meData);
 
       const sampleEvents = eventList.filter((event) => {
@@ -646,6 +666,14 @@ export default function SampleDetail() {
 
         <Card className="app-card metric-card h-100">
           <Card.Body>
+            <div className="metric-label">Mass Spec Runs</div>
+            <div className="metric-value">{massSpecRuns.length}</div>
+            <div className="metric-note">Linked mzML/mzXML/mzData runs</div>
+          </Card.Body>
+        </Card>
+
+        <Card className="app-card metric-card h-100">
+          <Card.Body>
             <div className="metric-label">Events</div>
             <div className="metric-value">{sortedEvents.length}</div>
             <div className="metric-note">Audit trail records</div>
@@ -915,6 +943,64 @@ export default function SampleDetail() {
                     </tr>
                   );
                 })}
+              </tbody>
+            </Table>
+          )}
+        </Card.Body>
+      </Card>
+
+
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <div className="toolbar-row mb-3">
+            <div>
+              <h5 className="section-title mb-0">Mass Spec Runs</h5>
+              <div className="feed-meta">
+                Mass spectrometry runs linked to this sample.
+              </div>
+            </div>
+
+            <Badge bg="dark">{massSpecRuns.length}</Badge>
+          </div>
+
+          {massSpecRuns.length === 0 ? (
+            <div className="empty-state">
+              No mass spec runs linked to this sample yet.
+            </div>
+          ) : (
+            <Table responsive hover className="app-table">
+              <thead>
+                <tr>
+                  <th>Run</th>
+                  <th>Status</th>
+                  <th>Spectra</th>
+                  <th>MS1 / MS2</th>
+                  <th>TIC Points</th>
+                  <th>Processed</th>
+                  <th></th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {massSpecRuns.map((run) => (
+                  <tr key={run.id}>
+                    <td className="fw-semibold">{run.name}</td>
+                    <td>
+                      <Badge bg={massSpecStatusVariant(run.status)}>
+                        {run.status}
+                      </Badge>
+                    </td>
+                    <td>{run.spectra_count}</td>
+                    <td>
+                      {run.ms1_count} / {run.ms2_count}
+                    </td>
+                    <td>{run.chromatogram_data?.length || 0}</td>
+                    <td>{formatTimestamp(run.processed_at)}</td>
+                    <td>
+                      <Link to={`/mass-spec/${run.id}`}>Open</Link>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </Table>
           )}
