@@ -180,9 +180,20 @@ export default function MassSpec() {
           </p>
         </div>
 
-        <Button variant="outline-dark" size="sm" onClick={load}>
-          Refresh
-        </Button>
+        <div className="inline-actions">
+          <Button
+            as={Link}
+            to="/mass-spec/compare"
+            variant="dark"
+            size="sm"
+          >
+            Compare Runs
+          </Button>
+
+          <Button variant="outline-dark" size="sm" onClick={load}>
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {err && <Alert variant="danger">{err}</Alert>}

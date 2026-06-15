@@ -23,6 +23,7 @@ import Search from "./pages/Search";
 import Blast from "./pages/Blast";
 import MassSpec from "./pages/MassSpec";
 import MassSpecDetail from "./pages/MassSpecDetail";
+import MassSpecCompare from "./pages/MassSpecCompare";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="search" element={<Search />} />
           <Route path="blast" element={<Blast />} />
           <Route path="mass-spec" element={<MassSpec />} />
+          <Route path="mass-spec/compare" element={<MassSpecCompare />} />
           <Route path="mass-spec/:id" element={<MassSpecDetail />} />
         </Route>
 

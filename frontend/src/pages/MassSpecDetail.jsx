@@ -267,6 +267,15 @@ export default function MassSpecDetail() {
   );
 
   const topPeaks = useMemo(() => run?.top_peaks || [], [run]);
+  const detectedFeatures = useMemo(
+    () => run?.detected_features || [],
+    [run]
+  );
+
+  const openmsSummary = useMemo(
+    () => run?.openms_summary || {},
+    [run]
+  );
 
   if (loading) {
     return (
@@ -368,9 +377,9 @@ export default function MassSpecDetail() {
         <Col md={3}>
           <Card className="app-card metric-card h-100">
             <Card.Body>
-              <div className="metric-label">Peak Count</div>
-              <div className="metric-value">{run.peak_count || 0}</div>
-              <div className="metric-note">Detected / summarized peaks</div>
+              <div className="metric-label">Feature Count</div>
+              <div className="metric-value">{run.feature_count || 0}</div>
+              <div className="metric-note">Grouped detected features</div>
             </Card.Body>
           </Card>
         </Col>
@@ -611,6 +620,218 @@ export default function MassSpecDetail() {
                     <td>{formatNumber(peak.mz)}</td>
                     <td>{formatNumber(peak.intensity)}</td>
                     <td>{peak.ms_level || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Card.Body>
+      </Card>
+
+
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <div className="toolbar-row mb-3">
+            <div>
+              <h5 className="section-title mb-0">Quality Metrics</h5>
+              <div className="feed-meta">
+                Run-level signal quality metrics calculated during pyOpenMS processing.
+              </div>
+            </div>
+
+            <Badge bg="dark">QC summary</Badge>
+          </div>
+
+          <Row className="g-3">
+            <Col md={3}>
+              <div className="soft-card">
+                <div className="feed-meta">Total Ion Current</div>
+                <div className="fw-semibold">
+                  {formatNumber(run.total_ion_current)}
+                </div>
+              </div>
+            </Col>
+
+            <Col md={3}>
+              <div className="soft-card">
+                <div className="feed-meta">Mean Total Intensity</div>
+                <div className="fw-semibold">
+                  {formatNumber(run.mean_total_intensity)}
+                </div>
+              </div>
+            </Col>
+
+            <Col md={3}>
+              <div className="soft-card">
+                <div className="feed-meta">Max Total Intensity</div>
+                <div className="fw-semibold">
+                  {formatNumber(run.max_total_intensity)}
+                </div>
+              </div>
+            </Col>
+
+            <Col md={3}>
+              <div className="soft-card">
+                <div className="feed-meta">Mean Peak Intensity</div>
+                <div className="fw-semibold">
+                  {formatNumber(run.mean_peak_intensity)}
+                </div>
+              </div>
+            </Col>
+
+            <Col md={3}>
+              <div className="soft-card">
+                <div className="feed-meta">RT Span</div>
+                <div className="fw-semibold">{formatNumber(run.rt_span)}</div>
+              </div>
+            </Col>
+
+            <Col md={3}>
+              <div className="soft-card">
+                <div className="feed-meta">m/z Span</div>
+                <div className="fw-semibold">{formatNumber(run.mz_span)}</div>
+              </div>
+            </Col>
+
+            <Col md={3}>
+              <div className="soft-card">
+                <div className="feed-meta">MS1 Ratio</div>
+                <div className="fw-semibold">
+                  {formatNumber((run.ms1_ratio || 0) * 100)}%
+                </div>
+              </div>
+            </Col>
+
+            <Col md={3}>
+              <div className="soft-card">
+                <div className="feed-meta">MS2 Ratio</div>
+                <div className="fw-semibold">
+                  {formatNumber((run.ms2_ratio || 0) * 100)}%
+                </div>
+              </div>
+            </Col>
+          </Row>
+        </Card.Body>
+      </Card>
+
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <div className="toolbar-row mb-3">
+            <div>
+              <h5 className="section-title mb-0">OpenMS File Summary</h5>
+              <div className="feed-meta">
+                Parsed OpenMS output metadata for featureXML, consensusXML, and raw spectrum files.
+              </div>
+            </div>
+
+            <Badge bg="dark">
+              {openmsSummary.file_type || "unknown"}
+            </Badge>
+          </div>
+
+          <Row className="g-3 mb-3">
+            <Col md={3}>
+              <div className="soft-card">
+                <div className="feed-meta">File Type</div>
+                <div className="fw-semibold">
+                  {openmsSummary.file_type || "-"}
+                </div>
+              </div>
+            </Col>
+
+            <Col md={3}>
+              <div className="soft-card">
+                <div className="feed-meta">featureXML Count</div>
+                <div className="fw-semibold">
+                  {run.featurexml_count || 0}
+                </div>
+              </div>
+            </Col>
+
+            <Col md={3}>
+              <div className="soft-card">
+                <div className="feed-meta">consensusXML Count</div>
+                <div className="fw-semibold">
+                  {run.consensusxml_count || 0}
+                </div>
+              </div>
+            </Col>
+
+            <Col md={3}>
+              <div className="soft-card">
+                <div className="feed-meta">Detected Features</div>
+                <div className="fw-semibold">
+                  {run.feature_count || detectedFeatures.length || 0}
+                </div>
+              </div>
+            </Col>
+          </Row>
+
+          <details>
+            <summary className="feed-meta">Raw OpenMS summary JSON</summary>
+            <pre
+              className="mb-0 mt-2"
+              style={{
+                maxHeight: "220px",
+                overflow: "auto",
+                fontSize: "0.78rem",
+                background: "#f8fafc",
+                border: "1px solid #e5e7eb",
+                borderRadius: "12px",
+                padding: "10px",
+              }}
+            >
+              {JSON.stringify(openmsSummary, null, 2)}
+            </pre>
+          </details>
+        </Card.Body>
+      </Card>
+
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <div className="toolbar-row mb-3">
+            <div>
+              <h5 className="section-title mb-0">Detected Features</h5>
+              <div className="feed-meta">
+                Lightweight feature detection groups high-signal peaks by m/z across retention time.
+              </div>
+            </div>
+
+            <Badge bg="dark">{run.feature_count || detectedFeatures.length} features</Badge>
+          </div>
+
+          {detectedFeatures.length === 0 ? (
+            <div className="empty-state">
+              No detected features available. Reprocess a completed mass spec run.
+            </div>
+          ) : (
+            <Table responsive hover className="app-table align-middle">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>m/z</th>
+                  <th>RT Min</th>
+                  <th>RT Max</th>
+                  <th>Apex RT</th>
+                  <th>Apex Intensity</th>
+                  <th>Total Intensity</th>
+                  <th>Peak Count</th>
+                  <th>MS Level</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {detectedFeatures.map((feature, index) => (
+                  <tr key={`${feature.mz}-${feature.apex_rt}-${index}`}>
+                    <td>{index + 1}</td>
+                    <td>{formatNumber(feature.mz)}</td>
+                    <td>{formatNumber(feature.rt_min)}</td>
+                    <td>{formatNumber(feature.rt_max)}</td>
+                    <td>{formatNumber(feature.apex_rt)}</td>
+                    <td>{formatNumber(feature.apex_intensity)}</td>
+                    <td>{formatNumber(feature.total_intensity)}</td>
+                    <td>{feature.peak_count || 0}</td>
+                    <td>{feature.ms_level || "-"}</td>
                   </tr>
                 ))}
               </tbody>
