@@ -113,6 +113,9 @@ export default function Layout() {
                 <DropdownItemLink to="/alignments">Alignments</DropdownItemLink>
                 <DropdownItemLink to="/blast">BLAST</DropdownItemLink>
                 <DropdownItemLink to="/mass-spec">Mass Spec</DropdownItemLink>
+                <DropdownItemLink to="/mass-spec/compare">
+                  Compare Mass Spec
+                </DropdownItemLink>
               </NavDropdown>
 
               <NavDropdown title="Operations" id="operations-nav">

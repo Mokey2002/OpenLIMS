@@ -60,6 +60,34 @@ class MassSpecRun(models.Model):
     base_peak_intensity = models.FloatField(null=True, blank=True)
     top_peaks = models.JSONField(default=list, blank=True)
 
+    feature_count = models.PositiveIntegerField(default=0)
+    detected_features = models.JSONField(default=list, blank=True)
+
+    featurexml_count = models.PositiveIntegerField(default=0)
+    consensusxml_count = models.PositiveIntegerField(default=0)
+    openms_summary = models.JSONField(default=dict, blank=True)
+
+    protein_count = models.PositiveIntegerField(default=0)
+    peptide_count = models.PositiveIntegerField(default=0)
+    top_proteins = models.JSONField(default=list, blank=True)
+    top_peptides = models.JSONField(default=list, blank=True)
+    identification_summary = models.JSONField(default=dict, blank=True)
+
+    protein_count = models.PositiveIntegerField(default=0)
+    peptide_count = models.PositiveIntegerField(default=0)
+    top_proteins = models.JSONField(default=list, blank=True)
+    top_peptides = models.JSONField(default=list, blank=True)
+    identification_summary = models.JSONField(default=dict, blank=True)
+
+    total_ion_current = models.FloatField(null=True, blank=True)
+    mean_total_intensity = models.FloatField(null=True, blank=True)
+    max_total_intensity = models.FloatField(null=True, blank=True)
+    mean_peak_intensity = models.FloatField(null=True, blank=True)
+    rt_span = models.FloatField(null=True, blank=True)
+    mz_span = models.FloatField(null=True, blank=True)
+    ms1_ratio = models.FloatField(null=True, blank=True)
+    ms2_ratio = models.FloatField(null=True, blank=True)
+
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
