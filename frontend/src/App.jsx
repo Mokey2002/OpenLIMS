@@ -24,6 +24,7 @@ import Blast from "./pages/Blast";
 import MassSpec from "./pages/MassSpec";
 import MassSpecDetail from "./pages/MassSpecDetail";
 import MassSpecCompare from "./pages/MassSpecCompare";
+import GettingStarted from "./pages/GettingStarted";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -44,6 +45,7 @@ export default function App() {
           }
         >
           <Route index element={<Dashboard />} />
+          <Route path="getting-started" element={<GettingStarted />} />
           <Route path="samples" element={<SamplesList />} />
           <Route path="samples/:id" element={<SampleDetail />} />
           <Route path="inventory" element={<Inventory />} />

@@ -193,6 +193,32 @@ export default function Dashboard() {
 
       {err && <Alert variant="danger">{err}</Alert>}
 
+      <Card className="app-card mb-4 demo-guide-callout">
+        <Card.Body>
+          <div className="toolbar-row">
+            <div>
+              <Badge bg="dark" className="mb-2">
+                New to OpenLIMS?
+              </Badge>
+              <h5 className="section-title mb-1">Start with the guided demo</h5>
+              <div className="feed-meta">
+                Follow a short walkthrough through projects, samples, mass spec
+                comparison, and audit trails using the seeded demo data.
+              </div>
+            </div>
+
+            <div className="inline-actions">
+              <Link to="/getting-started" className="btn btn-dark btn-sm">
+                Open Getting Started
+              </Link>
+              <Link to="/mass-spec/compare" className="btn btn-outline-dark btn-sm">
+                Try Mass Spec Compare
+              </Link>
+            </div>
+          </div>
+        </Card.Body>
+      </Card>
+
       <div className="stat-grid mb-4">
         <MetricCard
           title="Total Samples"

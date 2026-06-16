@@ -251,3 +251,139 @@ body {
   gap: 10px;
   flex-wrap: wrap;
 }
+/* ---------- DEMO GUIDE ---------- */
+.demo-hero-card {
+  background:
+    radial-gradient(circle at top right, rgba(17, 24, 39, 0.08), transparent 34%),
+    var(--panel) !important;
+}
+
+.demo-guide-callout {
+  background:
+    linear-gradient(135deg, rgba(17, 24, 39, 0.04), rgba(255, 255, 255, 1)) !important;
+}
+
+.guide-step-card {
+  transition: all 0.15s ease;
+}
+
+.guide-step-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md) !important;
+}
+
+.guide-step-number {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+.demo-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.demo-timeline-item {
+  border-left: 4px solid var(--brand);
+  background: var(--panel-2);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  color: var(--text);
+}
+
+/* ---------- GUIDED TUTORIAL ---------- */
+.tutorial-step-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tutorial-step-preview {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  border-radius: 14px;
+  padding: 0.85rem;
+  transition: all 0.15s ease;
+}
+
+.tutorial-step-preview:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.tutorial-step-preview.active {
+  background: #111827;
+  color: white;
+  border-color: #111827;
+}
+
+.tutorial-step-preview.active .feed-meta {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.tutorial-step-preview-number {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: white;
+  color: #111827;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+
+.tutorial-step-preview.active .tutorial-step-preview-number {
+  background: rgba(255, 255, 255, 0.16);
+  color: white;
+}
+
+.tutorial-next-panel {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel-2);
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ---------- FLOATING TUTORIAL BAR ---------- */
+.tutorial-floating-bar {
+  position: fixed;
+  left: 24px;
+  right: 24px;
+  bottom: 20px;
+  z-index: 1050;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  padding: 0.9rem 1rem;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+
+@media (max-width: 768px) {
+  .tutorial-floating-bar {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
