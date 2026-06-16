@@ -73,12 +73,6 @@ class MassSpecRun(models.Model):
     top_peptides = models.JSONField(default=list, blank=True)
     identification_summary = models.JSONField(default=dict, blank=True)
 
-    protein_count = models.PositiveIntegerField(default=0)
-    peptide_count = models.PositiveIntegerField(default=0)
-    top_proteins = models.JSONField(default=list, blank=True)
-    top_peptides = models.JSONField(default=list, blank=True)
-    identification_summary = models.JSONField(default=dict, blank=True)
-
     total_ion_current = models.FloatField(null=True, blank=True)
     mean_total_intensity = models.FloatField(null=True, blank=True)
     max_total_intensity = models.FloatField(null=True, blank=True)
