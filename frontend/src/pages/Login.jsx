@@ -122,7 +122,7 @@ export default function Login() {
           <h1 className="fw-bold mb-2">OpenLIMS</h1>
 
           <p className="text-muted mb-0">
-            Demo login for directors, lab techs, and read-only reviewers.
+            For the best demo experience, start with the Director account first.
           </p>
         </div>
 
@@ -171,10 +171,12 @@ export default function Login() {
                 </Form>
 
                 <Alert variant="light" className="border mt-4 mb-0">
-                  <div className="fw-semibold mb-1">Demo recommendation</div>
+                  <div className="fw-semibold mb-1">Recommended demo login</div>
                   <div className="small text-muted">
-                    Start as Viewer to see read-only access, then try a Lab Tech
-                    or Director to compare permissions.
+                    Start with <strong>director / Director123!</strong> to see the
+                    full guided demo, imports, admin settings, system status, audit
+                    workflows, and mass spec comparison. Then try
+                    <strong> viewer / viewer123</strong> to see read-only access.
                   </div>
                 </Alert>
               </Card.Body>
@@ -187,7 +189,8 @@ export default function Login() {
                 <div className="mb-3">
                   <h4 className="mb-1">Demo Accounts</h4>
                   <p className="text-muted mb-0">
-                    Choose a role to see how permissions change across the app.
+                    Start with Director for the full demo, then compare with Tech
+                    and Viewer permissions.
                   </p>
                 </div>
 
