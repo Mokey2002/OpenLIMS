@@ -12,6 +12,7 @@ from sequences.models import Sequence, SequenceFeature
 from projects.models import Project, ProjectPost
 from blast.models import BlastDatabase
 from blast.services import build_blast_database
+from mass_spec.models import MassSpecRun
 
 User = get_user_model()
 def seed_blast_demo(project, sample, director):
@@ -216,6 +217,294 @@ def create_or_update_instrument(instrument_config):
 
     return instrument
 
+
+
+def build_demo_chromatogram(offset=0, scale=1.0):
+    points = []
+
+    for i in range(18):
+        rt = 5.0 + i * 2.5
+        peak_shape = max(0.05, 1 - abs(i - 9) / 10)
+        total_intensity = round((1200 * peak_shape * scale) + offset + (i * 9), 2)
+
+        points.append(
+            {
+                "rt": rt,
+                "total_intensity": total_intensity,
+                "ms_level": 1 if i % 5 != 0 else 2,
+            }
+        )
+
+    return points
+
+
+def build_demo_features(shared_base=150.0, unique_base=300.0, scale=1.0):
+    return [
+        {
+            "mz": shared_base,
+            "rt_min": 12.5,
+            "rt_max": 24.5,
+            "apex_rt": 17.5,
+            "apex_intensity": round(950.0 * scale, 2),
+            "total_intensity": round(3200.0 * scale, 2),
+            "peak_count": 6,
+            "ms_level": 1,
+        },
+        {
+            "mz": 225.1,
+            "rt_min": 20.0,
+            "rt_max": 35.0,
+            "apex_rt": 27.5,
+            "apex_intensity": round(700.0 * scale, 2),
+            "total_intensity": round(2600.0 * scale, 2),
+            "peak_count": 5,
+            "ms_level": 1,
+        },
+        {
+            "mz": unique_base,
+            "rt_min": 32.5,
+            "rt_max": 45.0,
+            "apex_rt": 37.5,
+            "apex_intensity": round(520.0 * scale, 2),
+            "total_intensity": round(1900.0 * scale, 2),
+            "peak_count": 4,
+            "ms_level": 1,
+        },
+    ]
+
+
+def seed_mass_spec_demo(project_alpha, project_beta, sample_by_code, director, peter, maria, michael):
+    demo_runs = [
+        {
+            "name": "Alpha LC-MS Demo Run 001",
+            "project": project_alpha,
+            "sample": sample_by_code.get("S-ALPHA-001"),
+            "user": maria,
+            "filename": "alpha_lcms_demo_run_001.mzML",
+            "offset": 0,
+            "scale": 1.00,
+            "shared_mz": 150.02,
+            "unique_mz": 301.10,
+            "proteins": 4,
+            "peptides": 11,
+        },
+        {
+            "name": "Alpha LC-MS Demo Run 002",
+            "project": project_alpha,
+            "sample": sample_by_code.get("S-ALPHA-001"),
+            "user": peter,
+            "filename": "alpha_lcms_demo_run_002.mzML",
+            "offset": 90,
+            "scale": 1.12,
+            "shared_mz": 150.04,
+            "unique_mz": 315.25,
+            "proteins": 5,
+            "peptides": 13,
+        },
+        {
+            "name": "Alpha LC-MS Demo Run 003 QC Review",
+            "project": project_alpha,
+            "sample": sample_by_code.get("S-ALPHA-003"),
+            "user": michael,
+            "filename": "alpha_lcms_demo_run_003_qc_review.mzML",
+            "offset": -80,
+            "scale": 0.72,
+            "shared_mz": 150.01,
+            "unique_mz": 330.40,
+            "proteins": 2,
+            "peptides": 6,
+        },
+        {
+            "name": "Alpha OpenMS featureXML Demo",
+            "project": project_alpha,
+            "sample": sample_by_code.get("S-ALPHA-002"),
+            "user": maria,
+            "filename": "alpha_openms_features_demo.featureXML",
+            "offset": 40,
+            "scale": 0.95,
+            "shared_mz": 150.03,
+            "unique_mz": 410.75,
+            "proteins": 0,
+            "peptides": 0,
+            "file_type": "featureXML",
+        },
+        {
+            "name": "Beta mzIdentML Demo IDs",
+            "project": project_beta,
+            "sample": sample_by_code.get("S-BETA-001"),
+            "user": director,
+            "filename": "beta_identifications_demo.mzid",
+            "offset": 20,
+            "scale": 0.85,
+            "shared_mz": 180.05,
+            "unique_mz": 500.25,
+            "proteins": 6,
+            "peptides": 18,
+            "file_type": "mzIdentML",
+        },
+    ]
+
+    for item in demo_runs:
+        chromatogram_data = build_demo_chromatogram(
+            offset=item["offset"],
+            scale=item["scale"],
+        )
+        detected_features = build_demo_features(
+            shared_base=item["shared_mz"],
+            unique_base=item["unique_mz"],
+            scale=item["scale"],
+        )
+
+        total_intensities = [
+            point["total_intensity"]
+            for point in chromatogram_data
+        ]
+
+        top_peaks = [
+            {
+                "rt": feature["apex_rt"],
+                "mz": feature["mz"],
+                "intensity": feature["apex_intensity"],
+                "ms_level": feature["ms_level"],
+            }
+            for feature in detected_features
+        ]
+
+        top_proteins = [
+            {
+                "accession": f"DEMO_PROT_{index + 1}",
+                "description": f"Demo protein identification {index + 1}",
+                "peptide_count": max(1, item["peptides"] // max(1, item["proteins"])),
+                "score": round(95.0 - index * 4.5, 2),
+            }
+            for index in range(item["proteins"])
+        ]
+
+        top_peptides = [
+            {
+                "sequence": f"PEPTIDESEQ{index + 1}",
+                "score": round(80.0 - index * 2.1, 2),
+                "protein_accessions": [top_proteins[index % len(top_proteins)]["accession"]]
+                if top_proteins
+                else [],
+                "charge": "2",
+            }
+            for index in range(item["peptides"])
+        ]
+
+        file_type = item.get("file_type", "mzML")
+
+        run, _ = MassSpecRun.objects.update_or_create(
+            name=item["name"],
+            defaults={
+                "project": item["project"],
+                "sample": item["sample"],
+                "uploaded_by": item["user"],
+                "original_filename": item["filename"],
+                "status": MassSpecRun.STATUS_COMPLETED,
+                "error_message": "",
+                "spectra_count": len(chromatogram_data),
+                "ms1_count": len([p for p in chromatogram_data if p["ms_level"] == 1]),
+                "ms2_count": len([p for p in chromatogram_data if p["ms_level"] == 2]),
+                "rt_min": min(p["rt"] for p in chromatogram_data),
+                "rt_max": max(p["rt"] for p in chromatogram_data),
+                "mz_min": min(f["mz"] for f in detected_features) - 50,
+                "mz_max": max(f["mz"] for f in detected_features) + 50,
+                "chromatogram_data": chromatogram_data,
+                "peak_count": sum(f["peak_count"] for f in detected_features),
+                "base_peak_mz": detected_features[0]["mz"],
+                "base_peak_intensity": detected_features[0]["apex_intensity"],
+                "top_peaks": top_peaks,
+                "feature_count": len(detected_features),
+                "detected_features": detected_features,
+                "featurexml_count": len(detected_features) if file_type == "featureXML" else 0,
+                "consensusxml_count": 0,
+                "openms_summary": {
+                    "file_type": file_type,
+                    "demo": True,
+                    "source": "seed_demo",
+                    "purpose": "mass_spec_comparison_demo",
+                },
+                "protein_count": item["proteins"],
+                "peptide_count": item["peptides"],
+                "top_proteins": top_proteins,
+                "top_peptides": top_peptides,
+                "identification_summary": {
+                    "file_type": file_type,
+                    "protein_count": item["proteins"],
+                    "peptide_count": item["peptides"],
+                    "top_proteins": top_proteins,
+                    "top_peptides": top_peptides,
+                    "note": "Seeded demo identification summary for mass spec comparison.",
+                },
+                "total_ion_current": round(sum(total_intensities), 2),
+                "mean_total_intensity": round(sum(total_intensities) / len(total_intensities), 2),
+                "max_total_intensity": round(max(total_intensities), 2),
+                "mean_peak_intensity": round(
+                    sum(peak["intensity"] for peak in top_peaks) / len(top_peaks),
+                    2,
+                ),
+                "rt_span": round(
+                    max(p["rt"] for p in chromatogram_data)
+                    - min(p["rt"] for p in chromatogram_data),
+                    2,
+                ),
+                "mz_span": round(
+                    (max(f["mz"] for f in detected_features) + 50)
+                    - (min(f["mz"] for f in detected_features) - 50),
+                    2,
+                ),
+                "ms1_ratio": round(
+                    len([p for p in chromatogram_data if p["ms_level"] == 1])
+                    / len(chromatogram_data),
+                    4,
+                ),
+                "ms2_ratio": round(
+                    len([p for p in chromatogram_data if p["ms_level"] == 2])
+                    / len(chromatogram_data),
+                    4,
+                ),
+            },
+        )
+
+        run.uploaded_file.save(
+            item["filename"],
+            ContentFile(
+                (
+                    f"Seeded demo placeholder for {item['name']}.\n"
+                    "This record is pre-processed for OpenLIMS demo comparison workflows.\n"
+                ).encode("utf-8")
+            ),
+            save=True,
+        )
+
+        Event.objects.get_or_create(
+            entity_type="mass_spec_run",
+            entity_id=str(run.id),
+            action="MASS_SPEC_DEMO_SEEDED",
+            defaults={
+                "actor": item["user"],
+                "payload": {
+                    "name": run.name,
+                    "original_filename": run.original_filename,
+                    "project": run.project_id,
+                    "sample": run.sample_id,
+                    "feature_count": run.feature_count,
+                    "protein_count": run.protein_count,
+                    "peptide_count": run.peptide_count,
+                    "demo": True,
+                },
+            },
+        )
+
+    Notification.objects.get_or_create(
+        user=director,
+        title="Mass spec comparison demo ready",
+        defaults={
+            "message": "Seeded mass spec runs are ready for project, sample, and manual comparison.",
+            "link": "/mass-spec/compare",
+        },
+    )
 
 class Command(BaseCommand):
     help = "Seed OpenLIMS with realistic demo data"
@@ -1025,6 +1314,19 @@ class Command(BaseCommand):
             project=project_alpha,
             sample=sample_by_code.get("S-ALPHA-001"),
             director=director,
+        )
+
+        # --------------------------------------------------
+        # Demo mass spectrometry runs for comparison
+        # --------------------------------------------------
+        seed_mass_spec_demo(
+            project_alpha=project_alpha,
+            project_beta=project_beta,
+            sample_by_code=sample_by_code,
+            director=director,
+            peter=peter,
+            maria=maria,
+            michael=michael,
         )
 
         # --------------------------------------------------

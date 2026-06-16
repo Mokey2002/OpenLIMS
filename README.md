@@ -1,6 +1,6 @@
 # OpenLIMS
 
-OpenLIMS is a lightweight, modular, production-style Laboratory Information Management System (LIMS) designed to support real laboratory workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence workspaces, Clustal Omega alignments, local BLAST search, mass spectrometry preview workflows, audit trails, notifications, reporting, real-time job updates, and system health monitoring.
+OpenLIMS is a lightweight, modular, production-style Laboratory Information Management System (LIMS) designed to support real laboratory workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence workspaces, Clustal Omega alignments, local BLAST search, mass spectrometry analysis workflows, audit trails, notifications, reporting, real-time job updates, and system health monitoring.
 
 OpenLIMS is currently a production-style prototype, not a fully validated clinical or regulated production LIMS. The goal is to provide a practical, configurable, easy-to-deploy foundation for laboratory workflow software.
 
@@ -28,55 +28,63 @@ http://16.146.193.92
 
 ## Current Release
 
-# OpenLIMS v0.11.0 — pyOpenMS Mass Spectrometry Preview
+# OpenLIMS v0.12.0 — Advanced Mass Spectrometry Analysis
 
-OpenLIMS v0.11.0 adds an initial mass spectrometry module powered by pyOpenMS. Users can upload mass spectrometry files, process them asynchronously through Celery, view extracted run metadata, inspect MS1/MS2 spectrum counts, and preview a Total Ion Chromatogram (TIC) chart from retention time and total intensity data.
+OpenLIMS v0.12.0 expands the mass spectrometry module from basic pyOpenMS preview into a broader advanced analysis workflow. Users can upload raw spectrum files, OpenMS feature output files, consensus feature files, and mzIdentML identification files, then inspect run-level QC metrics, detected features, protein/peptide identification summaries, and compare completed mass spec runs by project, sample, or manually selected run sets.
 
-### v0.11.0 Highlights
+### v0.12.0 Highlights
 
-- New Mass Spec module
-- Upload support for `mzML`, `mzXML`, and `mzData` files
-- pyOpenMS-based file processing
-- Celery background processing for mass spec runs
-- Mass spec run list page
-- Mass spec run detail page
+- Sample Detail mass spec integration
+- Upload support for `mzML`, `mzXML`, `mzData`, `featureXML`, `consensusXML`, `mzID`, and `mzIdentML` files
+- pyOpenMS-based raw file processing
+- FeatureXML parsing
+- consensusXML parsing
+- mzIdentML parsing
+- Peak summary extraction
+- Lightweight feature detection
+- Protein and peptide identification summaries
+- Top protein and peptide tables from identification files
+- Run-level quality metrics
 - Total Ion Chromatogram (TIC) preview chart
 - Chromatogram point table
-- Spectra count extraction
-- MS1/MS2 spectrum count extraction
-- Retention time range extraction
-- m/z range extraction
-- Project and sample linking for mass spec runs
+- Detected features table
+- OpenMS file summary view
+- Sample/project-linked mass spec runs
+- Full Mass Spec comparison page
+- Compare runs by project
+- Compare runs by sample
+- Manual run selection comparison
+- Shared and unique feature m/z comparison
 - Reprocess action for uploaded mass spec runs
-- Audit events for upload, processing, reprocessing, and failure states
+- Audit events for upload, processing, reprocessing, parsing, and failure states
 - pyOpenMS health check support
 - Docker runtime dependencies for pyOpenMS
-- Backend permission tests for mass spec upload, read, and reprocess access
+- Backend permission tests for mass spec upload, read, reprocess, and comparison access
 
 ### Access Control
 
 | Role | Mass Spec Access |
 |---|---|
-| Admin / Director | Upload, view, reprocess |
-| Tech | Upload, view, reprocess |
-| Viewer | View only |
+| Admin / Director | Upload, view, reprocess, compare |
+| Tech | Upload, view, reprocess, compare |
+| Viewer | View and compare only |
 
 ### Supported Mass Spec Workflow
 
 ```text
-Upload mzML / mzXML / mzData file
+Upload mzML / mzXML / mzData / featureXML / consensusXML / mzID / mzIdentML file
    ↓
 Create MassSpecRun as PENDING
    ↓
 Queue Celery processing task
    ↓
-pyOpenMS loads experiment
+pyOpenMS or OpenMS-compatible parser processes file
    ↓
-Extract spectra count, MS1/MS2 counts, RT range, m/z range, TIC points
+Extract spectra, TIC, peak, feature, QC, OpenMS, or ID summaries depending on file type
    ↓
 Store results on MassSpecRun
    ↓
-Render Mass Spec detail page and TIC chart
+Render Mass Spec detail page, OpenMS summary, ID summary, detected features, and comparison views
    ↓
 Record audit events
 ```
@@ -326,13 +334,16 @@ GET  /api/blast-jobs/:id/hits/
 
 ---
 
-## Mass Spectrometry Preview
+## Mass Spectrometry Analysis
 
-OpenLIMS v0.11.0 introduces mass spectrometry preview support using pyOpenMS.
+OpenLIMS v0.12.0 includes advanced mass spectrometry support using pyOpenMS and OpenMS-compatible output formats.
 
 Users can:
 
-- Upload `mzML`, `mzXML`, and `mzData` files
+- Upload `mzML`, `mzXML`, and `mzData` raw spectrum files
+- Upload `featureXML` files
+- Upload `consensusXML` files
+- Upload `mzID` / `mzIdentML` identification files
 - Link mass spec runs to projects
 - Link mass spec runs to samples
 - Process files asynchronously using Celery
@@ -342,8 +353,14 @@ Users can:
 - View MS1/MS2 counts
 - View retention time range
 - View m/z range
-- View a TIC chart
+- View TIC charts
 - View raw chromatogram points
+- View peak picking summaries
+- View detected features
+- View OpenMS file summaries
+- View protein and peptide identification summaries
+- Compare completed runs by project, sample, or manual run selection
+- View shared and unique feature m/z values across compared runs
 - View audit events for mass spec workflows
 
 ### Mass Spec APIs
@@ -353,6 +370,8 @@ GET  /api/mass-spec-runs/
 POST /api/mass-spec-runs/
 GET  /api/mass-spec-runs/:id/
 POST /api/mass-spec-runs/:id/reprocess/
+GET  /api/mass-spec-runs/compare/?project=:id
+GET  /api/mass-spec-runs/compare/?sample=:id
 ```
 
 ### TIC Preview
@@ -367,6 +386,22 @@ Sum intensities per spectrum
 Store chromatogram_data
    ↓
 Render SVG TIC chart in React
+```
+
+### Run Comparison
+
+Mass Spec comparison supports project-level, sample-level, and manual run selection workflows.
+
+```text
+Select project, sample, or runs
+   ↓
+Compare completed MassSpecRun records
+   ↓
+Summarize spectra, peaks, features, QC metrics, proteins, and peptides
+   ↓
+Calculate shared and unique rounded feature m/z values
+   ↓
+Render comparison tables in React
 ```
 
 ---
@@ -592,9 +627,9 @@ BlastJob + BlastHit results
 ```text
 Celery Worker
    ↓
-pyOpenMS
+pyOpenMS / OpenMS-compatible parsers
    ↓
-MassSpecRun summary + TIC data
+MassSpecRun summary + TIC data + features + IDs + comparison data
 ```
 
 ### Production Runtime Architecture
@@ -658,7 +693,7 @@ Redis Pub/Sub
 | `sequences` | Sequence workspaces and features |
 | `alignments` | Clustal Omega alignment jobs |
 | `blast` | BLAST databases, jobs, and hits |
-| `mass_spec` | Mass spectrometry uploads, pyOpenMS processing, TIC preview |
+| `mass_spec` | Mass spectrometry uploads, pyOpenMS processing, TIC preview, feature detection, OpenMS parsing, mzIdentML summaries, and run comparison |
 | `settings_app` | Admin system settings |
 | `core` | Users, roles, permissions, search, shared utilities |
 
@@ -886,6 +921,12 @@ Upload it from the Mass Spec page:
 http://localhost:5173/mass-spec
 ```
 
+Compare completed runs from:
+
+```text
+http://localhost:5173/mass-spec/compare
+```
+
 Expected result:
 
 ```text
@@ -919,7 +960,7 @@ npm install
 npm run build
 ```
 
-Test coverage includes instrument API ingest, CSV import workflow, duplicate run protection, import retry validation, FASTA import validation, backend permissions, project permissions, sample transitions, notifications, alignment workflow behavior, BLAST permission tests, mass spec permission tests, and system health checks.
+Test coverage includes instrument API ingest, CSV import workflow, duplicate run protection, import retry validation, FASTA import validation, backend permissions, project permissions, sample transitions, notifications, alignment workflow behavior, BLAST permission tests, mass spec permission tests, mass spec comparison tests, and system health checks.
 
 ---
 
@@ -983,12 +1024,15 @@ cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.pr
 | 12 | Local BLAST search | Added |
 | 13 | Real-time background job updates | Added |
 | 14 | pyOpenMS mass spectrometry preview | Added |
-| 15 | Sample Detail mass spec integration | Planned |
-| 16 | Peak picking and feature detection | Planned |
-| 17 | Reason-for-change audit logging | Planned |
-| 18 | S3/external media storage | Planned |
-| 19 | Validation-readiness documentation | Planned |
-| 20 | Monitoring and alerting | Planned |
+| 15 | Sample Detail mass spec integration | Added |
+| 16 | Peak picking and feature detection | Added |
+| 17 | OpenMS featureXML / consensusXML parsing | Added |
+| 18 | mzIdentML protein/peptide ID summaries | Added |
+| 19 | Mass spec sample comparison | Added |
+| 20 | Reason-for-change audit logging | Planned |
+| 21 | S3/external media storage | Planned |
+| 22 | Validation-readiness documentation | Planned |
+| 23 | Monitoring and alerting | Planned |
 
 ---
 
@@ -1019,6 +1063,8 @@ It includes several production-shaped patterns:
 - Clustal Omega integration
 - BLAST+ integration
 - pyOpenMS integration
+- Advanced mass spec feature and ID summaries
+- Mass spec run comparison
 - Daphne ASGI runtime
 
 Remaining production-readiness work:
@@ -1034,18 +1080,22 @@ Remaining production-readiness work:
 
 ---
 
-## Planned for v0.12.0
+## Completed in v0.12.0
 
 - Sample Detail mass spec integration
-- Peak picking
+- Peak picking summaries
 - Feature detection
-- Consensus maps
-- Protein/peptide ID summaries
-- mzIdentML support
-- FeatureXML/consensusXML parsing
 - Quality metrics
-- Sample comparison
-- Stronger chain-of-custody workflows
+- FeatureXML parsing
+- consensusXML parsing
+- mzIdentML support
+- Protein/peptide ID summaries
+- OpenMS file summary frontend view
+- Full mass spec comparison page
+- Compare by project
+- Compare by sample
+- Manual run comparison
+- Shared and unique feature m/z comparison
 
 ---
 

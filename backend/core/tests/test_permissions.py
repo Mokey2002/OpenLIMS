@@ -286,6 +286,113 @@ class BackendPermissionTests(APITestCase):
 
         mock_delay.assert_called_once_with(run.id)
 
+    def test_viewer_can_compare_mass_spec_runs_by_project(self):
+        MassSpecRun.objects.create(
+            name="Compare Run A",
+            project=self.project,
+            sample=self.sample,
+            uploaded_by=self.tech,
+            uploaded_file="mass_spec/compare-a.mzML",
+            original_filename="compare-a.mzML",
+            status=MassSpecRun.STATUS_COMPLETED,
+            spectra_count=2,
+            peak_count=6,
+            feature_count=2,
+            protein_count=1,
+            peptide_count=3,
+            base_peak_mz=150.0,
+            base_peak_intensity=50.0,
+            total_ion_current=80.0,
+            detected_features=[
+                {"mz": 100.01, "total_intensity": 30.0},
+                {"mz": 150.02, "total_intensity": 50.0},
+            ],
+        )
+
+        MassSpecRun.objects.create(
+            name="Compare Run B",
+            project=self.project,
+            sample=self.sample,
+            uploaded_by=self.tech,
+            uploaded_file="mass_spec/compare-b.mzML",
+            original_filename="compare-b.mzML",
+            status=MassSpecRun.STATUS_COMPLETED,
+            spectra_count=3,
+            peak_count=8,
+            feature_count=2,
+            protein_count=2,
+            peptide_count=4,
+            base_peak_mz=150.1,
+            base_peak_intensity=55.0,
+            total_ion_current=95.0,
+            detected_features=[
+                {"mz": 100.04, "total_intensity": 33.0},
+                {"mz": 200.01, "total_intensity": 62.0},
+            ],
+        )
+
+        self.auth_as(self.viewer)
+
+        response = self.client.get(
+            f"/api/mass-spec-runs/compare/?project={self.project.id}"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(response.data["summary"]["run_count"], 2)
+        self.assertEqual(response.data["summary"]["feature_count_max"], 2)
+        self.assertEqual(response.data["summary"]["protein_count_max"], 2)
+        self.assertIn("feature_overlap", response.data)
+        self.assertIn(100.0, response.data["feature_overlap"]["shared_feature_mz"])
+
+    def test_viewer_can_compare_mass_spec_runs_by_sample(self):
+        MassSpecRun.objects.create(
+            name="Sample Compare Run A",
+            project=self.project,
+            sample=self.sample,
+            uploaded_by=self.tech,
+            uploaded_file="mass_spec/sample-compare-a.mzML",
+            original_filename="sample-compare-a.mzML",
+            status=MassSpecRun.STATUS_COMPLETED,
+            spectra_count=1,
+            peak_count=2,
+            feature_count=1,
+            detected_features=[{"mz": 300.0, "total_intensity": 10.0}],
+        )
+
+        MassSpecRun.objects.create(
+            name="Sample Compare Run B",
+            project=self.project,
+            sample=self.sample,
+            uploaded_by=self.tech,
+            uploaded_file="mass_spec/sample-compare-b.mzML",
+            original_filename="sample-compare-b.mzML",
+            status=MassSpecRun.STATUS_COMPLETED,
+            spectra_count=1,
+            peak_count=2,
+            feature_count=1,
+            detected_features=[{"mz": 300.04, "total_intensity": 12.0}],
+        )
+
+        self.auth_as(self.viewer)
+
+        response = self.client.get(
+            f"/api/mass-spec-runs/compare/?sample={self.sample.id}"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertIn(300.0, response.data["feature_overlap"]["shared_feature_mz"])
+
+    def test_compare_mass_spec_runs_requires_authentication(self):
+        self.client.force_authenticate(user=None)
+
+        response = self.client.get(
+            f"/api/mass-spec-runs/compare/?project={self.project.id}"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
     def test_viewer_can_read_samples(self):
         self.auth_as(self.viewer)
 
