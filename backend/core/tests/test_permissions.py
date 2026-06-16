@@ -9,6 +9,8 @@ from rest_framework.test import APITestCase
 from alignments.models import AlignmentJob
 from blast.models import BlastDatabase, BlastJob
 from imports.models import InstrumentProfile
+from inventory.models import Location, Container
+from events.models import Event
 from mass_spec.models import MassSpecRun
 from projects.models import Project
 from results.models import WorkItem
@@ -392,6 +394,90 @@ class BackendPermissionTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_admin_location_create_writes_audit_event(self):
+        self.auth_as(self.admin)
+
+        response = self.client.post(
+            "/api/locations/",
+            {
+                "name": "Audit Freezer",
+                "kind": "freezer",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        location = Location.objects.get(name="Audit Freezer")
+        event = Event.objects.get(
+            entity_type="Location",
+            entity_id=str(location.id),
+            action="LOCATION_CREATED",
+        )
+
+        self.assertEqual(event.actor, self.admin)
+        self.assertEqual(event.payload["name"], "Audit Freezer")
+        self.assertEqual(event.payload["kind"], "freezer")
+
+    def test_admin_location_update_writes_audit_event(self):
+        location = Location.objects.create(
+            name="Old Audit Freezer",
+            kind="freezer",
+        )
+
+        self.auth_as(self.admin)
+
+        response = self.client.patch(
+            f"/api/locations/{location.id}/",
+            {
+                "name": "Updated Audit Freezer",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        event = Event.objects.get(
+            entity_type="Location",
+            entity_id=str(location.id),
+            action="LOCATION_UPDATED",
+        )
+
+        self.assertEqual(event.actor, self.admin)
+        self.assertEqual(event.payload["before"]["name"], "Old Audit Freezer")
+        self.assertEqual(event.payload["after"]["name"], "Updated Audit Freezer")
+
+    def test_admin_container_create_writes_audit_event(self):
+        location = Location.objects.create(
+            name="Container Audit Location",
+            kind="freezer",
+        )
+
+        self.auth_as(self.admin)
+
+        response = self.client.post(
+            "/api/containers/",
+            {
+                "container_id": "AUDIT-BOX-001",
+                "kind": "box",
+                "location": location.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        container = Container.objects.get(container_id="AUDIT-BOX-001")
+        event = Event.objects.get(
+            entity_type="Container",
+            entity_id=str(container.id),
+            action="CONTAINER_CREATED",
+        )
+
+        self.assertEqual(event.actor, self.admin)
+        self.assertEqual(event.payload["container_id"], "AUDIT-BOX-001")
+        self.assertEqual(event.payload["location"], location.id)
 
     def test_viewer_can_read_samples(self):
         self.auth_as(self.viewer)
