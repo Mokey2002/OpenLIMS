@@ -34,6 +34,19 @@ function prettyPayload(payload) {
   }
 }
 
+function renderReasonSummary(payload) {
+  const reason = payload?.reason;
+
+  if (!reason) return null;
+
+  return (
+    <div className="reason-box mb-2">
+      <div className="feed-meta mb-1">Reason for change</div>
+      <div className="fw-semibold">{reason}</div>
+    </div>
+  );
+}
+
 function statusVariant(action) {
   const value = String(action || "").toUpperCase();
 
@@ -425,6 +438,8 @@ export default function Events() {
                     </td>
 
                     <td style={{ minWidth: "360px" }}>
+                      {renderReasonSummary(event.payload)}
+
                       <pre
                         className="mb-0"
                         style={{

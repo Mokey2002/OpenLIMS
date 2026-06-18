@@ -387,3 +387,11 @@ body {
     align-items: flex-start;
   }
 }
+
+/* ---------- REASON FOR CHANGE ---------- */
+.reason-box {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+}

@@ -479,6 +479,117 @@ class BackendPermissionTests(APITestCase):
         self.assertEqual(event.payload["container_id"], "AUDIT-BOX-001")
         self.assertEqual(event.payload["location"], location.id)
 
+    def test_sample_status_transition_requires_reason(self):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            f"/api/samples/{self.sample.id}/transition/",
+            {
+                "new_status": "IN_PROGRESS",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.sample.refresh_from_db()
+        self.assertEqual(self.sample.status, "RECEIVED")
+
+    def test_tech_can_change_sample_status_with_reason(self):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            f"/api/samples/{self.sample.id}/transition/",
+            {
+                "new_status": "IN_PROGRESS",
+                "reason": "Initial processing started by lab tech.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.sample.refresh_from_db()
+        self.assertEqual(self.sample.status, "IN_PROGRESS")
+
+        event = Event.objects.get(
+            entity_type="Sample",
+            entity_id=str(self.sample.id),
+            action="SAMPLE_STATUS_CHANGED",
+        )
+
+        self.assertEqual(event.actor, self.tech)
+        self.assertEqual(event.payload["before"]["status"], "RECEIVED")
+        self.assertEqual(event.payload["after"]["status"], "IN_PROGRESS")
+        self.assertEqual(
+            event.payload["reason"],
+            "Initial processing started by lab tech.",
+        )
+
+    def test_direct_sample_status_patch_requires_reason(self):
+        self.auth_as(self.tech)
+
+        response = self.client.patch(
+            f"/api/samples/{self.sample.id}/",
+            {
+                "status": "IN_PROGRESS",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.sample.refresh_from_db()
+        self.assertEqual(self.sample.status, "RECEIVED")
+
+    def test_bulk_sample_status_update_requires_reason(self):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            "/api/samples/bulk-update/",
+            {
+                "ids": [self.sample.id],
+                "status": "IN_PROGRESS",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.sample.refresh_from_db()
+        self.assertEqual(self.sample.status, "RECEIVED")
+
+    def test_bulk_sample_status_update_accepts_reason(self):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            "/api/samples/bulk-update/",
+            {
+                "ids": [self.sample.id],
+                "status": "IN_PROGRESS",
+                "reason": "Bulk move into processing after sample intake.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.sample.refresh_from_db()
+        self.assertEqual(self.sample.status, "IN_PROGRESS")
+
+        event = Event.objects.get(
+            entity_type="Sample",
+            entity_id=str(self.sample.id),
+            action="BULK_SAMPLE_STATUS_CHANGED",
+        )
+
+        self.assertEqual(event.actor, self.tech)
+        self.assertTrue(event.payload["bulk"])
+        self.assertEqual(
+            event.payload["reason"],
+            "Bulk move into processing after sample intake.",
+        )
+
     def test_viewer_can_read_samples(self):
         self.auth_as(self.viewer)
 
@@ -554,6 +665,7 @@ class BackendPermissionTests(APITestCase):
             {
                 "ids": [self.sample.id],
                 "status": "IN_PROGRESS",
+                "reason": "Bulk status update allowed with audit reason.",
             },
             format="json",
         )

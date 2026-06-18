@@ -10,6 +10,10 @@ def snapshot(instance):
     """
     Convert model instance -> dict for audit payload.
     FK fields become their id.
+
+    This signal file is intentionally minimal.
+    Detailed user-driven changes should be audited in the view layer
+    where request.user and reason-for-change are available.
     """
     return model_to_dict(instance)
 
@@ -24,8 +28,16 @@ def write_event(instance, action):
 
 
 @receiver(post_save, sender=Sample)
-def sample_saved(sender, instance, created, **kwargs):
-    write_event(instance, "CREATED" if created else "UPDATED")
+def sample_created(sender, instance, created, **kwargs):
+    """
+    Keep generic Sample CREATED events for basic creation traceability.
+
+    Do NOT write generic UPDATED events here.
+    Updates should be written explicitly in samples/views.py so actor,
+    before/after values, and reason-for-change are recorded correctly.
+    """
+    if created:
+        write_event(instance, "CREATED")
 
 
 @receiver(post_delete, sender=Sample)

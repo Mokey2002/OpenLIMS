@@ -5,6 +5,7 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 
 from .models import Sample, SingleSampleAttachment
 from .serializers import SampleSerializer, SingleSampleAttachmentSerializer
@@ -13,6 +14,80 @@ from .workflows import get_allowed_transitions
 from custom_fields.models import FieldValue
 from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite
 from events.models import Event
+
+
+REASON_MIN_LENGTH = 10
+
+
+def sample_audit_state(sample):
+    return {
+        "status": sample.status,
+        "project_id": sample.project_id,
+        "container_id": sample.container_id,
+    }
+
+
+def get_change_reason(request):
+    return (
+        request.data.get("reason")
+        or request.data.get("status_change_reason")
+        or request.data.get("change_reason")
+        or ""
+    )
+
+
+def validate_change_reason(reason):
+    normalized = str(reason or "").strip()
+
+    if len(normalized) < REASON_MIN_LENGTH:
+        raise ValidationError({
+            "reason": (
+                "Reason for change is required for sample status changes "
+                f"and must be at least {REASON_MIN_LENGTH} characters."
+            )
+        })
+
+    return normalized
+
+
+def validate_status_transition(current_status, new_status):
+    allowed = get_allowed_transitions(current_status)
+
+    if new_status == current_status:
+        raise ValidationError({
+            "detail": f"Sample is already in status {current_status}.",
+            "current_status": current_status,
+        })
+
+    if new_status not in allowed:
+        raise ValidationError({
+            "detail": f"Invalid transition from {current_status} to {new_status}.",
+            "current_status": current_status,
+            "allowed_transitions": allowed,
+        })
+
+
+def create_sample_event(sample, action, actor, before, after, changed_fields, extra_payload=None):
+    payload = {
+        "sample_id": sample.id,
+        "sample_code": sample.sample_id,
+        "actor_id": actor.id if actor and actor.is_authenticated else None,
+        "actor_username": actor.username if actor and actor.is_authenticated else None,
+        "before": before,
+        "after": after,
+        "changed_fields": changed_fields,
+    }
+
+    if extra_payload:
+        payload.update(extra_payload)
+
+    Event.objects.create(
+        entity_type="Sample",
+        entity_id=str(sample.id),
+        action=action,
+        actor=actor if actor and actor.is_authenticated else None,
+        payload=payload,
+    )
 
 
 class SampleViewSet(ModelViewSet):
@@ -53,19 +128,17 @@ class SampleViewSet(ModelViewSet):
     def perform_update(self, serializer):
         sample = self.get_object()
 
-        before = {
-            "status": sample.status,
-            "project_id": sample.project_id,
-            "container_id": sample.container_id,
-        }
+        before = sample_audit_state(sample)
+        requested_status = serializer.validated_data.get("status", sample.status)
+        status_changed = requested_status != sample.status
+        reason = None
+
+        if status_changed:
+            reason = validate_change_reason(get_change_reason(self.request))
+            validate_status_transition(sample.status, requested_status)
 
         updated = serializer.save()
-
-        after = {
-            "status": updated.status,
-            "project_id": updated.project_id,
-            "container_id": updated.container_id,
-        }
+        after = sample_audit_state(updated)
 
         changed_fields = [
             key for key in before.keys()
@@ -73,18 +146,29 @@ class SampleViewSet(ModelViewSet):
         ]
 
         if changed_fields:
-            Event.objects.create(
-                entity_type="Sample",
-                entity_id=str(updated.id),
-                action="UPDATED",
-                actor=self.request.user if self.request.user.is_authenticated else None,
-                payload={
-                    "sample_id": updated.id,
-                    "sample_code": updated.sample_id,
-                    "before": before,
-                    "after": after,
-                    "changed_fields": changed_fields,
-                },
+            extra_payload = {}
+
+            if status_changed:
+                extra_payload.update({
+                    "reason": reason,
+                    "reason_required": True,
+                    "reason_type": "sample_status_change",
+                })
+
+            action = (
+                "SAMPLE_STATUS_CHANGED"
+                if changed_fields == ["status"]
+                else "UPDATED"
+            )
+
+            create_sample_event(
+                sample=updated,
+                action=action,
+                actor=self.request.user,
+                before=before,
+                after=after,
+                changed_fields=changed_fields,
+                extra_payload=extra_payload,
             )
 
     @action(detail=True, methods=["get"], url_path="custom-fields")
@@ -132,7 +216,7 @@ class SampleViewSet(ModelViewSet):
     @action(detail=True, methods=["post"], url_path="transition")
     def transition(self, request, pk=None):
         sample = self.get_object()
-        new_status = request.data.get("new_status")
+        new_status = request.data.get("new_status") or request.data.get("status")
 
         if not new_status:
             return Response(
@@ -140,47 +224,30 @@ class SampleViewSet(ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        current_status = sample.status
-        allowed = get_allowed_transitions(current_status)
+        try:
+            reason = validate_change_reason(get_change_reason(request))
+            validate_status_transition(sample.status, new_status)
+        except ValidationError as exc:
+            return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
 
-        if new_status not in allowed:
-            return Response(
-                {
-                    "detail": (
-                        f"Invalid transition from {current_status} to {new_status}."
-                    ),
-                    "current_status": current_status,
-                    "allowed_transitions": allowed,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        before = {
-            "status": sample.status,
-            "project_id": sample.project_id,
-            "container_id": sample.container_id,
-        }
+        before = sample_audit_state(sample)
 
         sample.status = new_status
         sample.save(update_fields=["status"])
 
-        after = {
-            "status": sample.status,
-            "project_id": sample.project_id,
-            "container_id": sample.container_id,
-        }
+        after = sample_audit_state(sample)
 
-        Event.objects.create(
-            entity_type="Sample",
-            entity_id=str(sample.id),
-            action="STATUS_CHANGED",
-            actor=request.user if request.user.is_authenticated else None,
-            payload={
-                "sample_id": sample.id,
-                "sample_code": sample.sample_id,
-                "before": before,
-                "after": after,
-                "changed_fields": ["status"],
+        create_sample_event(
+            sample=sample,
+            action="SAMPLE_STATUS_CHANGED",
+            actor=request.user,
+            before=before,
+            after=after,
+            changed_fields=["status"],
+            extra_payload={
+                "reason": reason,
+                "reason_required": True,
+                "reason_type": "sample_status_change",
             },
         )
 
@@ -231,6 +298,7 @@ class SampleViewSet(ModelViewSet):
         new_status = request.data.get("status", None)
         new_project = request.data.get("project", None)
         new_container = request.data.get("container", None)
+        status_change_reason = None
 
         if not ids:
             return Response(
@@ -249,6 +317,14 @@ class SampleViewSet(ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if new_status is not None:
+            try:
+                status_change_reason = validate_change_reason(
+                    get_change_reason(request)
+                )
+            except ValidationError as exc:
+                return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+
         samples = (
             Sample.objects
             .select_related("project", "container", "container__location")
@@ -260,11 +336,7 @@ class SampleViewSet(ModelViewSet):
         updated_ids = []
 
         for sample in samples:
-            before = {
-                "status": sample.status,
-                "project_id": sample.project_id,
-                "container_id": sample.container_id,
-            }
+            before = sample_audit_state(sample)
 
             changed_fields = []
 
@@ -304,28 +376,36 @@ class SampleViewSet(ModelViewSet):
             if changed_fields:
                 sample.save()
 
-                after = {
-                    "status": sample.status,
-                    "project_id": sample.project_id,
-                    "container_id": sample.container_id,
-                }
+                after = sample_audit_state(sample)
 
                 updated_count += 1
                 updated_ids.append(sample.id)
 
-                Event.objects.create(
-                    entity_type="Sample",
-                    entity_id=str(sample.id),
-                    action="BULK_SAMPLE_UPDATED",
-                    actor=request.user if request.user.is_authenticated else None,
-                    payload={
-                        "sample_id": sample.id,
-                        "sample_code": sample.sample_id,
-                        "before": before,
-                        "after": after,
-                        "changed_fields": changed_fields,
-                        "bulk": True,
-                    },
+                extra_payload = {
+                    "bulk": True,
+                }
+
+                if "status" in changed_fields:
+                    extra_payload.update({
+                        "reason": status_change_reason,
+                        "reason_required": True,
+                        "reason_type": "bulk_sample_status_change",
+                    })
+
+                action = (
+                    "BULK_SAMPLE_STATUS_CHANGED"
+                    if changed_fields == ["status"]
+                    else "BULK_SAMPLE_UPDATED"
+                )
+
+                create_sample_event(
+                    sample=sample,
+                    action=action,
+                    actor=request.user,
+                    before=before,
+                    after=after,
+                    changed_fields=changed_fields,
+                    extra_payload=extra_payload,
                 )
 
         return Response({

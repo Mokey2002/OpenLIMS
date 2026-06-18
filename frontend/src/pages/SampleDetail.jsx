@@ -99,6 +99,8 @@ function actionVariant(action) {
     case "DELETED":
       return "danger";
     case "STATUS_CHANGED":
+    case "SAMPLE_STATUS_CHANGED":
+    case "BULK_SAMPLE_STATUS_CHANGED":
       return "warning";
     case "CONTAINER_ASSIGNED":
       return "info";
@@ -152,7 +154,11 @@ function getTimelineTitle(event) {
     return "Sample created";
   }
 
-  if (event.action === "STATUS_CHANGED") {
+  if (
+    event.action === "STATUS_CHANGED" ||
+    event.action === "SAMPLE_STATUS_CHANGED" ||
+    event.action === "BULK_SAMPLE_STATUS_CHANGED"
+  ) {
     const before = payload.before?.status;
     const after = payload.after?.status;
 
@@ -257,6 +263,20 @@ function renderBeforeAfter(event) {
   );
 }
 
+function renderReason(event) {
+  const payload = event.payload || {};
+  const reason = payload.reason;
+
+  if (!reason) return null;
+
+  return (
+    <div className="reason-box mt-3">
+      <div className="feed-meta mb-1">Reason for change</div>
+      <div className="fw-semibold">{reason}</div>
+    </div>
+  );
+}
+
 function renderLineageLinks(event) {
   const payload = event.payload || {};
   const importJobId = payload.import_job_id;
@@ -314,6 +334,9 @@ export default function SampleDetail() {
   const [selectedAttachmentFile, setSelectedAttachmentFile] = useState(null);
   const [selectedContainer, setSelectedContainer] = useState("");
 
+  const [statusTransitionTarget, setStatusTransitionTarget] = useState("");
+  const [statusChangeReason, setStatusChangeReason] = useState("");
+
   async function load() {
     setErr("");
 
@@ -347,8 +370,15 @@ export default function SampleDetail() {
       const sequenceList = sequencesData.results || sequencesData || [];
       const massSpecList = massSpecData.results || massSpecData || [];
 
+      const allowedTransitions = transitionData.allowed_transitions || [];
+
       setSample(sampleData);
-      setAllowed(transitionData.allowed_transitions || []);
+      setAllowed(allowedTransitions);
+      setStatusTransitionTarget((current) =>
+        current && allowedTransitions.includes(current)
+          ? current
+          : allowedTransitions[0] || ""
+      );
       setWorkItems(workItemList);
       setContainers(containerList);
       setSelectedContainer(sampleData.container || "");
@@ -432,18 +462,36 @@ export default function SampleDetail() {
     };
   }, [workItems]);
 
-  async function doTransition(newStatus) {
+  async function doTransition(e) {
+    e.preventDefault();
+
     if (!userCanWrite) return;
 
     setErr("");
     setSuccess("");
 
+    const reason = statusChangeReason.trim();
+
+    if (!statusTransitionTarget) {
+      setErr("Select a new status.");
+      return;
+    }
+
+    if (reason.length < 10) {
+      setErr("Reason for change is required and must be at least 10 characters.");
+      return;
+    }
+
     try {
       await apiPost(`/api/samples/${id}/transition/`, {
-        new_status: newStatus,
+        new_status: statusTransitionTarget,
+        reason,
       });
 
-      setSuccess(`Sample moved to ${newStatus}.`);
+      setStatusChangeReason("");
+      setSuccess(
+        `Sample moved to ${statusTransitionTarget}. Reason recorded in audit trail.`
+      );
       await load();
     } catch (e) {
       setErr(e.message || String(e));
@@ -752,24 +800,56 @@ export default function SampleDetail() {
 
             {userCanWrite && (
               <div className="col-lg-4">
-                <h5 className="section-title">Status Actions</h5>
+                <h5 className="section-title">Change Status</h5>
 
-                <div className="inline-actions">
-                  {allowed.length === 0 ? (
-                    <span className="empty-state">No further transitions.</span>
-                  ) : (
-                    allowed.map((status) => (
-                      <Button
-                        key={status}
-                        variant="dark"
-                        size="sm"
-                        onClick={() => doTransition(status)}
+                {allowed.length === 0 ? (
+                  <span className="empty-state">No further transitions.</span>
+                ) : (
+                  <Form onSubmit={doTransition}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>New Status</Form.Label>
+                      <Form.Select
+                        value={statusTransitionTarget}
+                        onChange={(e) =>
+                          setStatusTransitionTarget(e.target.value)
+                        }
                       >
-                        Move to {status}
-                      </Button>
-                    ))
-                  )}
-                </div>
+                        {allowed.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label>Reason for change</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        value={statusChangeReason}
+                        onChange={(e) => setStatusChangeReason(e.target.value)}
+                        placeholder="Example: QC review completed and results approved for reporting."
+                      />
+                      <div className="feed-meta mt-1">
+                        Required for status changes. This reason is saved in the
+                        audit trail.
+                      </div>
+                    </Form.Group>
+
+                    <Button
+                      type="submit"
+                      variant="dark"
+                      size="sm"
+                      disabled={
+                        !statusTransitionTarget ||
+                        statusChangeReason.trim().length < 10
+                      }
+                    >
+                      Update Status
+                    </Button>
+                  </Form>
+                )}
               </div>
             )}
           </div>
@@ -1393,6 +1473,7 @@ export default function SampleDetail() {
                   </div>
 
                   {renderLineageLinks(event)}
+                  {renderReason(event)}
                   {renderBeforeAfter(event)}
 
                   <details className="mt-3">
