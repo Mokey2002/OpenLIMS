@@ -29,7 +29,10 @@ def sample():
 def test_valid_sample_transition_creates_event(tech_client, sample):
     response = tech_client.post(
         f"/api/samples/{sample.id}/transition/",
-        {"new_status": "IN_PROGRESS"},
+        {
+            "new_status": "IN_PROGRESS",
+            "reason": "Initial processing started after sample intake.",
+        },
         format="json",
     )
 
@@ -41,5 +44,5 @@ def test_valid_sample_transition_creates_event(tech_client, sample):
     assert Event.objects.filter(
         entity_type="Sample",
         entity_id=str(sample.id),
-        action="STATUS_CHANGED",
+        action="SAMPLE_STATUS_CHANGED",
     ).exists()

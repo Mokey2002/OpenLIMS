@@ -26,21 +26,30 @@ def test_sample_lifecycle_workflow(tech_client):
 
     r1 = tech_client.post(
         f"/api/samples/{sample.id}/transition/",
-        {"new_status": "IN_PROGRESS"},
+        {
+            "new_status": "IN_PROGRESS",
+            "reason": "Initial processing started after sample intake.",
+        },
         format="json",
     )
     assert r1.status_code == 200
 
     r2 = tech_client.post(
         f"/api/samples/{sample.id}/transition/",
-        {"new_status": "QC"},
+        {
+            "new_status": "QC",
+            "reason": "Sample processing completed and ready for QC review.",
+        },
         format="json",
     )
     assert r2.status_code == 200
 
     r3 = tech_client.post(
         f"/api/samples/{sample.id}/transition/",
-        {"new_status": "REPORTED"},
+        {
+            "new_status": "REPORTED",
+            "reason": "QC review completed and sample approved for reporting.",
+        },
         format="json",
     )
     assert r3.status_code == 200
@@ -51,6 +60,6 @@ def test_sample_lifecycle_workflow(tech_client):
     events = Event.objects.filter(
         entity_type="Sample",
         entity_id=str(sample.id),
-        action="STATUS_CHANGED",
+        action="SAMPLE_STATUS_CHANGED",
     )
     assert events.count() == 3
