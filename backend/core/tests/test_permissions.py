@@ -526,6 +526,66 @@ class BackendPermissionTests(APITestCase):
             "Initial processing started by lab tech.",
         )
 
+    def test_sample_status_change_payload_includes_actor_and_reason(self):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            f"/api/samples/{self.sample.id}/transition/",
+            {
+                "new_status": "IN_PROGRESS",
+                "reason": "Initial processing started after accessioning.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        event = Event.objects.get(
+            entity_type="Sample",
+            entity_id=str(self.sample.id),
+            action="SAMPLE_STATUS_CHANGED",
+        )
+
+        self.assertEqual(event.actor, self.tech)
+        self.assertEqual(event.payload["actor_username"], "tech")
+        self.assertEqual(event.payload["actor_id"], self.tech.id)
+        self.assertEqual(
+            event.payload["reason"],
+            "Initial processing started after accessioning.",
+        )
+        self.assertEqual(event.payload["reason_type"], "sample_status_change")
+        self.assertTrue(event.payload["reason_required"])
+
+    def test_sample_status_change_does_not_create_generic_updated_event(self):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            f"/api/samples/{self.sample.id}/transition/",
+            {
+                "new_status": "IN_PROGRESS",
+                "reason": "Initial processing started after accessioning.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.assertTrue(
+            Event.objects.filter(
+                entity_type="Sample",
+                entity_id=str(self.sample.id),
+                action="SAMPLE_STATUS_CHANGED",
+            ).exists()
+        )
+
+        self.assertFalse(
+            Event.objects.filter(
+                entity_type="Sample",
+                entity_id=str(self.sample.id),
+                action="UPDATED",
+            ).exists()
+        )
+
     def test_direct_sample_status_patch_requires_reason(self):
         self.auth_as(self.tech)
 

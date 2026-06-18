@@ -24,6 +24,26 @@ function formatTimestamp(ts) {
   }
 }
 
+function getReason(payload) {
+  return payload?.reason || "";
+}
+
+function getBeforeAfterSummary(payload) {
+  const before = payload?.before || {};
+  const after = payload?.after || {};
+  const changedFields = payload?.changed_fields || [];
+
+  if (!changedFields.length) return "";
+
+  return changedFields
+    .map((field) => {
+      const beforeValue = before[field] ?? "-";
+      const afterValue = after[field] ?? "-";
+      return `${field}: ${beforeValue} → ${afterValue}`;
+    })
+    .join(", ");
+}
+
 function prettyPayload(payload) {
   if (!payload) return "{}";
 
@@ -53,7 +73,13 @@ function statusVariant(action) {
   if (value.includes("FAILED") || value.includes("ERROR")) return "danger";
   if (value.includes("COMPLETED") || value.includes("APPROVED")) return "success";
   if (value.includes("CREATED") || value.includes("IMPORTED")) return "primary";
-  if (value.includes("UPDATED") || value.includes("CHANGED")) return "warning";
+  if (
+    value.includes("UPDATED") ||
+    value.includes("CHANGED") ||
+    value.includes("REASON")
+  ) {
+    return "warning";
+  }
   if (value.includes("QUEUED") || value.includes("RUNNING")) return "info";
 
   return "secondary";
@@ -413,6 +439,8 @@ export default function Events() {
                   <th>Actor</th>
                   <th>Entity</th>
                   <th>Action</th>
+                  <th>Reason</th>
+                  <th>Change Summary</th>
                   <th>Payload</th>
                 </tr>
               </thead>
@@ -437,9 +465,29 @@ export default function Events() {
                       </Badge>
                     </td>
 
-                    <td style={{ minWidth: "360px" }}>
-                      {renderReasonSummary(event.payload)}
+                    <td style={{ minWidth: "260px" }}>
+                      {getReason(event.payload) ? (
+                        <div className="reason-box mb-0">
+                          <div className="fw-semibold">
+                            {getReason(event.payload)}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="feed-meta">-</span>
+                      )}
+                    </td>
 
+                    <td style={{ minWidth: "260px" }}>
+                      {getBeforeAfterSummary(event.payload) ? (
+                        <div className="small">
+                          {getBeforeAfterSummary(event.payload)}
+                        </div>
+                      ) : (
+                        <span className="feed-meta">-</span>
+                      )}
+                    </td>
+
+                    <td style={{ minWidth: "360px" }}>
                       <pre
                         className="mb-0"
                         style={{
