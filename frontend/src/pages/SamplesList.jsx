@@ -13,6 +13,7 @@ import {
 } from "react-bootstrap";
 import { apiGet, apiPost } from "../api";
 import { getAccessToken } from "../auth";
+import { isAdmin, isTech, canWrite } from "../authz";
 
 const STATUS_OPTIONS = [
   "",
@@ -81,6 +82,7 @@ export default function SamplesList() {
   const [samples, setSamples] = useState([]);
   const [projects, setProjects] = useState([]);
   const [containers, setContainers] = useState([]);
+  const [me, setMe] = useState(null);
 
   const [err, setErr] = useState("");
   const [success, setSuccess] = useState("");
@@ -98,6 +100,7 @@ export default function SamplesList() {
   const [bulkStatus, setBulkStatus] = useState("");
   const [bulkProject, setBulkProject] = useState("");
   const [bulkContainer, setBulkContainer] = useState("");
+  const [bulkReason, setBulkReason] = useState("");
 
   const [exporting, setExporting] = useState(false);
 
@@ -119,10 +122,11 @@ export default function SamplesList() {
 
       params.set("page", page);
 
-      const [samplesData, projectsData, containersData] = await Promise.all([
+      const [samplesData, projectsData, containersData, meData] = await Promise.all([
         apiGet(`/api/samples/?${params.toString()}`),
         apiGet("/api/projects/"),
         apiGet("/api/containers/"),
+        apiGet("/api/me/"),
       ]);
 
       setSamples(samplesData.results || []);
@@ -131,6 +135,7 @@ export default function SamplesList() {
       setPreviousPageUrl(samplesData.previous || null);
       setProjects(projectsData.results || projectsData || []);
       setContainers(containersData.results || containersData || []);
+      setMe(meData);
     } catch (e) {
       setErr(e.message || String(e));
     }
@@ -154,6 +159,22 @@ export default function SamplesList() {
   }, [samples, selectedVisibleCount]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / 10));
+
+  const userIsAdmin = isAdmin(me);
+  const userIsTech = isTech(me);
+  const userCanWrite = canWrite(me);
+
+  const visibilityMessage = userIsAdmin
+    ? "Showing all samples, including unassigned samples, because you are an admin."
+    : userIsTech
+      ? "Showing samples from your assigned projects plus unassigned samples you created."
+      : "Showing samples from your assigned projects only.";
+
+  const emptyMessage = userIsAdmin
+    ? "No samples found."
+    : userIsTech
+      ? "No samples found in your assigned projects or unassigned samples you created."
+      : "No samples found in your assigned projects. Ask an admin to add you to a project if you need access.";
 
   function toggleSelected(id) {
     setSelectedIds((prev) =>
@@ -219,10 +240,18 @@ export default function SamplesList() {
       return;
     }
 
+    if (bulkStatus && bulkReason.trim().length < 10) {
+      setErr("Reason for change is required for bulk status updates and must be at least 10 characters.");
+      return;
+    }
+
     try {
       const payload = { ids: selectedIds };
 
-      if (bulkStatus) payload.status = bulkStatus;
+      if (bulkStatus) {
+        payload.status = bulkStatus;
+        payload.reason = bulkReason.trim();
+      }
       if (bulkProject) payload.project = Number(bulkProject);
       if (bulkContainer) payload.container = Number(bulkContainer);
 
@@ -235,6 +264,8 @@ export default function SamplesList() {
       setBulkStatus("");
       setBulkProject("");
       setBulkContainer("");
+      setBulkReason("");
+      setBulkReason("");
 
       await load();
     } catch (e) {
@@ -254,10 +285,16 @@ export default function SamplesList() {
       return;
     }
 
+    if (bulkReason.trim().length < 10) {
+      setErr("Reason for change is required to archive selected samples.");
+      return;
+    }
+
     try {
       const result = await apiPost("/api/samples/bulk-update/", {
         ids: selectedIds,
         status: "ARCHIVED",
+        reason: bulkReason.trim(),
       });
 
       setBulkResult(result);
@@ -316,6 +353,11 @@ export default function SamplesList() {
       {err && <Alert variant="danger">{err}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
 
+      <Alert variant="info" className="mb-4">
+        {visibilityMessage}
+      </Alert>
+
+      {userCanWrite && (
       <Card className="app-card mb-4">
         <Card.Body>
           <h5 className="section-title">Create Sample</h5>
@@ -354,6 +396,7 @@ export default function SamplesList() {
           </Form>
         </Card.Body>
       </Card>
+      )}
 
       <Card className="app-card mb-4">
         <Card.Body>
@@ -416,6 +459,7 @@ export default function SamplesList() {
         </Card.Body>
       </Card>
 
+      {userCanWrite && (
       <Card className="app-card mb-4">
         <Card.Body>
           <div className="toolbar-row mb-3">
@@ -480,12 +524,31 @@ export default function SamplesList() {
                 variant="dark"
                 className="w-100"
                 onClick={applyBulkUpdate}
-                disabled={selectedIds.length === 0}
+                disabled={
+                  selectedIds.length === 0 ||
+                  (bulkStatus && bulkReason.trim().length < 10)
+                }
               >
                 Apply to {selectedIds.length}
               </Button>
             </Col>
           </Row>
+
+          {bulkStatus && (
+            <div className="mt-3">
+              <Form.Label>Reason for status change</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={2}
+                value={bulkReason}
+                onChange={(e) => setBulkReason(e.target.value)}
+                placeholder="Example: Samples completed review and are ready for the next workflow step."
+              />
+              <div className="feed-meta mt-1">
+                Required when changing sample status. This reason is saved in the audit trail.
+              </div>
+            </div>
+          )}
 
           <div className="inline-actions mt-3">
             <Button
@@ -510,7 +573,7 @@ export default function SamplesList() {
               variant="outline-warning"
               size="sm"
               onClick={archiveSelected}
-              disabled={selectedIds.length === 0}
+              disabled={selectedIds.length === 0 || bulkReason.trim().length < 10}
             >
               Archive Selected
             </Button>
@@ -550,6 +613,7 @@ export default function SamplesList() {
           )}
         </Card.Body>
       </Card>
+      )}
 
       <Card className="app-card">
         <Card.Body>
@@ -574,7 +638,7 @@ export default function SamplesList() {
           </div>
 
           {samples.length === 0 ? (
-            <div className="empty-state">No samples found.</div>
+            <div className="empty-state">{emptyMessage}</div>
           ) : (
             <Table responsive hover className="app-table align-middle">
               <thead>
@@ -592,6 +656,7 @@ export default function SamplesList() {
                   <th>Status</th>
                   <th>Container</th>
                   <th>Location</th>
+                  <th>Created By</th>
                   <th>Created At</th>
                 </tr>
               </thead>
@@ -625,6 +690,7 @@ export default function SamplesList() {
 
                     <td>{sample.container_code || "-"}</td>
                     <td>{sample.location_name || "-"}</td>
+                    <td>{sample.created_by_username || "-"}</td>
                     <td>{formatTimestamp(sample.created_at)}</td>
                   </tr>
                 ))}

@@ -11,6 +11,7 @@ class SampleSerializer(serializers.ModelSerializer):
     project_id = serializers.SerializerMethodField()
     project_name = serializers.SerializerMethodField()
     project_code = serializers.SerializerMethodField()
+    created_by_username = serializers.SerializerMethodField()
 
     class Meta:
         model = Sample
@@ -27,6 +28,8 @@ class SampleSerializer(serializers.ModelSerializer):
             "container_code",
             "location_id",
             "location_name",
+            "created_by",
+            "created_by_username",
             "created_at",
         ]
         read_only_fields = [
@@ -38,8 +41,13 @@ class SampleSerializer(serializers.ModelSerializer):
             "container_code",
             "location_id",
             "location_name",
+            "created_by",
+            "created_by_username",
             "created_at",
         ]
+
+    def get_created_by_username(self, obj):
+        return obj.created_by.username if obj.created_by else None
 
     def get_project_id(self, obj):
         return obj.project.id if obj.project else None
