@@ -22,7 +22,11 @@ def client(user):
 
 
 def test_sample_lifecycle_workflow(tech_client):
-    sample = Sample.objects.create(sample_id="S-LIFE-001", status="RECEIVED")
+    sample = Sample.objects.create(
+        sample_id="S-LIFE-001",
+        status="RECEIVED",
+        created_by=tech_client.handler._force_user,
+    )
 
     r1 = tech_client.post(
         f"/api/samples/{sample.id}/transition/",

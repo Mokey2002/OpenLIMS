@@ -650,6 +650,160 @@ class BackendPermissionTests(APITestCase):
             "Bulk move into processing after sample intake.",
         )
 
+    def test_admin_can_see_all_samples_including_unassigned(self):
+        assigned = self.sample
+        unassigned = Sample.objects.create(
+            sample_id="S-UNASSIGNED-ADMIN-VISIBLE",
+            status="RECEIVED",
+        )
+
+        self.auth_as(self.admin)
+
+        response = self.client.get("/api/samples/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        ids = {item["id"] for item in response.data["results"]}
+
+        self.assertIn(assigned.id, ids)
+        self.assertIn(unassigned.id, ids)
+
+    def test_viewer_sees_only_samples_in_assigned_projects(self):
+        other_project = Project.objects.create(
+            code="PRJ-OTHER",
+            name="Other Project",
+        )
+
+        assigned = self.sample
+
+        unassigned = Sample.objects.create(
+            sample_id="S-UNASSIGNED-VIEWER-HIDDEN",
+            status="RECEIVED",
+        )
+
+        other_sample = Sample.objects.create(
+            sample_id="S-OTHER-VIEWER-HIDDEN",
+            status="RECEIVED",
+            project=other_project,
+        )
+
+        self.auth_as(self.viewer)
+
+        response = self.client.get("/api/samples/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        ids = {item["id"] for item in response.data["results"]}
+
+        self.assertIn(assigned.id, ids)
+        self.assertNotIn(unassigned.id, ids)
+        self.assertNotIn(other_sample.id, ids)
+
+    def test_tech_sees_assigned_project_samples_and_own_unassigned_samples(self):
+        other_project = Project.objects.create(
+            code="PRJ-OTHER-TECH",
+            name="Other Tech Project",
+        )
+
+        assigned = self.sample
+
+        own_unassigned = Sample.objects.create(
+            sample_id="S-TECH-OWN-UNASSIGNED",
+            status="RECEIVED",
+            created_by=self.tech,
+        )
+
+        other_unassigned = Sample.objects.create(
+            sample_id="S-OTHER-UNASSIGNED-HIDDEN",
+            status="RECEIVED",
+            created_by=self.admin,
+        )
+
+        other_project_sample = Sample.objects.create(
+            sample_id="S-OTHER-PROJECT-HIDDEN",
+            status="RECEIVED",
+            project=other_project,
+        )
+
+        self.auth_as(self.tech)
+
+        response = self.client.get("/api/samples/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        ids = {item["id"] for item in response.data["results"]}
+
+        self.assertIn(assigned.id, ids)
+        self.assertIn(own_unassigned.id, ids)
+        self.assertNotIn(other_unassigned.id, ids)
+        self.assertNotIn(other_project_sample.id, ids)
+
+    def test_tech_created_unassigned_sample_is_visible_to_that_tech(self):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            "/api/samples/",
+            {
+                "sample_id": "S-TECH-CREATED-UNASSIGNED",
+                "status": "RECEIVED",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        sample = Sample.objects.get(sample_id="S-TECH-CREATED-UNASSIGNED")
+        self.assertEqual(sample.created_by, self.tech)
+
+        list_response = self.client.get("/api/samples/")
+        ids = {item["id"] for item in list_response.data["results"]}
+
+        self.assertIn(sample.id, ids)
+
+    def test_tech_cannot_create_sample_in_unassigned_project(self):
+        other_project = Project.objects.create(
+            code="PRJ-NO-TECH",
+            name="Project Without Tech",
+        )
+
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            "/api/samples/",
+            {
+                "sample_id": "S-TECH-BLOCKED-PROJECT",
+                "status": "RECEIVED",
+                "project": other_project.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_tech_cannot_update_hidden_project_sample(self):
+        other_project = Project.objects.create(
+            code="PRJ-NO-TECH-UPDATE",
+            name="Project Without Tech Update",
+        )
+
+        sample = Sample.objects.create(
+            sample_id="S-TECH-HIDDEN-UPDATE",
+            status="RECEIVED",
+            project=other_project,
+        )
+
+        self.auth_as(self.tech)
+
+        response = self.client.patch(
+            f"/api/samples/{sample.id}/",
+            {
+                "container": None,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_viewer_can_read_samples(self):
         self.auth_as(self.viewer)
 

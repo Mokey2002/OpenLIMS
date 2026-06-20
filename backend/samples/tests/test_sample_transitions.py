@@ -27,6 +27,9 @@ def sample():
 
 
 def test_valid_sample_transition_creates_event(tech_client, sample):
+    sample.created_by = tech_client.handler._force_user
+    sample.save(update_fields=["created_by"])
+
     response = tech_client.post(
         f"/api/samples/{sample.id}/transition/",
         {

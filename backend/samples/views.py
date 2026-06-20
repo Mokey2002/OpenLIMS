@@ -10,6 +10,12 @@ from rest_framework.exceptions import ValidationError
 from .models import Sample, SingleSampleAttachment
 from .serializers import SampleSerializer, SingleSampleAttachmentSerializer
 from .workflows import get_allowed_transitions
+from .access import (
+    get_sample_access_queryset,
+    user_can_access_sample,
+    validate_sample_project_assignment,
+    validate_unassign_project,
+)
 
 from custom_fields.models import FieldValue
 from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite
@@ -101,6 +107,7 @@ class SampleViewSet(ModelViewSet):
                 "project",
                 "container",
                 "container__location",
+                "created_by",
             )
             .all()
             .order_by("-created_at")
@@ -123,10 +130,24 @@ class SampleViewSet(ModelViewSet):
         if container:
             queryset = queryset.filter(container_id=container)
 
-        return queryset
+        return get_sample_access_queryset(queryset, self.request.user)
+
+    def perform_create(self, serializer):
+        project = serializer.validated_data.get("project")
+
+        validate_sample_project_assignment(self.request.user, project)
+
+        serializer.save(created_by=self.request.user)
 
     def perform_update(self, serializer):
         sample = self.get_object()
+
+        requested_project = serializer.validated_data.get("project", sample.project)
+
+        if requested_project is None and sample.project_id:
+            validate_unassign_project(self.request.user, sample)
+        else:
+            validate_sample_project_assignment(self.request.user, requested_project)
 
         before = sample_audit_state(sample)
         requested_status = serializer.validated_data.get("status", sample.status)
@@ -327,9 +348,15 @@ class SampleViewSet(ModelViewSet):
 
         samples = (
             Sample.objects
-            .select_related("project", "container", "container__location")
+            .select_related(
+                "project",
+                "container",
+                "container__location",
+                "created_by",
+            )
             .filter(id__in=ids)
         )
+        samples = get_sample_access_queryset(samples, request.user)
 
         updated_count = 0
         skipped = []
@@ -361,6 +388,45 @@ class SampleViewSet(ModelViewSet):
 
             if new_project is not None:
                 normalized_project = new_project or None
+
+                if normalized_project is None:
+                    if sample.project_id:
+                        try:
+                            validate_unassign_project(request.user, sample)
+                        except ValidationError as exc:
+                            skipped.append({
+                                "id": sample.id,
+                                "sample_id": sample.sample_id,
+                                "reason": exc.detail,
+                            })
+                            continue
+                else:
+                    from projects.models import Project
+
+                    target_project = Project.objects.filter(
+                        id=normalized_project
+                    ).first()
+
+                    if not target_project:
+                        skipped.append({
+                            "id": sample.id,
+                            "sample_id": sample.sample_id,
+                            "reason": "Target project does not exist.",
+                        })
+                        continue
+
+                    try:
+                        validate_sample_project_assignment(
+                            request.user,
+                            target_project,
+                        )
+                    except ValidationError as exc:
+                        skipped.append({
+                            "id": sample.id,
+                            "sample_id": sample.sample_id,
+                            "reason": exc.detail,
+                        })
+                        continue
 
                 if sample.project_id != normalized_project:
                     sample.project_id = normalized_project
@@ -426,8 +492,16 @@ class SampleViewSet(ModelViewSet):
 
         samples = (
             Sample.objects
-            .select_related("project", "container", "container__location")
+            .select_related(
+                "project",
+                "container",
+                "container__location",
+                "created_by",
+            )
             .filter(id__in=ids)
+        )
+        samples = (
+            get_sample_access_queryset(samples, request.user)
             .order_by("sample_id")
         )
 
@@ -491,9 +565,21 @@ class SingleSampleAttachmentViewSet(ModelViewSet):
         if project_id:
             queryset = queryset.filter(sample__project_id=project_id)
 
-        return queryset
+        allowed_samples = get_sample_access_queryset(
+            Sample.objects.all(),
+            self.request.user,
+        )
+
+        return queryset.filter(sample__in=allowed_samples)
 
     def perform_create(self, serializer):
+        sample = serializer.validated_data.get("sample")
+
+        if not user_can_access_sample(self.request.user, sample):
+            raise ValidationError({
+                "sample": "You do not have access to attach files to this sample."
+            })
+
         attachment = serializer.save(uploaded_by=self.request.user)
 
         Event.objects.create(
