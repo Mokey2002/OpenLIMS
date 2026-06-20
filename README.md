@@ -1,6 +1,6 @@
 # OpenLIMS
 
-OpenLIMS is a lightweight, modular, production-style Laboratory Information Management System (LIMS) designed to support real laboratory workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence workspaces, Clustal Omega alignments, local BLAST search, mass spectrometry analysis workflows, audit trails, notifications, reporting, real-time job updates, and system health monitoring.
+OpenLIMS is a lightweight, modular, production-style Laboratory Information Management System (LIMS) designed to support real laboratory workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence workspaces, Clustal Omega alignments, local BLAST search, mass spectrometry analysis workflows, audit trails, notifications, reporting, real-time job updates, project-scoped access control, and system health monitoring.
 
 OpenLIMS is currently a production-style prototype, not a fully validated clinical or regulated production LIMS. The goal is to provide a practical, configurable, easy-to-deploy foundation for laboratory workflow software.
 
@@ -26,11 +26,120 @@ http://16.146.193.92
 
 ---
 
-## Current Release
+# Current Release
 
-# OpenLIMS v0.12.0 — Advanced Mass Spectrometry Analysis
+## OpenLIMS v0.14.0 — Project-Scoped Sample Access
 
-OpenLIMS v0.12.0 expands the mass spectrometry module from basic pyOpenMS preview into a broader advanced analysis workflow. Users can upload raw spectrum files, OpenMS feature output files, consensus feature files, and mzIdentML identification files, then inspect run-level QC metrics, detected features, protein/peptide identification summaries, and compare completed mass spec runs by project, sample, or manually selected run sets.
+OpenLIMS v0.14.0 improves sample visibility, user experience, and project-based access control. Samples are now scoped by project membership, with special handling for unassigned samples.
+
+This release makes OpenLIMS more realistic for labs where different users, teams, or projects should not automatically see each other’s samples.
+
+### v0.14.0 Highlights
+
+- Added project-scoped sample visibility
+- Added `created_by` tracking for samples
+- Admins can see and manage all samples, including unassigned samples
+- Tech users can see samples in assigned projects plus unassigned samples they created
+- Viewers can see samples only in assigned projects
+- Viewers cannot see unassigned samples
+- Tech users cannot see other tech users’ unassigned samples
+- Tech users cannot see samples from projects they are not assigned to
+- Sample attachments now respect sample visibility rules
+- Selected sample CSV export now respects sample visibility rules
+- Samples page now explains what each user role is allowed to see
+- Bulk status updates now require a reason from the UI for audit compliance
+- Added backend tests for project-scoped sample visibility and write protections
+
+### Project-Scoped Sample Access Rules
+
+| Role | Sample Visibility | Modify Samples |
+|---|---|---|
+| Admin / Director | All samples, including unassigned samples | Yes, all samples |
+| Tech | Samples in assigned projects, plus unassigned samples they created | Yes, only accessible samples |
+| Viewer | Samples in assigned projects only | No |
+
+### Example
+
+If Peter is assigned to Project A and Maria is assigned to Project B:
+
+```text
+Peter can see:
+- Project A samples
+- Unassigned samples created by Peter
+
+Peter cannot see:
+- Project B samples
+- Unassigned samples created by Maria
+- Unassigned samples with no creator
+```
+
+```text
+Maria can see:
+- Project B samples
+- Unassigned samples created by Maria
+
+Maria cannot see:
+- Project A samples
+- Unassigned samples created by Peter
+- Unassigned samples with no creator
+```
+
+Admins can see all samples.
+
+---
+
+## Previous Release: v0.13.0 — Reason-for-Change Audit Logging
+
+OpenLIMS v0.13.0 added controlled-change auditing for sample workflow status changes.
+
+### v0.13.0 Highlights
+
+- Added reason-for-change requirement for sample status transitions
+- Added reason capture for bulk sample status updates
+- Added actor metadata into audit payloads
+- Added before/after status tracking for controlled status changes
+- Added clear reason display in Audit Events
+- Added change summary display in Audit Events
+- Added reason display in the Sample Detail chain-of-custody timeline
+- Removed duplicate generic Sample `UPDATED` events for status transitions
+- Expanded backend tests for reason-required audit behavior
+
+### New Audit Event
+
+Sample status changes create:
+
+```text
+SAMPLE_STATUS_CHANGED
+```
+
+Example payload:
+
+```json
+{
+  "sample_id": 34,
+  "sample_code": "S-GAMMA-002",
+  "actor_id": 1,
+  "actor_username": "director",
+  "before": {
+    "status": "IN_PROGRESS"
+  },
+  "after": {
+    "status": "QC"
+  },
+  "reason": "QC review completed and sample approved for reporting.",
+  "changed_fields": ["status"],
+  "reason_required": true,
+  "reason_type": "sample_status_change"
+}
+```
+
+OpenLIMS now records not only what changed, but why it changed.
+
+---
+
+## Previous Release: v0.12.0 — Advanced Mass Spectrometry Analysis
+
+OpenLIMS v0.12.0 expanded the mass spectrometry module from basic pyOpenMS preview into a broader advanced analysis workflow. Users can upload raw spectrum files, OpenMS feature output files, consensus feature files, and mzIdentML identification files, then inspect run-level QC metrics, detected features, protein/peptide identification summaries, and compare completed mass spec runs by project, sample, or manually selected run sets.
 
 ### v0.12.0 Highlights
 
@@ -61,37 +170,9 @@ OpenLIMS v0.12.0 expands the mass spectrometry module from basic pyOpenMS previe
 - Docker runtime dependencies for pyOpenMS
 - Backend permission tests for mass spec upload, read, reprocess, and comparison access
 
-### Access Control
-
-| Role | Mass Spec Access |
-|---|---|
-| Admin / Director | Upload, view, reprocess, compare |
-| Tech | Upload, view, reprocess, compare |
-| Viewer | View and compare only |
-
-### Supported Mass Spec Workflow
-
-```text
-Upload mzML / mzXML / mzData / featureXML / consensusXML / mzID / mzIdentML file
-   ↓
-Create MassSpecRun as PENDING
-   ↓
-Queue Celery processing task
-   ↓
-pyOpenMS or OpenMS-compatible parser processes file
-   ↓
-Extract spectra, TIC, peak, feature, QC, OpenMS, or ID summaries depending on file type
-   ↓
-Store results on MassSpecRun
-   ↓
-Render Mass Spec detail page, OpenMS summary, ID summary, detected features, and comparison views
-   ↓
-Record audit events
-```
-
 ---
 
-## Core Features
+# Core Features
 
 ## Role-Based Access Control
 
@@ -105,9 +186,9 @@ OpenLIMS uses JWT authentication and role-based permissions.
 
 Director/admin users can manage users, system settings, instrument profiles, imports, samples, sequences, projects, audit workflows, reports, and system health tools.
 
-Tech users can perform lab workflow actions such as updating samples, running imports, managing sequence workspaces, queueing alignments, running BLAST searches, and processing mass spec runs.
+Tech users can perform lab workflow actions such as updating accessible samples, running imports, managing sequence workspaces, queueing alignments, running BLAST searches, and processing mass spec runs.
 
-Viewer users can inspect dashboards, samples, projects, audit events, imports, sequences, alignments, BLAST results, mass spec runs, and reports without write access.
+Viewer users can inspect dashboards, accessible samples, assigned projects, audit events, imports, sequences, alignments, BLAST results, mass spec runs, and reports without write access.
 
 ---
 
@@ -129,6 +210,8 @@ Users can:
 - Upload sample attachments
 - View sample work items, results, and audit timeline events
 - Link samples to sequence workspaces, import jobs, BLAST jobs, and mass spec runs
+- Record reason-for-change when changing controlled sample status
+- View project-scoped sample lists based on role and project membership
 
 ---
 
@@ -144,6 +227,8 @@ Users can:
 - Add project notes and feed posts
 - Link samples, imports, sequences, alignments, BLAST jobs, and mass spec runs to projects
 - Notify project members when updates are posted
+
+Project membership now controls sample visibility for non-admin users.
 
 ---
 
@@ -214,8 +299,8 @@ The preview step helps prevent accidental bad imports by showing records found, 
 
 OpenLIMS supports two ingestion workflows:
 
-- CSV upload through the UI
-- Direct instrument/API push
+1. CSV upload through the UI
+2. Direct instrument/API push
 
 Instrument profiles define how incoming data should be interpreted. Each instrument profile can define an instrument name, instrument code, delimiter, sample ID column, column mappings, numeric min/max validation, and allowed values.
 
@@ -336,7 +421,7 @@ GET  /api/blast-jobs/:id/hits/
 
 ## Mass Spectrometry Analysis
 
-OpenLIMS v0.12.0 includes advanced mass spectrometry support using pyOpenMS and OpenMS-compatible output formats.
+OpenLIMS includes advanced mass spectrometry support using pyOpenMS and OpenMS-compatible output formats.
 
 Users can:
 
@@ -488,6 +573,15 @@ Examples include:
 
 The Events page supports audit export as CSV and JSON. Audit logs can be filtered by entity type, action, actor, search term, and date range.
 
+Reason-for-change audit logging records:
+
+- Actor
+- Before state
+- After state
+- Reason
+- Changed fields
+- Reason type
+
 ---
 
 ## Notifications
@@ -564,9 +658,9 @@ Example response:
 
 ---
 
-## Architecture
+# Architecture
 
-### Application Architecture
+## Application Architecture
 
 ```text
 React + Vite Frontend
@@ -576,7 +670,7 @@ Django REST Framework API
 PostgreSQL
 ```
 
-### Real-Time Architecture
+## Real-Time Architecture
 
 ```text
 React WebSocket Client
@@ -590,7 +684,7 @@ Redis Pub/Sub Channel Layer
 Celery job update broadcasts
 ```
 
-### Async Processing
+## Async Processing
 
 ```text
 Django API
@@ -602,7 +696,7 @@ Celery Worker
 PostgreSQL
 ```
 
-### Alignment Processing
+## Alignment Processing
 
 ```text
 Celery Worker
@@ -612,7 +706,7 @@ Clustal Omega
 AlignmentJob result
 ```
 
-### BLAST Processing
+## BLAST Processing
 
 ```text
 Celery Worker
@@ -622,7 +716,7 @@ NCBI BLAST+
 BlastJob + BlastHit results
 ```
 
-### Mass Spec Processing
+## Mass Spec Processing
 
 ```text
 Celery Worker
@@ -632,7 +726,7 @@ pyOpenMS / OpenMS-compatible parsers
 MassSpecRun summary + TIC data + features + IDs + comparison data
 ```
 
-### Production Runtime Architecture
+## Production Runtime Architecture
 
 ```text
 Internet
@@ -660,7 +754,7 @@ Redis Pub/Sub
 
 ---
 
-## Services
+# Services
 
 | Service | Purpose |
 |---|---|
@@ -678,11 +772,11 @@ Redis Pub/Sub
 
 ---
 
-## Main Django Apps
+# Main Django Apps
 
 | App | Responsibility |
 |---|---|
-| `samples` | Sample lifecycle, transitions, attachments |
+| `samples` | Sample lifecycle, project-scoped access, transitions, attachments |
 | `projects` | Projects, membership, posts |
 | `inventory` | Locations and containers |
 | `imports` | Instrument profiles, mappings, import jobs |
@@ -699,9 +793,9 @@ Redis Pub/Sub
 
 ---
 
-## Import Workflows
+# Import Workflows
 
-### CSV Upload Workflow
+## CSV Upload Workflow
 
 ```text
 Frontend Import Page
@@ -721,7 +815,7 @@ Samples, work items, and results are created
 ImportJob summary is updated
 ```
 
-### FASTA Import Workflow
+## FASTA Import Workflow
 
 ```text
 Frontend Import Page
@@ -741,7 +835,7 @@ Sequence workspaces created
 Events logged
 ```
 
-### Instrument API Push Workflow
+## Instrument API Push Workflow
 
 ```text
 Instrument / Adapter Script
@@ -781,13 +875,14 @@ curl -X POST http://localhost:8000/api/import-jobs/instrument-ingest/ \
 
 ---
 
-## Authentication and Permissions
+# Authentication and Permissions
 
 OpenLIMS uses:
 
 - JWT authentication for users
 - Shared API key authentication for instrument ingestion
 - Role-based API permissions
+- Project-scoped sample access
 - Backend permission tests
 
 | Role | Demo User | Access |
@@ -798,18 +893,20 @@ OpenLIMS uses:
 
 Backend tests help verify that viewer users cannot perform write actions such as creating samples, updating samples, creating sequence workspaces, running imports, creating alignment jobs, creating BLAST databases, building BLAST databases, creating BLAST jobs, uploading mass spec files, reprocessing mass spec runs, changing system settings, or managing users.
 
+Backend tests also verify that sample visibility is project-scoped for non-admin users.
+
 ---
 
-## Local Development
+# Local Development
 
-### 1. Clone the repository
+## 1. Clone the repository
 
 ```bash
 git clone https://github.com/Mokey2002/OpenLIMS.git
 cd OpenLIMS
 ```
 
-### 2. Create environment file
+## 2. Create environment file
 
 ```bash
 cp deploy/.env.example deploy/.env
@@ -836,31 +933,31 @@ INSTRUMENT_API_KEY=my-shared-lab-instrument-key
 
 Production deployment note: OpenLIMS real-time updates require the API container to run Daphne/ASGI and the reverse proxy to forward `/ws/*` to the API service.
 
-### 3. Start services
+## 3. Start services
 
 ```bash
 docker compose -p openlims -f deploy/docker-compose.yml up -d --build
 ```
 
-### 4. Run migrations
+## 4. Run migrations
 
 ```bash
 docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py migrate
 ```
 
-### 5. Seed demo data
+## 5. Seed demo data
 
 ```bash
 docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py seed_demo
 ```
 
-### 6. Create superuser if needed
+## 6. Create superuser if needed
 
 ```bash
 docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py createsuperuser
 ```
 
-### 7. Open app
+## 7. Open app
 
 ```text
 Frontend: http://localhost:5173
@@ -871,7 +968,7 @@ Health:   http://localhost:8000/api/health/
 
 ---
 
-## Testing Mass Spec Locally
+# Testing Mass Spec Locally
 
 You can generate a small demo mzML file inside the API container:
 
@@ -938,7 +1035,7 @@ TIC Points: 30
 
 ---
 
-## Running Tests
+# Running Tests
 
 Run all tests:
 
@@ -960,11 +1057,11 @@ npm install
 npm run build
 ```
 
-Test coverage includes instrument API ingest, CSV import workflow, duplicate run protection, import retry validation, FASTA import validation, backend permissions, project permissions, sample transitions, notifications, alignment workflow behavior, BLAST permission tests, mass spec permission tests, mass spec comparison tests, and system health checks.
+Test coverage includes instrument API ingest, CSV import workflow, duplicate run protection, import retry validation, FASTA import validation, backend permissions, project permissions, project-scoped sample access, sample transitions, notifications, alignment workflow behavior, BLAST permission tests, mass spec permission tests, mass spec comparison tests, and system health checks.
 
 ---
 
-## CI/CD
+# CI/CD
 
 OpenLIMS uses GitHub Actions for CI.
 
@@ -990,7 +1087,7 @@ Build frontend
 
 ---
 
-## Database Backup
+# Database Backup
 
 Create backup:
 
@@ -1006,10 +1103,10 @@ cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.pr
 
 ---
 
-## Enterprise Feature Roadmap
+# Enterprise Feature Roadmap
 
 | # | Feature | Status |
-|---|---|---|
+|---:|---|---|
 | 1 | Admin Settings page | Added |
 | 2 | Audit log export | Added |
 | 3 | User management improvements | Added |
@@ -1029,14 +1126,15 @@ cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.pr
 | 17 | OpenMS featureXML / consensusXML parsing | Added |
 | 18 | mzIdentML protein/peptide ID summaries | Added |
 | 19 | Mass spec sample comparison | Added |
-| 20 | Reason-for-change audit logging | Planned |
-| 21 | S3/external media storage | Planned |
-| 22 | Validation-readiness documentation | Planned |
-| 23 | Monitoring and alerting | Planned |
+| 20 | Reason-for-change audit logging | Added |
+| 21 | Project-scoped sample access | Added |
+| 22 | S3/external media storage | Planned |
+| 23 | Validation-readiness documentation | Planned |
+| 24 | Monitoring and alerting | Planned |
 
 ---
 
-## Production Readiness Status
+# Production Readiness Status
 
 OpenLIMS is currently best described as a production-style open-source LIMS prototype.
 
@@ -1047,7 +1145,9 @@ It includes several production-shaped patterns:
 - Redis + Celery async jobs
 - Django Channels + WebSocket live job updates
 - Role-based access control
+- Project-scoped sample access
 - Audit event logging
+- Reason-for-change audit logging
 - Audit log export
 - Health checks
 - Upload validation
@@ -1069,7 +1169,6 @@ It includes several production-shaped patterns:
 
 Remaining production-readiness work:
 
-- Reason-for-change enforcement on critical edits
 - S3 or external file storage
 - Formal backup/restore procedures
 - Monitoring and alerting
@@ -1080,7 +1179,37 @@ Remaining production-readiness work:
 
 ---
 
-## Completed in v0.12.0
+# Completed in v0.14.0
+
+- Project-scoped sample visibility
+- Sample `created_by` tracking
+- Admin visibility for all samples
+- Tech visibility for assigned project samples plus own unassigned samples
+- Viewer visibility for assigned project samples only
+- Hidden unassigned samples for viewers
+- Hidden other users’ unassigned samples for techs
+- Sample attachment visibility enforcement
+- Selected CSV export visibility enforcement
+- Samples page role visibility message
+- Bulk status reason field in Samples UI
+- Project-scoped sample permission tests
+
+---
+
+# Completed in v0.13.0
+
+- Reason-for-change required for sample status changes
+- Reason-for-change support for bulk sample status changes
+- Before/after status audit payloads
+- Actor username and actor ID in audit payloads
+- Reason visible in Audit Events
+- Reason visible in Sample Detail timeline
+- Duplicate generic Sample `UPDATED` events removed for status-only transitions
+- Backend tests for reason-required sample status changes
+
+---
+
+# Completed in v0.12.0
 
 - Sample Detail mass spec integration
 - Peak picking summaries
@@ -1099,7 +1228,7 @@ Remaining production-readiness work:
 
 ---
 
-## Project Goals
+# Project Goals
 
 OpenLIMS aims to be:
 
@@ -1114,13 +1243,26 @@ OpenLIMS aims to be:
 
 ---
 
-## Author
+# Author
 
-Eduardo L  
+Eduardo L
+
 LinkedIn: https://www.linkedin.com/in/edlemus/
 
 ---
 
-## License
+# License
 
 Apache 2.0
+
+---
+
+# About
+
+OpenLIMS is an open-source, self-hosted, production-style Laboratory Information Management System for labs that need sample tracking, inventory management, audit trails, custom fields, instrument imports, sequence workflows, mass spectrometry analysis, project collaboration, role-based access control, and project-scoped sample visibility without the cost or complexity of traditional enterprise LIMS platforms.
+
+## Topics
+
+```text
+python laboratory bioinformatics lims lab dna massspectrometry
+```
