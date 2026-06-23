@@ -7,9 +7,11 @@ from core.realtime import broadcast_job_update
 from events.models import Event
 from notifications.models import Notification
 from samples.models import Sample
+from samples.access import user_can_modify_sample
 from results.models import WorkItem, Result
 
 from .models import ImportJob
+from .csv_utils import get_csv_dict_reader
 
 
 def broadcast_import_job_update(job, message):
@@ -125,7 +127,10 @@ def process_rows(job, rows, actor=None):
 
         sample_code = str(sample_code).strip()
 
-        defaults = {"status": "RECEIVED"}
+        defaults = {
+            "status": "RECEIVED",
+            "created_by": actor,
+        }
 
         if job.project_id:
             defaults["project_id"] = job.project_id
@@ -134,6 +139,16 @@ def process_rows(job, rows, actor=None):
             sample_id=sample_code,
             defaults=defaults,
         )
+
+        if not created and actor and not user_can_modify_sample(actor, sample):
+            skipped_rows.append(
+                {
+                    "row": rows_processed,
+                    "sample_id": sample_code,
+                    "reason": "Sample exists but this user cannot import results into it.",
+                }
+            )
+            continue
 
         touched_sample_ids.append(sample.id)
 
@@ -276,13 +291,11 @@ def process_import_job(job_id):
         decoded = job.uploaded_file.read().decode("utf-8")
         job.uploaded_file.seek(0)
 
-        reader = csv.DictReader(
-            io.StringIO(decoded),
-            delimiter=job.instrument.delimiter,
-        )
+        reader, csv_metadata = get_csv_dict_reader(decoded, job.instrument)
         rows = list(reader)
 
         summary = process_rows(job, rows, actor=job.uploaded_by)
+        summary["csv_metadata"] = csv_metadata
 
         job.status = "COMPLETED"
         job.summary = summary

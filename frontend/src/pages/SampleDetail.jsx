@@ -104,6 +104,10 @@ function actionVariant(action) {
       return "warning";
     case "CONTAINER_ASSIGNED":
       return "info";
+    case "SAMPLE_PROJECT_LINKED":
+      return "info";
+    case "SAMPLE_PROJECT_UNLINKED":
+      return "secondary";
     case "ATTACHMENT_UPLOADED":
       return "info";
     case "RESULTS_IMPORTED":
@@ -181,6 +185,14 @@ function getTimelineTitle(event) {
     }
 
     return "Sample updated";
+  }
+
+  if (event.action === "SAMPLE_PROJECT_LINKED") {
+    return `Linked to project ${payload.linked_project_code || payload.linked_project_id || ""}`;
+  }
+
+  if (event.action === "SAMPLE_PROJECT_UNLINKED") {
+    return `Unlinked from project ${payload.unlinked_project_code || payload.unlinked_project_id || ""}`;
   }
 
   if (event.action === "ATTACHMENT_UPLOADED") {
@@ -318,6 +330,7 @@ export default function SampleDetail() {
   const [events, setEvents] = useState([]);
   const [workItems, setWorkItems] = useState([]);
   const [containers, setContainers] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [sampleAttachments, setSampleAttachments] = useState([]);
   const [sampleSequences, setSampleSequences] = useState([]);
   const [massSpecRuns, setMassSpecRuns] = useState([]);
@@ -333,6 +346,7 @@ export default function SampleDetail() {
 
   const [selectedAttachmentFile, setSelectedAttachmentFile] = useState(null);
   const [selectedContainer, setSelectedContainer] = useState("");
+  const [linkedProjectId, setLinkedProjectId] = useState("");
 
   const [statusTransitionTarget, setStatusTransitionTarget] = useState("");
   const [statusChangeReason, setStatusChangeReason] = useState("");
@@ -347,6 +361,7 @@ export default function SampleDetail() {
         eventsData,
         workItemsData,
         containersData,
+        projectsData,
         attachmentsData,
         sequencesData,
         massSpecData,
@@ -357,6 +372,7 @@ export default function SampleDetail() {
         apiGet(`/api/events/`),
         apiGet(`/api/work-items/?sample=${id}`),
         apiGet("/api/containers/"),
+        apiGet("/api/projects/"),
         apiGet(`/api/sample-attachments/?sample=${id}`),
         apiGet(`/api/sequences/?sample=${id}`),
         apiGet(`/api/mass-spec-runs/?sample=${id}`),
@@ -366,6 +382,7 @@ export default function SampleDetail() {
       const eventList = eventsData.results || eventsData || [];
       const workItemList = workItemsData.results || workItemsData || [];
       const containerList = containersData.results || containersData || [];
+      const projectList = projectsData.results || projectsData || [];
       const attachmentList = attachmentsData.results || attachmentsData || [];
       const sequenceList = sequencesData.results || sequencesData || [];
       const massSpecList = massSpecData.results || massSpecData || [];
@@ -381,6 +398,7 @@ export default function SampleDetail() {
       );
       setWorkItems(workItemList);
       setContainers(containerList);
+      setProjects(projectList);
       setSelectedContainer(sampleData.container || "");
       setSampleAttachments(attachmentList);
       setSampleSequences(sequenceList);
@@ -409,8 +427,21 @@ export default function SampleDetail() {
   }, [id]);
 
   const projectId = sample?.project || sample?.project_id;
-  const userCanWrite = canWrite(me);
+  const userCanWrite = canWrite(me) && sample?.can_modify !== false;
   const readOnlyText = readOnlyMessage(me);
+  const linkedProjects = sample?.linked_project_summaries || [];
+
+  const linkableProjects = projects.filter((project) => {
+    const primaryProjectId = sample?.project || sample?.project_id;
+    const alreadyLinked = linkedProjects.some(
+      (linkedProject) => String(linkedProject.id) === String(project.id)
+    );
+
+    return (
+      String(project.id) !== String(primaryProjectId || "") &&
+      !alreadyLinked
+    );
+  });
 
   const sortedEvents = useMemo(() => {
     return [...events].sort(
@@ -633,6 +664,45 @@ export default function SampleDetail() {
     }
   }
 
+  async function linkProject(e) {
+    e.preventDefault();
+
+    if (!userCanWrite || !linkedProjectId) return;
+
+    setErr("");
+    setSuccess("");
+
+    try {
+      await apiPost(`/api/samples/${id}/link-project/`, {
+        project: Number(linkedProjectId),
+      });
+
+      setLinkedProjectId("");
+      setSuccess("Project linked to sample.");
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
+  async function unlinkProject(projectId) {
+    if (!userCanWrite) return;
+
+    setErr("");
+    setSuccess("");
+
+    try {
+      await apiPost(`/api/samples/${id}/unlink-project/`, {
+        project: Number(projectId),
+      });
+
+      setSuccess("Project unlinked from sample.");
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
   async function assignContainer(e) {
     e.preventDefault();
 
@@ -738,7 +808,7 @@ export default function SampleDetail() {
               <div className="row g-3">
                 <div className="col-md-4">
                   <div className="soft-card">
-                    <div className="feed-meta">Linked Project</div>
+                    <div className="feed-meta">Primary Project</div>
                     <div className="fw-semibold">
                       {projectId ? (
                         <Link to={`/projects/${projectId}`}>
@@ -793,6 +863,76 @@ export default function SampleDetail() {
                     <Badge bg={statusVariant(sample.status)}>
                       {sample.status}
                     </Badge>
+                  </div>
+                </div>
+
+                <div className="col-12">
+                  <div className="soft-card">
+                    <div className="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                      <div>
+                        <div className="feed-meta mb-2">Linked Projects</div>
+
+                        {linkedProjects.length === 0 ? (
+                          <div className="fw-semibold">No linked projects</div>
+                        ) : (
+                          <div className="d-flex gap-2 flex-wrap">
+                            {linkedProjects.map((project) => (
+                              <Badge key={project.id} bg="info">
+                                <Link
+                                  to={`/projects/${project.id}`}
+                                  className="text-white text-decoration-none"
+                                >
+                                  {project.code}
+                                </Link>
+
+                                {userCanWrite && (
+                                  <Button
+                                    variant="link"
+                                    size="sm"
+                                    className="text-white p-0 ms-2 align-baseline"
+                                    onClick={() => unlinkProject(project.id)}
+                                  >
+                                    ×
+                                  </Button>
+                                )}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {userCanWrite && (
+                        <Form onSubmit={linkProject} className="d-flex gap-2">
+                          <Form.Select
+                            size="sm"
+                            value={linkedProjectId}
+                            onChange={(e) => setLinkedProjectId(e.target.value)}
+                          >
+                            <option value="">Link project...</option>
+
+                            {linkableProjects.map((project) => (
+                              <option key={project.id} value={project.id}>
+                                {project.code} - {project.name}
+                              </option>
+                            ))}
+                          </Form.Select>
+
+                          <Button
+                            type="submit"
+                            variant="outline-dark"
+                            size="sm"
+                            disabled={!linkedProjectId}
+                          >
+                            Link
+                          </Button>
+                        </Form>
+                      )}
+                    </div>
+
+                    <div className="feed-meta mt-2">
+                      Linked projects can view this sample. Only the primary
+                      project team or admins can modify it.
+                    </div>
                   </div>
                 </div>
               </div>

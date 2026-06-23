@@ -34,6 +34,8 @@ class InstrumentProfileSerializer(serializers.ModelSerializer):
             "code",
             "delimiter",
             "has_header",
+            "header_row_index",
+            "auto_detect_header",
             "sample_id_column",
             "column_mappings",
         ]

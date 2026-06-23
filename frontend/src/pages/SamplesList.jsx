@@ -34,6 +34,24 @@ function formatTimestamp(value) {
   }
 }
 
+function linkedProjectBadges(sample) {
+  const linkedProjects = sample.linked_project_summaries || [];
+
+  if (linkedProjects.length === 0) {
+    return "-";
+  }
+
+  return (
+    <div className="d-flex gap-1 flex-wrap">
+      {linkedProjects.map((project) => (
+        <Badge key={project.id} bg="info">
+          {project.code || `Project #${project.id}`}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
 function statusVariant(status) {
   switch (status) {
     case "RECEIVED":
@@ -167,14 +185,14 @@ export default function SamplesList() {
   const visibilityMessage = userIsAdmin
     ? "Showing all samples, including unassigned samples, because you are an admin."
     : userIsTech
-      ? "Showing samples from your assigned projects plus unassigned samples you created."
-      : "Showing samples from your assigned projects only.";
+      ? "Showing samples from your assigned primary projects, linked projects, plus unassigned samples you created."
+      : "Showing samples from your assigned primary or linked projects only.";
 
   const emptyMessage = userIsAdmin
     ? "No samples found."
     : userIsTech
-      ? "No samples found in your assigned projects or unassigned samples you created."
-      : "No samples found in your assigned projects. Ask an admin to add you to a project if you need access.";
+      ? "No samples found in your assigned primary/linked projects or unassigned samples you created."
+      : "No samples found in your assigned primary or linked projects. Ask an admin to add you to a project if you need access.";
 
   function toggleSelected(id) {
     setSelectedIds((prev) =>
@@ -652,7 +670,8 @@ export default function SamplesList() {
                   </th>
                   <th>ID</th>
                   <th>Sample ID</th>
-                  <th>Project</th>
+                  <th>Primary Project</th>
+                  <th>Linked Projects</th>
                   <th>Status</th>
                   <th>Container</th>
                   <th>Location</th>
@@ -680,7 +699,15 @@ export default function SamplesList() {
                       </Link>
                     </td>
 
-                    <td>{sample.project_code || "-"}</td>
+                    <td>
+                      {sample.project_code ? (
+                        <Badge bg="dark">{sample.project_code}</Badge>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+
+                    <td>{linkedProjectBadges(sample)}</td>
 
                     <td>
                       <Badge bg={statusVariant(sample.status)}>

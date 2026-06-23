@@ -37,6 +37,9 @@ class UploadValidationTests(APITestCase):
             name="Upload Validation Project",
         )
 
+        self.project.members.add(self.tech)
+
+
         self.sample = Sample.objects.create(
             sample_id="S-UPLOAD-001",
             status="RECEIVED",
@@ -129,3 +132,82 @@ class UploadValidationTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["matched_count"], 1)
+
+    def test_csv_preview_auto_detects_header_after_metadata_rows(self):
+        instrument = InstrumentProfile.objects.create(
+            name="Metadata CSV Instrument",
+            code="META-CSV",
+            delimiter=",",
+            has_header=True,
+            header_row_index=0,
+            auto_detect_header=True,
+            sample_id_column="sample_id",
+        )
+
+        upload = SimpleUploadedFile(
+            "metadata.csv",
+            (
+                b"Instrument,Example Analyzer\n"
+                b"Run ID,ABC-123\n"
+                b"Operator,Peter\n"
+                b"\n"
+                b"sample_id,result\n"
+                b"S-UPLOAD-001,pass\n"
+            ),
+            content_type="text/csv",
+        )
+
+        response = self.client.post(
+            "/api/import-jobs/preview/",
+            {
+                "instrument": instrument.id,
+                "project": self.project.id,
+                "uploaded_file": upload,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["rows_processed"], 1)
+        self.assertEqual(response.data["existing_samples"], 1)
+        self.assertEqual(response.data["csv_metadata"]["detected_header_row"], 3)
+        self.assertEqual(response.data["csv_metadata"]["skipped_metadata_rows"], 3)
+
+    def test_csv_preview_uses_manual_header_row_index(self):
+        instrument = InstrumentProfile.objects.create(
+            name="Manual Metadata CSV Instrument",
+            code="MANUAL-META-CSV",
+            delimiter=",",
+            has_header=True,
+            header_row_index=3,
+            auto_detect_header=False,
+            sample_id_column="sample_id",
+        )
+
+        upload = SimpleUploadedFile(
+            "manual-metadata.csv",
+            (
+                b"Instrument,Example Analyzer\n"
+                b"Run ID,ABC-123\n"
+                b"Operator,Peter\n"
+                b"sample_id,result\n"
+                b"S-UPLOAD-001,pass\n"
+            ),
+            content_type="text/csv",
+        )
+
+        response = self.client.post(
+            "/api/import-jobs/preview/",
+            {
+                "instrument": instrument.id,
+                "project": self.project.id,
+                "uploaded_file": upload,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["rows_processed"], 1)
+        self.assertEqual(response.data["existing_samples"], 1)
+        self.assertEqual(response.data["csv_metadata"]["detected_header_row"], 3)
+

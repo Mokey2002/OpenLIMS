@@ -19,7 +19,7 @@ class ProjectViewSet(ModelViewSet):
         user = self.request.user
         queryset = (
             Project.objects
-            .prefetch_related("members", "samples")
+            .prefetch_related("members", "samples", "linked_samples")
             .all()
             .order_by("name")
         )

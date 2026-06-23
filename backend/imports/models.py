@@ -8,6 +8,14 @@ class InstrumentProfile(models.Model):
     code = models.CharField(max_length=64, unique=True)
     delimiter = models.CharField(max_length=5, default=",")
     has_header = models.BooleanField(default=True)
+    header_row_index = models.PositiveIntegerField(
+        default=0,
+        help_text="Zero-based row index where the CSV header starts.",
+    )
+    auto_detect_header = models.BooleanField(
+        default=True,
+        help_text="Auto-detect the header row using the sample ID column.",
+    )
     sample_id_column = models.CharField(max_length=128)
     created_at = models.DateTimeField(auto_now_add=True)
 

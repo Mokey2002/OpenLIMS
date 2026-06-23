@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Sample, SingleSampleAttachment
+from .access import user_can_modify_sample
 
 
 class SampleSerializer(serializers.ModelSerializer):
@@ -13,6 +14,7 @@ class SampleSerializer(serializers.ModelSerializer):
     project_code = serializers.SerializerMethodField()
     linked_project_summaries = serializers.SerializerMethodField()
     created_by_username = serializers.SerializerMethodField()
+    can_modify = serializers.SerializerMethodField()
 
     class Meta:
         model = Sample
@@ -33,6 +35,7 @@ class SampleSerializer(serializers.ModelSerializer):
             "location_name",
             "created_by",
             "created_by_username",
+            "can_modify",
             "created_at",
         ]
         read_only_fields = [
@@ -47,6 +50,7 @@ class SampleSerializer(serializers.ModelSerializer):
             "location_name",
             "created_by",
             "created_by_username",
+            "can_modify",
             "created_at",
         ]
 
@@ -59,6 +63,11 @@ class SampleSerializer(serializers.ModelSerializer):
             }
             for project in obj.linked_projects.all().order_by("code")
         ]
+
+    def get_can_modify(self, obj):
+        request = self.context.get("request")
+        user = request.user if request else None
+        return user_can_modify_sample(user, obj)
 
     def get_created_by_username(self, obj):
         return obj.created_by.username if obj.created_by else None

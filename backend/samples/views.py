@@ -1,6 +1,7 @@
 import csv
 
 from django.http import HttpResponse
+from django.db.models import Q
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -128,7 +129,10 @@ class SampleViewSet(ModelViewSet):
             queryset = queryset.filter(status=status_filter)
 
         if project:
-            queryset = queryset.filter(project_id=project)
+            queryset = queryset.filter(
+                Q(project_id=project) |
+                Q(linked_projects__id=project)
+            ).distinct()
 
         if container:
             queryset = queryset.filter(container_id=container)

@@ -8,7 +8,7 @@ from rest_framework.test import APITestCase
 
 from alignments.models import AlignmentJob
 from blast.models import BlastDatabase, BlastJob
-from imports.models import InstrumentProfile
+from imports.models import ImportJob, InstrumentProfile
 from inventory.models import Location, Container
 from events.models import Event
 from mass_spec.models import MassSpecRun
@@ -969,6 +969,99 @@ class BackendPermissionTests(APITestCase):
         self.work_item.refresh_from_db()
         self.assertEqual(self.work_item.qc_status, WorkItem.QC_APPROVED)
         self.assertEqual(self.work_item.reviewed_by, self.tech)
+
+    def test_tech_cannot_create_csv_import_for_unassigned_project(self):
+        other_project = Project.objects.create(
+            code="PRJ-IMPORT-BLOCKED",
+            name="Import Blocked Project",
+        )
+
+        self.auth_as(self.tech)
+
+        upload = SimpleUploadedFile(
+            "blocked.csv",
+            b"sample_id,result\nS-NEW-001,pass\n",
+            content_type="text/csv",
+        )
+
+        response = self.client.post(
+            "/api/import-jobs/",
+            {
+                "instrument": self.instrument.id,
+                "project": other_project.id,
+                "source_type": "UPLOAD",
+                "uploaded_file": upload,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_import_jobs_are_scoped_by_project_membership(self):
+        other_project = Project.objects.create(
+            code="PRJ-IMPORT-HIDDEN",
+            name="Import Hidden Project",
+        )
+
+        visible_job = ImportJob.objects.create(
+            instrument=self.instrument,
+            project=self.project,
+            uploaded_by=self.tech,
+            source_type="UPLOAD",
+            status="COMPLETED",
+        )
+
+        hidden_job = ImportJob.objects.create(
+            instrument=self.instrument,
+            project=other_project,
+            uploaded_by=self.admin,
+            source_type="UPLOAD",
+            status="COMPLETED",
+        )
+
+        self.auth_as(self.tech)
+
+        response = self.client.get("/api/import-jobs/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        ids = {item["id"] for item in response.data["results"]}
+
+        self.assertIn(visible_job.id, ids)
+        self.assertNotIn(hidden_job.id, ids)
+
+    def test_fasta_preview_skips_linked_only_sample_for_tech(self):
+        linked_tech = create_user("importlinkedtech", "linked123", role="tech")
+
+        linked_project = Project.objects.create(
+            code="PRJ-IMPORT-LINKED",
+            name="Import Linked Project",
+        )
+        linked_project.members.add(linked_tech)
+
+        self.sample.linked_projects.add(linked_project)
+
+        self.auth_as(linked_tech)
+
+        fasta_file = SimpleUploadedFile(
+            "linked-only.fasta",
+            b">S-TEST-001 read\nATGCGTACCGTAGGCTA\n",
+            content_type="text/plain",
+        )
+
+        response = self.client.post(
+            "/api/import-jobs/sequence-fasta-preview/",
+            {
+                "instrument": self.instrument.id,
+                "project": linked_project.id,
+                "uploaded_file": fasta_file,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["matched_count"], 0)
+        self.assertEqual(response.data["skipped_count"], 1)
 
     def test_viewer_cannot_run_fasta_preview(self):
         self.auth_as(self.viewer)

@@ -102,6 +102,8 @@ export default function Imports() {
   const [profileCode, setProfileCode] = useState("");
   const [delimiter, setDelimiter] = useState(",");
   const [hasHeader, setHasHeader] = useState(true);
+  const [headerRowIndex, setHeaderRowIndex] = useState(0);
+  const [autoDetectHeader, setAutoDetectHeader] = useState(true);
   const [sampleIdColumn, setSampleIdColumn] = useState("sample_id");
 
   const [mappingInstrument, setMappingInstrument] = useState("");
@@ -201,6 +203,8 @@ export default function Imports() {
         code: profileCode,
         delimiter,
         has_header: hasHeader,
+        header_row_index: Number(headerRowIndex || 0),
+        auto_detect_header: autoDetectHeader,
         sample_id_column: sampleIdColumn,
       });
 
@@ -208,6 +212,8 @@ export default function Imports() {
       setProfileCode("");
       setDelimiter(",");
       setHasHeader(true);
+      setHeaderRowIndex(0);
+      setAutoDetectHeader(true);
       setSampleIdColumn("sample_id");
 
       const profileList = await apiGetAllPages("/api/instrument-profiles/");
@@ -297,6 +303,7 @@ export default function Imports() {
     try {
       const formData = new FormData();
       formData.append("instrument", uploadInstrument);
+      if (uploadProject) formData.append("project", uploadProject);
       formData.append("uploaded_file", uploadFile);
 
       const data = await apiPostForm("/api/import-jobs/preview/", formData);
@@ -445,6 +452,12 @@ export default function Imports() {
       {err && <Alert variant="danger">{err}</Alert>}
       {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
 
+      <Alert variant="info" className="mb-4">
+        Imports are limited to your assigned projects. Samples shared through
+        linked projects may be visible, but only primary-project members can
+        import results or sequence data into them.
+      </Alert>
+
       {userIsAdmin && (
         <div className="row g-4 mb-4">
           <div className="col-lg-5">
@@ -478,12 +491,28 @@ export default function Imports() {
                       />
                     </Col>
 
-                    <Col md={8}>
+                    <Col md={4}>
                       <Form.Control
                         placeholder="Sample ID column"
                         value={sampleIdColumn}
                         onChange={(e) => setSampleIdColumn(e.target.value)}
                       />
+                    </Col>
+
+                    <Col md={4}>
+                      <Form.Control
+                        type="number"
+                        min="0"
+                        placeholder="Header row index"
+                        value={headerRowIndex}
+                        disabled={autoDetectHeader}
+                        onChange={(e) => setHeaderRowIndex(e.target.value)}
+                      />
+                      <div className="feed-meta mt-1">
+                        {autoDetectHeader
+                          ? "Auto-detect is on. OpenLIMS will scan for the sample ID column; this value is only a fallback."
+                          : "Manual mode. 0 = first row, 4 = fifth readable row."}
+                      </div>
                     </Col>
 
                     <Col md={4}>
@@ -498,13 +527,21 @@ export default function Imports() {
                     </Col>
                   </Row>
 
-                  <Form.Check
-                    className="mt-3"
-                    type="checkbox"
-                    label="CSV has header row"
-                    checked={hasHeader}
-                    onChange={(e) => setHasHeader(e.target.checked)}
-                  />
+                  <div className="d-flex gap-4 flex-wrap mt-3">
+                    <Form.Check
+                      type="checkbox"
+                      label="CSV has header row"
+                      checked={hasHeader}
+                      onChange={(e) => setHasHeader(e.target.checked)}
+                    />
+
+                    <Form.Check
+                      type="checkbox"
+                      label="Auto-detect header row using sample ID column"
+                      checked={autoDetectHeader}
+                      onChange={(e) => setAutoDetectHeader(e.target.checked)}
+                    />
+                  </div>
                 </Form>
               </Card.Body>
             </Card>
@@ -668,7 +705,7 @@ export default function Imports() {
                   onChange={(e) => setUploadProject(e.target.value)}
                   disabled={!userCanWrite}
                 >
-                  <option value="">No project</option>
+                  <option value="">No project / unassigned import</option>
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.code} - {p.name}
@@ -720,6 +757,17 @@ export default function Imports() {
               <Card.Body>
                 <h5 className="section-title">CSV Import Preview</h5>
 
+                {previewData.csv_metadata && (
+                  <Alert variant="info" className="mb-3">
+                    Header row detected at row{" "}
+                    <strong>{previewData.csv_metadata.detected_header_row + 1}</strong>.
+                    Skipped{" "}
+                    <strong>{previewData.csv_metadata.skipped_metadata_rows}</strong>{" "}
+                    metadata row(s). Columns:{" "}
+                    {(previewData.csv_metadata.fieldnames || []).join(", ")}
+                  </Alert>
+                )}
+
                 <div className="row g-3 mb-3">
                   <div className="col-md-3">
                     <div className="soft-card">
@@ -757,6 +805,14 @@ export default function Imports() {
                     </div>
                   </div>
                 </div>
+
+                {previewData.skipped_rows?.length > 0 && (
+                  <Alert variant="warning">
+                    <strong>Skipped rows:</strong>{" "}
+                    {previewData.skipped_rows.length} row(s) will be skipped
+                    because of validation or access restrictions.
+                  </Alert>
+                )}
 
                 {previewData.preview_rows?.length > 0 && (
                   <Table responsive hover className="app-table">
@@ -838,7 +894,7 @@ export default function Imports() {
                   }}
                   disabled={!userCanWrite}
                 >
-                  <option value="">Use sample project</option>
+                  <option value="">Use sample primary project</option>
 
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -1014,10 +1070,32 @@ export default function Imports() {
                 )}
 
                 {sequencePreviewData.skipped_records?.length > 0 && (
-                  <Alert variant="secondary" className="mt-3 mb-0">
-                    {sequencePreviewData.skipped_records.length} empty records
-                    will be skipped.
-                  </Alert>
+                  <>
+                    <Alert variant="secondary" className="mt-3">
+                      {sequencePreviewData.skipped_records.length} FASTA record(s)
+                      will be skipped.
+                    </Alert>
+
+                    <Table responsive hover className="app-table">
+                      <thead>
+                        <tr>
+                          <th>Header</th>
+                          <th>Sample Token</th>
+                          <th>Reason</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {sequencePreviewData.skipped_records.map((record, idx) => (
+                          <tr key={`${record.row || idx}-${record.header}`}>
+                            <td>{record.header || "-"}</td>
+                            <td>{record.sample_code || "-"}</td>
+                            <td>{record.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </>
                 )}
               </Card.Body>
             </Card>

@@ -21,6 +21,11 @@ from core.upload_validators import (
 )
 from events.models import Event
 from samples.models import Sample
+from samples.access import (
+    get_sample_access_queryset,
+    user_can_modify_sample,
+    validate_sample_project_assignment,
+)
 from sequences.models import Sequence
 
 from .models import ImportJob, InstrumentColumnMapping, InstrumentProfile
@@ -30,6 +35,7 @@ from .serializers import (
     InstrumentProfileSerializer,
 )
 from .tasks import process_import_job, process_rows
+from .csv_utils import get_csv_dict_reader
 
 
 class InstrumentProfileViewSet(viewsets.ModelViewSet):
@@ -89,11 +95,37 @@ class ImportJobViewSet(viewsets.ModelViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
-        return (
+        queryset = (
             ImportJob.objects.select_related("instrument", "uploaded_by", "project")
             .all()
             .order_by("-created_at")
         )
+
+        user = self.request.user
+
+        if not user or not user.is_authenticated:
+            return queryset.none()
+
+        if user.is_superuser or user.groups.filter(name="admin").exists():
+            return queryset
+
+        return queryset.filter(project__members=user).distinct()
+
+    def _get_validated_project(self, project_id):
+        if not project_id:
+            return None
+
+        from projects.models import Project
+
+        project = Project.objects.filter(id=project_id).first()
+
+        if not project:
+            raise serializers.ValidationError({
+                "project": "Project not found."
+            })
+
+        validate_sample_project_assignment(self.request.user, project)
+        return project
 
     def _validate_mapped_value(self, mapping, raw_value):
         if raw_value in (None, ""):
@@ -146,17 +178,17 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
         return {"ok": True, "normalized": raw_value}
 
-    def _parse_preview(self, instrument, uploaded_file):
+    def _parse_preview(self, instrument, uploaded_file, project=None):
         mappings = {m.source_column: m for m in instrument.column_mappings.all()}
 
         uploaded_file.seek(0)
         decoded = uploaded_file.read().decode("utf-8")
         uploaded_file.seek(0)
 
-        reader = csv.DictReader(
-            io.StringIO(decoded),
-            delimiter=instrument.delimiter,
-        )
+        try:
+            reader, csv_metadata = get_csv_dict_reader(decoded, instrument)
+        except ValueError as exc:
+            raise serializers.ValidationError({"uploaded_file": str(exc)})
 
         rows_processed = 0
         existing_samples = 0
@@ -183,7 +215,25 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                 continue
 
             sample_code = str(sample_code).strip()
-            sample_exists = Sample.objects.filter(sample_id=sample_code).exists()
+            matched_sample = (
+                get_sample_access_queryset(
+                    Sample.objects.filter(sample_id=sample_code),
+                    self.request.user,
+                )
+                .first()
+            )
+
+            sample_exists = bool(matched_sample)
+
+            if matched_sample and not user_can_modify_sample(self.request.user, matched_sample):
+                skipped_rows.append(
+                    {
+                        "row": rows_processed,
+                        "sample_id": sample_code,
+                        "reason": "Sample exists but you do not have permission to import results into it.",
+                    }
+                )
+                continue
 
             if sample_exists:
                 existing_samples += 1
@@ -230,6 +280,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             "valid_result_cells": valid_result_cells,
             "skipped_rows": skipped_rows,
             "preview_rows": preview_rows[:20],
+            "csv_metadata": csv_metadata,
         }
 
     def _parse_fasta_records(self, uploaded_file):
@@ -298,6 +349,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="preview")
     def preview(self, request):
         instrument_id = request.data.get("instrument")
+        project_id = request.data.get("project")
         uploaded_file = request.data.get("uploaded_file")
 
         if not instrument_id or not uploaded_file:
@@ -327,7 +379,17 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        summary = self._parse_preview(instrument, uploaded_file)
+        try:
+            project = self._get_validated_project(project_id)
+        except serializers.ValidationError as exc:
+            return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            summary = self._parse_preview(instrument, uploaded_file, project=project)
+        except serializers.ValidationError as exc:
+            return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        summary["project_id"] = project.id if project else None
+        summary["project_code"] = project.code if project else None
         summary["instrument_code"] = instrument.code
         summary["instrument_name"] = instrument.name
 
@@ -363,6 +425,16 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             )
 
         try:
+            project = self._get_validated_project(project_id)
+        except serializers.ValidationError as exc:
+            return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            project = self._get_validated_project(project_id)
+        except serializers.ValidationError as exc:
+            return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
             records = self._parse_fasta_records(uploaded_file)
             validate_fasta_records(records)
         except UnicodeDecodeError:
@@ -393,8 +465,10 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                 continue
 
             sample = (
-                Sample.objects.select_related("project")
-                .filter(sample_id=sample_code)
+                get_sample_access_queryset(
+                    Sample.objects.select_related("project").filter(sample_id=sample_code),
+                    request.user,
+                )
                 .first()
             )
 
@@ -406,6 +480,18 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                         "sample_code": sample_code,
                         "sequence_length": len(sequence_text),
                         "reason": "No matching sample found",
+                    }
+                )
+                continue
+
+            if not user_can_modify_sample(request.user, sample):
+                skipped_records.append(
+                    {
+                        "row": index,
+                        "header": record["header"],
+                        "sample_code": sample_code,
+                        "sequence_length": len(sequence_text),
+                        "reason": "You can view this sample, but you do not have permission to import sequence data into it.",
                     }
                 )
                 continue
@@ -495,7 +581,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
         job = ImportJob.objects.create(
             instrument=instrument,
-            project_id=project_id if project_id else None,
+            project=project,
             uploaded_by=actor,
             source_type="SEQUENCE_FASTA",
             status="RUNNING",
@@ -537,8 +623,10 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                         continue
 
                     sample = (
-                        Sample.objects.select_related("project")
-                        .filter(sample_id=sample_code)
+                        get_sample_access_queryset(
+                            Sample.objects.select_related("project").filter(sample_id=sample_code),
+                            request.user,
+                        )
                         .first()
                     )
 
@@ -548,6 +636,16 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                                 "header": record["header"],
                                 "sample_code": sample_code,
                                 "reason": "No matching sample found",
+                            }
+                        )
+                        continue
+
+                    if not user_can_modify_sample(request.user, sample):
+                        skipped_records.append(
+                            {
+                                "header": record["header"],
+                                "sample_code": sample_code,
+                                "reason": "You can view this sample, but you do not have permission to import sequence data into it.",
                             }
                         )
                         continue
@@ -659,6 +757,9 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         uploaded_file = self.request.data.get("uploaded_file")
+        project = serializer.validated_data.get("project")
+
+        validate_sample_project_assignment(self.request.user, project)
 
         try:
             validate_uploaded_file(
@@ -728,7 +829,10 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
         samples = (
             Sample.objects.filter(id__in=sample_ids)
-            .select_related("project", "container")
+            .select_related("project", "container", "created_by")
+        )
+        samples = (
+            get_sample_access_queryset(samples, request.user)
             .order_by("sample_id")
         )
 

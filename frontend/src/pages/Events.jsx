@@ -28,10 +28,32 @@ function getReason(payload) {
   return payload?.reason || "";
 }
 
-function getBeforeAfterSummary(payload) {
-  const before = payload?.before || {};
-  const after = payload?.after || {};
-  const changedFields = payload?.changed_fields || [];
+function getBeforeAfterSummary(payload, action = "") {
+  if (!payload) return "";
+
+  if (action === "SAMPLE_PROJECT_LINKED") {
+    const projectLabel =
+      payload.linked_project_code ||
+      payload.linked_project_name ||
+      payload.linked_project_id;
+
+    return projectLabel ? `Linked project: ${projectLabel}` : "Project linked";
+  }
+
+  if (action === "SAMPLE_PROJECT_UNLINKED") {
+    const projectLabel =
+      payload.unlinked_project_code ||
+      payload.unlinked_project_name ||
+      payload.unlinked_project_id;
+
+    return projectLabel
+      ? `Unlinked project: ${projectLabel}`
+      : "Project unlinked";
+  }
+
+  const before = payload.before || {};
+  const after = payload.after || {};
+  const changedFields = payload.changed_fields || [];
 
   if (!changedFields.length) return "";
 
@@ -478,9 +500,9 @@ export default function Events() {
                     </td>
 
                     <td style={{ minWidth: "260px" }}>
-                      {getBeforeAfterSummary(event.payload) ? (
+                      {getBeforeAfterSummary(event.payload, event.action) ? (
                         <div className="small">
-                          {getBeforeAfterSummary(event.payload)}
+                          {getBeforeAfterSummary(event.payload, event.action)}
                         </div>
                       ) : (
                         <span className="feed-meta">-</span>

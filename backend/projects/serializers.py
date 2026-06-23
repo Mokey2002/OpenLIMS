@@ -6,7 +6,9 @@ User = get_user_model()
 
 
 class ProjectSerializer(serializers.ModelSerializer):
-    sample_count = serializers.IntegerField(source="samples.count", read_only=True)
+    sample_count = serializers.SerializerMethodField()
+    primary_sample_count = serializers.SerializerMethodField()
+    linked_sample_count = serializers.SerializerMethodField()
     member_usernames = serializers.SerializerMethodField()
 
     class Meta:
@@ -20,8 +22,28 @@ class ProjectSerializer(serializers.ModelSerializer):
             "member_usernames",
             "created_at",
             "sample_count",
+            "primary_sample_count",
+            "linked_sample_count",
         ]
-        read_only_fields = ["id", "created_at", "member_usernames", "sample_count"]
+        read_only_fields = [
+            "id",
+            "created_at",
+            "member_usernames",
+            "sample_count",
+            "primary_sample_count",
+            "linked_sample_count",
+        ]
+
+    def get_sample_count(self, obj):
+        primary_ids = set(obj.samples.values_list("id", flat=True))
+        linked_ids = set(obj.linked_samples.values_list("id", flat=True))
+        return len(primary_ids | linked_ids)
+
+    def get_primary_sample_count(self, obj):
+        return obj.samples.count()
+
+    def get_linked_sample_count(self, obj):
+        return obj.linked_samples.count()
 
     def get_member_usernames(self, obj):
         return list(obj.members.values_list("username", flat=True))
