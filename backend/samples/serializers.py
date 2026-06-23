@@ -11,6 +11,7 @@ class SampleSerializer(serializers.ModelSerializer):
     project_id = serializers.SerializerMethodField()
     project_name = serializers.SerializerMethodField()
     project_code = serializers.SerializerMethodField()
+    linked_project_summaries = serializers.SerializerMethodField()
     created_by_username = serializers.SerializerMethodField()
 
     class Meta:
@@ -23,6 +24,8 @@ class SampleSerializer(serializers.ModelSerializer):
             "project_id",
             "project_name",
             "project_code",
+            "linked_projects",
+            "linked_project_summaries",
             "container",
             "container_id",
             "container_code",
@@ -37,6 +40,7 @@ class SampleSerializer(serializers.ModelSerializer):
             "project_id",
             "project_name",
             "project_code",
+            "linked_project_summaries",
             "container_id",
             "container_code",
             "location_id",
@@ -44,6 +48,16 @@ class SampleSerializer(serializers.ModelSerializer):
             "created_by",
             "created_by_username",
             "created_at",
+        ]
+
+    def get_linked_project_summaries(self, obj):
+        return [
+            {
+                "id": project.id,
+                "code": project.code,
+                "name": project.name,
+            }
+            for project in obj.linked_projects.all().order_by("code")
         ]
 
     def get_created_by_username(self, obj):

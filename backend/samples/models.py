@@ -28,6 +28,13 @@ class Sample(models.Model):
         related_name="samples",
     )
 
+    linked_projects = models.ManyToManyField(
+        "projects.Project",
+        blank=True,
+        related_name="linked_samples",
+        help_text="Additional projects that can view this sample.",
+    )
+
     container = models.ForeignKey(
         "inventory.Container",
         on_delete=models.PROTECT,

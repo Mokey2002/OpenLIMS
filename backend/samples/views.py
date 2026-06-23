@@ -13,7 +13,9 @@ from .workflows import get_allowed_transitions
 from .access import (
     get_sample_access_queryset,
     user_can_access_sample,
+    require_sample_modify_access,
     validate_sample_project_assignment,
+    validate_linked_projects_for_user,
     validate_unassign_project,
 )
 
@@ -109,6 +111,7 @@ class SampleViewSet(ModelViewSet):
                 "container__location",
                 "created_by",
             )
+            .prefetch_related("linked_projects")
             .all()
             .order_by("-created_at")
         )
@@ -134,20 +137,30 @@ class SampleViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         project = serializer.validated_data.get("project")
+        linked_projects = serializer.validated_data.get("linked_projects", [])
 
         validate_sample_project_assignment(self.request.user, project)
+        validate_linked_projects_for_user(self.request.user, linked_projects)
 
         serializer.save(created_by=self.request.user)
 
     def perform_update(self, serializer):
         sample = self.get_object()
+        require_sample_modify_access(self.request.user, sample)
 
         requested_project = serializer.validated_data.get("project", sample.project)
+        requested_linked_projects = serializer.validated_data.get("linked_projects", None)
 
         if requested_project is None and sample.project_id:
             validate_unassign_project(self.request.user, sample)
         else:
             validate_sample_project_assignment(self.request.user, requested_project)
+
+        if requested_linked_projects is not None:
+            validate_linked_projects_for_user(
+                self.request.user,
+                requested_linked_projects,
+            )
 
         before = sample_audit_state(sample)
         requested_status = serializer.validated_data.get("status", sample.status)
@@ -191,6 +204,142 @@ class SampleViewSet(ModelViewSet):
                 changed_fields=changed_fields,
                 extra_payload=extra_payload,
             )
+
+    def perform_destroy(self, instance):
+        require_sample_modify_access(self.request.user, instance)
+
+        before = sample_audit_state(instance)
+
+        create_sample_event(
+            sample=instance,
+            action="DELETED",
+            actor=self.request.user,
+            before=before,
+            after={},
+            changed_fields=list(before.keys()),
+            extra_payload={
+                "sample_code": instance.sample_id,
+            },
+        )
+
+        instance.delete()
+
+    @action(detail=True, methods=["post"], url_path="link-project")
+    def link_project(self, request, pk=None):
+        sample = self.get_object()
+        require_sample_modify_access(request.user, sample)
+
+        project_id = request.data.get("project") or request.data.get("project_id")
+
+        if not project_id:
+            return Response(
+                {"detail": "project is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from projects.models import Project
+
+        project = Project.objects.filter(id=project_id).first()
+
+        if not project:
+            return Response(
+                {"detail": "Project not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if sample.project_id == project.id:
+            return Response(
+                {"detail": "This project is already the primary project."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            validate_linked_projects_for_user(request.user, [project])
+        except ValidationError as exc:
+            return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+
+        before = {
+            "linked_project_ids": list(
+                sample.linked_projects.values_list("id", flat=True)
+            )
+        }
+
+        sample.linked_projects.add(project)
+
+        after = {
+            "linked_project_ids": list(
+                sample.linked_projects.values_list("id", flat=True)
+            )
+        }
+
+        create_sample_event(
+            sample=sample,
+            action="SAMPLE_PROJECT_LINKED",
+            actor=request.user,
+            before=before,
+            after=after,
+            changed_fields=["linked_projects"],
+            extra_payload={
+                "linked_project_id": project.id,
+                "linked_project_code": project.code,
+                "linked_project_name": project.name,
+            },
+        )
+
+        return Response(self.get_serializer(sample).data)
+
+    @action(detail=True, methods=["post"], url_path="unlink-project")
+    def unlink_project(self, request, pk=None):
+        sample = self.get_object()
+        require_sample_modify_access(request.user, sample)
+
+        project_id = request.data.get("project") or request.data.get("project_id")
+
+        if not project_id:
+            return Response(
+                {"detail": "project is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from projects.models import Project
+
+        project = Project.objects.filter(id=project_id).first()
+
+        if not project:
+            return Response(
+                {"detail": "Project not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        before = {
+            "linked_project_ids": list(
+                sample.linked_projects.values_list("id", flat=True)
+            )
+        }
+
+        sample.linked_projects.remove(project)
+
+        after = {
+            "linked_project_ids": list(
+                sample.linked_projects.values_list("id", flat=True)
+            )
+        }
+
+        create_sample_event(
+            sample=sample,
+            action="SAMPLE_PROJECT_UNLINKED",
+            actor=request.user,
+            before=before,
+            after=after,
+            changed_fields=["linked_projects"],
+            extra_payload={
+                "unlinked_project_id": project.id,
+                "unlinked_project_code": project.code,
+                "unlinked_project_name": project.name,
+            },
+        )
+
+        return Response(self.get_serializer(sample).data)
 
     @action(detail=True, methods=["get"], url_path="custom-fields")
     def custom_fields(self, request, pk=None):
@@ -237,6 +386,8 @@ class SampleViewSet(ModelViewSet):
     @action(detail=True, methods=["post"], url_path="transition")
     def transition(self, request, pk=None):
         sample = self.get_object()
+        require_sample_modify_access(request.user, sample)
+
         new_status = request.data.get("new_status") or request.data.get("status")
 
         if not new_status:
@@ -277,6 +428,7 @@ class SampleViewSet(ModelViewSet):
 
     def partial_update(self, request, *args, **kwargs):
         sample = self.get_object()
+        require_sample_modify_access(request.user, sample)
         old_container_id = sample.container_id
         old_container_code = (
             sample.container.container_id if sample.container else None
@@ -363,6 +515,16 @@ class SampleViewSet(ModelViewSet):
         updated_ids = []
 
         for sample in samples:
+            try:
+                require_sample_modify_access(request.user, sample)
+            except Exception as exc:
+                skipped.append({
+                    "id": sample.id,
+                    "sample_id": sample.sample_id,
+                    "reason": str(exc),
+                })
+                continue
+
             before = sample_audit_state(sample)
 
             changed_fields = []

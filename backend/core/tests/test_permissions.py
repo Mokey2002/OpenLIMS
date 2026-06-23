@@ -1251,6 +1251,191 @@ class BackendPermissionTests(APITestCase):
 
         mock_delay.assert_called_once_with(job.id)
 
+    def test_admin_can_link_sample_to_another_project(self):
+        other_project = Project.objects.create(
+            code="PRJ-LINKED-ADMIN",
+            name="Linked Admin Project",
+        )
+
+        self.auth_as(self.admin)
+
+        response = self.client.post(
+            f"/api/samples/{self.sample.id}/link-project/",
+            {"project": other_project.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.sample.refresh_from_db()
+        self.assertTrue(
+            self.sample.linked_projects.filter(id=other_project.id).exists()
+        )
+
+        event = Event.objects.get(
+            entity_type="Sample",
+            entity_id=str(self.sample.id),
+            action="SAMPLE_PROJECT_LINKED",
+        )
+
+        self.assertEqual(event.actor, self.admin)
+        self.assertEqual(event.payload["linked_project_code"], "PRJ-LINKED-ADMIN")
+
+    def test_linked_project_member_can_view_but_not_modify_sample(self):
+        linked_tech = create_user("linkedtech", "linked123", role="tech")
+
+        linked_project = Project.objects.create(
+            code="PRJ-LINKED-TECH",
+            name="Linked Tech Project",
+        )
+        linked_project.members.add(linked_tech)
+
+        self.sample.linked_projects.add(linked_project)
+
+        self.auth_as(linked_tech)
+
+        list_response = self.client.get("/api/samples/")
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+
+        ids = {item["id"] for item in list_response.data["results"]}
+        self.assertIn(self.sample.id, ids)
+
+        transition_response = self.client.post(
+            f"/api/samples/{self.sample.id}/transition/",
+            {
+                "new_status": "IN_PROGRESS",
+                "reason": "Linked project user should not control primary status.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(transition_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_linked_project_viewer_can_view_but_not_modify_sample(self):
+        linked_viewer = create_user("linkedviewer", "linked123", role="viewer")
+
+        linked_project = Project.objects.create(
+            code="PRJ-LINKED-VIEWER",
+            name="Linked Viewer Project",
+        )
+        linked_project.members.add(linked_viewer)
+
+        self.sample.linked_projects.add(linked_project)
+
+        self.auth_as(linked_viewer)
+
+        list_response = self.client.get("/api/samples/")
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+
+        ids = {item["id"] for item in list_response.data["results"]}
+        self.assertIn(self.sample.id, ids)
+
+        patch_response = self.client.patch(
+            f"/api/samples/{self.sample.id}/",
+            {"container": None},
+            format="json",
+        )
+
+        self.assertEqual(patch_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_primary_project_tech_can_modify_linked_sample(self):
+        linked_project = Project.objects.create(
+            code="PRJ-LINKED-VISIBLE",
+            name="Linked Visible Project",
+        )
+
+        self.sample.linked_projects.add(linked_project)
+
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            f"/api/samples/{self.sample.id}/transition/",
+            {
+                "new_status": "IN_PROGRESS",
+                "reason": "Primary project tech can control sample workflow.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.sample.refresh_from_db()
+        self.assertEqual(self.sample.status, "IN_PROGRESS")
+
+    def test_non_admin_cannot_link_sample_to_project_they_are_not_member_of(self):
+        other_project = Project.objects.create(
+            code="PRJ-LINK-BLOCKED",
+            name="Link Blocked Project",
+        )
+
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            f"/api/samples/{self.sample.id}/link-project/",
+            {"project": other_project.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_admin_can_unlink_sample_from_project(self):
+        other_project = Project.objects.create(
+            code="PRJ-UNLINK-ADMIN",
+            name="Unlink Admin Project",
+        )
+        self.sample.linked_projects.add(other_project)
+
+        self.auth_as(self.admin)
+
+        response = self.client.post(
+            f"/api/samples/{self.sample.id}/unlink-project/",
+            {"project": other_project.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.sample.refresh_from_db()
+        self.assertFalse(
+            self.sample.linked_projects.filter(id=other_project.id).exists()
+        )
+
+        event = Event.objects.get(
+            entity_type="Sample",
+            entity_id=str(self.sample.id),
+            action="SAMPLE_PROJECT_UNLINKED",
+        )
+
+        self.assertEqual(event.actor, self.admin)
+        self.assertEqual(event.payload["unlinked_project_code"], "PRJ-UNLINK-ADMIN")
+
+    def test_sample_created_event_records_actor(self):
+        self.auth_as(self.tech)
+
+        response = self.client.post(
+            "/api/samples/",
+            {
+                "sample_id": "S-TECH-CREATED-AUDIT",
+                "status": "RECEIVED",
+                "project": self.project.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        sample = Sample.objects.get(sample_id="S-TECH-CREATED-AUDIT")
+
+        event = Event.objects.get(
+            entity_type="Sample",
+            entity_id=str(sample.id),
+            action="CREATED",
+        )
+
+        self.assertEqual(event.actor, self.tech)
+        self.assertEqual(event.payload["actor_username"], "tech")
+        self.assertEqual(event.payload["sample_code"], "S-TECH-CREATED-AUDIT")
+
     def test_admin_can_access_admin_users(self):
         self.auth_as(self.admin)
 
