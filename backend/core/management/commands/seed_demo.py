@@ -187,6 +187,8 @@ def create_or_update_instrument(instrument_config):
         "name": name,
         "delimiter": instrument_config["delimiter"],
         "has_header": instrument_config["has_header"],
+        "header_row_index": instrument_config.get("header_row_index", 0),
+        "auto_detect_header": instrument_config.get("auto_detect_header", True),
         "sample_id_column": instrument_config["sample_id_column"],
     }
 
@@ -789,6 +791,20 @@ class Command(BaseCommand):
                 ],
             },
             {
+                "code": "META-CSV",
+                "name": "Metadata Header CSV Instrument",
+                "delimiter": ",",
+                "has_header": True,
+                "header_row_index": 0,
+                "auto_detect_header": True,
+                "sample_id_column": "sample_id",
+                "mappings": [
+                    ("result", "result", "STRING", None, None, ["pass", "fail", "review", "PASS", "FAIL", "REVIEW"]),
+                    ("operator", "operator", "STRING", None, None, None),
+                    ("qc_status", "qc_status", "STRING", None, None, ["PASS", "FAIL", "REVIEW"]),
+                ],
+            },
+            {
                 "code": "FASTA-SEQ",
                 "name": "Generic FASTA Sequencer",
                 "delimiter": ",",
@@ -813,6 +829,7 @@ class Command(BaseCommand):
         nanodrop = instruments["NANODROP"]
         bioanalyzer = instruments["BIOANALYZER"]
         hamilton = instruments["HAMILTON-STAR"]
+        meta_csv = instruments["META-CSV"]
 
         # --------------------------------------------------
         # Samples
@@ -855,6 +872,88 @@ class Command(BaseCommand):
                 )
 
         sample_by_code = {sample.sample_id: sample for sample in samples}
+
+        # --------------------------------------------------
+        # v0.15 demo: Cross-project sample linking
+        # --------------------------------------------------
+        alpha_shared_sample = sample_by_code.get("S-ALPHA-001")
+        beta_review_sample = sample_by_code.get("S-BETA-001")
+
+        if alpha_shared_sample and hasattr(alpha_shared_sample, "linked_projects"):
+            alpha_shared_sample.linked_projects.add(project_beta, project_gamma)
+
+            Event.objects.get_or_create(
+                entity_type="Sample",
+                entity_id=str(alpha_shared_sample.id),
+                action="SAMPLE_PROJECT_LINKED",
+                defaults={
+                    "actor": director,
+                    "payload": {
+                        "sample_id": alpha_shared_sample.id,
+                        "sample_code": alpha_shared_sample.sample_id,
+                        "primary_project_id": project_alpha.id,
+                        "primary_project_code": project_alpha.code,
+                        "linked_project_id": project_beta.id,
+                        "linked_project_code": project_beta.code,
+                        "linked_project_name": project_beta.name,
+                        "source": "demo_seed_v0_15",
+                        "note": (
+                            "v0.15 demo: sample is owned by PRJ-ALPHA but "
+                            "shared with PRJ-BETA for visibility only."
+                        ),
+                    },
+                },
+            )
+
+            Event.objects.get_or_create(
+                entity_type="Sample",
+                entity_id=str(alpha_shared_sample.id),
+                action="SAMPLE_PROJECT_LINKED",
+                defaults={
+                    "actor": director,
+                    "payload": {
+                        "sample_id": alpha_shared_sample.id,
+                        "sample_code": alpha_shared_sample.sample_id,
+                        "primary_project_id": project_alpha.id,
+                        "primary_project_code": project_alpha.code,
+                        "linked_project_id": project_gamma.id,
+                        "linked_project_code": project_gamma.code,
+                        "linked_project_name": project_gamma.name,
+                        "source": "demo_seed_v0_15",
+                        "note": (
+                            "v0.15 demo: sample is also shared with PRJ-GAMMA "
+                            "to demonstrate multi-project visibility."
+                        ),
+                    },
+                },
+            )
+
+        if beta_review_sample and hasattr(beta_review_sample, "linked_projects"):
+            beta_review_sample.linked_projects.add(project_alpha)
+
+            Event.objects.get_or_create(
+                entity_type="Sample",
+                entity_id=str(beta_review_sample.id),
+                action="SAMPLE_PROJECT_LINKED",
+                defaults={
+                    "actor": director,
+                    "payload": {
+                        "sample_id": beta_review_sample.id,
+                        "sample_code": beta_review_sample.sample_id,
+                        "primary_project_id": project_beta.id,
+                        "primary_project_code": project_beta.code,
+                        "linked_project_id": project_alpha.id,
+                        "linked_project_code": project_alpha.code,
+                        "linked_project_name": project_alpha.name,
+                        "source": "demo_seed_v0_15",
+                        "note": (
+                            "v0.15 demo: Beta sample is visible from Alpha, "
+                            "but Alpha members only have linked-project visibility unless "
+                            "they also belong to the primary project."
+                        ),
+                    },
+                },
+            )
 
         # --------------------------------------------------
         # Work items + results
@@ -1099,6 +1198,28 @@ class Command(BaseCommand):
                 "message": "Hamilton STAR transfer log import completed",
                 "sample_codes": ["S-ALPHA-004"],
             },
+            {
+                "instrument": meta_csv,
+                "run_id": "META-CSV-RUN-2026-001",
+                "project": project_alpha,
+                "uploaded_by": peter,
+                "rows_processed": 1,
+                "results_created": 3,
+                "message": "Metadata-row CSV import completed using auto header detection",
+                "sample_codes": ["S-ALPHA-001"],
+                "csv_metadata": {
+                    "detected_header_row": 3,
+                    "skipped_metadata_rows": 3,
+                    "fieldnames": ["sample_id", "result", "operator", "qc_status"],
+                    "demo_file_preview": [
+                        "Instrument,Example Analyzer",
+                        "Run ID,META-CSV-RUN-2026-001",
+                        "Operator,Peter",
+                        "sample_id,result,operator,qc_status",
+                        "S-ALPHA-001,pass,Peter,PASS",
+                    ],
+                },
+            },
         ]
 
         for job_data in demo_import_jobs:
@@ -1132,6 +1253,7 @@ class Command(BaseCommand):
                         "created_sample_ids": [],
                         "matched_sample_ids": sample_ids,
                         "touched_sample_ids": sample_ids,
+                        "csv_metadata": job_data.get("csv_metadata"),
                     },
                 },
             )
@@ -1149,6 +1271,7 @@ class Command(BaseCommand):
                         "rows_processed": job_data["rows_processed"],
                         "results_created": job_data["results_created"],
                         "touched_sample_ids": sample_ids,
+                        "csv_metadata": job_data.get("csv_metadata"),
                     },
                 },
             )
@@ -1415,6 +1538,39 @@ class Command(BaseCommand):
             )
 
         # --------------------------------------------------
+        # v0.15 demo feed posts
+        # --------------------------------------------------
+        ProjectPost.objects.get_or_create(
+            project=project_alpha,
+            author=director,
+            note=(
+                "v0.15 demo: S-ALPHA-001 is still owned by PRJ-ALPHA, but it is "
+                "linked to PRJ-BETA and PRJ-GAMMA so those teams can view it without "
+                "taking ownership."
+            ),
+        )
+
+        ProjectPost.objects.get_or_create(
+            project=project_beta,
+            author=director,
+            note=(
+                "v0.15 demo: linked samples now appear in project sample sections. "
+                "PRJ-BETA can see S-ALPHA-001 as a linked sample, but primary-project "
+                "permissions still control edits and imports."
+            ),
+        )
+
+        ProjectPost.objects.get_or_create(
+            project=project_alpha,
+            author=peter,
+            note=(
+                "v0.15 demo: META-CSV shows flexible CSV import support. The import "
+                "can skip metadata rows and auto-detect the real header using the "
+                "sample_id column."
+            ),
+        )
+
+        # --------------------------------------------------
         # Notifications
         # --------------------------------------------------
         Notification.objects.get_or_create(
@@ -1441,6 +1597,18 @@ class Command(BaseCommand):
             defaults={
                 "message": "S-ALPHA-003 has elevated endotoxin results.",
                 "link": "/projects",
+            },
+        )
+
+        Notification.objects.get_or_create(
+            user=director,
+            title="v0.15 demo features ready",
+            defaults={
+                "message": (
+                    "Cross-project sample linking and flexible CSV header detection "
+                    "demo data has been seeded."
+                ),
+                "link": "/samples",
             },
         )
 
