@@ -25,6 +25,7 @@ import MassSpec from "./pages/MassSpec";
 import MassSpecDetail from "./pages/MassSpecDetail";
 import MassSpecCompare from "./pages/MassSpecCompare";
 import GettingStarted from "./pages/GettingStarted";
+import DataMigration from "./pages/DataMigration";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="users" element={<Users />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="imports" element={<Imports />} />
+          <Route path="data-migration" element={<DataMigration />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="imports/:id" element={<ImportDetail />} />
           <Route path="search" element={<Search />} />

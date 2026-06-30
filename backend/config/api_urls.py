@@ -13,6 +13,12 @@ from alignments.views import AlignmentJobViewSet
 from settings_app.views import SystemSettingsViewSet
 from blast.views import BlastDatabaseViewSet, BlastJobViewSet
 from mass_spec.views import MassSpecRunViewSet
+from migration_toolkit.views import (
+    MigrationFieldMappingViewSet,
+    MigrationJobViewSet,
+    MigrationProfileViewSet,
+    SampleExternalIDViewSet,
+)
 
 router = DefaultRouter()
 router.register(r"samples", SampleViewSet, basename="sample")
@@ -39,4 +45,10 @@ router.register(r"system-settings", SystemSettingsViewSet, basename="system-sett
 router.register(r"blast-databases", BlastDatabaseViewSet, basename="blast-database")
 router.register(r"blast-jobs", BlastJobViewSet, basename="blast-job")
 router.register(r"mass-spec-runs", MassSpecRunViewSet, basename="mass-spec-run")
+
+router.register(r"sample-external-ids", SampleExternalIDViewSet, basename="sample-external-id")
+router.register(r"migration-profiles", MigrationProfileViewSet, basename="migration-profile")
+router.register(r"migration-field-mappings", MigrationFieldMappingViewSet, basename="migration-field-mapping")
+router.register(r"migration-jobs", MigrationJobViewSet, basename="migration-job")
+
 urlpatterns = router.urls
