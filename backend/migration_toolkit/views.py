@@ -14,12 +14,14 @@ from .models import (
     MigrationFieldMapping,
     MigrationJob,
     MigrationProfile,
+    MigrationRowRecord,
     SampleExternalID,
 )
 from .serializers import (
     MigrationFieldMappingSerializer,
     MigrationJobSerializer,
     MigrationProfileSerializer,
+    MigrationRowRecordSerializer,
     SampleExternalIDSerializer,
 )
 from .services import apply_migration, build_preview, suggest_field_mappings
@@ -71,6 +73,35 @@ class MigrationFieldMappingViewSet(viewsets.ModelViewSet):
 
         if profile_id:
             queryset = queryset.filter(profile_id=profile_id)
+
+        return queryset
+
+
+
+class MigrationRowRecordViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
+    serializer_class = MigrationRowRecordSerializer
+
+    def get_queryset(self):
+        queryset = (
+            MigrationRowRecord.objects
+            .select_related("migration_job", "project", "sample")
+            .all()
+            .order_by("-created_at", "row_number")
+        )
+
+        job_id = self.request.query_params.get("job")
+        project_id = self.request.query_params.get("project")
+        sample_id = self.request.query_params.get("sample")
+
+        if job_id:
+            queryset = queryset.filter(migration_job_id=job_id)
+
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+
+        if sample_id:
+            queryset = queryset.filter(sample_id=sample_id)
 
         return queryset
 
@@ -273,6 +304,7 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
                 uploaded_file=uploaded_file,
                 actor=request.user,
                 default_project=project,
+                job=job,
             )
 
             job.status = MigrationJob.STATUS_COMPLETED

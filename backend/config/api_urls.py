@@ -17,6 +17,7 @@ from migration_toolkit.views import (
     MigrationFieldMappingViewSet,
     MigrationJobViewSet,
     MigrationProfileViewSet,
+    MigrationRowRecordViewSet,
     SampleExternalIDViewSet,
 )
 
@@ -50,5 +51,6 @@ router.register(r"sample-external-ids", SampleExternalIDViewSet, basename="sampl
 router.register(r"migration-profiles", MigrationProfileViewSet, basename="migration-profile")
 router.register(r"migration-field-mappings", MigrationFieldMappingViewSet, basename="migration-field-mapping")
 router.register(r"migration-jobs", MigrationJobViewSet, basename="migration-job")
+router.register(r"migration-row-records", MigrationRowRecordViewSet, basename="migration-row-record")
 
 urlpatterns = router.urls

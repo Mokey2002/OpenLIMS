@@ -9,7 +9,7 @@ import {
   Row,
   Table,
 } from "react-bootstrap";
-import { apiGet, apiPost, apiPostForm } from "../api";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPostForm } from "../api";
 import { canWrite } from "../authz";
 
 const TARGET_TYPES = [
@@ -63,6 +63,13 @@ export default function DataMigration() {
   const [targetField, setTargetField] = useState("");
   const [valueType, setValueType] = useState("STRING");
   const [required, setRequired] = useState(false);
+
+  const [editingMappingId, setEditingMappingId] = useState(null);
+  const [editSourceColumn, setEditSourceColumn] = useState("");
+  const [editTargetType, setEditTargetType] = useState("CUSTOM_FIELD");
+  const [editTargetField, setEditTargetField] = useState("");
+  const [editValueType, setEditValueType] = useState("STRING");
+  const [editRequired, setEditRequired] = useState(false);
 
   const [migrationProject, setMigrationProject] = useState("");
   const [uploadFile, setUploadFile] = useState(null);
@@ -145,6 +152,58 @@ export default function DataMigration() {
       setTargetField("");
       setRequired(false);
       setSuccess("Field mapping added.");
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
+  function startEditMapping(mapping) {
+    setEditingMappingId(mapping.id);
+    setEditSourceColumn(mapping.source_column);
+    setEditTargetType(mapping.target_type);
+    setEditTargetField(mapping.target_field || "");
+    setEditValueType(mapping.value_type || "STRING");
+    setEditRequired(Boolean(mapping.required));
+  }
+
+  function cancelEditMapping() {
+    setEditingMappingId(null);
+    setEditSourceColumn("");
+    setEditTargetType("CUSTOM_FIELD");
+    setEditTargetField("");
+    setEditValueType("STRING");
+    setEditRequired(false);
+  }
+
+  async function saveEditMapping(mappingId) {
+    setErr("");
+    setSuccess("");
+
+    try {
+      await apiPatch(`/api/migration-field-mappings/${mappingId}/`, {
+        source_column: editSourceColumn,
+        target_type: editTargetType,
+        target_field: editTargetField,
+        value_type: editValueType,
+        required: editRequired,
+      });
+
+      setSuccess("Mapping updated.");
+      cancelEditMapping();
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
+  async function deleteMapping(mappingId) {
+    setErr("");
+    setSuccess("");
+
+    try {
+      await apiDelete(`/api/migration-field-mappings/${mappingId}/`);
+      setSuccess("Mapping deleted.");
       await load();
     } catch (e) {
       setErr(e.message || String(e));
@@ -408,18 +467,144 @@ export default function DataMigration() {
                           <th>Target</th>
                           <th>Field</th>
                           <th>Type</th>
+                          <th>Required</th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
 
                       <tbody>
-                        {activeProfile.field_mappings.map((mapping) => (
-                          <tr key={mapping.id}>
-                            <td>{mapping.source_column}</td>
-                            <td>{mapping.target_type}</td>
-                            <td>{mapping.target_field || "-"}</td>
-                            <td>{mapping.value_type}</td>
-                          </tr>
-                        ))}
+                        {activeProfile.field_mappings.map((mapping) => {
+                          const isEditing =
+                            String(editingMappingId) === String(mapping.id);
+
+                          return (
+                            <tr key={mapping.id}>
+                              <td>
+                                {isEditing ? (
+                                  <Form.Control
+                                    size="sm"
+                                    value={editSourceColumn}
+                                    onChange={(e) =>
+                                      setEditSourceColumn(e.target.value)
+                                    }
+                                  />
+                                ) : (
+                                  mapping.source_column
+                                )}
+                              </td>
+
+                              <td>
+                                {isEditing ? (
+                                  <Form.Select
+                                    size="sm"
+                                    value={editTargetType}
+                                    onChange={(e) =>
+                                      setEditTargetType(e.target.value)
+                                    }
+                                  >
+                                    {TARGET_TYPES.map(([value, label]) => (
+                                      <option key={value} value={value}>
+                                        {label}
+                                      </option>
+                                    ))}
+                                  </Form.Select>
+                                ) : (
+                                  mapping.target_type
+                                )}
+                              </td>
+
+                              <td>
+                                {isEditing ? (
+                                  <Form.Control
+                                    size="sm"
+                                    value={editTargetField}
+                                    onChange={(e) =>
+                                      setEditTargetField(e.target.value)
+                                    }
+                                  />
+                                ) : (
+                                  mapping.target_field || "-"
+                                )}
+                              </td>
+
+                              <td>
+                                {isEditing ? (
+                                  <Form.Select
+                                    size="sm"
+                                    value={editValueType}
+                                    onChange={(e) =>
+                                      setEditValueType(e.target.value)
+                                    }
+                                  >
+                                    {VALUE_TYPES.map((item) => (
+                                      <option key={item} value={item}>
+                                        {item}
+                                      </option>
+                                    ))}
+                                  </Form.Select>
+                                ) : (
+                                  mapping.value_type
+                                )}
+                              </td>
+
+                              <td>
+                                {isEditing ? (
+                                  <Form.Check
+                                    type="checkbox"
+                                    checked={editRequired}
+                                    onChange={(e) =>
+                                      setEditRequired(e.target.checked)
+                                    }
+                                  />
+                                ) : mapping.required ? (
+                                  "Yes"
+                                ) : (
+                                  "No"
+                                )}
+                              </td>
+
+                              <td>
+                                {isEditing ? (
+                                  <div className="d-flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="dark"
+                                      onClick={() => saveEditMapping(mapping.id)}
+                                    >
+                                      Save
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline-secondary"
+                                      onClick={cancelEditMapping}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="d-flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline-dark"
+                                      onClick={() => startEditMapping(mapping)}
+                                      disabled={!userCanWrite}
+                                    >
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline-danger"
+                                      onClick={() => deleteMapping(mapping.id)}
+                                      disabled={!userCanWrite}
+                                    >
+                                      Delete
+                                    </Button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </Table>
                   )}

@@ -11,7 +11,7 @@ from results.models import Result, WorkItem
 from samples.access import validate_sample_project_assignment
 from samples.models import Sample
 
-from .models import MigrationFieldMapping, SampleExternalID
+from .models import MigrationFieldMapping, MigrationRowRecord, SampleExternalID
 
 
 def normalize_bool(value):
@@ -50,6 +50,23 @@ def read_csv(uploaded_file):
     return rows, reader.fieldnames or []
 
 
+
+def get_mapped_columns(mappings):
+    return {
+        mapping.source_column
+        for mapping_list in mappings.values()
+        for mapping in mapping_list
+    }
+
+
+def get_unmapped_data(row, mapped_columns):
+    return {
+        key: value
+        for key, value in row.items()
+        if key not in mapped_columns and value not in [None, ""]
+    }
+
+
 def mappings_by_type(profile):
     mappings = profile.field_mappings.all().order_by("id")
 
@@ -71,14 +88,66 @@ def get_first_value(row, mappings, target_type):
     return None, None
 
 
+
+def resolve_project_for_migration(project_code, project_name, default_project=None):
+    """
+    Resolve projects safely during migration.
+
+    Priority:
+    1. Use default selected project if provided.
+    2. Match by OpenLIMS project code.
+    3. Match by existing project name.
+    4. Create project only if neither code nor name already exists.
+    """
+    if default_project:
+        return default_project, False, "default_project"
+
+    project_code = str(project_code or "").strip()
+    project_name = str(project_name or "").strip()
+
+    if project_code:
+        project = Project.objects.filter(code=project_code).first()
+
+        if project:
+            return project, False, "matched_code"
+
+    if project_name:
+        project = Project.objects.filter(name=project_name).first()
+
+        if project:
+            return project, False, "matched_name"
+
+    if project_code:
+        project = Project.objects.create(
+            code=project_code,
+            name=project_name or project_code,
+            description="Migrated legacy project.",
+        )
+        return project, True, "created_code"
+
+    if project_name:
+        base_code = project_name.upper().replace(" ", "-")[:64]
+        code = base_code
+        counter = 2
+
+        while Project.objects.filter(code=code).exists():
+            suffix = f"-{counter}"
+            code = f"{base_code[:64-len(suffix)]}{suffix}"
+            counter += 1
+
+        project = Project.objects.create(
+            code=code,
+            name=project_name,
+            description="Migrated legacy project.",
+        )
+        return project, True, "created_name"
+
+    return None, False, "missing"
+
 def build_preview(profile, uploaded_file, default_project=None):
     rows, fieldnames = read_csv(uploaded_file)
     mappings = mappings_by_type(profile)
-    mapped_columns = {
-        mapping.source_column
-        for mapping_list in mappings.values()
-        for mapping in mapping_list
-    }
+    mapped_columns = get_mapped_columns(mappings)
 
     unmapped_columns = [
         column for column in fieldnames
@@ -188,9 +257,13 @@ def build_preview(profile, uploaded_file, default_project=None):
         preview_rows.append({
             "row": row_number,
             "sample_id": sample_code,
+            "project_id": target_project.id if target_project else (
+                default_project.id if default_project else None
+            ),
             "project": project_code or project_name or (
                 default_project.code if default_project else None
             ),
+            "unmapped_data": get_unmapped_data(row, mapped_columns),
             "will_skip": bool(row_errors),
             "errors": row_errors,
         })
@@ -298,7 +371,6 @@ def infer_mappings_for_column(column, fieldnames):
     normalized = normalize_column_name(column)
     normalized_fieldnames = {normalize_column_name(item) for item in fieldnames}
 
-    has_sample_id = "sample_id" in normalized_fieldnames
     suggestions = []
 
     def add(target_type, target_field="", value_type=None, required=False):
@@ -310,54 +382,63 @@ def infer_mappings_for_column(column, fieldnames):
             "required": required,
         })
 
-    if normalized in ["project_code", "study_code"]:
+    # Project identifiers
+    if normalized == "project_code":
         add(MigrationFieldMapping.TARGET_PROJECT_CODE, required=False)
         return suggestions
 
-    if normalized in ["project_id", "study_id", "legacy_project_id"]:
-        add(MigrationFieldMapping.TARGET_PROJECT_CODE, required=False)
-        return suggestions
-
-    if normalized in ["project_name", "study_name", "experiment_name"]:
+    if normalized in ["project_name", "study_name"]:
         add(MigrationFieldMapping.TARGET_PROJECT_NAME, required=False)
         return suggestions
 
+    # Legacy project IDs should be preserved, not treated as OpenLIMS project codes.
+    if normalized in ["project_id", "study_id", "legacy_project_id", "old_project_id"]:
+        add(
+            MigrationFieldMapping.TARGET_CUSTOM_FIELD,
+            target_field=normalized,
+            value_type=MigrationFieldMapping.VALUE_TYPE_STRING,
+            required=False,
+        )
+        return suggestions
+
+    # Sample identifiers
     if normalized == "sample_id":
         add(MigrationFieldMapping.TARGET_SAMPLE_ID, required=True)
         return suggestions
 
-    if normalized in ["specimen_id", "aliquot_id", "tube_id", "sample_code"]:
-        if not has_sample_id:
+    if normalized in ["specimen_id", "aliquot_id", "tube_id", "sample_code", "legacy_sample_id"]:
+        if "sample_id" not in normalized_fieldnames:
             add(MigrationFieldMapping.TARGET_SAMPLE_ID, required=True)
 
         add(
             MigrationFieldMapping.TARGET_EXTERNAL_ID,
             target_field=normalized,
+            value_type=MigrationFieldMapping.VALUE_TYPE_STRING,
             required=False,
         )
         return suggestions
 
-    if normalized in ["external_id", "legacy_id", "legacy_sample_id", "legacy_specimen_id"]:
+    if normalized in ["external_id", "legacy_id", "legacy_specimen_id"]:
         add(
             MigrationFieldMapping.TARGET_EXTERNAL_ID,
             target_field=normalized,
+            value_type=MigrationFieldMapping.VALUE_TYPE_STRING,
             required=False,
         )
         return suggestions
 
+    # Work item / assay identifiers
     if normalized in ["assay", "assay_name", "test", "test_name", "panel", "panel_name", "analyte"]:
         add(MigrationFieldMapping.TARGET_WORK_ITEM_NAME, required=False)
         return suggestions
 
-    result_exact = [
+    # Be conservative with result values. Only obvious result/value columns become results.
+    result_columns = [
         "result",
         "result_value",
         "value",
         "measurement",
         "measurement_value",
-    ]
-
-    result_keywords = [
         "concentration",
         "read_count",
         "mean_q_score",
@@ -367,17 +448,15 @@ def infer_mappings_for_column(column, fieldnames):
         "purity",
         "yield",
         "rin",
-        "abs_",
-        "endotoxin",
-        "recovery",
-        "score",
-        "quality",
+        "endotoxin_eu_ml",
+        "spike_recovery_percent",
+        "quality_score",
+        "abs_450",
+        "abs_570",
         "ng_ul",
-        "fragment_size",
-        "volume",
     ]
 
-    if normalized in result_exact or any(keyword in normalized for keyword in result_keywords):
+    if normalized in result_columns:
         add(
             MigrationFieldMapping.TARGET_RESULT_VALUE,
             target_field=normalized,
@@ -386,10 +465,11 @@ def infer_mappings_for_column(column, fieldnames):
         )
         return suggestions
 
+    # Default behavior: unknown legacy columns become sample custom fields.
     add(
         MigrationFieldMapping.TARGET_CUSTOM_FIELD,
         target_field=normalized,
-        value_type=infer_value_type_for_column(normalized),
+        value_type=MigrationFieldMapping.VALUE_TYPE_STRING,
         required=False,
     )
 
@@ -443,10 +523,59 @@ def suggest_field_mappings(profile, uploaded_file):
     }
 
 
+
+
+def create_sample_custom_field_value(sample, field_name, raw_value, value_type, profile):
+    field_name = normalize_column_name(field_name)
+
+    if not field_name or raw_value in [None, ""]:
+        return 0
+
+    field_definition, _ = FieldDefinition.objects.get_or_create(
+        entity_type="Sample",
+        name=field_name,
+        defaults={
+            "label": field_name.replace("_", " ").title(),
+            "data_type": "string",
+            "rules": {
+                "source_system": profile.source_system,
+                "created_by": "migration_toolkit",
+            },
+        },
+    )
+
+    FieldValue.objects.update_or_create(
+        field_definition=field_definition,
+        entity_type="Sample",
+        entity_id=str(sample.id),
+        defaults={
+            "value": normalize_value(raw_value, value_type),
+        },
+    )
+
+    return 1
+
+
+def create_unmapped_data_as_custom_fields(sample, unmapped_data, profile):
+    created_count = 0
+
+    for key, value in (unmapped_data or {}).items():
+        created_count += create_sample_custom_field_value(
+            sample=sample,
+            field_name=key,
+            raw_value=value,
+            value_type=MigrationFieldMapping.VALUE_TYPE_STRING,
+            profile=profile,
+        )
+
+    return created_count
+
+
 @transaction.atomic
-def apply_migration(profile, uploaded_file, actor, default_project=None):
+def apply_migration(profile, uploaded_file, actor, default_project=None, job=None):
     rows, fieldnames = read_csv(uploaded_file)
     mappings = mappings_by_type(profile)
+    mapped_columns = get_mapped_columns(mappings)
 
     projects_created = []
     samples_created = []
@@ -455,8 +584,12 @@ def apply_migration(profile, uploaded_file, actor, default_project=None):
     custom_values_created = 0
     results_created = 0
     skipped_rows = []
+    row_records_created = 0
+    unmapped_rows_preserved = 0
 
     for row_number, row in enumerate(rows, start=1):
+        unmapped_data = get_unmapped_data(row, mapped_columns)
+
         sample_code, _ = get_first_value(
             row,
             mappings,
@@ -468,6 +601,20 @@ def apply_migration(profile, uploaded_file, actor, default_project=None):
                 "row": row_number,
                 "reason": "Missing mapped sample ID.",
             })
+
+            if job:
+                MigrationRowRecord.objects.create(
+                    migration_job=job,
+                    row_number=row_number,
+                    raw_row=row,
+                    unmapped_data=unmapped_data,
+                    status=MigrationRowRecord.STATUS_SKIPPED,
+                    errors=["Missing mapped sample ID."],
+                )
+                row_records_created += 1
+                if unmapped_data:
+                    unmapped_rows_preserved += 1
+
             continue
 
         project_code, _ = get_first_value(
@@ -482,34 +629,14 @@ def apply_migration(profile, uploaded_file, actor, default_project=None):
             MigrationFieldMapping.TARGET_PROJECT_NAME,
         )
 
-        project = None
+        project, created, project_resolution = resolve_project_for_migration(
+            project_code=project_code,
+            project_name=project_name,
+            default_project=default_project,
+        )
 
-        if project_code:
-            project, created = Project.objects.get_or_create(
-                code=project_code,
-                defaults={
-                    "name": project_name or project_code,
-                    "description": f"Migrated from {profile.source_system}",
-                },
-            )
-
-            if created:
-                projects_created.append(project.code)
-
-        elif default_project:
-            project = default_project
-
-        elif project_name:
-            project, created = Project.objects.get_or_create(
-                name=project_name,
-                defaults={
-                    "code": project_name.upper().replace(" ", "-")[:64],
-                    "description": f"Migrated from {profile.source_system}",
-                },
-            )
-
-            if created:
-                projects_created.append(project.code)
+        if created and project:
+            projects_created.append(project.code)
 
         if project is None:
             skipped_rows.append({
@@ -517,6 +644,23 @@ def apply_migration(profile, uploaded_file, actor, default_project=None):
                 "sample_id": sample_code,
                 "reason": "Missing project mapping or default project.",
             })
+
+            if job:
+                MigrationRowRecord.objects.create(
+                    migration_job=job,
+                    row_number=row_number,
+                    project_code=project_code or "",
+                    project_name=project_name or "",
+                    sample_code=sample_code or "",
+                    raw_row=row,
+                    unmapped_data=unmapped_data,
+                    status=MigrationRowRecord.STATUS_SKIPPED,
+                    errors=["Missing project mapping or default project."],
+                )
+                row_records_created += 1
+                if unmapped_data:
+                    unmapped_rows_preserved += 1
+
             continue
 
         validate_sample_project_assignment(actor, project)
@@ -588,6 +732,13 @@ def apply_migration(profile, uploaded_file, actor, default_project=None):
 
             custom_values_created += 1
 
+        # Any columns still unmapped are preserved as string custom fields.
+        custom_values_created += create_unmapped_data_as_custom_fields(
+            sample=sample,
+            unmapped_data=unmapped_data,
+            profile=profile,
+        )
+
         work_item_name, _ = get_first_value(
             row,
             mappings,
@@ -615,14 +766,51 @@ def apply_migration(profile, uploaded_file, actor, default_project=None):
 
                 result_key = mapping.target_field or mapping.source_column
 
-                set_result_value(
-                    work_item=work_item,
-                    key=result_key,
-                    raw_value=raw_value,
-                    value_type=mapping.value_type,
-                )
+                try:
+                    set_result_value(
+                        work_item=work_item,
+                        key=result_key,
+                        raw_value=raw_value,
+                        value_type=mapping.value_type,
+                    )
 
-                results_created += 1
+                    results_created += 1
+                except (TypeError, ValueError):
+                    custom_values_created += create_sample_custom_field_value(
+                        sample=sample,
+                        field_name=result_key,
+                        raw_value=raw_value,
+                        value_type=MigrationFieldMapping.VALUE_TYPE_STRING,
+                        profile=profile,
+                    )
+
+                    skipped_rows.append({
+                        "row": row_number,
+                        "sample_id": sample_code,
+                        "source_column": mapping.source_column,
+                        "reason": (
+                            "Could not convert value for mapped result. "
+                            "Saved as string custom field instead."
+                        ),
+                    })
+
+        if job:
+            MigrationRowRecord.objects.create(
+                migration_job=job,
+                project=project,
+                sample=sample,
+                row_number=row_number,
+                project_code=project.code if project else project_code or "",
+                project_name=project.name if project else project_name or "",
+                sample_code=sample.sample_id if sample else sample_code or "",
+                raw_row=row,
+                unmapped_data=unmapped_data,
+                status=MigrationRowRecord.STATUS_IMPORTED,
+                errors=[],
+            )
+            row_records_created += 1
+            if unmapped_data:
+                unmapped_rows_preserved += 1
 
     summary = {
         "rows_processed": len(rows),
@@ -633,6 +821,8 @@ def apply_migration(profile, uploaded_file, actor, default_project=None):
         "custom_values_created": custom_values_created,
         "results_created": results_created,
         "skipped_rows": skipped_rows,
+        "row_records_created": row_records_created,
+        "unmapped_rows_preserved": unmapped_rows_preserved,
         "source_system": profile.source_system,
     }
 

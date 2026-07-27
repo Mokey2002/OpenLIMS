@@ -149,3 +149,61 @@ class MigrationJob(models.Model):
 
     def __str__(self):
         return f"MigrationJob {self.id} - {self.profile.name}"
+
+
+class MigrationRowRecord(models.Model):
+    STATUS_IMPORTED = "IMPORTED"
+    STATUS_SKIPPED = "SKIPPED"
+    STATUS_ERROR = "ERROR"
+
+    STATUS_CHOICES = [
+        (STATUS_IMPORTED, "Imported"),
+        (STATUS_SKIPPED, "Skipped"),
+        (STATUS_ERROR, "Error"),
+    ]
+
+    migration_job = models.ForeignKey(
+        MigrationJob,
+        on_delete=models.CASCADE,
+        related_name="row_records",
+    )
+    project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="migration_row_records",
+    )
+    sample = models.ForeignKey(
+        "samples.Sample",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="migration_row_records",
+    )
+    row_number = models.PositiveIntegerField()
+    project_code = models.CharField(max_length=128, blank=True)
+    project_name = models.CharField(max_length=255, blank=True)
+    sample_code = models.CharField(max_length=128, blank=True)
+    raw_row = models.JSONField(default=dict, blank=True)
+    unmapped_data = models.JSONField(default=dict, blank=True)
+    status = models.CharField(
+        max_length=32,
+        choices=STATUS_CHOICES,
+        default=STATUS_IMPORTED,
+    )
+    errors = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("migration_job", "row_number")]
+        indexes = [
+            models.Index(fields=["migration_job", "row_number"]),
+            models.Index(fields=["project", "sample"]),
+            models.Index(fields=["sample_code"]),
+            models.Index(fields=["project_code"]),
+            models.Index(fields=["status"]),
+        ]
+
+    def __str__(self):
+        return f"Migration row {self.row_number} for job {self.migration_job_id}"
