@@ -69,6 +69,7 @@ export default function DataMigration() {
   const [previewJob, setPreviewJob] = useState(null);
   const [confirming, setConfirming] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
 
   async function load() {
     setErr("");
@@ -156,6 +157,30 @@ export default function DataMigration() {
     if (migrationProject) formData.append("project", migrationProject);
     formData.append("uploaded_file", uploadFile);
     return formData;
+  }
+
+  async function suggestMappings() {
+    setErr("");
+    setSuccess("");
+    setSuggesting(true);
+
+    try {
+      const data = await apiPostForm(
+        "/api/migration-jobs/suggest-mappings/",
+        buildFormData()
+      );
+
+      setSuccess(
+        `Auto-suggested ${data.created_count || 0} new mapping(s). ` +
+          `${data.existing_count || 0} mapping(s) already existed.`
+      );
+
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setSuggesting(false);
+    }
   }
 
   async function previewMigration() {
@@ -451,7 +476,18 @@ export default function DataMigration() {
           </Row>
 
           <Row className="g-2 mt-3">
-            <Col md={6}>
+            <Col md={4}>
+              <Button
+                variant="outline-secondary"
+                className="w-100"
+                onClick={suggestMappings}
+                disabled={!userCanWrite || !selectedProfile || !uploadFile || suggesting}
+              >
+                {suggesting ? "Suggesting..." : "Auto-Suggest Mappings"}
+              </Button>
+            </Col>
+
+            <Col md={4}>
               <Button
                 variant="outline-dark"
                 className="w-100"
@@ -462,7 +498,7 @@ export default function DataMigration() {
               </Button>
             </Col>
 
-            <Col md={6}>
+            <Col md={4}>
               <Button
                 variant="dark"
                 className="w-100"

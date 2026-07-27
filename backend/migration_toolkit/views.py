@@ -22,7 +22,7 @@ from .serializers import (
     MigrationProfileSerializer,
     SampleExternalIDSerializer,
 )
-from .services import apply_migration, build_preview
+from .services import apply_migration, build_preview, suggest_field_mappings
 
 
 class SampleExternalIDViewSet(viewsets.ModelViewSet):
@@ -150,6 +150,39 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
             )
 
         return None
+
+    @action(detail=False, methods=["post"], url_path="suggest-mappings")
+    def suggest_mappings(self, request):
+        profile, error_response = self._get_profile(request)
+
+        if error_response:
+            return error_response
+
+        uploaded_file = request.data.get("uploaded_file")
+
+        if not uploaded_file:
+            return Response(
+                {"detail": "uploaded_file is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        error_response = self._validate_file(uploaded_file)
+
+        if error_response:
+            return error_response
+
+        try:
+            summary = suggest_field_mappings(
+                profile=profile,
+                uploaded_file=uploaded_file,
+            )
+        except Exception as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(summary, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="preview")
     def preview(self, request):

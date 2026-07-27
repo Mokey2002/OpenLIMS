@@ -1,5 +1,6 @@
 import csv
 import io
+import re
 
 from django.db import transaction
 
@@ -232,6 +233,214 @@ def set_result_value(work_item, key, raw_value, value_type):
         key=key,
         defaults=defaults,
     )
+
+
+
+
+def normalize_column_name(column):
+    normalized = str(column or "").strip().lower()
+    normalized = re.sub(r"[^a-z0-9]+", "_", normalized)
+    normalized = re.sub(r"_+", "_", normalized).strip("_")
+    return normalized
+
+
+def infer_value_type_for_column(normalized_column):
+    boolean_keywords = [
+        "pass",
+        "fail",
+        "passed",
+        "failed",
+        "valid",
+        "approved",
+        "detected",
+        "positive",
+        "negative",
+    ]
+
+    numeric_keywords = [
+        "value",
+        "result",
+        "concentration",
+        "count",
+        "score",
+        "ct",
+        "delta_ct",
+        "q30",
+        "purity",
+        "yield",
+        "rin",
+        "length",
+        "size",
+        "abs",
+        "od",
+        "eu_ml",
+        "recovery",
+        "ng_ul",
+        "volume",
+        "intensity",
+        "mz",
+        "rt",
+        "percent",
+        "percentage",
+        "ratio",
+    ]
+
+    if any(keyword in normalized_column for keyword in boolean_keywords):
+        return MigrationFieldMapping.VALUE_TYPE_BOOLEAN
+
+    if any(keyword in normalized_column for keyword in numeric_keywords):
+        return MigrationFieldMapping.VALUE_TYPE_NUMBER
+
+    return MigrationFieldMapping.VALUE_TYPE_STRING
+
+
+def infer_mappings_for_column(column, fieldnames):
+    normalized = normalize_column_name(column)
+    normalized_fieldnames = {normalize_column_name(item) for item in fieldnames}
+
+    has_sample_id = "sample_id" in normalized_fieldnames
+    suggestions = []
+
+    def add(target_type, target_field="", value_type=None, required=False):
+        suggestions.append({
+            "source_column": column,
+            "target_type": target_type,
+            "target_field": target_field,
+            "value_type": value_type or MigrationFieldMapping.VALUE_TYPE_STRING,
+            "required": required,
+        })
+
+    if normalized in ["project_code", "study_code"]:
+        add(MigrationFieldMapping.TARGET_PROJECT_CODE, required=False)
+        return suggestions
+
+    if normalized in ["project_id", "study_id", "legacy_project_id"]:
+        add(MigrationFieldMapping.TARGET_PROJECT_CODE, required=False)
+        return suggestions
+
+    if normalized in ["project_name", "study_name", "experiment_name"]:
+        add(MigrationFieldMapping.TARGET_PROJECT_NAME, required=False)
+        return suggestions
+
+    if normalized == "sample_id":
+        add(MigrationFieldMapping.TARGET_SAMPLE_ID, required=True)
+        return suggestions
+
+    if normalized in ["specimen_id", "aliquot_id", "tube_id", "sample_code"]:
+        if not has_sample_id:
+            add(MigrationFieldMapping.TARGET_SAMPLE_ID, required=True)
+
+        add(
+            MigrationFieldMapping.TARGET_EXTERNAL_ID,
+            target_field=normalized,
+            required=False,
+        )
+        return suggestions
+
+    if normalized in ["external_id", "legacy_id", "legacy_sample_id", "legacy_specimen_id"]:
+        add(
+            MigrationFieldMapping.TARGET_EXTERNAL_ID,
+            target_field=normalized,
+            required=False,
+        )
+        return suggestions
+
+    if normalized in ["assay", "assay_name", "test", "test_name", "panel", "panel_name", "analyte"]:
+        add(MigrationFieldMapping.TARGET_WORK_ITEM_NAME, required=False)
+        return suggestions
+
+    result_exact = [
+        "result",
+        "result_value",
+        "value",
+        "measurement",
+        "measurement_value",
+    ]
+
+    result_keywords = [
+        "concentration",
+        "read_count",
+        "mean_q_score",
+        "percent_q30",
+        "ct_value",
+        "delta_ct",
+        "purity",
+        "yield",
+        "rin",
+        "abs_",
+        "endotoxin",
+        "recovery",
+        "score",
+        "quality",
+        "ng_ul",
+        "fragment_size",
+        "volume",
+    ]
+
+    if normalized in result_exact or any(keyword in normalized for keyword in result_keywords):
+        add(
+            MigrationFieldMapping.TARGET_RESULT_VALUE,
+            target_field=normalized,
+            value_type=infer_value_type_for_column(normalized),
+            required=False,
+        )
+        return suggestions
+
+    add(
+        MigrationFieldMapping.TARGET_CUSTOM_FIELD,
+        target_field=normalized,
+        value_type=infer_value_type_for_column(normalized),
+        required=False,
+    )
+
+    return suggestions
+
+
+def suggest_field_mappings(profile, uploaded_file):
+    rows, fieldnames = read_csv(uploaded_file)
+
+    created = []
+    existing = []
+
+    for column in fieldnames:
+        suggestions = infer_mappings_for_column(column, fieldnames)
+
+        for suggestion in suggestions:
+            mapping, was_created = MigrationFieldMapping.objects.get_or_create(
+                profile=profile,
+                source_column=suggestion["source_column"],
+                target_type=suggestion["target_type"],
+                target_field=suggestion.get("target_field", ""),
+                defaults={
+                    "value_type": suggestion.get(
+                        "value_type",
+                        MigrationFieldMapping.VALUE_TYPE_STRING,
+                    ),
+                    "required": suggestion.get("required", False),
+                },
+            )
+
+            item = {
+                "id": mapping.id,
+                "source_column": mapping.source_column,
+                "target_type": mapping.target_type,
+                "target_field": mapping.target_field,
+                "value_type": mapping.value_type,
+                "required": mapping.required,
+            }
+
+            if was_created:
+                created.append(item)
+            else:
+                existing.append(item)
+
+    return {
+        "fieldnames": fieldnames,
+        "created_count": len(created),
+        "existing_count": len(existing),
+        "created": created,
+        "existing": existing,
+    }
 
 
 @transaction.atomic
