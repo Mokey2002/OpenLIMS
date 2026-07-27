@@ -4,6 +4,7 @@ from .models import (
     MigrationFieldMapping,
     MigrationJob,
     MigrationProfile,
+    MigrationRowRecord,
     SampleExternalID,
 )
 
@@ -96,3 +97,30 @@ class MigrationJobSerializer(serializers.ModelSerializer):
             "summary",
             "created_at",
         ]
+
+
+
+class MigrationRowRecordSerializer(serializers.ModelSerializer):
+    project_code_resolved = serializers.CharField(source="project.code", read_only=True)
+    sample_code_resolved = serializers.CharField(source="sample.sample_id", read_only=True)
+
+    class Meta:
+        model = MigrationRowRecord
+        fields = [
+            "id",
+            "migration_job",
+            "project",
+            "project_code_resolved",
+            "sample",
+            "sample_code_resolved",
+            "row_number",
+            "project_code",
+            "project_name",
+            "sample_code",
+            "raw_row",
+            "unmapped_data",
+            "status",
+            "errors",
+            "created_at",
+        ]
+        read_only_fields = fields

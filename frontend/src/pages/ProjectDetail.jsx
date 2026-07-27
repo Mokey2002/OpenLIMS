@@ -94,11 +94,44 @@ function countBy(items, field) {
   }, {});
 }
 
+async function apiGetAllPages(basePath) {
+  const separator = basePath.includes("?") ? "&" : "?";
+  let page = 1;
+  let results = [];
+
+  while (page <= 100) {
+    const data = await apiGet(`${basePath}${separator}page=${page}`);
+
+    if (!data?.results) {
+      return data || [];
+    }
+
+    results = [...results, ...data.results];
+
+    if (!data.next) break;
+
+    page += 1;
+  }
+
+  return results;
+}
+
+function formatCustomFieldValue(value) {
+  if (value === null || value === undefined || value === "") return "-";
+
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
 export default function ProjectDetail() {
   const { id } = useParams();
 
   const [project, setProject] = useState(null);
   const [samples, setSamples] = useState([]);
+  const [sampleCustomFields, setSampleCustomFields] = useState({});
   const [workItems, setWorkItems] = useState([]);
   const [posts, setPosts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -133,7 +166,7 @@ export default function ProjectDetail() {
         meData,
       ] = await Promise.all([
         apiGet(`/api/projects/${id}/`),
-        apiGet(`/api/samples/?project=${id}`),
+        apiGetAllPages(`/api/samples/?project=${id}`),
         apiGet(`/api/work-items/?project=${id}`),
         apiGet(`/api/project-posts/?project=${id}`),
         apiGet(`/api/import-jobs/`),
@@ -150,6 +183,22 @@ export default function ProjectDetail() {
       const sequenceList = sequencesData.results || sequencesData || [];
       const alignmentList = alignmentsData.results || alignmentsData || [];
       const eventList = eventsData.results || eventsData || [];
+
+      const customFieldPairs = await Promise.all(
+        sampleList.map(async (sample) => {
+          try {
+            const fieldData = await apiGet(
+              `/api/samples/${sample.id}/custom-fields/`
+            );
+
+            return [sample.id, fieldData.fields || {}];
+          } catch {
+            return [sample.id, {}];
+          }
+        })
+      );
+
+      setSampleCustomFields(Object.fromEntries(customFieldPairs));
 
       setProject(projectData);
       setSamples(sampleList);
@@ -224,6 +273,16 @@ export default function ProjectDetail() {
   const sampleStatusCounts = useMemo(() => {
     return countBy(samples, "status");
   }, [samples]);
+
+  const sampleCustomFieldColumns = useMemo(() => {
+    const names = new Set();
+
+    Object.values(sampleCustomFields).forEach((fields) => {
+      Object.keys(fields || {}).forEach((name) => names.add(name));
+    });
+
+    return Array.from(names).sort();
+  }, [sampleCustomFields]);
 
   const qcStats = useMemo(() => {
     return {
@@ -790,6 +849,9 @@ export default function ProjectDetail() {
                   <th>ID</th>
                   <th>Sample ID</th>
                   <th>Status</th>
+                  {sampleCustomFieldColumns.map((fieldName) => (
+                    <th key={fieldName}>{fieldName}</th>
+                  ))}
                   <th>Container</th>
                   <th>Created</th>
                 </tr>
@@ -811,6 +873,15 @@ export default function ProjectDetail() {
                         {sample.status}
                       </Badge>
                     </td>
+
+                    {sampleCustomFieldColumns.map((fieldName) => (
+                      <td key={fieldName}>
+                        {formatCustomFieldValue(
+                          sampleCustomFields[sample.id]?.[fieldName]
+                        )}
+                      </td>
+                    ))}
+
                     <td>{sample.container_code || "-"}</td>
                     <td>{formatTimestamp(sample.created_at)}</td>
                   </tr>
