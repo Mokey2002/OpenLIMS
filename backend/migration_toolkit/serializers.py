@@ -23,6 +23,7 @@ class SampleExternalIDSerializer(serializers.ModelSerializer):
             "label",
             "metadata",
             "created_at",
+            "row_record_count",
         ]
         read_only_fields = ["id", "sample_code", "created_at"]
 
@@ -67,6 +68,7 @@ class MigrationProfileSerializer(serializers.ModelSerializer):
 class MigrationJobSerializer(serializers.ModelSerializer):
     profile_name = serializers.CharField(source="profile.name", read_only=True)
     project_code = serializers.CharField(source="project.code", read_only=True)
+    row_record_count = serializers.SerializerMethodField()
     uploaded_by_username = serializers.CharField(
         source="uploaded_by.username",
         read_only=True,
@@ -96,7 +98,11 @@ class MigrationJobSerializer(serializers.ModelSerializer):
             "status",
             "summary",
             "created_at",
+            "row_record_count",
         ]
+
+    def get_row_record_count(self, obj):
+        return obj.row_records.count()
 
 
 
@@ -118,6 +124,7 @@ class MigrationRowRecordSerializer(serializers.ModelSerializer):
             "project_name",
             "sample_code",
             "raw_row",
+            "raw_row_text",
             "unmapped_data",
             "status",
             "errors",

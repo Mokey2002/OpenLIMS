@@ -1,4 +1,8 @@
+import csv
+import json
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Q
+from django.http import HttpResponse
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -24,7 +28,8 @@ from .serializers import (
     MigrationRowRecordSerializer,
     SampleExternalIDSerializer,
 )
-from .services import apply_migration, build_preview, suggest_field_mappings
+from .services import build_preview, suggest_field_mappings
+from .tasks import run_migration_job
 
 
 class SampleExternalIDViewSet(viewsets.ModelViewSet):
@@ -93,6 +98,8 @@ class MigrationRowRecordViewSet(viewsets.ReadOnlyModelViewSet):
         job_id = self.request.query_params.get("job")
         project_id = self.request.query_params.get("project")
         sample_id = self.request.query_params.get("sample")
+        status_filter = self.request.query_params.get("status")
+        search = self.request.query_params.get("search")
 
         if job_id:
             queryset = queryset.filter(migration_job_id=job_id)
@@ -102,6 +109,17 @@ class MigrationRowRecordViewSet(viewsets.ReadOnlyModelViewSet):
 
         if sample_id:
             queryset = queryset.filter(sample_id=sample_id)
+
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        if search:
+            queryset = queryset.filter(
+                Q(project_code__icontains=search)
+                | Q(project_name__icontains=search)
+                | Q(sample_code__icontains=search)
+                | Q(raw_row_text__icontains=search)
+            )
 
         return queryset
 
@@ -294,31 +312,71 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
             project=project,
             uploaded_file=uploaded_file,
             uploaded_by=request.user,
-            status=MigrationJob.STATUS_PREVIEWED,
-            summary={},
+            status=MigrationJob.STATUS_PENDING,
+            summary={
+                "queued": True,
+                "progress": {
+                    "processed_rows": 0,
+                    "total_rows": None,
+                    "percent": 0,
+                },
+            },
         )
 
-        try:
-            summary = apply_migration(
-                profile=profile,
-                uploaded_file=uploaded_file,
-                actor=request.user,
-                default_project=project,
-                job=job,
-            )
-
-            job.status = MigrationJob.STATUS_COMPLETED
-            job.summary = summary
-            job.save(update_fields=["status", "summary"])
-        except Exception as exc:
-            job.status = MigrationJob.STATUS_FAILED
-            job.summary = {"error": str(exc)}
-            job.save(update_fields=["status", "summary"])
-
-            return Response(
-                {"detail": str(exc), "job_id": job.id},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        run_migration_job.delay(job.id)
 
         serializer = self.get_serializer(job)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=True, methods=["get"], url_path="export-rows")
+    def export_rows(self, request, pk=None):
+        job = self.get_object()
+
+        queryset = MigrationRowRecord.objects.filter(
+            migration_job=job,
+        ).order_by("row_number")
+
+        status_filter = request.query_params.get("status")
+        search = request.query_params.get("search")
+
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        if search:
+            queryset = queryset.filter(
+                Q(project_code__icontains=search)
+                | Q(project_name__icontains=search)
+                | Q(sample_code__icontains=search)
+                | Q(raw_row_text__icontains=search)
+            )
+
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = (
+            f'attachment; filename="migration_job_{job.id}_rows.csv"'
+        )
+
+        writer = csv.writer(response)
+        writer.writerow([
+            "row_number",
+            "status",
+            "project_code",
+            "project_name",
+            "sample_code",
+            "errors",
+            "unmapped_data",
+            "raw_row",
+        ])
+
+        for row in queryset.iterator(chunk_size=500):
+            writer.writerow([
+                row.row_number,
+                row.status,
+                row.project_code,
+                row.project_name,
+                row.sample_code,
+                json.dumps(row.errors),
+                json.dumps(row.unmapped_data),
+                json.dumps(row.raw_row),
+            ])
+
+        return response
