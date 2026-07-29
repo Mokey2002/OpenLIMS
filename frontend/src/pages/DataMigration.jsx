@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Alert,
   Badge,
@@ -276,7 +277,7 @@ export default function DataMigration() {
       );
 
       setPreviewJob(data);
-      setSuccess("Migration imported successfully.");
+      setSuccess(`Migration job #${data.id} was queued. Open the job detail page to track progress.`);
       await load();
     } catch (e) {
       setErr(e.message || String(e));
@@ -296,7 +297,7 @@ export default function DataMigration() {
           </p>
         </div>
 
-        <Badge bg="dark">v0.16 preview</Badge>
+        <Badge bg="dark">v0.18 scalable review</Badge>
       </div>
 
       {err && <Alert variant="danger">{err}</Alert>}
@@ -690,7 +691,7 @@ export default function DataMigration() {
                 onClick={confirmMigration}
                 disabled={!userCanWrite || !selectedProfile || !uploadFile || confirming}
               >
-                {confirming ? "Importing..." : "Confirm Migration Import"}
+                {confirming ? "Queuing..." : "Confirm Migration Import"}
               </Button>
             </Col>
           </Row>
@@ -808,11 +809,35 @@ export default function DataMigration() {
               <tbody>
                 {jobs.map((job) => (
                   <tr key={job.id}>
-                    <td>#{job.id}</td>
+                    <td>
+                      <Link to={`/data-migration/jobs/${job.id}`}>
+                        #{job.id}
+                      </Link>
+                    </td>
                     <td>{job.profile_name}</td>
                     <td>{job.project_code || "-"}</td>
-                    <td>{job.status}</td>
-                    <td>{job.summary?.rows_processed ?? 0}</td>
+                    <td>
+                      <Badge
+                        bg={
+                          job.status === "COMPLETED"
+                            ? "success"
+                            : job.status === "FAILED"
+                            ? "danger"
+                            : job.status === "PARTIAL_FAILED"
+                            ? "warning"
+                            : job.status === "RUNNING"
+                            ? "primary"
+                            : "secondary"
+                        }
+                      >
+                        {job.status}
+                      </Badge>
+                    </td>
+                    <td>
+                      {job.summary?.rows_processed ??
+                        job.summary?.progress?.processed_rows ??
+                        0}
+                    </td>
                     <td>{new Date(job.created_at).toLocaleString()}</td>
                   </tr>
                 ))}

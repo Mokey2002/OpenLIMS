@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import re
 
 from django.db import transaction
@@ -144,8 +145,9 @@ def resolve_project_for_migration(project_code, project_name, default_project=No
 
     return None, False, "missing"
 
-def build_preview(profile, uploaded_file, default_project=None):
+def build_preview(profile, uploaded_file, default_project=None, preview_limit=100):
     rows, fieldnames = read_csv(uploaded_file)
+    total_rows = len(rows)
     mappings = mappings_by_type(profile)
     mapped_columns = get_mapped_columns(mappings)
 
@@ -279,7 +281,9 @@ def build_preview(profile, uploaded_file, default_project=None):
         "results_to_create": results_to_create,
         "skipped_rows": skipped_rows,
         "unmapped_columns": unmapped_columns,
-        "preview_rows": preview_rows[:50],
+        "preview_rows": preview_rows[:preview_limit],
+        "preview_limit": preview_limit,
+        "preview_rows_returned": min(len(preview_rows), preview_limit),
         "fieldnames": fieldnames,
     }
 
@@ -571,8 +575,14 @@ def create_unmapped_data_as_custom_fields(sample, unmapped_data, profile):
     return created_count
 
 
-@transaction.atomic
-def apply_migration(profile, uploaded_file, actor, default_project=None, job=None):
+def apply_migration(
+    profile,
+    uploaded_file,
+    actor,
+    default_project=None,
+    job=None,
+    progress_callback=None,
+):
     rows, fieldnames = read_csv(uploaded_file)
     mappings = mappings_by_type(profile)
     mapped_columns = get_mapped_columns(mappings)
@@ -586,6 +596,26 @@ def apply_migration(profile, uploaded_file, actor, default_project=None, job=Non
     skipped_rows = []
     row_records_created = 0
     unmapped_rows_preserved = 0
+
+    def report_progress(row_number=0):
+        if not progress_callback:
+            return
+
+        percent = 100 if total_rows == 0 else round((row_number / total_rows) * 100, 2)
+
+        progress_callback({
+            "processed_rows": row_number,
+            "total_rows": total_rows,
+            "percent": percent,
+            "samples_created": len(samples_created),
+            "samples_matched": len(samples_matched),
+            "results_created": results_created,
+            "custom_values_created": custom_values_created,
+            "row_records_created": row_records_created,
+            "skipped_rows": len(skipped_rows),
+        })
+
+    report_progress(0)
 
     for row_number, row in enumerate(rows, start=1):
         unmapped_data = get_unmapped_data(row, mapped_columns)
@@ -607,6 +637,7 @@ def apply_migration(profile, uploaded_file, actor, default_project=None, job=Non
                     migration_job=job,
                     row_number=row_number,
                     raw_row=row,
+                    raw_row_text=json.dumps(row, sort_keys=True),
                     unmapped_data=unmapped_data,
                     status=MigrationRowRecord.STATUS_SKIPPED,
                     errors=["Missing mapped sample ID."],
@@ -653,6 +684,7 @@ def apply_migration(profile, uploaded_file, actor, default_project=None, job=Non
                     project_name=project_name or "",
                     sample_code=sample_code or "",
                     raw_row=row,
+                    raw_row_text=json.dumps(row, sort_keys=True),
                     unmapped_data=unmapped_data,
                     status=MigrationRowRecord.STATUS_SKIPPED,
                     errors=["Missing project mapping or default project."],
@@ -804,6 +836,7 @@ def apply_migration(profile, uploaded_file, actor, default_project=None, job=Non
                 project_name=project.name if project else project_name or "",
                 sample_code=sample.sample_id if sample else sample_code or "",
                 raw_row=row,
+                raw_row_text=json.dumps(row, sort_keys=True),
                 unmapped_data=unmapped_data,
                 status=MigrationRowRecord.STATUS_IMPORTED,
                 errors=[],
@@ -811,6 +844,9 @@ def apply_migration(profile, uploaded_file, actor, default_project=None, job=Non
             row_records_created += 1
             if unmapped_data:
                 unmapped_rows_preserved += 1
+
+        if row_number == 1 or row_number % 100 == 0 or row_number == total_rows:
+            report_progress(row_number)
 
     summary = {
         "rows_processed": len(rows),
@@ -824,6 +860,11 @@ def apply_migration(profile, uploaded_file, actor, default_project=None, job=Non
         "row_records_created": row_records_created,
         "unmapped_rows_preserved": unmapped_rows_preserved,
         "source_system": profile.source_system,
+        "progress": {
+            "processed_rows": total_rows,
+            "total_rows": total_rows,
+            "percent": 100,
+        },
     }
 
     Event.objects.create(

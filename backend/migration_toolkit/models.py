@@ -109,13 +109,19 @@ class MigrationFieldMapping(models.Model):
 
 
 class MigrationJob(models.Model):
+    STATUS_PENDING = "PENDING"
+    STATUS_RUNNING = "RUNNING"
     STATUS_PREVIEWED = "PREVIEWED"
     STATUS_COMPLETED = "COMPLETED"
+    STATUS_PARTIAL_FAILED = "PARTIAL_FAILED"
     STATUS_FAILED = "FAILED"
 
     STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_RUNNING, "Running"),
         (STATUS_PREVIEWED, "Previewed"),
         (STATUS_COMPLETED, "Completed"),
+        (STATUS_PARTIAL_FAILED, "Partial Failed"),
         (STATUS_FAILED, "Failed"),
     ]
 
@@ -186,6 +192,7 @@ class MigrationRowRecord(models.Model):
     project_name = models.CharField(max_length=255, blank=True)
     sample_code = models.CharField(max_length=128, blank=True)
     raw_row = models.JSONField(default=dict, blank=True)
+    raw_row_text = models.TextField(blank=True)
     unmapped_data = models.JSONField(default=dict, blank=True)
     status = models.CharField(
         max_length=32,
