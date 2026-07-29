@@ -341,6 +341,10 @@ export default function Layout() {
         <Outlet />
       </Container>
 
+      <footer className="app-footer-version">
+        OpenLIMS v0.18.0
+      </footer>
+
       <TutorialBar userIsAdmin={userIsAdmin} />
     </>
   );

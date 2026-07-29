@@ -395,3 +395,10 @@ body {
   border-radius: 12px;
   padding: 0.75rem 0.9rem;
 }
+
+.app-footer-version {
+  padding: 16px 24px 24px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #6c757d;
+}
