@@ -1,3 +1,4 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 from samples.views import SampleViewSet, SingleSampleAttachmentViewSet
 from inventory.views import LocationViewSet, ContainerViewSet
@@ -13,6 +14,7 @@ from alignments.views import AlignmentJobViewSet
 from settings_app.views import SystemSettingsViewSet
 from blast.views import BlastDatabaseViewSet, BlastJobViewSet
 from mass_spec.views import MassSpecRunViewSet
+from assistant.views import AssistantChatView
 from migration_toolkit.views import (
     MigrationFieldMappingViewSet,
     MigrationJobViewSet,
@@ -53,4 +55,6 @@ router.register(r"migration-field-mappings", MigrationFieldMappingViewSet, basen
 router.register(r"migration-jobs", MigrationJobViewSet, basename="migration-job")
 router.register(r"migration-row-records", MigrationRowRecordViewSet, basename="migration-row-record")
 
-urlpatterns = router.urls
+urlpatterns = router.urls + [
+    path("assistant/chat/", AssistantChatView.as_view(), name="assistant-chat"),
+]

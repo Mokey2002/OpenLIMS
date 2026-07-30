@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'blast',
     'mass_spec',
     'migration_toolkit',
+    'assistant',
 ]
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
