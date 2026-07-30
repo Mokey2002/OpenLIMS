@@ -18,6 +18,7 @@ import {
 import { clearTokens } from "./auth";
 import { apiGet } from "./api";
 import { isAdmin, isTech } from "./authz";
+import { OPENLIMS_VERSION } from "./version";
 
 const baseTutorialSteps = [
   {
@@ -346,7 +347,7 @@ export default function Layout() {
       </Container>
 
       <footer className="app-footer-version">
-        OpenLIMS v0.18.0
+        OpenLIMS {OPENLIMS_VERSION}
       </footer>
 
       <TutorialBar userIsAdmin={userIsAdmin} />

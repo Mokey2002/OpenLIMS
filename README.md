@@ -1,95 +1,129 @@
-# OpenLIMS
+# 🧪 OpenLIMS
 
-OpenLIMS is an open-source, self-hosted Laboratory Information Management System (LIMS) built to support practical lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, and role-based access control.
+<p align="center">
+  <strong>Open-source, self-hosted Laboratory Information Management System for practical lab workflows.</strong>
+</p>
+
+<p align="center">
+  <a href="http://16.146.193.92"><strong>Live Demo</strong></a>
+  ·
+  <a href="#-demo-users">Demo Users</a>
+  ·
+  <a href="#-features">Features</a>
+  ·
+  <a href="#-architecture">Architecture</a>
+  ·
+  <a href="#-local-development">Local Development</a>
+</p>
+
+<p align="center">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.19.2-blue">
+  <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
+  <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
+  <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
+  <img alt="Database" src="https://img.shields.io/badge/database-PostgreSQL-336791">
+  <img alt="Assistant" src="https://img.shields.io/badge/assistant-OpenLIMS%20%7C%20OpenAI%20%7C%20Ollama-purple">
+</p>
+
+---
+
+## Overview
+
+**OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and a read-only assistant with optional OpenAI or local Ollama support.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
-> OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
+> **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-## Live Demo
+**Current release:** `v0.19.2 — Local Ollama Assistant`
+
+---
+
+## 🌐 Live Demo
 
 OpenLIMS is currently deployed here:
 
-```text
-http://16.146.193.92
-```
+**http://16.146.193.92**
 
-## Demo Users
+### 👥 Demo Users
 
 | User | Password | Role |
-|---|---|---|
-| director | Director123! | Admin / director access |
-| peter | peter123 | Lab tech access |
-| maria | maria123 | Lab tech access |
-| michael | michael123 | Lab tech access |
-| viewer | viewer123 | Read-only access |
+|---|---:|---|
+| `director` | `Director123!` | Admin / Director access |
+| `peter` | `peter123` | Lab tech access |
+| `maria` | `maria123` | Lab tech access |
+| `michael` | `michael123` | Lab tech access |
+| `viewer` | `viewer123` | Read-only access |
 
-## What OpenLIMS Does
+---
 
-OpenLIMS brings together several common lab workflow needs in one self-hosted application:
+## ✨ Features
 
-- Sample lifecycle tracking
-- Project-based organization
-- Project-scoped sample visibility
-- Cross-project sample linking
-- Inventory locations and containers
-- Sample attachments
-- Custom fields
-- Instrument CSV imports
-- Flexible CSV header detection
-- Direct instrument/API ingestion
-- Work items and structured results
-- FASTA import workflows
-- Sequence workspaces
-- Clustal Omega alignments
-- Local BLAST database building and search
-- Mass spectrometry file processing and comparison
-- Data migration toolkit for legacy lab database exports
-- Migration profiles and reusable field mappings
-- CSV migration preview / dry-run
-- Confirmed migration import
-- External sample IDs and aliases
-- Audit trails and reason-for-change logging
-- Notifications
-- Reports and CSV exports
-- Global search
-- System health checks
-- Real-time background job updates
+| Area | Capabilities |
+|---|---|
+| **Samples** | Sample lifecycle tracking, statuses, attachments, custom fields, reason-for-change logging |
+| **Projects** | Project workspaces, project-scoped visibility, project membership, cross-project sample linking |
+| **Inventory** | Locations, containers, sample placement |
+| **Imports** | Instrument CSV imports, flexible header detection, direct instrument/API ingestion |
+| **Migration** | Legacy CSV migration profiles, reusable field mappings, preview/dry-run, queued imports, row review |
+| **External IDs** | Preserve legacy sample IDs and aliases from older systems |
+| **Sequences** | FASTA import workflows, sequence workspaces, sequence metadata and features |
+| **Alignments** | Clustal Omega alignment jobs with downloadable output |
+| **BLAST** | Local BLAST database building and blastn/blastp search |
+| **Mass Spec** | mzML, mzXML, mzData, featureXML, consensusXML, mzID/mzIdentML review using pyOpenMS |
+| **Audit** | Audit events, reason-for-change tracking, CSV exports |
+| **Reports** | Project summaries, sample inventory, QC review, import summaries, audit activity |
+| **Assistant** | OpenLIMS Rules, optional OpenAI, optional local Ollama, engine/model indicator in UI |
+| **Jobs** | Celery/Redis background jobs and real-time WebSocket updates |
+| **Security** | JWT authentication and role-based permissions |
 
-## Core Concepts
+---
+
+## 🧭 Table of Contents
+
+- [Core Concepts](#-core-concepts)
+- [OpenLIMS Assistant](#-openlims-assistant)
+- [Architecture](#-architecture)
+- [Permissions](#-permissions)
+- [Local Development](#-local-development)
+- [Optional Local Ollama Assistant](#-optional-local-ollama-assistant)
+- [Testing](#-testing)
+- [Deployment Notes](#-deployment-notes)
+- [Current Project Status](#-current-project-status)
+- [Roadmap](#-roadmap)
+
+---
+
+## 🧬 Core Concepts
 
 ### Samples
 
 Samples are the central records in OpenLIMS. A sample can be assigned to a project, placed in a container, linked to results, connected to sequence records, used in BLAST or alignment workflows, associated with mass spectrometry runs, and connected to external IDs from legacy systems.
 
-Supported sample statuses include:
+Supported sample statuses:
 
-```text
-RECEIVED
-IN_PROGRESS
-QC
-REPORTED
-ARCHIVED
-```
+| Status |
+|---|
+| `RECEIVED` |
+| `IN_PROGRESS` |
+| `QC` |
+| `REPORTED` |
+| `ARCHIVED` |
 
-OpenLIMS also supports controlled status changes with a required reason for change. This helps create a stronger chain-of-custody and audit trail.
+OpenLIMS supports controlled status changes with a required reason for change, helping create a stronger chain-of-custody and audit trail.
 
 ### Projects
 
-Projects act as shared workspaces for lab teams. They can contain samples, sequence workspaces, imports, BLAST jobs, alignments, mass spec runs, notes, migration jobs, and project activity.
+Projects act as shared workspaces for lab teams. They can contain samples, sequence workspaces, imports, BLAST jobs, alignments, mass spectrometry runs, notes, migration jobs, and project activity.
 
 Project membership controls what non-admin users can see and modify.
 
 ### Cross-Project Sample Linking
 
-A sample has one primary project, but it can also be linked to additional projects.
-
-This supports cases where a sample belongs to one study or team but needs to be visible to another project without transferring ownership.
-
-Example:
+A sample has one primary project, but it can also be linked to additional projects. This supports cases where a sample belongs to one study or team but needs to be visible to another project without transferring ownership.
 
 ```text
-S-ALPHA-001
+Sample: S-ALPHA-001
 Primary Project: PRJ-ALPHA
 Linked Projects: PRJ-BETA, PRJ-GAMMA
 ```
@@ -111,14 +145,15 @@ Freezer A → BOX-A1 → S-ALPHA-001
 Fridge B  → BOX-B1 → S-BETA-001
 ```
 
-### Instrument Imports
+---
+
+## 📥 Instrument Imports
 
 OpenLIMS supports CSV-based instrument imports and direct API ingestion.
 
 Instrument profiles define:
 
-- Instrument code
-- Instrument name
+- Instrument code and name
 - Delimiter
 - Sample ID column
 - Column mappings
@@ -128,13 +163,9 @@ Instrument profiles define:
 - Header row behavior
 - Auto-detection of true CSV headers
 
-This makes it possible to import data from common lab instruments and convert rows into samples, work items, and structured results.
-
 ### Flexible CSV Imports
 
-Some instrument exports include metadata rows before the real CSV header. OpenLIMS supports flexible CSV parsing so the system can scan for the sample ID column and detect the actual header row.
-
-Example:
+Some instrument exports include metadata rows before the real CSV header. OpenLIMS can scan for the sample ID column and detect the actual header row.
 
 ```csv
 Instrument,Example Analyzer
@@ -144,29 +175,11 @@ sample_id,result,operator,qc_status
 S-ALPHA-001,pass,Peter,PASS
 ```
 
-OpenLIMS can skip the metadata rows and process the real table.
+---
 
-### Data Migration Toolkit
+## 🔁 Data Migration Toolkit
 
 OpenLIMS includes a data migration toolkit for bringing legacy lab database exports into OpenLIMS in a safer, reviewable way.
-
-Instead of directly copying an old database into OpenLIMS, users can export legacy data as CSV, define a reusable migration profile, map old columns to OpenLIMS fields, preview the migration, and then confirm the import.
-
-The migration toolkit supports:
-
-- Migration profiles
-- Reusable field mappings
-- CSV upload
-- Preview / dry-run before import
-- Project creation or matching
-- Sample creation or matching
-- External sample IDs and aliases
-- Custom field values
-- Work items and results
-- Migration job history
-- Audit events for completed migrations
-
-Example workflow:
 
 ```text
 Legacy database export
@@ -184,13 +197,25 @@ Confirm import
 Projects, samples, external IDs, custom fields, work items, and results created
 ```
 
-This is useful for labs moving away from custom databases or spreadsheets because OpenLIMS can preserve old identifiers while mapping the data into its project, sample, result, and audit model.
+The migration toolkit supports:
+
+- Migration profiles
+- Reusable field mappings
+- CSV upload
+- Preview / dry-run before import
+- Project creation or matching
+- Sample creation or matching
+- External sample IDs and aliases
+- Custom field values
+- Work items and results
+- Migration job history
+- Paginated migration row review
+- Skipped/error row filtering
+- CSV export for migration review
 
 ### External Sample IDs and Aliases
 
 OpenLIMS can preserve legacy identifiers from older databases or spreadsheets.
-
-Example:
 
 ```text
 Sample: S-UW-001
@@ -199,11 +224,46 @@ Label: legacy_specimen_id
 External ID: SP-00921
 ```
 
-This lets labs keep searching and tracing data using IDs from their previous systems while still organizing the data inside OpenLIMS.
+---
+
+## 🤖 OpenLIMS Assistant
+
+OpenLIMS includes a read-only assistant for quickly finding and summarizing records inside the system.
+
+The assistant can help users ask questions such as:
+
+- Find a sample by sample ID
+- Summarize a project
+- Show failed migration jobs
+- Show skipped migration rows
+- Explain why a migration job failed
+- Identify the current logged-in OpenLIMS user
+
+The assistant uses safe backend tools as the source of truth. It does **not** directly modify database records.
+
+### Assistant Modes
+
+| Mode | Description |
+|---|---|
+| **OpenLIMS Rules** | Built-in rule-based search and summaries with no external model required |
+| **OpenAI** | Optional external LLM summaries using server-side API configuration |
+| **Ollama** | Optional local LLM summaries using a self-hosted Ollama container |
+
+If an LLM is unavailable, the assistant falls back to **OpenLIMS Rules** mode.
+
+The UI displays the active engine/model, such as:
+
+```text
+Using: OpenLIMS Rules
+Using: OpenAI · gpt-5
+Using: Ollama · llama3.2:1b
+```
+
+---
+
+## 🧫 Sequence, BLAST, and Mass Spec Workflows
 
 ### Sequence Workspaces
-
-OpenLIMS includes sequence workspace support for DNA, RNA, and protein records.
 
 Users can:
 
@@ -213,8 +273,6 @@ Users can:
 - Add sequence features
 - Import FASTA files
 - Use sequences in alignment and BLAST workflows
-
-Example workflow:
 
 ```text
 Sample → FASTA Import → Sequence Workspace → Alignment Job → BLAST Search
@@ -257,16 +315,15 @@ Supported workflows include:
 - Protein and peptide summaries
 - Run comparison by project, sample, or manual selection
 
-### Audit Trail
+---
 
-OpenLIMS records important activity as audit events.
+## 🧾 Audit Trail and Reports
 
-Examples include:
+OpenLIMS records important activity as audit events, including:
 
 - Sample created
 - Sample status changed
-- Sample linked to project
-- Sample unlinked from project
+- Sample linked/unlinked from project
 - Container assigned
 - Attachment uploaded
 - Results imported
@@ -278,18 +335,9 @@ Examples include:
 - Mass spec run uploaded or processed
 - Settings changed
 
-For controlled sample status changes, OpenLIMS records:
+For controlled sample status changes, OpenLIMS records actor, before/after state, changed fields, reason for change, and timestamp.
 
-- Actor
-- Before state
-- After state
-- Changed fields
-- Reason for change
-- Timestamp
-
-### Reports
-
-OpenLIMS includes operational reports and CSV exports for:
+Reports and CSV exports include:
 
 - Project summaries
 - Sample inventory
@@ -299,7 +347,9 @@ OpenLIMS includes operational reports and CSV exports for:
 - BLAST summaries
 - Audit activity
 
-### Real-Time Job Updates
+---
+
+## ⚡ Real-Time Job Updates
 
 Background jobs run through Celery and Redis. OpenLIMS uses Django Channels and WebSockets to update the frontend when jobs change status.
 
@@ -311,43 +361,46 @@ Supported live-update workflows include:
 - BLAST searches
 - Mass spec processing
 
-## Permissions
+---
+
+## 🔐 Permissions
 
 OpenLIMS uses JWT authentication and role-based permissions.
 
 | Role | Purpose |
 |---|---|
-| Admin / Director | Full system access |
-| Tech | Lab workflow access for assigned projects |
-| Viewer | Read-only access |
+| **Admin / Director** | Full system access |
+| **Tech** | Lab workflow access for assigned projects |
+| **Viewer** | Read-only access |
 
 ### Sample Access Rules
 
 | Role | Sample Visibility | Modify Samples |
 |---|---|---|
-| Admin / Director | All samples, including unassigned samples | Yes |
-| Tech | Samples in assigned projects, linked project samples, and unassigned samples they created | Only samples they have modification rights for |
-| Viewer | Samples in assigned or linked projects | No |
+| **Admin / Director** | All samples, including unassigned samples | Yes |
+| **Tech** | Samples in assigned projects, linked project samples, and unassigned samples they created | Only samples they have modification rights for |
+| **Viewer** | Samples in assigned or linked projects | No |
 
 Linked-project access allows a user to see a sample, but it does not automatically grant edit or import permissions.
 
-## Architecture
+---
 
-OpenLIMS is built with:
+## 🏗 Architecture
 
 | Layer | Technology |
 |---|---|
-| Frontend | React + Vite |
-| Backend API | Django REST Framework |
-| Database | PostgreSQL |
-| Background Jobs | Celery |
-| Broker / Cache | Redis |
-| Real-Time Updates | Django Channels + Daphne |
-| Alignments | Clustal Omega |
-| BLAST | NCBI BLAST+ |
-| Mass Spec | pyOpenMS |
-| Reverse Proxy | Caddy |
-| Deployment | Docker Compose |
+| **Frontend** | React + Vite |
+| **Backend API** | Django REST Framework |
+| **Database** | PostgreSQL |
+| **Background Jobs** | Celery |
+| **Broker / Cache** | Redis |
+| **Real-Time Updates** | Django Channels + Daphne |
+| **Alignments** | Clustal Omega |
+| **BLAST** | NCBI BLAST+ |
+| **Mass Spec** | pyOpenMS |
+| **Assistant** | OpenLIMS Rules, optional OpenAI, optional Ollama |
+| **Reverse Proxy** | Caddy |
+| **Deployment** | Docker Compose |
 
 High-level architecture:
 
@@ -367,29 +420,38 @@ Imports / Migrations / Alignments / BLAST / Mass Spec Jobs
 Daphne + Django Channels
    ↓
 WebSocket job updates
+
+OpenLIMS Assistant
+   ↓
+Safe read-only backend tools
+   ↓
+Optional OpenAI or local Ollama summary
 ```
 
-## Main Django Apps
+### Main Django Apps
 
 | App | Responsibility |
 |---|---|
-| samples | Sample lifecycle, access control, attachments, transitions |
-| projects | Projects, membership, project posts |
-| inventory | Locations and containers |
-| imports | Instrument profiles, CSV imports, direct instrument ingestion |
-| migration_toolkit | Legacy CSV migration profiles, field mappings, dry-run previews, imports, and external IDs |
-| results | Work items and structured results |
-| events | Audit trail and audit export |
-| notifications | User notifications |
-| custom_fields | Configurable fields |
-| sequences | Sequence records and features |
-| alignments | Clustal Omega alignment jobs |
-| blast | BLAST databases, jobs, and hits |
-| mass_spec | Mass spec uploads, processing, summaries, and comparison |
-| settings_app | Admin settings |
-| core | Users, roles, permissions, search, shared utilities |
+| `samples` | Sample lifecycle, access control, attachments, transitions |
+| `projects` | Projects, membership, project posts |
+| `inventory` | Locations and containers |
+| `imports` | Instrument profiles, CSV imports, direct instrument ingestion |
+| `migration_toolkit` | Legacy CSV migration profiles, field mappings, dry-run previews, imports, and external IDs |
+| `results` | Work items and structured results |
+| `events` | Audit trail and audit export |
+| `notifications` | User notifications |
+| `custom_fields` | Configurable fields |
+| `sequences` | Sequence records and features |
+| `alignments` | Clustal Omega alignment jobs |
+| `blast` | BLAST databases, jobs, and hits |
+| `mass_spec` | Mass spec uploads, processing, summaries, and comparison |
+| `settings_app` | Admin settings |
+| `assistant` | Read-only assistant tools, OpenAI/Ollama summaries, and assistant status |
+| `core` | Users, roles, permissions, search, shared utilities |
 
-## Local Development
+---
+
+## 💻 Local Development
 
 ### 1. Clone the repository
 
@@ -422,6 +484,12 @@ CELERY_RESULT_BACKEND=redis://redis:6379/1
 CHANNEL_REDIS_URL=redis://redis:6379/2
 
 INSTRUMENT_API_KEY=my-shared-lab-instrument-key
+
+OPENLIMS_ASSISTANT_LLM_ENABLED=false
+OPENLIMS_ASSISTANT_LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_MODEL=llama3.2:1b
+OLLAMA_TIMEOUT_SECONDS=25
 ```
 
 ### 3. Start services
@@ -444,14 +512,52 @@ docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.p
 
 ### 6. Open the app
 
-```text
-Frontend: http://localhost:5173
-API:      http://localhost:8000
-Admin:    http://localhost:8000/admin
-Health:   http://localhost:8000/api/health/
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:5173 |
+| API | http://localhost:8000 |
+| Admin | http://localhost:8000/admin |
+| Health | http://localhost:8000/api/health/ |
+
+---
+
+## 🦙 Optional Local Ollama Assistant
+
+OpenLIMS can run the assistant with a local Ollama model instead of an external LLM provider.
+
+Enable the assistant in `deploy/.env`:
+
+```env
+OPENLIMS_ASSISTANT_LLM_ENABLED=true
+OPENLIMS_ASSISTANT_LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_MODEL=llama3.2:1b
+OLLAMA_TIMEOUT_SECONDS=25
 ```
 
-## Running Tests
+Start the Ollama container:
+
+```bash
+docker compose -p openlims -f deploy/docker-compose.yml up -d ollama
+```
+
+Pull a small model:
+
+```bash
+docker compose -p openlims -f deploy/docker-compose.yml exec ollama ollama pull llama3.2:1b
+```
+
+Restart the API and frontend:
+
+```bash
+docker compose -p openlims -f deploy/docker-compose.yml restart api frontend
+```
+
+The Assistant page will show which engine is active: **OpenLIMS Rules**, **OpenAI**, or **Ollama**.
+
+---
+
+## 🧪 Testing
 
 Run backend tests:
 
@@ -473,7 +579,9 @@ npm install
 npm run build
 ```
 
-## Health Check
+---
+
+## 🩺 Health Check
 
 OpenLIMS includes a health endpoint:
 
@@ -491,7 +599,23 @@ The health check verifies:
 - makeblastdb
 - pyOpenMS
 
-## Deployment Notes
+---
+
+## 🔖 Frontend Version Footer
+
+The frontend footer should use the generated `frontend/src/version.js` file instead of a hardcoded version string.
+
+Recommended footer source:
+
+```jsx
+OpenLIMS {OPENLIMS_VERSION}
+```
+
+The version file can be generated from the latest Git tag during frontend dev/build so the footer stays aligned with releases.
+
+---
+
+## 🚀 Deployment Notes
 
 OpenLIMS can run locally, on a private lab server, on a VM, or on cloud infrastructure.
 
@@ -513,7 +637,7 @@ Celery Worker
 
 For real-time updates, the production reverse proxy should forward WebSocket traffic under `/ws/*` to the Django/Daphne API service.
 
-## Database Backup
+### Database Backup
 
 Create a backup:
 
@@ -527,7 +651,9 @@ Restore a backup:
 cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.prod.yml exec -T db psql -U openlims openlims
 ```
 
-## Current Project Status
+---
+
+## 📌 Current Project Status
 
 OpenLIMS is a production-style open-source LIMS prototype with many production-shaped patterns already in place:
 
@@ -553,6 +679,10 @@ OpenLIMS is a production-style open-source LIMS prototype with many production-s
 - pyOpenMS mass spectrometry workflows
 - Reports
 - Global search
+- OpenLIMS Assistant
+- Optional OpenAI assistant summaries
+- Optional Docker-based local Ollama assistant
+- Assistant engine/model indicator in the UI
 - Admin settings
 - System health checks
 - CI checks
@@ -567,7 +697,9 @@ Remaining production-readiness work includes:
 - Validation-readiness documentation
 - Formal regulated-environment validation package
 
-## Roadmap
+---
+
+## 🗺 Roadmap
 
 Planned and future improvements include:
 
@@ -578,8 +710,12 @@ Planned and future improvements include:
 - External file storage support
 - Monitoring and alerting
 - Validation-readiness documentation
+- Assistant calculations for safe counts, averages, percentages, and summaries
+- Confirmed assistant actions with explicit user approval
 
-## Project Goals
+---
+
+## 🎯 Project Goals
 
 OpenLIMS aims to be:
 
@@ -592,12 +728,17 @@ OpenLIMS aims to be:
 - Useful for small labs, research groups, and biotech teams
 - A strong foundation for lab workflow automation
 
-## Author
+---
 
-Eduardo L
+## 👤 Author
+
+**Eduardo L**
 
 LinkedIn: https://www.linkedin.com/in/edlemus/
 
-## License
+---
+
+## 📄 License
 
 Apache 2.0
+
