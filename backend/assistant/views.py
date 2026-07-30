@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .llm import enhance_with_llm
 from .tools import route_assistant_message
 
 
@@ -17,9 +18,16 @@ class AssistantChatView(APIView):
         serializer = AssistantChatSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        message = serializer.validated_data["message"]
+
         result = route_assistant_message(
-            message=serializer.validated_data["message"],
+            message=message,
             user=request.user,
+        )
+
+        result = enhance_with_llm(
+            message=message,
+            tool_result=result,
         )
 
         return Response(result, status=status.HTTP_200_OK)
