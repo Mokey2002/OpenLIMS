@@ -402,3 +402,47 @@ body {
   font-size: 0.8rem;
   color: #6c757d;
 }
+
+.assistant-chat-window {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 62vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.assistant-message {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fff;
+}
+
+.assistant-message-user {
+  background: #f8f9fa;
+}
+
+.assistant-message-assistant {
+  background: #ffffff;
+}
+
+.assistant-message-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #6c757d;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.assistant-message-body {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.assistant-links {
+  margin-top: 12px;
+}

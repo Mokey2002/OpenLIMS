@@ -258,6 +258,10 @@ export default function Layout() {
                 Getting Started
               </Nav.Link>
 
+              <Nav.Link as={NavLink} to="/assistant">
+                Assistant
+              </Nav.Link>
+
               <NavDropdown title="Core" id="core-nav">
                 <DropdownItemLink to="/projects">Projects</DropdownItemLink>
                 <DropdownItemLink to="/samples">Samples</DropdownItemLink>
