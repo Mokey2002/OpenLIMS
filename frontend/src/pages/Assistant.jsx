@@ -66,6 +66,8 @@ export default function Assistant() {
           content: data.answer || "No answer returned.",
           links: data.links || [],
           suggestions: data.suggestions || [],
+          mode: data.mode || "rules",
+          llmError: data.llm_error || "",
         },
       ]);
     } catch (e) {
@@ -98,8 +100,9 @@ export default function Assistant() {
       {err && <Alert variant="danger">{err}</Alert>}
 
       <Alert variant="info">
-        This first version is read-only. It can search and summarize OpenLIMS
-        records, but it cannot create, edit, delete, or run migrations.
+        This assistant is read-only. When an LLM key is configured, it can
+        summarize results more naturally. Without a key, it falls back to
+        rule-based search.
       </Alert>
 
       <Card className="app-card mb-4">
@@ -112,9 +115,23 @@ export default function Assistant() {
               >
                 <div className="assistant-message-label">
                   {item.role === "user" ? "You" : "Assistant"}
+                  {item.role === "assistant" && item.mode && (
+                    <Badge
+                      bg={item.mode === "llm" ? "primary" : "secondary"}
+                      className="ms-2"
+                    >
+                      {item.mode === "llm" ? "LLM" : "Rules"}
+                    </Badge>
+                  )}
                 </div>
 
                 <pre className="assistant-message-body">{item.content}</pre>
+
+                {item.llmError && (
+                  <Alert variant="warning" className="mt-2 mb-2">
+                    {item.llmError}
+                  </Alert>
+                )}
 
                 {item.links?.length > 0 && (
                   <div className="assistant-links">

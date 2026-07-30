@@ -16,3 +16,4 @@ channels-redis
 daphne
 numpy
 pyopenms
+openai>=2.0.0

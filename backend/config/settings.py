@@ -1,3 +1,4 @@
+import os
 """
 Django settings for config project.
 
@@ -180,3 +181,14 @@ MEDIA_ROOT = BASE_DIR / "media"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Optional LLM support for the OpenLIMS Assistant.
+# The assistant remains read-only. If no key is configured, it falls back to rule-based mode.
+OPENLIMS_ASSISTANT_LLM_ENABLED = os.getenv(
+    "OPENLIMS_ASSISTANT_LLM_ENABLED",
+    "false",
+).lower() in ["1", "true", "yes", "on"]
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+
