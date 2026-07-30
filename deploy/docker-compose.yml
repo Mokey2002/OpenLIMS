@@ -36,6 +36,8 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - db
       - redis
@@ -55,7 +57,16 @@ services:
       - redis
 
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: openlims-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
 volumes:
+  ollama_data:
   postgres_data:
   media_data:
   static_data:
