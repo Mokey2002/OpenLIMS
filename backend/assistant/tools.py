@@ -365,9 +365,52 @@ def search_migration_rows(message, limit=10):
     }
 
 
+
+def answer_current_user(message, user):
+    lower = str(message or "").strip().lower()
+
+    identity_phrases = [
+        "what is my name",
+        "what's my name",
+        "whats my name",
+        "who am i",
+        "who am i logged in as",
+        "what user am i",
+        "my username",
+    ]
+
+    if not any(phrase in lower for phrase in identity_phrases):
+        return None
+
+    username = getattr(user, "username", "") or "Unknown"
+    roles = getattr(user, "roles", None)
+
+    role_text = ""
+    if roles:
+        try:
+            role_text = f" Your role(s): {', '.join(roles)}."
+        except Exception:
+            role_text = ""
+
+    return {
+        "answer": f"You are logged in as {username}.{role_text}",
+        "links": [],
+        "suggestions": [
+            "Find sample S-UW-101",
+            "Show failed migration jobs",
+            "Summarize project PRJ-UW-PILOT",
+        ],
+        "skip_llm": True,
+    }
+
+
 def route_assistant_message(message, user):
     query = clean_query(message)
     lower = query.lower()
+
+    current_user_result = answer_current_user(query, user)
+    if current_user_result:
+        return current_user_result
 
     if not query:
         return {

@@ -184,6 +184,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Optional LLM support for the OpenLIMS Assistant.
 # The assistant remains read-only. If no key is configured, it falls back to rule-based mode.
+OPENLIMS_ASSISTANT_LLM_PROVIDER = os.getenv("OPENLIMS_ASSISTANT_LLM_PROVIDER", "openai")
 OPENLIMS_ASSISTANT_LLM_ENABLED = os.getenv(
     "OPENLIMS_ASSISTANT_LLM_ENABLED",
     "false",
@@ -191,4 +192,9 @@ OPENLIMS_ASSISTANT_LLM_ENABLED = os.getenv(
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+
+# Optional local Ollama support for the OpenLIMS Assistant.
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
+OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "60"))
 

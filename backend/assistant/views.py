@@ -3,7 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .llm import enhance_with_llm
+from .llm import configured_model_info, enhance_with_llm
 from .tools import route_assistant_message
 
 
@@ -31,3 +31,10 @@ class AssistantChatView(APIView):
         )
 
         return Response(result, status=status.HTTP_200_OK)
+
+class AssistantStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(configured_model_info(), status=status.HTTP_200_OK)
+

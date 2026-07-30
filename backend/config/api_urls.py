@@ -14,7 +14,7 @@ from alignments.views import AlignmentJobViewSet
 from settings_app.views import SystemSettingsViewSet
 from blast.views import BlastDatabaseViewSet, BlastJobViewSet
 from mass_spec.views import MassSpecRunViewSet
-from assistant.views import AssistantChatView
+from assistant.views import AssistantChatView, AssistantStatusView
 from migration_toolkit.views import (
     MigrationFieldMappingViewSet,
     MigrationJobViewSet,
@@ -57,4 +57,5 @@ router.register(r"migration-row-records", MigrationRowRecordViewSet, basename="m
 
 urlpatterns = router.urls + [
     path("assistant/chat/", AssistantChatView.as_view(), name="assistant-chat"),
+    path("assistant/status/", AssistantStatusView.as_view(), name="assistant-status"),
 ]

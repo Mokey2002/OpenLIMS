@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Badge,
@@ -8,7 +8,7 @@ import {
   Spinner,
 } from "react-bootstrap";
 import { Link } from "react-router-dom";
-import { apiPost } from "../api";
+import { apiGet, apiPost } from "../api";
 
 const STARTER_PROMPTS = [
   "Summarize project PRJ-UW-PILOT",
@@ -19,8 +19,15 @@ const STARTER_PROMPTS = [
   "Show running migration jobs",
 ];
 
+function badgeVariantForProvider(provider) {
+  if (provider === "openai") return "primary";
+  if (provider === "ollama") return "success";
+  return "secondary";
+}
+
 export default function Assistant() {
   const [message, setMessage] = useState("");
+  const [assistantStatus, setAssistantStatus] = useState(null);
   const [history, setHistory] = useState([
     {
       role: "assistant",
@@ -28,10 +35,32 @@ export default function Assistant() {
         "Ask me about samples, projects, migration jobs, skipped rows, failed imports, or where a sample is located.",
       links: [],
       suggestions: STARTER_PROMPTS,
+      modelInfo: {
+        provider: "openlims",
+        model: "rules",
+        display_name: "OpenLIMS Rules",
+      },
     },
   ]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+
+  async function loadAssistantStatus() {
+    try {
+      const data = await apiGet("/api/assistant/status/");
+      setAssistantStatus(data);
+    } catch (e) {
+      setAssistantStatus({
+        provider: "openlims",
+        model: "rules",
+        display_name: "OpenLIMS Rules",
+      });
+    }
+  }
+
+  useEffect(() => {
+    loadAssistantStatus();
+  }, []);
 
   async function sendMessage(textOverride = "") {
     const text = (textOverride || message).trim();
@@ -66,10 +95,20 @@ export default function Assistant() {
           content: data.answer || "No answer returned.",
           links: data.links || [],
           suggestions: data.suggestions || [],
-          mode: data.mode || "rules",
+          mode: data.mode || "openlims",
           llmError: data.llm_error || "",
+          modelInfo:
+            data.model_info || {
+              provider: "openlims",
+              model: "rules",
+              display_name: "OpenLIMS Rules",
+            },
         },
       ]);
+
+      if (data.model_info) {
+        setAssistantStatus(data.model_info);
+      }
     } catch (e) {
       setErr(e.message || String(e));
       setHistory(nextHistory);
@@ -83,6 +122,9 @@ export default function Assistant() {
     sendMessage();
   }
 
+  const activeProvider = assistantStatus?.provider || "openlims";
+  const activeDisplayName = assistantStatus?.display_name || "OpenLIMS Rules";
+
   return (
     <div className="w-100">
       <div className="page-header">
@@ -94,77 +136,87 @@ export default function Assistant() {
           </p>
         </div>
 
-        <Badge bg="dark">v0.19 read-only</Badge>
+        <div className="d-flex flex-column align-items-end gap-2">
+          <Badge bg="dark">v0.19.2 local LLM</Badge>
+          <Badge bg={badgeVariantForProvider(activeProvider)}>
+            Using: {activeDisplayName}
+          </Badge>
+        </div>
       </div>
 
       {err && <Alert variant="danger">{err}</Alert>}
 
       <Alert variant="info">
-        This assistant is read-only. When an LLM key is configured, it can
-        summarize results more naturally. Without a key, it falls back to
-        rule-based search.
+        This assistant is read-only. It can use OpenAI, a local Ollama model,
+        or the built-in OpenLIMS rule-based search.
       </Alert>
 
       <Card className="app-card mb-4">
         <Card.Body>
           <div className="assistant-chat-window">
-            {history.map((item, index) => (
-              <div
-                key={`${item.role}-${index}`}
-                className={`assistant-message assistant-message-${item.role}`}
-              >
-                <div className="assistant-message-label">
-                  {item.role === "user" ? "You" : "Assistant"}
-                  {item.role === "assistant" && item.mode && (
-                    <Badge
-                      bg={item.mode === "llm" ? "primary" : "secondary"}
-                      className="ms-2"
-                    >
-                      {item.mode === "llm" ? "LLM" : "Rules"}
-                    </Badge>
+            {history.map((item, index) => {
+              const provider = item.modelInfo?.provider || "openlims";
+              const displayName =
+                item.modelInfo?.display_name || "OpenLIMS Rules";
+
+              return (
+                <div
+                  key={`${item.role}-${index}`}
+                  className={`assistant-message assistant-message-${item.role}`}
+                >
+                  <div className="assistant-message-label">
+                    {item.role === "user" ? "You" : "Assistant"}
+                    {item.role === "assistant" && (
+                      <Badge
+                        bg={badgeVariantForProvider(provider)}
+                        className="ms-2"
+                      >
+                        {displayName}
+                      </Badge>
+                    )}
+                  </div>
+
+                  <pre className="assistant-message-body">{item.content}</pre>
+
+                  {item.llmError && (
+                    <Alert variant="warning" className="mt-2 mb-2">
+                      {item.llmError}
+                    </Alert>
+                  )}
+
+                  {item.links?.length > 0 && (
+                    <div className="assistant-links">
+                      {item.links.map((link, linkIndex) => (
+                        <Link
+                          key={`${link.url}-${linkIndex}`}
+                          to={link.url}
+                          className="btn btn-sm btn-outline-dark me-2 mb-2"
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+
+                  {item.suggestions?.length > 0 && (
+                    <div className="assistant-suggestions mt-2">
+                      {item.suggestions.map((suggestion) => (
+                        <Button
+                          key={suggestion}
+                          size="sm"
+                          variant="outline-secondary"
+                          className="me-2 mb-2"
+                          disabled={loading}
+                          onClick={() => sendMessage(suggestion)}
+                        >
+                          {suggestion}
+                        </Button>
+                      ))}
+                    </div>
                   )}
                 </div>
-
-                <pre className="assistant-message-body">{item.content}</pre>
-
-                {item.llmError && (
-                  <Alert variant="warning" className="mt-2 mb-2">
-                    {item.llmError}
-                  </Alert>
-                )}
-
-                {item.links?.length > 0 && (
-                  <div className="assistant-links">
-                    {item.links.map((link, linkIndex) => (
-                      <Link
-                        key={`${link.url}-${linkIndex}`}
-                        to={link.url}
-                        className="btn btn-sm btn-outline-dark me-2 mb-2"
-                      >
-                        {link.label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-
-                {item.suggestions?.length > 0 && (
-                  <div className="assistant-suggestions mt-2">
-                    {item.suggestions.map((suggestion) => (
-                      <Button
-                        key={suggestion}
-                        size="sm"
-                        variant="outline-secondary"
-                        className="me-2 mb-2"
-                        disabled={loading}
-                        onClick={() => sendMessage(suggestion)}
-                      >
-                        {suggestion}
-                      </Button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
 
             {loading && (
               <div className="assistant-message assistant-message-assistant">
