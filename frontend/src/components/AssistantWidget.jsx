@@ -1,23 +1,17 @@
-import { useEffect, useState } from "react";
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  Form,
-  Spinner,
-} from "react-bootstrap";
+import { useEffect, useRef, useState } from "react";
+import { Alert, Badge, Button, Form, Spinner } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 
 const STARTER_PROMPTS = [
-  "Summarize project PRJ-UW-PILOT",
-  "Find sample S-UW-101",
+  "Find sample",
   "Show failed migration jobs",
   "Show skipped migration rows",
-  "Why did migration job #1 fail?",
-  "Show running migration jobs",
+  "What's my name?",
 ];
+
+const DEMO_ASSISTANT_NOTE =
+  "Public demo note: this hosted demo uses OpenLIMS Rules because server resources are limited. Self-hosted deployments can enable OpenAI or Ollama.";
 
 function badgeVariantForProvider(provider) {
   if (provider === "openai") return "primary";
@@ -25,14 +19,17 @@ function badgeVariantForProvider(provider) {
   return "secondary";
 }
 
-export default function Assistant() {
+export default function AssistantWidget() {
+  const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [assistantStatus, setAssistantStatus] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
   const [history, setHistory] = useState([
     {
       role: "assistant",
       content:
-        "Ask me about samples, projects, migration jobs, skipped rows, failed imports, or where a sample is located.",
+        "Hi, I can help you find samples, projects, migration jobs, skipped rows, and failed imports.",
       links: [],
       suggestions: STARTER_PROMPTS,
       modelInfo: {
@@ -42,14 +39,14 @@ export default function Assistant() {
       },
     },
   ]);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
+
+  const bottomRef = useRef(null);
 
   async function loadAssistantStatus() {
     try {
       const data = await apiGet("/api/assistant/status/");
       setAssistantStatus(data);
-    } catch (e) {
+    } catch {
       setAssistantStatus({
         provider: "openlims",
         model: "rules",
@@ -61,6 +58,12 @@ export default function Assistant() {
   useEffect(() => {
     loadAssistantStatus();
   }, []);
+
+  useEffect(() => {
+    if (open && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [history, loading, open]);
 
   async function sendMessage(textOverride = "") {
     const text = (textOverride || message).trim();
@@ -88,6 +91,13 @@ export default function Assistant() {
         message: text,
       });
 
+      const modelInfo =
+        data.model_info || {
+          provider: "openlims",
+          model: "rules",
+          display_name: "OpenLIMS Rules",
+        };
+
       setHistory([
         ...nextHistory,
         {
@@ -95,20 +105,12 @@ export default function Assistant() {
           content: data.answer || "No answer returned.",
           links: data.links || [],
           suggestions: data.suggestions || [],
-          mode: data.mode || "openlims",
           llmError: data.llm_error || "",
-          modelInfo:
-            data.model_info || {
-              provider: "openlims",
-              model: "rules",
-              display_name: "OpenLIMS Rules",
-            },
+          modelInfo,
         },
       ]);
 
-      if (data.model_info) {
-        setAssistantStatus(data.model_info);
-      }
+      setAssistantStatus(modelInfo);
     } catch (e) {
       setErr(e.message || String(e));
       setHistory(nextHistory);
@@ -126,41 +128,38 @@ export default function Assistant() {
   const activeDisplayName = assistantStatus?.display_name || "OpenLIMS Rules";
 
   return (
-    <div className="w-100">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">OpenLIMS Assistant</h1>
-          <p className="page-subtitle">
-            Read-only assistant for finding samples, reviewing projects, and
-            explaining migration jobs.
-          </p>
-        </div>
+    <>
+      {open && (
+        <div className="assistant-widget-panel">
+          <div className="assistant-widget-header">
+            <div>
+              <div className="assistant-widget-title">OpenLIMS Assistant</div>
+              <Badge bg={badgeVariantForProvider(activeProvider)}>
+                {activeDisplayName}
+              </Badge>
+            </div>
 
-        <div className="d-flex flex-column align-items-end gap-2">
-          <Badge bg="dark">v0.19.2 local LLM</Badge>
-          <Badge bg={badgeVariantForProvider(activeProvider)}>
-            Using: {activeDisplayName}
-          </Badge>
-        </div>
-      </div>
+            <Button
+              size="sm"
+              variant="outline-light"
+              onClick={() => setOpen(false)}
+              aria-label="Close assistant"
+            >
+              ×
+            </Button>
+          </div>
 
-      {err && <Alert variant="danger">{err}</Alert>}
+          <div className="assistant-widget-demo-note">
+            {DEMO_ASSISTANT_NOTE}
+          </div>
 
-      <Alert variant="info">
-        This assistant is read-only. It can use OpenAI, a local Ollama model,
-        or the built-in OpenLIMS rule-based search.
-      </Alert>
+          <div className="assistant-widget-body">
+            {err && (
+              <Alert variant="danger" className="assistant-widget-alert">
+                {err}
+              </Alert>
+            )}
 
-      <Alert variant="secondary">
-        Public demo note: this hosted demo uses OpenLIMS Rules because server
-        resources are limited. Self-hosted deployments can enable OpenAI or
-        Ollama through environment settings.
-      </Alert>
-
-
-      <Card className="app-card mb-4">
-        <Card.Body>
-          <div className="assistant-chat-window">
             {history.map((item, index) => {
               const provider = item.modelInfo?.provider || "openlims";
               const displayName =
@@ -169,9 +168,9 @@ export default function Assistant() {
               return (
                 <div
                   key={`${item.role}-${index}`}
-                  className={`assistant-message assistant-message-${item.role}`}
+                  className={`assistant-widget-message assistant-widget-message-${item.role}`}
                 >
-                  <div className="assistant-message-label">
+                  <div className="assistant-widget-message-label">
                     {item.role === "user" ? "You" : "Assistant"}
                     {item.role === "assistant" && (
                       <Badge
@@ -183,21 +182,24 @@ export default function Assistant() {
                     )}
                   </div>
 
-                  <pre className="assistant-message-body">{item.content}</pre>
+                  <div className="assistant-widget-message-text">
+                    {item.content}
+                  </div>
 
                   {item.llmError && (
-                    <Alert variant="warning" className="mt-2 mb-2">
+                    <Alert variant="warning" className="mt-2 mb-1 py-2">
                       {item.llmError}
                     </Alert>
                   )}
 
                   {item.links?.length > 0 && (
-                    <div className="assistant-links">
+                    <div className="assistant-widget-links">
                       {item.links.map((link, linkIndex) => (
                         <Link
                           key={`${link.url}-${linkIndex}`}
                           to={link.url}
                           className="btn btn-sm btn-outline-dark me-2 mb-2"
+                          onClick={() => setOpen(false)}
                         >
                           {link.label}
                         </Link>
@@ -206,7 +208,7 @@ export default function Assistant() {
                   )}
 
                   {item.suggestions?.length > 0 && (
-                    <div className="assistant-suggestions mt-2">
+                    <div className="assistant-widget-suggestions">
                       {item.suggestions.map((suggestion) => (
                         <Button
                           key={suggestion}
@@ -226,56 +228,51 @@ export default function Assistant() {
             })}
 
             {loading && (
-              <div className="assistant-message assistant-message-assistant">
-                <div className="assistant-message-label">Assistant</div>
-                <div className="d-flex align-items-center gap-2">
+              <div className="assistant-widget-message assistant-widget-message-assistant">
+                <div className="assistant-widget-message-label">Assistant</div>
+                <div className="assistant-widget-thinking">
                   <Spinner animation="border" size="sm" />
-                  <span>Searching OpenLIMS...</span>
+                  <span className="assistant-typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </span>
                 </div>
               </div>
             )}
+
+            <div ref={bottomRef} />
           </div>
 
-          <Form onSubmit={submit} className="mt-3">
-            <div className="d-flex gap-2">
-              <Form.Control
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Ask about a sample, project, migration job, or failed import..."
-                disabled={loading}
-              />
-
-              <Button
-                type="submit"
-                variant="dark"
-                disabled={loading || !message.trim()}
-              >
-                Send
-              </Button>
-            </div>
+          <Form onSubmit={submit} className="assistant-widget-form">
+            <Form.Control
+              size="sm"
+              value={message}
+              disabled={loading}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Ask OpenLIMS..."
+            />
+            <Button
+              size="sm"
+              type="submit"
+              variant="dark"
+              disabled={loading || !message.trim()}
+            >
+              Send
+            </Button>
           </Form>
-        </Card.Body>
-      </Card>
+        </div>
+      )}
 
-      <Card className="app-card">
-        <Card.Body>
-          <h5 className="section-title">Example questions</h5>
-
-          <div className="d-flex flex-wrap gap-2">
-            {STARTER_PROMPTS.map((prompt) => (
-              <Button
-                key={prompt}
-                size="sm"
-                variant="outline-dark"
-                disabled={loading}
-                onClick={() => sendMessage(prompt)}
-              >
-                {prompt}
-              </Button>
-            ))}
-          </div>
-        </Card.Body>
-      </Card>
-    </div>
+      <button
+        type="button"
+        className={`assistant-widget-button ${open ? "assistant-widget-button-open" : ""}`}
+        onClick={() => setOpen(!open)}
+        aria-label="Open OpenLIMS Assistant"
+      >
+        <span className="assistant-widget-pulse"></span>
+        <span className="assistant-widget-icon">🤖</span>
+      </button>
+    </>
   );
 }

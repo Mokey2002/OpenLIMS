@@ -19,6 +19,7 @@ import { clearTokens } from "./auth";
 import { apiGet } from "./api";
 import { isAdmin, isTech } from "./authz";
 import { OPENLIMS_VERSION } from "./version";
+import AssistantWidget from "./components/AssistantWidget";
 
 const baseTutorialSteps = [
   {
@@ -350,6 +351,7 @@ export default function Layout() {
         OpenLIMS {OPENLIMS_VERSION}
       </footer>
 
+      <AssistantWidget />
       <TutorialBar userIsAdmin={userIsAdmin} />
     </>
   );
