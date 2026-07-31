@@ -115,61 +115,88 @@ def get_sample_detail(sample):
 
 def search_samples(message, user, limit=10):
     query = clean_query(message)
-    tokens = extract_sample_like_tokens(query)
 
-    queryset = get_sample_access_queryset(
-        Sample.objects.select_related("project", "created_by").all(),
-        user,
+    sample_query = query
+    for phrase in [
+        "find sample",
+        "show sample",
+        "search sample",
+        "open sample",
+        "sample",
+        "find",
+        "show",
+        "search",
+        "open",
+    ]:
+        sample_query = sample_query.replace(phrase, "", 1)
+        sample_query = sample_query.replace(phrase.title(), "", 1)
+
+    sample_query = sample_query.strip()
+
+    base_queryset = Sample.objects.all().select_related(
+        "project",
+        "container",
+        "created_by",
     )
 
-    if tokens:
-        sample_filter = Q()
-        for token in tokens:
-            sample_filter |= Q(sample_id__icontains=token)
-            sample_filter |= Q(project__code__icontains=token)
+    queryset = get_sample_access_queryset(base_queryset, user)
 
-        queryset = queryset.filter(sample_filter).distinct()
-    else:
-        queryset = queryset.filter(
-            Q(sample_id__icontains=query)
-            | Q(status__icontains=query)
-            | Q(project__code__icontains=query)
-            | Q(project__name__icontains=query)
-        ).distinct()
+    filters = Q()
 
-    samples = list(queryset.order_by("sample_id")[:limit])
+    if sample_query:
+        filters |= Q(sample_id__icontains=sample_query)
+        filters |= Q(status__icontains=sample_query)
+        filters |= Q(external_ids__external_id__icontains=sample_query)
+        filters |= Q(external_ids__label__icontains=sample_query)
+
+        if sample_query.isdigit():
+            filters |= Q(id=int(sample_query))
+
+    for token in extract_sample_like_tokens(query):
+        filters |= Q(sample_id__icontains=token)
+        filters |= Q(external_ids__external_id__icontains=token)
+
+    if not filters:
+        return None
+
+    samples = list(queryset.filter(filters).distinct()[:limit])
 
     if not samples:
         return None
 
-    if len(samples) == 1:
-        return get_sample_detail(samples[0])
-
+    lines = [f"Found {len(samples)} matching sample(s):"]
     links = []
-    lines = [f"I found {len(samples)} matching sample(s):"]
 
     for sample in samples:
-        project_code = sample.project.code if sample.project_id else "Unassigned"
-        lines.append(f"- {sample.sample_id} — {sample.status} — {project_code}")
-        links.append(
-            make_link(
-                f"{sample.sample_id}",
-                f"/samples/{sample.id}",
-                "sample",
-                {
-                    "id": sample.id,
-                    "sample_id": sample.sample_id,
-                    "status": sample.status,
-                    "project": project_code,
-                },
-            )
+        project = getattr(sample, "project", None)
+        container = getattr(sample, "container", None)
+
+        project_text = getattr(project, "code", None) or "No project"
+        container_text = (
+            getattr(container, "name", None)
+            or getattr(container, "label", None)
+            or getattr(container, "barcode", None)
+            or (f"Container #{sample.container_id}" if sample.container_id else "No container")
         )
+
+        lines.append(
+            f"- {sample.sample_id} — status: {sample.status}, project: {project_text}, container: {container_text}"
+        )
+
+        links.append({
+            "label": f"Open {sample.sample_id}",
+            "url": f"/samples/{sample.id}",
+        })
 
     return {
         "answer": "\n".join(lines),
         "links": links,
+        "suggestions": [
+            "Summarize project PRJ-UW-PILOT",
+            "Show failed migration jobs",
+            "Show skipped migration rows",
+        ],
     }
-
 
 def search_projects(message, user, limit=10):
     query = clean_query(message)
