@@ -11,12 +11,12 @@ import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 
 const STARTER_PROMPTS = [
-  "Summarize project PRJ-UW-PILOT",
-  "Find sample S-UW-101",
+  "Which samples need QC?",
+  "Count samples by status",
+  "How many samples are in QC?",
+  "What percentage of migration rows failed?",
   "Show failed migration jobs",
-  "Show skipped migration rows",
-  "Why did migration job #1 fail?",
-  "Show running migration jobs",
+  "Find sample",
 ];
 
 function badgeVariantForProvider(provider) {

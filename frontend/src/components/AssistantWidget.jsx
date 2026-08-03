@@ -4,10 +4,10 @@ import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 
 const STARTER_PROMPTS = [
+  "Which samples need QC?",
+  "Count samples by status",
+  "What percentage of migration rows failed?",
   "Find sample",
-  "Show failed migration jobs",
-  "Show skipped migration rows",
-  "What's my name?",
 ];
 
 const DEMO_ASSISTANT_NOTE =
