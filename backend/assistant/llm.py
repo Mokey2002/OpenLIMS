@@ -92,6 +92,7 @@ def build_assistant_prompt(message, tool_result):
         "answer": tool_result.get("answer", ""),
         "links": tool_result.get("links", []),
         "suggestions": tool_result.get("suggestions", []),
+        "chart": tool_result.get("chart"),
     }
 
     return f"""
