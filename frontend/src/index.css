@@ -673,3 +673,104 @@ body {
   background: #f8fafc;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
 }
+
+/* Assistant charts */
+
+.assistant-chart-card {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.assistant-chart-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.assistant-chart-description {
+  margin-top: 2px;
+  margin-bottom: 10px;
+  font-size: 0.76rem;
+  color: #64748b;
+}
+
+.assistant-chart-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.assistant-chart-bar-row {
+  display: grid;
+  grid-template-columns: 86px 1fr 44px;
+  gap: 8px;
+  align-items: center;
+}
+
+.assistant-chart-bar-label,
+.assistant-chart-bar-value {
+  font-size: 0.74rem;
+  color: #475569;
+}
+
+.assistant-chart-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-chart-bar-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-chart-bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.assistant-chart-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #111827;
+}
+
+.assistant-chart-svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+.assistant-chart-svg line {
+  stroke: rgba(15, 23, 42, 0.22);
+  stroke-width: 1;
+}
+
+.assistant-chart-svg polyline {
+  fill: none;
+  stroke: #111827;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.assistant-chart-svg circle {
+  fill: #111827;
+}
+
+.assistant-chart-svg text {
+  fill: #64748b;
+  font-size: 10px;
+}
+
+@media (max-width: 576px) {
+  .assistant-chart-bar-row {
+    grid-template-columns: 72px 1fr 38px;
+  }
+}

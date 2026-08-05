@@ -9,13 +9,14 @@ import {
 } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
+import AssistantChart from "../components/AssistantChart";
 
 const STARTER_PROMPTS = [
+  "Chart samples by status",
+  "Show sample creation trend",
+  "Chart migration errors",
   "Which samples need QC?",
   "Count samples by status",
-  "How many samples are in QC?",
-  "What percentage of migration rows failed?",
-  "Show failed migration jobs",
   "Find sample",
 ];
 
@@ -95,6 +96,7 @@ export default function Assistant() {
           content: data.answer || "No answer returned.",
           links: data.links || [],
           suggestions: data.suggestions || [],
+          chart: data.chart || null,
           mode: data.mode || "openlims",
           llmError: data.llm_error || "",
           modelInfo:
@@ -190,6 +192,8 @@ export default function Assistant() {
                       {item.llmError}
                     </Alert>
                   )}
+
+                  {item.chart && <AssistantChart chart={item.chart} />}
 
                   {item.links?.length > 0 && (
                     <div className="assistant-links">

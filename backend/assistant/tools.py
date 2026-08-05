@@ -8,6 +8,7 @@ from projects.models import Project
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
 from .calculations import route_worklist_or_calculation
+from .charts import route_assistant_chart
 
 
 def make_link(label, url, kind="record", extra=None):
@@ -439,6 +440,10 @@ def route_assistant_message(message, user):
     current_user_result = answer_current_user(query, user)
     if current_user_result:
         return current_user_result
+
+    chart_result = route_assistant_chart(query, user)
+    if chart_result:
+        return chart_result
 
     worklist_or_calculation_result = route_worklist_or_calculation(query, user)
     if worklist_or_calculation_result:

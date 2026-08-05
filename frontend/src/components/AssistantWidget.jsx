@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Badge, Button, Form, Spinner } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
+import AssistantChart from "./AssistantChart";
 
 const STARTER_PROMPTS = [
+  "Chart samples by status",
+  "Show sample creation trend",
+  "Chart migration errors",
   "Which samples need QC?",
-  "Count samples by status",
-  "What percentage of migration rows failed?",
-  "Find sample",
 ];
 
 const DEMO_ASSISTANT_NOTE =
@@ -105,6 +106,7 @@ export default function AssistantWidget() {
           content: data.answer || "No answer returned.",
           links: data.links || [],
           suggestions: data.suggestions || [],
+          chart: data.chart || null,
           llmError: data.llm_error || "",
           modelInfo,
         },
@@ -191,6 +193,8 @@ export default function AssistantWidget() {
                       {item.llmError}
                     </Alert>
                   )}
+
+                  {item.chart && <AssistantChart chart={item.chart} />}
 
                   {item.links?.length > 0 && (
                     <div className="assistant-widget-links">
