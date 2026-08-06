@@ -5,10 +5,10 @@ import { apiGet, apiPost } from "../api";
 import AssistantChart from "./AssistantChart";
 
 const STARTER_PROMPTS = [
+  "Find sample sequences",
+  "Summarize sequence records",
+  "Prepare BLAST for sample",
   "Chart samples by status",
-  "Show sample creation trend",
-  "Chart migration errors",
-  "Which samples need QC?",
 ];
 
 const DEMO_ASSISTANT_NOTE =

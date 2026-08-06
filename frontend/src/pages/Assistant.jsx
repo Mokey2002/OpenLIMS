@@ -12,11 +12,11 @@ import { apiGet, apiPost } from "../api";
 import AssistantChart from "../components/AssistantChart";
 
 const STARTER_PROMPTS = [
+  "Find sample sequences",
+  "Summarize sequence records",
+  "Prepare BLAST for sample",
+  "Summarize BLAST results",
   "Chart samples by status",
-  "Show sample creation trend",
-  "Chart migration errors",
-  "Which samples need QC?",
-  "Count samples by status",
   "Find sample",
 ];
 
