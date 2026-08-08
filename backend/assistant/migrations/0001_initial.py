@@ -51,6 +51,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="assistantaction",
-            index=models.Index(fields=["requested_by", "status", "created_at"], name="assistant_a_request_735f10_idx"),
+            index=models.Index(fields=["requested_by", "status", "created_at"], name="asst_req_status_created_idx"),
         ),
     ]
