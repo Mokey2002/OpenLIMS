@@ -63,7 +63,10 @@ class AssistantAction(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["requested_by", "status", "created_at"]),
+            models.Index(
+                fields=["requested_by", "status", "created_at"],
+                name="asst_req_status_created_idx",
+            ),
         ]
 
     @property

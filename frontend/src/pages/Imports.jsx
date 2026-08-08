@@ -117,6 +117,8 @@ export default function Imports() {
   const [uploadInstrument, setUploadInstrument] = useState("");
   const [uploadProject, setUploadProject] = useState("");
   const [uploadFile, setUploadFile] = useState(null);
+  const [requireAssistantConfirmation, setRequireAssistantConfirmation] =
+    useState(false);
 
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -327,12 +329,19 @@ export default function Imports() {
       formData.append("instrument", uploadInstrument);
       if (uploadProject) formData.append("project", uploadProject);
       formData.append("uploaded_file", uploadFile);
+      if (requireAssistantConfirmation) {
+        formData.append("assistant_confirmation", "true");
+      }
 
-      await apiPostForm("/api/import-jobs/", formData);
+      const createdJob = await apiPostForm("/api/import-jobs/", formData);
 
       setUploadFile(null);
       setPreviewData(null);
-      setLastLiveUpdate("CSV import queued. Progress will update automatically.");
+      setLastLiveUpdate(
+        requireAssistantConfirmation
+          ? `Import job #${createdJob.id} is waiting. Open the Assistant and ask: Queue import job #${createdJob.id}.`
+          : "CSV import queued. Progress will update automatically."
+      );
 
       await load();
     } catch (e) {
@@ -724,6 +733,17 @@ export default function Imports() {
               </Col>
             </Row>
 
+            <Form.Check
+              type="checkbox"
+              className="mb-3"
+              label="Require explicit confirmation in the OpenLIMS Assistant"
+              checked={requireAssistantConfirmation}
+              disabled={!userCanWrite}
+              onChange={(e) =>
+                setRequireAssistantConfirmation(e.target.checked)
+              }
+            />
+
             <Row className="g-2">
               <Col md={6}>
                 <Button
@@ -746,7 +766,9 @@ export default function Imports() {
                   className="w-100"
                   disabled={!userCanWrite || !uploadInstrument || !uploadFile}
                 >
-                  Queue CSV Import
+                  {requireAssistantConfirmation
+                    ? "Prepare for Assistant Confirmation"
+                    : "Queue CSV Import"}
                 </Button>
               </Col>
             </Row>

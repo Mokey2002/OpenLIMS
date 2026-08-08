@@ -15,6 +15,7 @@ from imports.models import ImportJob
 from imports.tasks import process_import_job
 from migration_toolkit.models import MigrationJob
 from migration_toolkit.services import suggest_field_mappings
+from projects.models import Project
 from samples.access import get_sample_access_queryset, validate_sample_project_assignment
 from samples.models import Sample
 from sequences.models import Sequence
@@ -235,6 +236,13 @@ def _queue_import(action):
 
 
 def _queue_report(action):
+    project_id = (action.payload.get("filters") or {}).get("project_id")
+    if project_id:
+        project = Project.objects.filter(id=project_id).first()
+        if not project:
+            raise AssistantActionError("The selected report project no longer exists.")
+        validate_sample_project_assignment(action.requested_by, project)
+
     transaction.on_commit(lambda: generate_assistant_report.delay(str(action.id)))
     return AssistantAction.STATUS_QUEUED, {
         "report_type": action.payload.get("report_type", "OPERATIONS_SUMMARY"),

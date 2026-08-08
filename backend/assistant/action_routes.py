@@ -2,6 +2,7 @@ import re
 
 from imports.models import ImportJob
 from migration_toolkit.models import MigrationJob
+from projects.models import Project
 from sequences.models import Sequence
 
 from samples.access import get_sample_access_queryset
@@ -11,6 +12,14 @@ from samples.models import Sample
 def _extract_id(message, noun):
     match = re.search(rf"\b{noun}\s*(?:job)?\s*#?\s*(\d+)\b", message, re.IGNORECASE)
     return int(match.group(1)) if match else None
+
+
+def _can_access_project(user, project):
+    if user.is_superuser or user.groups.filter(name="admin").exists():
+        return True
+    if project is None:
+        return False
+    return project.members.filter(id=user.id).exists()
 
 
 def _accessible_sequence_ids(user):
@@ -100,6 +109,13 @@ def propose_migration_mappings(message, user):
             "skip_llm": True,
         }
 
+    if not _can_access_project(user, job.project):
+        return {
+            "answer": f"You do not have access to migration job #{job_id}.",
+            "links": [],
+            "skip_llm": True,
+        }
+
     summary = f"Create suggested field mappings for migration job #{job.id} ({job.profile.name})"
 
     return {
@@ -138,6 +154,23 @@ def propose_import(message, user):
             "skip_llm": True,
         }
 
+    if not _can_access_project(user, job.project):
+        return {
+            "answer": f"You do not have access to import job #{job_id}.",
+            "links": [],
+            "skip_llm": True,
+        }
+
+    if not (job.summary or {}).get("awaiting_assistant_confirmation"):
+        return {
+            "answer": (
+                f"Import job #{job.id} is not waiting for assistant confirmation "
+                "and may already be queued. No action was proposed."
+            ),
+            "links": [{"label": "Open imports", "url": "/imports"}],
+            "skip_llm": True,
+        }
+
     summary = f"Queue import job #{job.id} for {job.instrument.name}"
 
     return {
@@ -170,6 +203,13 @@ def propose_report(message, user):
 
     filters = {}
     if project_id:
+        project = Project.objects.filter(id=project_id).first()
+        if not project or not _can_access_project(user, project):
+            return {
+                "answer": f"Project #{project_id} was not found or is not accessible.",
+                "links": [],
+                "skip_llm": True,
+            }
         filters["project_id"] = project_id
 
     summary = f"Queue {report_type.replace('_', ' ').title()}"

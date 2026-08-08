@@ -25,6 +25,7 @@ export default function AssistantWidget() {
   const [message, setMessage] = useState("");
   const [assistantStatus, setAssistantStatus] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [actionBusy, setActionBusy] = useState("");
   const [err, setErr] = useState("");
   const [history, setHistory] = useState([
     {
@@ -107,6 +108,8 @@ export default function AssistantWidget() {
           links: data.links || [],
           suggestions: data.suggestions || [],
           chart: data.chart || null,
+          pendingAction: data.pending_action || null,
+          actionError: data.action_error || "",
           llmError: data.llm_error || "",
           modelInfo,
         },
@@ -118,6 +121,33 @@ export default function AssistantWidget() {
       setHistory(nextHistory);
     } finally {
       setLoading(false);
+    }
+  }
+
+  function updateHistoryAction(index, pendingAction, actionError = "") {
+    setHistory((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? { ...item, pendingAction, actionError }
+          : item
+      )
+    );
+  }
+
+  async function handleAction(index, pendingAction, operation) {
+    setActionBusy(pendingAction.confirmation_token);
+
+    try {
+      const body = operation === "confirm" ? { confirm: true } : {};
+      const updated = await apiPost(
+        `/api/assistant/actions/${pendingAction.confirmation_token}/${operation}/`,
+        body
+      );
+      updateHistoryAction(index, updated);
+    } catch (e) {
+      updateHistoryAction(index, pendingAction, e.message || String(e));
+    } finally {
+      setActionBusy("");
     }
   }
 
@@ -195,6 +225,63 @@ export default function AssistantWidget() {
                   )}
 
                   {item.chart && <AssistantChart chart={item.chart} />}
+
+                  {item.actionError && (
+                    <Alert variant="danger" className="mt-2 mb-1 py-2">
+                      {item.actionError}
+                    </Alert>
+                  )}
+
+                  {item.pendingAction && (
+                    <Alert variant="warning" className="mt-2 mb-2 py-2">
+                      <div className="fw-semibold">Confirmation required</div>
+                      <div className="small mb-2">{item.pendingAction.summary}</div>
+                      <Badge
+                        bg={
+                          item.pendingAction.status === "PROPOSED"
+                            ? "warning"
+                            : item.pendingAction.status === "FAILED"
+                              ? "danger"
+                              : "success"
+                        }
+                        text={
+                          item.pendingAction.status === "PROPOSED"
+                            ? "dark"
+                            : undefined
+                        }
+                      >
+                        {item.pendingAction.status}
+                      </Badge>
+                      {item.pendingAction.status === "PROPOSED" && (
+                        <div className="d-flex gap-2 mt-2">
+                          <Button
+                            size="sm"
+                            variant="dark"
+                            disabled={
+                              actionBusy === item.pendingAction.confirmation_token
+                            }
+                            onClick={() =>
+                              handleAction(index, item.pendingAction, "confirm")
+                            }
+                          >
+                            Confirm
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            disabled={
+                              actionBusy === item.pendingAction.confirmation_token
+                            }
+                            onClick={() =>
+                              handleAction(index, item.pendingAction, "cancel")
+                            }
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      )}
+                    </Alert>
+                  )}
 
                   {item.links?.length > 0 && (
                     <div className="assistant-widget-links">
