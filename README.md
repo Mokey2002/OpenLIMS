@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.19.2-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.20.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -35,7 +35,17 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.19.2 — Local Ollama Assistant`
+**Current release:** `v0.20.0 — Confirmed Assistant Actions`
+
+### v0.20.0 highlights
+
+- Run BLAST and Clustal Omega alignments only after explicit confirmation
+- Create migration field mappings only after confirmation
+- Queue reports and prepared CSV imports only after confirmation
+- Bind confirmations to the requesting user and the tech/admin role
+- Expire unused confirmations after 15 minutes
+- Audit proposals, confirmations, cancellations, expirations, completions, and failures
+- Prevent duplicate execution when a confirmation is submitted more than once
 
 ---
 
