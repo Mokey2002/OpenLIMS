@@ -435,7 +435,8 @@ def answer_current_user(message, user):
     }
 
 
-def route_assistant_message(message, user):
+def route_assistant_message(message, user, context=None):
+    context = context or {}
     query = clean_query(message)
     lower = query.lower()
 
@@ -447,7 +448,11 @@ def route_assistant_message(message, user):
     if confirmed_action_result:
         return confirmed_action_result
 
-    sequence_result = route_assistant_sequence(query, user)
+    sequence_result = route_assistant_sequence(
+        query,
+        user,
+        context=context,
+    )
     if sequence_result:
         return sequence_result
 

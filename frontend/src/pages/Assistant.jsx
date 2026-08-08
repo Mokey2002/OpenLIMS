@@ -29,6 +29,7 @@ function badgeVariantForProvider(provider) {
 
 export default function Assistant() {
   const [message, setMessage] = useState("");
+  const [conversationContext, setConversationContext] = useState({});
   const [assistantStatus, setAssistantStatus] = useState(null);
   const [history, setHistory] = useState([
     {
@@ -89,7 +90,10 @@ export default function Assistant() {
     try {
       const data = await apiPost("/api/assistant/chat/", {
         message: text,
+        context: conversationContext,
       });
+
+      setConversationContext(data.context || {});
 
       setHistory([
         ...nextHistory,

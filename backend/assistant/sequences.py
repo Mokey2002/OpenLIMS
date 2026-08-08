@@ -262,7 +262,10 @@ def sequence_line(obj):
     length_text = f"{length} bp/aa" if length is not None else "length unknown"
     sample_text = getattr(sample, "sample_id", "unknown sample")
 
-    return f"- {label} — sample: {sample_text}, type: {sequence_type}, length: {length_text}"
+    return (
+        f"- Sequence #{obj.pk}: {label} — sample: {sample_text}, "
+        f"type: {sequence_type}, length: {length_text}"
+    )
 
 
 def find_sample_sequences(message, user, limit=20):
@@ -459,25 +462,118 @@ def parse_blast_program(message, sequence_obj=None):
 def parse_blast_database(message):
     text = str(message or "")
 
+    matches = re.findall(
+        r"\b(?:database|db|against)\s+([A-Za-z0-9_.:-]+)",
+        text,
+        re.IGNORECASE,
+    )
+
+    if not matches:
+        return ""
+
+    return matches[-1].strip(" .,:;")
+
+
+def extract_sequence_record_id(message):
     patterns = [
-        r"\bdatabase\s+([A-Za-z0-9_.:-]+)",
-        r"\bdb\s+([A-Za-z0-9_.:-]+)",
-        r"\bagainst\s+([A-Za-z0-9_.:-]+)",
+        r"\bsequence\s*#\s*(\d+)\b",
+        r"\brecord\s*#\s*(\d+)\b",
+        r"\bsequence\s+id\s*#?\s*(\d+)\b",
     ]
 
     for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-
+        match = re.search(
+            pattern,
+            str(message or ""),
+            re.IGNORECASE,
+        )
         if match:
-            return match.group(1).strip(" .,:;")
+            return int(match.group(1))
 
-    return ""
+    return None
+
+
+def extract_raw_sequence(message):
+    match = re.search(
+        r"\b(?:(?:DNA|RNA|PROTEIN)\s+)?sequence\s*[:=]\s*([A-Za-z*.-]{10,})",
+        str(message or ""),
+        re.IGNORECASE,
+    )
+
+    if not match:
+        return ""
+
+    return re.sub(r"[^A-Za-z*]", "", match.group(1)).upper()
+
+
+def infer_raw_sequence_type(message, sequence):
+    explicit = re.search(
+        r"\b(DNA|RNA|PROTEIN)\s+sequence\s*[:=]",
+        str(message or ""),
+        re.IGNORECASE,
+    )
+
+    if explicit:
+        return explicit.group(1).upper()
+
+    letters = set(str(sequence or "").upper())
+
+    dna_letters = set("ACGTRYKMSWBDHVN")
+    rna_letters = set("ACGURYKMSWBDHVN")
+
+    if letters and letters <= dna_letters:
+        return "DNA"
+
+    if letters and letters <= rna_letters:
+        return "RNA"
+
+    return "PROTEIN"
+
+
+def validate_raw_sequence(sequence, sequence_type):
+    letters = set(str(sequence or "").upper())
+
+    if not letters:
+        return False
+
+    allowed = {
+        "DNA": set("ACGTRYKMSWBDHVN"),
+        "RNA": set("ACGURYKMSWBDHVN"),
+        "PROTEIN": set("ABCDEFGHIJKLMNOPQRSTUVWXYZ*"),
+    }
+
+    return letters <= allowed.get(sequence_type, set())
+
+
+def asks_to_use_sample_as_database(message):
+    return bool(
+        re.search(
+            r"\bagainst\s+(?:this\s+)?sample\b",
+            str(message or ""),
+            re.IGNORECASE,
+        )
+    )
 
 
 def select_sequences_for_blast(message, user):
     models = find_sequence_models()
 
     if not models:
+        return [], None
+
+    sequence_id = extract_sequence_record_id(message)
+
+    if sequence_id is not None:
+        for model, sample_fk in models:
+            sequence_obj = (
+                sequence_queryset_for_user(model, sample_fk, user)
+                .filter(id=sequence_id)
+                .first()
+            )
+
+            if sequence_obj is not None:
+                return [sequence_obj], get_sequence_sample(sequence_obj)
+
         return [], None
 
     sample = find_accessible_sample_from_message(message, user)
@@ -488,32 +584,110 @@ def select_sequences_for_blast(message, user):
     found = []
 
     for model, sample_fk in models:
-        queryset = sequence_queryset_for_user(model, sample_fk, user, sample=sample)
+        queryset = sequence_queryset_for_user(
+            model,
+            sample_fk,
+            user,
+            sample=sample,
+        )
 
         for obj in queryset.order_by("-id")[:20]:
             found.append(obj)
 
+    message_lower = str(message or "").lower()
+    name_matches = [
+        obj
+        for obj in found
+        if get_sequence_label(obj).lower() in message_lower
+    ]
+
+    if name_matches:
+        return name_matches, sample
+
     return found, sample
 
 
-def prepare_blast_job(message, user):
-    sequences, sample = select_sequences_for_blast(message, user)
+def prepare_blast_job(message, user, context=None):
+    incoming_context = dict(context or {})
+    current_message = str(message or "").strip()
 
-    if sample is None:
+    if incoming_context.get("intent") == "RUN_BLAST":
+        previous_request = str(
+            incoming_context.get("request_text") or ""
+        ).strip()
+    else:
+        previous_request = ""
+
+    effective_message = "\n".join(
+        part
+        for part in [previous_request, current_message]
+        if part
+    ).strip()
+
+    next_context = {
+        "intent": "RUN_BLAST",
+        "request_text": effective_message[-8000:],
+    }
+
+    raw_sequence = extract_raw_sequence(effective_message)
+    raw_sequence_type = ""
+
+    if raw_sequence:
+        raw_sequence_type = infer_raw_sequence_type(
+            effective_message,
+            raw_sequence,
+        )
+
+        if not validate_raw_sequence(raw_sequence, raw_sequence_type):
+            return {
+                "answer": (
+                    f"The pasted sequence is not valid {raw_sequence_type} data. "
+                    "Check the sequence and start the BLAST request again."
+                ),
+                "links": [{"label": "Open BLAST", "url": "/blast"}],
+                "suggestions": [
+                    "Find sample sequences",
+                    "Prepare BLAST for sample",
+                ],
+                "skip_llm": True,
+                "context": {},
+            }
+
+        sequences = []
+        sample = None
+    else:
+        sequences, sample = select_sequences_for_blast(
+            effective_message,
+            user,
+        )
+
+    selected_sequence_id = extract_sequence_record_id(effective_message)
+
+    if not raw_sequence and sample is None:
+        if selected_sequence_id is not None:
+            answer = (
+                f"I could not access sequence #{selected_sequence_id}. "
+                "Choose one of the sequence IDs shown by the sequence search."
+            )
+        else:
+            answer = (
+                "Tell me which saved sequence to use for BLAST. "
+                "You can say `Use sequence #12`, or paste a query using "
+                "`Run BLAST for this DNA sequence: ATGC...`."
+            )
+
         return {
-            "answer": (
-                "Tell me which sample to use for BLAST. "
-                "Example: Prepare BLAST for sample S-UW-101."
-            ),
+            "answer": answer,
             "links": [],
             "suggestions": [
                 "Find sample sequences",
                 "Summarize sequence records",
             ],
             "skip_llm": True,
+            "context": next_context,
         }
 
-    if not sequences:
+    if not raw_sequence and not sequences:
         return {
             "answer": f"No sequence records were found for sample {sample.sample_id}.",
             "links": [sample_link(sample)],
@@ -522,41 +696,74 @@ def prepare_blast_job(message, user):
                 "Summarize sequence records",
             ],
             "skip_llm": True,
+            "context": next_context,
         }
 
-    if len(sequences) > 1:
+    if not raw_sequence and len(sequences) > 1:
         lines = [
             f"I found {len(sequences)} sequence record(s) for sample {sample.sample_id}.",
-            "Choose which sequence should be used for BLAST:",
+            "Choose the exact sequence ID to use for BLAST:",
         ]
 
-        for index, obj in enumerate(sequences[:10], start=1):
-            lines.append(f"{index}. {sequence_line(obj).lstrip('- ')}")
+        for obj in sequences[:10]:
+            lines.append(sequence_line(obj))
+
+        suggestions = [
+            f"Use sequence #{obj.id}"
+            for obj in sequences[:2]
+        ]
+        suggestions.append("Find sample sequences")
 
         return {
             "answer": "\n".join(lines),
             "links": [sample_link(sample)],
-            "suggestions": [
-                f"Prepare BLAST for sample {sample.sample_id} using sequence 1",
-                f"Run blastn for sample {sample.sample_id}",
-                "Find sample sequences",
-            ],
+            "suggestions": suggestions,
             "skip_llm": True,
+            "context": next_context,
         }
 
-    sequence_obj = sequences[0]
-    program = parse_blast_program(message, sequence_obj=sequence_obj)
-    database_name = parse_blast_database(message)
-    label = get_sequence_label(sequence_obj)
-    sequence_type = get_sequence_type(sequence_obj)
-    length = get_sequence_length(sequence_obj)
+    if raw_sequence:
+        sequence_obj = None
+        label = "Pasted query sequence"
+        sequence_type = raw_sequence_type
+        length = len(raw_sequence)
+        project_id = None
+        links = [{"label": "Open BLAST", "url": "/blast"}]
+    else:
+        sequence_obj = sequences[0]
+        label = get_sequence_label(sequence_obj)
+        sequence_type = get_sequence_type(sequence_obj)
+        length = get_sequence_length(sequence_obj)
+        project_id = sample.project_id
+        links = [
+            sample_link(sample),
+            {"label": "Open BLAST", "url": "/blast"},
+        ]
 
+    program = parse_blast_program(
+        effective_message,
+        sequence_obj=sequence_obj,
+    )
+
+    if (
+        raw_sequence
+        and not any(name in effective_message.lower() for name in BLAST_PROGRAMS)
+        and sequence_type == "PROTEIN"
+    ):
+        program = "blastp"
+
+    database_name = parse_blast_database(effective_message)
     length_text = f"{length} bp/aa" if length is not None else "unknown length"
 
     lines = [
         "Prepared a BLAST job plan.",
         "",
-        f"Sample: {sample.sample_id}",
+    ]
+
+    if sample is not None:
+        lines.append(f"Sample: {sample.sample_id}")
+
+    lines.extend([
         f"Sequence: {label}",
         f"Sequence type: {sequence_type}",
         f"Sequence length: {length_text}",
@@ -564,63 +771,197 @@ def prepare_blast_job(message, user):
         f"Database: {database_name or 'not selected yet'}",
         "",
         "Status: not queued.",
-    ]
+    ])
 
     if program not in ["blastn", "blastp"]:
         lines.extend([
             "",
-            f"{program} is not supported by the current BLAST job model. Choose blastn or blastp.",
+            f"{program} is not supported by the current BLAST job model. "
+            "Choose blastn or blastp.",
         ])
+
+        suggestions = ["Use blastn", "Use blastp"]
+
         return {
             "answer": "\n".join(lines),
-            "links": [sample_link(sample), {"label": "Open BLAST", "url": "/blast"}],
-            "suggestions": [
-                f"Prepare blastn for sample {sample.sample_id}",
-                f"Prepare blastp for sample {sample.sample_id}",
+            "links": links,
+            "suggestions": suggestions,
+            "skip_llm": True,
+            "context": next_context,
+        }
+
+    expected_database_type = (
+        "PROTEIN"
+        if program == "blastp"
+        else "DNA"
+    )
+
+    ready_database_names = list(
+        BlastDatabase.objects.filter(
+            status=BlastDatabase.STATUS_READY,
+            database_type=expected_database_type,
+        )
+        .order_by("name")
+        .values_list("name", flat=True)[:10]
+    )
+
+    database_suggestions = [
+        f"Use database {name}"
+        for name in ready_database_names[:3]
+    ]
+
+    if asks_to_use_sample_as_database(current_message):
+        lines.extend([
+            "",
+            "A sample sequence is not a BLAST database. To compare two saved "
+            "sequences, use an alignment. For BLAST, choose a READY local "
+            f"{expected_database_type} database.",
+        ])
+
+        if ready_database_names:
+            lines.append(
+                "Ready databases: " + ", ".join(ready_database_names)
+            )
+
+        return {
+            "answer": "\n".join(lines),
+            "links": links,
+            "suggestions": database_suggestions + [
+                "Find sample sequences",
             ],
             "skip_llm": True,
+            "context": next_context,
         }
 
     if not database_name:
         lines.extend([
             "",
-            "No action can be confirmed yet. Choose a ready local BLAST database using `against DATABASE_NAME`.",
+            "No action can be confirmed yet. Choose a READY local BLAST "
+            "database by name.",
         ])
+
+        if ready_database_names:
+            lines.append(
+                "Ready databases: " + ", ".join(ready_database_names)
+            )
+        else:
+            lines.append(
+                f"No READY {expected_database_type} BLAST databases were found."
+            )
+
         return {
             "answer": "\n".join(lines),
-            "links": [sample_link(sample), {"label": "Open BLAST", "url": "/blast"}],
-            "suggestions": [
-                f"Prepare {program} for sample {sample.sample_id} against local_database_name",
+            "links": links,
+            "suggestions": database_suggestions + [
                 "Find sample sequences",
             ],
             "skip_llm": True,
+            "context": next_context,
         }
 
     database = (
         BlastDatabase.objects
-        .filter(name__iexact=database_name, status=BlastDatabase.STATUS_READY)
+        .filter(
+            name__iexact=database_name,
+            status=BlastDatabase.STATUS_READY,
+        )
         .first()
     )
 
-    if not database:
-        lines.extend([
-            "",
-            f"I could not find a READY local BLAST database named {database_name}. No action was proposed.",
-        ])
+    if database is None:
+        target_sample = (
+            apply_sample_access(user)
+            .filter(sample_id__iexact=database_name)
+            .first()
+        )
+
+        if target_sample is not None:
+            explanation = (
+                f"{database_name} is a sample, not a BLAST database. "
+                "Use alignment to compare saved sequences, or choose a READY "
+                f"{expected_database_type} BLAST database."
+            )
+        else:
+            explanation = (
+                f"I could not find a READY local BLAST database named "
+                f"{database_name}. No action was proposed."
+            )
+
+        lines.extend(["", explanation])
+
+        if ready_database_names:
+            lines.append(
+                "Ready databases: " + ", ".join(ready_database_names)
+            )
+
         return {
             "answer": "\n".join(lines),
-            "links": [sample_link(sample), {"label": "Open BLAST databases", "url": "/blast"}],
-            "suggestions": [
+            "links": links,
+            "suggestions": database_suggestions + [
                 "Find sample sequences",
-                "Summarize BLAST results",
             ],
             "skip_llm": True,
+            "context": next_context,
         }
 
-    summary = (
-        f"Run {program} for {sample.sample_id} using {label} "
-        f"against {database.name}"
-    )
+    if database.database_type != expected_database_type:
+        lines.extend([
+            "",
+            f"{program} requires a {expected_database_type} database, but "
+            f"{database.name} is {database.database_type}. No action was proposed.",
+        ])
+
+        if ready_database_names:
+            lines.append(
+                "Compatible databases: " + ", ".join(ready_database_names)
+            )
+
+        return {
+            "answer": "\n".join(lines),
+            "links": links,
+            "suggestions": database_suggestions,
+            "skip_llm": True,
+            "context": next_context,
+        }
+
+    if raw_sequence:
+        summary = (
+            f"Run {program} for a pasted {sequence_type} query "
+            f"against {database.name}"
+        )
+        payload = {
+            "name": "Assistant BLAST — pasted query",
+            "database": database.id,
+            "program": program,
+            "max_target_seqs": 25,
+            "evalue": "10",
+            "raw_query": {
+                "name": "Assistant pasted BLAST query",
+                "sequence": raw_sequence,
+                "sequence_type": sequence_type,
+            },
+        }
+    else:
+        summary = (
+            f"Run {program} for {sample.sample_id} using {label} "
+            f"against {database.name}"
+        )
+        payload = {
+            "name": f"Assistant BLAST — {sample.sample_id}",
+            "project": project_id,
+            "query_sequence": sequence_obj.id,
+            "database": database.id,
+            "program": program,
+            "max_target_seqs": 25,
+            "evalue": "10",
+        }
+
+    payload = {
+        key: value
+        for key, value in payload.items()
+        if value is not None
+    }
+
     lines.extend([
         "",
         "Review the action details below. BLAST will run only after you confirm.",
@@ -628,24 +969,17 @@ def prepare_blast_job(message, user):
 
     return {
         "answer": "\n".join(lines),
-        "links": [sample_link(sample), {"label": "Open BLAST", "url": "/blast"}],
+        "links": links,
         "suggestions": [
             "Summarize BLAST results",
             "Find sample sequences",
         ],
         "skip_llm": True,
+        "context": {},
         "pending_action": {
             "type": "RUN_BLAST",
             "summary": summary,
-            "payload": {
-                "name": f"Assistant BLAST — {sample.sample_id}",
-                "project": sample.project_id,
-                "query_sequence": sequence_obj.id,
-                "database": database.id,
-                "program": program,
-                "max_target_seqs": 25,
-                "evalue": "10",
-            },
+            "payload": payload,
         },
     }
 
@@ -931,9 +1265,63 @@ def summarize_blast_results(message, user):
     }
 
 
-def route_assistant_sequence(message, user):
+def route_assistant_sequence(message, user, context=None):
     text = str(message or "").strip()
     lower = text.lower()
+    context = dict(context or {})
+
+    pending_blast = context.get("intent") == "RUN_BLAST"
+
+    if pending_blast and lower in [
+        "cancel",
+        "cancel blast",
+        "never mind",
+        "nevermind",
+        "start over",
+    ]:
+        return {
+            "answer": "The pending BLAST request was cleared.",
+            "links": [],
+            "suggestions": [
+                "Find sample sequences",
+                "Prepare BLAST for sample",
+            ],
+            "skip_llm": True,
+            "context": {},
+        }
+
+    starts_new_blast = (
+        "blast" in lower
+        and any(
+            lower.startswith(prefix)
+            for prefix in [
+                "run blast",
+                "prepare blast",
+                "start blast",
+            ]
+        )
+    )
+
+    if pending_blast and starts_new_blast:
+        context = {}
+        pending_blast = False
+
+    if pending_blast:
+        is_sequence_lookup = (
+            any(term in lower for term in ["find", "show", "list"])
+            and any(term in lower for term in ["sample", "sequence"])
+        )
+
+        if is_sequence_lookup:
+            result = find_sample_sequences(text, user)
+            result["context"] = context
+            return result
+
+        return prepare_blast_job(
+            text,
+            user,
+            context=context,
+        )
 
     sequence_terms = [
         "sequence",
@@ -950,10 +1338,24 @@ def route_assistant_sequence(message, user):
         return None
 
     if "blast" in lower:
-        if any(term in lower for term in ["result", "results", "summary", "summarize", "hits", "hit"]):
+        if any(
+            term in lower
+            for term in [
+                "result",
+                "results",
+                "summary",
+                "summarize",
+                "hits",
+                "hit",
+            ]
+        ):
             return summarize_blast_results(text, user)
 
-        return prepare_blast_job(text, user)
+        return prepare_blast_job(
+            text,
+            user,
+            context=context,
+        )
 
     if any(term in lower for term in ["summarize", "summary", "overview", "count"]):
         return summarize_sequence_records(text, user)
@@ -962,3 +1364,5 @@ def route_assistant_sequence(message, user):
         return find_sample_sequences(text, user)
 
     return summarize_sequence_records(text, user)
+
+

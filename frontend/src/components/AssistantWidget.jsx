@@ -23,6 +23,7 @@ function badgeVariantForProvider(provider) {
 export default function AssistantWidget() {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
+  const [conversationContext, setConversationContext] = useState({});
   const [assistantStatus, setAssistantStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState("");
@@ -91,7 +92,10 @@ export default function AssistantWidget() {
     try {
       const data = await apiPost("/api/assistant/chat/", {
         message: text,
+        context: conversationContext,
       });
+
+      setConversationContext(data.context || {});
 
       const modelInfo =
         data.model_info || {

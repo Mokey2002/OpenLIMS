@@ -92,7 +92,56 @@ def _assert_sample_access(user, sample_id):
 
 
 def _run_blast(action):
-    serializer = BlastJobSerializer(data=action.payload)
+    payload = dict(action.payload or {})
+    raw_query = payload.pop("raw_query", None)
+
+    if raw_query is not None:
+        if not isinstance(raw_query, dict):
+            raise AssistantActionError("The pasted BLAST query is invalid.")
+
+        if payload.get("query_sequence"):
+            raise AssistantActionError(
+                "A BLAST action cannot contain both a saved query and a pasted query."
+            )
+
+        sequence_text = "".join(
+            character
+            for character in str(raw_query.get("sequence") or "").upper()
+            if character.isalpha() or character == "*"
+        )
+
+        if len(sequence_text) < 10:
+            raise AssistantActionError(
+                "The pasted BLAST sequence must contain at least 10 residues."
+            )
+
+        sequence_type = str(
+            raw_query.get("sequence_type") or "DNA"
+        ).upper()
+
+        if sequence_type not in ["DNA", "RNA", "PROTEIN"]:
+            raise AssistantActionError(
+                "The pasted BLAST sequence type must be DNA, RNA, or PROTEIN."
+            )
+
+        query_sequence = Sequence.objects.create(
+            name=str(
+                raw_query.get("name") or "Assistant pasted BLAST query"
+            )[:255],
+            sequence=sequence_text,
+            sequence_type=sequence_type,
+            source_type="MANUAL",
+            source_metadata={
+                "created_from": "assistant_confirmed_action",
+                "assistant_action_id": str(action.id),
+            },
+            created_by=action.requested_by,
+        )
+
+        payload["query_sequence"] = query_sequence.id
+
+    serializer = BlastJobSerializer(data=payload)
+
     try:
         serializer.is_valid(raise_exception=True)
     except serializers.ValidationError as exc:
@@ -110,8 +159,10 @@ def _run_blast(action):
         status=BlastJob.STATUS_PENDING,
     )
     transaction.on_commit(lambda: run_blast_job_task.delay(job.id))
+
     return AssistantAction.STATUS_QUEUED, {
         "blast_job_id": job.id,
+        "query_sequence_id": query_sequence.id,
         "url": "/blast",
     }
 

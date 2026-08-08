@@ -17,6 +17,7 @@ from .tools import route_assistant_message
 
 class AssistantChatSerializer(serializers.Serializer):
     message = serializers.CharField(max_length=2000)
+    context = serializers.DictField(required=False, default=dict)
 
 
 class AssistantChatView(APIView):
@@ -26,8 +27,13 @@ class AssistantChatView(APIView):
         serializer = AssistantChatSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         message = serializer.validated_data["message"]
+        context = serializer.validated_data["context"]
 
-        result = route_assistant_message(message=message, user=request.user)
+        result = route_assistant_message(
+            message=message,
+            user=request.user,
+            context=context,
+        )
         proposal = result.pop("pending_action", None)
 
         if proposal:
