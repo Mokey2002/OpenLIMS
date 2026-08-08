@@ -7,6 +7,7 @@ from migration_toolkit.models import MigrationJob, MigrationRowRecord
 from projects.models import Project
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
+from .action_routes import route_confirmed_action_proposal
 from .calculations import route_worklist_or_calculation
 from .charts import route_assistant_chart
 from .sequences import route_assistant_sequence
@@ -441,6 +442,10 @@ def route_assistant_message(message, user):
     current_user_result = answer_current_user(query, user)
     if current_user_result:
         return current_user_result
+
+    confirmed_action_result = route_confirmed_action_proposal(query, user)
+    if confirmed_action_result:
+        return confirmed_action_result
 
     sequence_result = route_assistant_sequence(query, user)
     if sequence_result:
