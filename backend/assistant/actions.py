@@ -215,6 +215,10 @@ def _queue_import(action):
         raise AssistantActionError(
             f"Import job #{job.id} is {job.status}; only PENDING jobs can be queued."
         )
+    if not (job.summary or {}).get("awaiting_assistant_confirmation"):
+        raise AssistantActionError(
+            "This import was not prepared for assistant confirmation and may already be queued."
+        )
     if not job.uploaded_file:
         raise AssistantActionError("The import job has no uploaded file.")
     if job.project_id:
@@ -268,9 +272,12 @@ def confirm_action(token, user):
 
             if action.is_expired:
                 action.status = AssistantAction.STATUS_EXPIRED
-                action.save(update_fields=["status", "updated_at"])
+                action.error_message = (
+                    "This confirmation expired. Ask the assistant to propose it again."
+                )
+                action.save(update_fields=["status", "error_message", "updated_at"])
                 _audit(action, "ASSISTANT_ACTION_EXPIRED")
-                raise AssistantActionError("This confirmation expired. Ask the assistant to propose it again.")
+                return action
 
             if not _user_can_execute(user):
                 raise AssistantActionError(
@@ -279,7 +286,23 @@ def confirm_action(token, user):
 
             action.confirmed_at = timezone.now()
             executor = EXECUTORS[action.action_type]
-            next_status, result = executor(action)
+
+            try:
+                with transaction.atomic():
+                    next_status, result = executor(action)
+            except Exception as exc:
+                action.status = AssistantAction.STATUS_FAILED
+                action.error_message = str(exc)
+                action.executed_at = timezone.now()
+                action.save(update_fields=[
+                    "status",
+                    "error_message",
+                    "confirmed_at",
+                    "executed_at",
+                    "updated_at",
+                ])
+                _audit(action, "ASSISTANT_ACTION_FAILED", {"error": str(exc)})
+                return action
 
             action.status = next_status
             action.result = result
