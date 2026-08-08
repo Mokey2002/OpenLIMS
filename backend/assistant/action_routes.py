@@ -138,6 +138,16 @@ def propose_import(message, user):
             "skip_llm": True,
         }
 
+    if not (job.summary or {}).get("awaiting_assistant_confirmation"):
+        return {
+            "answer": (
+                f"Import job #{job.id} is not waiting for assistant confirmation "
+                "and may already be queued. No action was proposed."
+            ),
+            "links": [{"label": "Open imports", "url": "/imports"}],
+            "skip_llm": True,
+        }
+
     summary = f"Queue import job #{job.id} for {job.instrument.name}"
 
     return {
