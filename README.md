@@ -29,7 +29,7 @@
 
 ## Overview
 
-**OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and a read-only assistant with optional OpenAI or local Ollama support.
+**OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
@@ -73,7 +73,7 @@ OpenLIMS is currently deployed here:
 | **Mass Spec** | mzML, mzXML, mzData, featureXML, consensusXML, mzID/mzIdentML review using pyOpenMS |
 | **Audit** | Audit events, reason-for-change tracking, CSV exports |
 | **Reports** | Project summaries, sample inventory, QC review, import summaries, audit activity |
-| **Assistant** | OpenLIMS Rules, optional OpenAI, optional local Ollama, engine/model indicator in UI |
+| **Assistant** | OpenLIMS Rules, optional OpenAI or Ollama, confirmed actions with expiring user-bound tokens and audit events |
 | **Jobs** | Celery/Redis background jobs and real-time WebSocket updates |
 | **Security** | JWT authentication and role-based permissions |
 
