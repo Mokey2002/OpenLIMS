@@ -44,6 +44,7 @@ export default function Assistant() {
     },
   ]);
   const [loading, setLoading] = useState(false);
+  const [actionBusy, setActionBusy] = useState("");
   const [err, setErr] = useState("");
 
   async function loadAssistantStatus() {
@@ -97,6 +98,8 @@ export default function Assistant() {
           links: data.links || [],
           suggestions: data.suggestions || [],
           chart: data.chart || null,
+          pendingAction: data.pending_action || null,
+          actionError: data.action_error || "",
           mode: data.mode || "openlims",
           llmError: data.llm_error || "",
           modelInfo:
@@ -119,6 +122,58 @@ export default function Assistant() {
     }
   }
 
+  function updateHistoryAction(index, pendingAction, actionError = "") {
+    setHistory((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? { ...item, pendingAction, actionError }
+          : item
+      )
+    );
+  }
+
+  async function confirmAssistantAction(index, pendingAction) {
+    setErr("");
+    setActionBusy(pendingAction.confirmation_token);
+
+    try {
+      const updated = await apiPost(
+        `/api/assistant/actions/${pendingAction.confirmation_token}/confirm/`,
+        { confirm: true }
+      );
+      updateHistoryAction(index, updated);
+    } catch (e) {
+      updateHistoryAction(
+        index,
+        pendingAction,
+        e.message || String(e)
+      );
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function cancelAssistantAction(index, pendingAction) {
+    setErr("");
+    setActionBusy(pendingAction.confirmation_token);
+
+    try {
+      const updated = await apiPost(
+        `/api/assistant/actions/${pendingAction.confirmation_token}/cancel/`,
+        {}
+      );
+      updateHistoryAction(index, updated);
+    } catch (e) {
+      updateHistoryAction(
+        index,
+        pendingAction,
+        e.message || String(e)
+      );
+    } finally {
+      setActionBusy("");
+    }
+  }
+
   function submit(e) {
     e.preventDefault();
     sendMessage();
@@ -133,13 +188,13 @@ export default function Assistant() {
         <div>
           <h1 className="page-title">OpenLIMS Assistant</h1>
           <p className="page-subtitle">
-            Read-only assistant for finding samples, reviewing projects, and
-            explaining migration jobs.
+            Find and review laboratory data, then explicitly confirm any
+            action before OpenLIMS executes it.
           </p>
         </div>
 
         <div className="d-flex flex-column align-items-end gap-2">
-          <Badge bg="dark">v0.19.2 local LLM</Badge>
+          <Badge bg="dark">v0.20.0 confirmed actions</Badge>
           <Badge bg={badgeVariantForProvider(activeProvider)}>
             Using: {activeDisplayName}
           </Badge>
@@ -149,8 +204,9 @@ export default function Assistant() {
       {err && <Alert variant="danger">{err}</Alert>}
 
       <Alert variant="info">
-        This assistant is read-only. It can use OpenAI, a local Ollama model,
-        or the built-in OpenLIMS rule-based search.
+        The assistant can propose BLAST, alignment, migration-mapping, report,
+        and import actions. A proposal expires after 15 minutes and never runs
+        until you select Confirm.
       </Alert>
 
       <Alert variant="secondary">
@@ -194,6 +250,76 @@ export default function Assistant() {
                   )}
 
                   {item.chart && <AssistantChart chart={item.chart} />}
+
+                  {item.actionError && (
+                    <Alert variant="danger" className="mt-2 mb-2">
+                      {item.actionError}
+                    </Alert>
+                  )}
+
+                  {item.pendingAction && (
+                    <Card className="mt-3 mb-3 border-warning">
+                      <Card.Body>
+                        <div className="d-flex justify-content-between align-items-start gap-3">
+                          <div>
+                            <div className="fw-semibold">Confirmation required</div>
+                            <div>{item.pendingAction.summary}</div>
+                            <small className="text-muted">
+                              Status: {item.pendingAction.status}
+                            </small>
+                          </div>
+                          <Badge
+                            bg={
+                              item.pendingAction.status === "PROPOSED"
+                                ? "warning"
+                                : item.pendingAction.status === "FAILED"
+                                  ? "danger"
+                                  : "success"
+                            }
+                            text={
+                              item.pendingAction.status === "PROPOSED"
+                                ? "dark"
+                                : undefined
+                            }
+                          >
+                            {item.pendingAction.status}
+                          </Badge>
+                        </div>
+
+                        {item.pendingAction.status === "PROPOSED" && (
+                          <div className="d-flex gap-2 mt-3">
+                            <Button
+                              size="sm"
+                              variant="warning"
+                              disabled={
+                                actionBusy === item.pendingAction.confirmation_token
+                              }
+                              onClick={() =>
+                                confirmAssistantAction(index, item.pendingAction)
+                              }
+                            >
+                              {actionBusy ===
+                              item.pendingAction.confirmation_token
+                                ? "Confirming..."
+                                : "Confirm action"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline-secondary"
+                              disabled={
+                                actionBusy === item.pendingAction.confirmation_token
+                              }
+                              onClick={() =>
+                                cancelAssistantAction(index, item.pendingAction)
+                              }
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        )}
+                      </Card.Body>
+                    </Card>
+                  )}
 
                   {item.links?.length > 0 && (
                     <div className="assistant-links">
