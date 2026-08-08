@@ -772,17 +772,30 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                 {"uploaded_file": e.messages if hasattr(e, "messages") else str(e)}
             )
 
+        requires_confirmation = str(
+            self.request.data.get("assistant_confirmation", "")
+        ).strip().lower() in ["1", "true", "yes", "on"]
+
         job = serializer.save(
             uploaded_by=self.request.user,
             source_type="UPLOAD",
             status="PENDING",
             progress_current=0,
             progress_total=0,
-            progress_message="Queued",
-            summary={},
+            progress_message=(
+                "Awaiting assistant confirmation"
+                if requires_confirmation
+                else "Queued"
+            ),
+            summary=(
+                {"awaiting_assistant_confirmation": True}
+                if requires_confirmation
+                else {}
+            ),
         )
 
-        process_import_job.delay(job.id)
+        if not requires_confirmation:
+            process_import_job.delay(job.id)
 
     @action(detail=True, methods=["get"], url_path="status")
     def status(self, request, pk=None):
