@@ -4,6 +4,8 @@ from collections import Counter, defaultdict
 from django.apps import apps
 from django.db.models import Q
 
+from blast.models import BlastDatabase
+
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
 
@@ -544,7 +546,7 @@ def prepare_blast_job(message, user):
 
     sequence_obj = sequences[0]
     program = parse_blast_program(message, sequence_obj=sequence_obj)
-    database = parse_blast_database(message) or "not selected yet"
+    database_name = parse_blast_database(message)
     label = get_sequence_label(sequence_obj)
     sequence_type = get_sequence_type(sequence_obj)
     length = get_sequence_length(sequence_obj)
@@ -559,33 +561,91 @@ def prepare_blast_job(message, user):
         f"Sequence type: {sequence_type}",
         f"Sequence length: {length_text}",
         f"Program: {program}",
-        f"Database: {database}",
+        f"Database: {database_name or 'not selected yet'}",
         "",
         "Status: not queued.",
-        "Safety: this assistant version only prepares the BLAST plan. It does not run BLAST yet.",
     ]
 
-    if database == "not selected yet":
-        lines.append("")
-        lines.append("Next: choose a BLAST database, for example `against nt` or `against local_bacteria_db`.")
+    if program not in ["blastn", "blastp"]:
+        lines.extend([
+            "",
+            f"{program} is not supported by the current BLAST job model. Choose blastn or blastp.",
+        ])
+        return {
+            "answer": "\n".join(lines),
+            "links": [sample_link(sample), {"label": "Open BLAST", "url": "/blast"}],
+            "suggestions": [
+                f"Prepare blastn for sample {sample.sample_id}",
+                f"Prepare blastp for sample {sample.sample_id}",
+            ],
+            "skip_llm": True,
+        }
+
+    if not database_name:
+        lines.extend([
+            "",
+            "No action can be confirmed yet. Choose a ready local BLAST database using `against DATABASE_NAME`.",
+        ])
+        return {
+            "answer": "\n".join(lines),
+            "links": [sample_link(sample), {"label": "Open BLAST", "url": "/blast"}],
+            "suggestions": [
+                f"Prepare {program} for sample {sample.sample_id} against local_database_name",
+                "Find sample sequences",
+            ],
+            "skip_llm": True,
+        }
+
+    database = (
+        BlastDatabase.objects
+        .filter(name__iexact=database_name, status=BlastDatabase.STATUS_READY)
+        .first()
+    )
+
+    if not database:
+        lines.extend([
+            "",
+            f"I could not find a READY local BLAST database named {database_name}. No action was proposed.",
+        ])
+        return {
+            "answer": "\n".join(lines),
+            "links": [sample_link(sample), {"label": "Open BLAST databases", "url": "/blast"}],
+            "suggestions": [
+                "Find sample sequences",
+                "Summarize BLAST results",
+            ],
+            "skip_llm": True,
+        }
+
+    summary = (
+        f"Run {program} for {sample.sample_id} using {label} "
+        f"against {database.name}"
+    )
+    lines.extend([
+        "",
+        "Review the action details below. BLAST will run only after you confirm.",
+    ])
 
     return {
         "answer": "\n".join(lines),
-        "links": [sample_link(sample)],
+        "links": [sample_link(sample), {"label": "Open BLAST", "url": "/blast"}],
         "suggestions": [
-            f"Prepare {program} for sample {sample.sample_id} against nt",
-            "Find sample sequences",
             "Summarize BLAST results",
+            "Find sample sequences",
         ],
         "skip_llm": True,
         "pending_action": {
-            "type": "BLAST_PLAN",
-            "sample_id": sample.id,
-            "sample_identifier": sample.sample_id,
-            "sequence_label": label,
-            "program": program,
-            "database": database,
-            "status": "NOT_QUEUED",
+            "type": "RUN_BLAST",
+            "summary": summary,
+            "payload": {
+                "name": f"Assistant BLAST — {sample.sample_id}",
+                "project": sample.project_id,
+                "query_sequence": sequence_obj.id,
+                "database": database.id,
+                "program": program,
+                "max_target_seqs": 25,
+                "evalue": "10",
+            },
         },
     }
 
