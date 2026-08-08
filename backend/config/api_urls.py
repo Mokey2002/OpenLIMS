@@ -14,7 +14,13 @@ from alignments.views import AlignmentJobViewSet
 from settings_app.views import SystemSettingsViewSet
 from blast.views import BlastDatabaseViewSet, BlastJobViewSet
 from mass_spec.views import MassSpecRunViewSet
-from assistant.views import AssistantChatView, AssistantStatusView
+from assistant.views import (
+    AssistantActionCancelView,
+    AssistantActionConfirmView,
+    AssistantActionDetailView,
+    AssistantChatView,
+    AssistantStatusView,
+)
 from migration_toolkit.views import (
     MigrationFieldMappingViewSet,
     MigrationJobViewSet,
@@ -58,4 +64,19 @@ router.register(r"migration-row-records", MigrationRowRecordViewSet, basename="m
 urlpatterns = router.urls + [
     path("assistant/chat/", AssistantChatView.as_view(), name="assistant-chat"),
     path("assistant/status/", AssistantStatusView.as_view(), name="assistant-status"),
+    path(
+        "assistant/actions/<uuid:token>/",
+        AssistantActionDetailView.as_view(),
+        name="assistant-action-detail",
+    ),
+    path(
+        "assistant/actions/<uuid:token>/confirm/",
+        AssistantActionConfirmView.as_view(),
+        name="assistant-action-confirm",
+    ),
+    path(
+        "assistant/actions/<uuid:token>/cancel/",
+        AssistantActionCancelView.as_view(),
+        name="assistant-action-cancel",
+    ),
 ]
