@@ -89,6 +89,15 @@ class AssistantActionConfirmView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if action.status in [
+            AssistantAction.STATUS_EXPIRED,
+            AssistantAction.STATUS_FAILED,
+        ]:
+            return Response(
+                serialize_action(action),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         response_status = (
             status.HTTP_202_ACCEPTED
             if action.status == AssistantAction.STATUS_QUEUED
