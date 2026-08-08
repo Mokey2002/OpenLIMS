@@ -10,6 +10,7 @@ import {
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import AssistantChart from "../components/AssistantChart";
+import { OPENLIMS_VERSION } from "../version";
 
 const STARTER_PROMPTS = [
   "Find sample sequences",
@@ -194,7 +195,7 @@ export default function Assistant() {
         </div>
 
         <div className="d-flex flex-column align-items-end gap-2">
-          <Badge bg="dark">v0.20.0 confirmed actions</Badge>
+          <Badge bg="dark">{OPENLIMS_VERSION} confirmed actions</Badge>
           <Badge bg={badgeVariantForProvider(activeProvider)}>
             Using: {activeDisplayName}
           </Badge>
