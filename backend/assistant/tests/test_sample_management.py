@@ -329,6 +329,15 @@ class AssistantSampleManagementTests(APITestCase):
             Event.objects.filter(action="SAMPLE_BATCH_CHANGED").count(),
             4,
         )
+        batch_created_event = Event.objects.get(
+            entity_type="SampleBatch",
+            entity_id=str(batch.id),
+            action="SAMPLE_BATCH_CREATED_ASSISTANT",
+        )
+        self.assertLessEqual(
+            len(batch_created_event.action),
+            Event._meta.get_field("action").max_length,
+        )
         self.assertEqual(
             Event.objects.filter(action="SAMPLE_ASSIGNED").count(),
             4,

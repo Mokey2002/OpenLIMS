@@ -1384,7 +1384,8 @@ def execute_bulk_sample_update(action):
             Event.objects.create(
                 entity_type="SampleBatch",
                 entity_id=str(batch.id),
-                action="SAMPLE_BATCH_CREATED_BY_ASSISTANT",
+                # Event.action is limited to 32 characters.
+                action="SAMPLE_BATCH_CREATED_ASSISTANT",
                 actor=action.requested_by,
                 payload={
                     "batch_code": batch.code,
@@ -1408,9 +1409,11 @@ def execute_bulk_sample_update(action):
         ):
             raise ValueError("The target user is no longer a tech or admin.")
 
+    # Lock only Sample rows. PostgreSQL rejects FOR UPDATE when nullable
+    # select_related() rows (project, batch, or assignee) are also locked.
     samples_by_id = {
         sample.id: sample
-        for sample in Sample.objects.select_for_update()
+        for sample in Sample.objects.select_for_update(of=("self",))
         .select_related("project", "batch", "assigned_to")
         .filter(id__in=sample_ids)
     }
