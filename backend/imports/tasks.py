@@ -230,6 +230,12 @@ def process_rows(job, rows, actor=None):
                 "value_string": "",
                 "value_number": None,
                 "value_boolean": None,
+                "entered_by": actor,
+                "reference_min": mapping.min_value,
+                "reference_max": mapping.max_value,
+                "qc_rule": (
+                    f"{mapping.target_key} must satisfy the configured instrument mapping."
+                ),
             }
 
             if mapping.value_type == "STRING":
@@ -238,6 +244,20 @@ def process_rows(job, rows, actor=None):
                 defaults["value_number"] = normalized
             elif mapping.value_type == "BOOLEAN":
                 defaults["value_boolean"] = normalized
+
+            if mapping.value_type == "NUMBER":
+                defaults["qc_passed"] = True
+            elif mapping.value_type == "STRING" and str(normalized).upper() in {
+                "PASS",
+                "FAIL",
+                "REVIEW",
+            }:
+                defaults["qc_passed"] = str(normalized).upper() == "PASS"
+                defaults["qc_failure_reason"] = (
+                    ""
+                    if defaults["qc_passed"]
+                    else f"Instrument reported {str(normalized).upper()}."
+                )
 
             Result.objects.update_or_create(
                 work_item=work_item,

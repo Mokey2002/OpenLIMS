@@ -112,6 +112,7 @@ export default function AdminSettings() {
         max_sequence_length: Number(form.max_sequence_length),
         viewer_read_only: Boolean(form.viewer_read_only),
         require_audit_reason: Boolean(form.require_audit_reason),
+        qc_separation_of_duties: Boolean(form.qc_separation_of_duties),
       };
 
       const data = await apiPatch("/api/system-settings/1/", payload);
@@ -377,6 +378,17 @@ export default function AdminSettings() {
                   disabled={!userIsAdmin}
                   onChange={(e) =>
                     updateField("require_audit_reason", e.target.checked)
+                  }
+                />
+
+                <Form.Check
+                  type="switch"
+                  className="mb-3"
+                  label="Enforce QC separation of duties"
+                  checked={Boolean(form.qc_separation_of_duties)}
+                  disabled={!userIsAdmin}
+                  onChange={(e) =>
+                    updateField("qc_separation_of_duties", e.target.checked)
                   }
                 />
 

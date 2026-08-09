@@ -84,6 +84,7 @@ class SystemSettingsViewSet(viewsets.ModelViewSet):
         settings_obj.max_sequence_length = 100000
         settings_obj.viewer_read_only = True
         settings_obj.require_audit_reason = False
+        settings_obj.qc_separation_of_duties = False
         settings_obj.updated_by = request.user
         settings_obj.save()
 

@@ -11,6 +11,8 @@ from .action_routes import route_confirmed_action_proposal
 from .attention import route_attention_summary
 from .calculations import route_worklist_or_calculation
 from .charts import route_assistant_chart
+from .inventory_operations import route_inventory_operations
+from .qc_operations import route_qc_operations
 from .sample_operations import route_sample_management
 from .sequences import route_assistant_sequence
 
@@ -453,6 +455,14 @@ def route_assistant_message(message, user, context=None):
     )
     if sample_management_result:
         return sample_management_result
+
+    qc_result = route_qc_operations(query, user, context=context)
+    if qc_result:
+        return qc_result
+
+    inventory_result = route_inventory_operations(query, user, context=context)
+    if inventory_result:
+        return inventory_result
 
     confirmed_action_result = route_confirmed_action_proposal(query, user)
     if confirmed_action_result:

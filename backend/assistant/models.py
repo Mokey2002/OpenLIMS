@@ -13,6 +13,8 @@ class AssistantAction(models.Model):
     ACTION_QUEUE_IMPORT = "QUEUE_IMPORT"
     ACTION_CREATE_SAMPLES = "CREATE_SAMPLES"
     ACTION_BULK_SAMPLE_UPDATE = "BULK_SAMPLE_UPDATE"
+    ACTION_QC_REVIEW = "QC_REVIEW"
+    ACTION_INVENTORY_OPERATION = "INVENTORY_OPERATION"
 
     ACTION_CHOICES = [
         (ACTION_RUN_BLAST, "Run BLAST"),
@@ -22,6 +24,8 @@ class AssistantAction(models.Model):
         (ACTION_QUEUE_IMPORT, "Queue import"),
         (ACTION_CREATE_SAMPLES, "Create samples"),
         (ACTION_BULK_SAMPLE_UPDATE, "Bulk sample update"),
+        (ACTION_QC_REVIEW, "QC review"),
+        (ACTION_INVENTORY_OPERATION, "Inventory operation"),
     ]
 
     STATUS_PROPOSED = "PROPOSED"

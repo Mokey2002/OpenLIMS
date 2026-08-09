@@ -16,11 +16,14 @@ from imports.tasks import process_import_job
 from migration_toolkit.models import MigrationJob
 from migration_toolkit.services import suggest_field_mappings
 from projects.models import Project
+from core.permissions import is_admin, is_qc_reviewer, is_tech
 from samples.access import get_sample_access_queryset, validate_sample_project_assignment
 from samples.models import Sample
 from sequences.models import Sequence
 
 from .models import AssistantAction
+from .inventory_operations import execute_inventory_operation
+from .qc_operations import execute_qc_review
 from .sample_operations import (
     execute_bulk_sample_update,
     execute_create_samples,
@@ -83,10 +86,13 @@ def propose_action(user, action_type, summary, payload):
     return action
 
 
-def _user_can_execute(user):
-    if user.is_superuser:
-        return True
-    return user.groups.filter(name__in=["admin", "tech"]).exists()
+def _user_can_execute(user, action):
+    if action.action_type == AssistantAction.ACTION_QC_REVIEW:
+        operation = (action.payload or {}).get("operation")
+        if operation in {"APPROVE", "REJECT", "REOPEN"}:
+            return is_qc_reviewer(user)
+        return is_admin(user) or is_tech(user) or is_qc_reviewer(user)
+    return is_admin(user) or is_tech(user)
 
 
 def _assert_sample_access(user, sample_id):
@@ -318,6 +324,14 @@ def _bulk_sample_update(action):
     return AssistantAction.STATUS_COMPLETED, execute_bulk_sample_update(action)
 
 
+def _qc_review(action):
+    return AssistantAction.STATUS_COMPLETED, execute_qc_review(action)
+
+
+def _inventory_operation(action):
+    return AssistantAction.STATUS_COMPLETED, execute_inventory_operation(action)
+
+
 EXECUTORS = {
     AssistantAction.ACTION_RUN_BLAST: _run_blast,
     AssistantAction.ACTION_RUN_ALIGNMENT: _run_alignment,
@@ -326,6 +340,8 @@ EXECUTORS = {
     AssistantAction.ACTION_QUEUE_IMPORT: _queue_import,
     AssistantAction.ACTION_CREATE_SAMPLES: _create_samples,
     AssistantAction.ACTION_BULK_SAMPLE_UPDATE: _bulk_sample_update,
+    AssistantAction.ACTION_QC_REVIEW: _qc_review,
+    AssistantAction.ACTION_INVENTORY_OPERATION: _inventory_operation,
 }
 
 
@@ -357,7 +373,39 @@ def confirm_action(token, user):
                 _audit(action, "ASSISTANT_ACTION_EXPIRED")
                 return action
 
-            if not _user_can_execute(user):
+            if not _user_can_execute(user, action):
+                if action.action_type == AssistantAction.ACTION_QC_REVIEW:
+                    action.status = AssistantAction.STATUS_FAILED
+                    action.error_message = (
+                        "Only QC reviewers or admins can confirm QC actions."
+                    )
+                    action.executed_at = timezone.now()
+                    action.save(
+                        update_fields=[
+                            "status",
+                            "error_message",
+                            "executed_at",
+                            "updated_at",
+                        ]
+                    )
+                    _audit(
+                        action,
+                        "ASSISTANT_ACTION_AUTH_DENIED",
+                        {"reason": action.error_message},
+                    )
+                    for result_id in (action.payload or {}).get("result_ids", []):
+                        Event.objects.create(
+                            entity_type="Result",
+                            entity_id=str(result_id),
+                            action="QC_AUTHORIZATION_DENIED",
+                            actor=user,
+                            payload={
+                                "assistant_action_id": str(action.id),
+                                "operation": (action.payload or {}).get("operation"),
+                                "reason": action.error_message,
+                            },
+                        )
+                    return action
                 raise AssistantActionError(
                     "Only users in the tech or admin role can confirm assistant actions."
                 )

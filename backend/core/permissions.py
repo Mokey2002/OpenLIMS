@@ -28,6 +28,10 @@ def is_viewer(user):
     return has_role(user, "viewer")
 
 
+def is_qc_reviewer(user):
+    return is_admin(user) or has_role(user, "qc_reviewer")
+
+
 class IsAdminOnly(BasePermission):
     """
     Only OpenLIMS admins or Django superusers can access.
@@ -71,7 +75,12 @@ class IsAuthenticatedReadOnlyOrTechAdminWrite(BasePermission):
             return False
 
         if request.method in SAFE_METHODS:
-            return is_admin(user) or is_tech(user) or is_viewer(user)
+            return (
+                is_admin(user)
+                or is_tech(user)
+                or is_viewer(user)
+                or is_qc_reviewer(user)
+            )
 
         return is_admin(user) or is_tech(user)
 

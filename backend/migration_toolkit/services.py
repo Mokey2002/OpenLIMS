@@ -288,7 +288,7 @@ def build_preview(profile, uploaded_file, default_project=None, preview_limit=10
     }
 
 
-def set_result_value(work_item, key, raw_value, value_type):
+def set_result_value(work_item, key, raw_value, value_type, entered_by=None):
     normalized = normalize_value(raw_value, value_type)
 
     defaults = {
@@ -296,6 +296,7 @@ def set_result_value(work_item, key, raw_value, value_type):
         "value_string": "",
         "value_number": None,
         "value_boolean": None,
+        "entered_by": entered_by,
     }
 
     if value_type == MigrationFieldMapping.VALUE_TYPE_NUMBER:
@@ -804,6 +805,7 @@ def apply_migration(
                         key=result_key,
                         raw_value=raw_value,
                         value_type=mapping.value_type,
+                        entered_by=actor,
                     )
 
                     results_created += 1

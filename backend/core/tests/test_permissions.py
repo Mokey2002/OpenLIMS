@@ -952,23 +952,79 @@ class BackendPermissionTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_tech_can_qc_review_work_item(self):
+    def test_tech_cannot_qc_review_work_item_without_qc_role(self):
         self.auth_as(self.tech)
 
         response = self.client.post(
             f"/api/work-items/{self.work_item.id}/qc-review/",
             {
                 "qc_status": "APPROVED",
-                "review_note": "Tech approval is allowed.",
+                "review_note": "Tech approval is not authorized.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.work_item.refresh_from_db()
+        self.assertEqual(self.work_item.qc_status, WorkItem.QC_PENDING_REVIEW)
+
+    def test_tech_cannot_patch_work_item_qc_status_around_review_workflow(self):
+        self.auth_as(self.tech)
+
+        response = self.client.patch(
+            f"/api/work-items/{self.work_item.id}/",
+            {"qc_status": "APPROVED"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.work_item.refresh_from_db()
+        self.assertEqual(self.work_item.qc_status, WorkItem.QC_PENDING_REVIEW)
+        self.assertTrue(
+            Event.objects.filter(
+                entity_type="WorkItem",
+                entity_id=str(self.work_item.id),
+                action="QC_AUTHORIZATION_DENIED",
+                actor=self.tech,
+            ).exists()
+        )
+
+    def test_qc_reviewer_can_review_work_item(self):
+        reviewer = create_user(
+            "qc-reviewer",
+            "reviewer123",
+            role="qc_reviewer",
+        )
+        self.project.members.add(reviewer)
+        self.auth_as(reviewer)
+
+        response = self.client.post(
+            f"/api/work-items/{self.work_item.id}/qc-review/",
+            {
+                "qc_status": "APPROVED",
+                "review_note": "Control and reference range passed.",
             },
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-
         self.work_item.refresh_from_db()
         self.assertEqual(self.work_item.qc_status, WorkItem.QC_APPROVED)
-        self.assertEqual(self.work_item.reviewed_by, self.tech)
+        self.assertEqual(self.work_item.reviewed_by, reviewer)
+
+    def test_qc_reviewer_can_read_project_results(self):
+        reviewer = create_user(
+            "qc-reader",
+            "reviewer123",
+            role="qc_reviewer",
+        )
+        self.project.members.add(reviewer)
+        self.auth_as(reviewer)
+
+        response = self.client.get(f"/api/work-items/{self.work_item.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_tech_cannot_create_csv_import_for_unassigned_project(self):
         other_project = Project.objects.create(

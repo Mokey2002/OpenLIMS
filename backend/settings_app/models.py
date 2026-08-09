@@ -22,6 +22,7 @@ class SystemSettings(models.Model):
 
     viewer_read_only = models.BooleanField(default=True)
     require_audit_reason = models.BooleanField(default=False)
+    qc_separation_of_duties = models.BooleanField(default=False)
 
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -66,6 +67,7 @@ class SystemSettings(models.Model):
                 "max_sequence_length": 100000,
                 "viewer_read_only": True,
                 "require_audit_reason": False,
+                "qc_separation_of_duties": False,
             },
         )
         return obj
