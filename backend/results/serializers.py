@@ -5,6 +5,19 @@ from .models import WorkItem, Result, SampleAttachment
 
 class ResultSerializer(serializers.ModelSerializer):
     value = serializers.SerializerMethodField()
+    entered_by_username = serializers.CharField(
+        source="entered_by.username",
+        read_only=True,
+    )
+    qc_assigned_to_username = serializers.CharField(
+        source="qc_assigned_to.username",
+        read_only=True,
+    )
+    qc_reviewed_by_username = serializers.CharField(
+        source="qc_reviewed_by.username",
+        read_only=True,
+    )
+    reference_comparison = serializers.CharField(read_only=True)
 
     class Meta:
         model = Result
@@ -17,9 +30,41 @@ class ResultSerializer(serializers.ModelSerializer):
             "value_number",
             "value_boolean",
             "value",
+            "unit",
+            "reference_min",
+            "reference_max",
+            "reference_comparison",
+            "qc_rule",
+            "qc_passed",
+            "qc_failure_reason",
+            "qc_status",
+            "entered_by",
+            "entered_by_username",
+            "qc_assigned_to",
+            "qc_assigned_to_username",
+            "qc_reviewed_by",
+            "qc_reviewed_by_username",
+            "qc_reviewed_at",
+            "qc_review_note",
             "created_at",
+            "updated_at",
         ]
-        read_only_fields = ["id", "value", "created_at"]
+        read_only_fields = [
+            "id",
+            "value",
+            "reference_comparison",
+            "qc_status",
+            "entered_by",
+            "entered_by_username",
+            "qc_assigned_to",
+            "qc_assigned_to_username",
+            "qc_reviewed_by",
+            "qc_reviewed_by_username",
+            "qc_reviewed_at",
+            "qc_review_note",
+            "created_at",
+            "updated_at",
+        ]
 
     def get_value(self, obj):
         return obj.value
@@ -44,6 +89,23 @@ class ResultSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"value_boolean": "Required for BOOLEAN results."}
                 )
+
+        reference_min = attrs.get(
+            "reference_min",
+            getattr(self.instance, "reference_min", None),
+        )
+        reference_max = attrs.get(
+            "reference_max",
+            getattr(self.instance, "reference_max", None),
+        )
+        if (
+            reference_min is not None
+            and reference_max is not None
+            and reference_min > reference_max
+        ):
+            raise serializers.ValidationError(
+                {"reference_max": "Reference maximum must be at least the minimum."}
+            )
 
         return attrs
 
@@ -73,6 +135,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "qc_status",
             "reviewed_by",
             "reviewed_by_username",
             "reviewed_at",

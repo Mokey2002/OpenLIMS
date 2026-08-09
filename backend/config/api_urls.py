@@ -5,7 +5,13 @@ from samples.views import (
     SampleViewSet,
     SingleSampleAttachmentViewSet,
 )
-from inventory.views import LocationViewSet, ContainerViewSet
+from inventory.views import (
+    ContainerViewSet,
+    InventoryItemViewSet,
+    InventoryLotViewSet,
+    InventoryReservationViewSet,
+    LocationViewSet,
+)
 from events.views import EventViewSet
 from custom_fields.views import FieldDefinitionViewSet, FieldValueViewSet
 from results.views import WorkItemViewSet, ResultViewSet, SampleAttachmentViewSet
@@ -38,6 +44,13 @@ router.register(r"samples", SampleViewSet, basename="sample")
 router.register(r"sample-batches", SampleBatchViewSet, basename="sample-batch")
 router.register(r"locations", LocationViewSet, basename="location")
 router.register(r"containers", ContainerViewSet, basename="container")
+router.register(r"inventory-items", InventoryItemViewSet, basename="inventory-item")
+router.register(r"inventory-lots", InventoryLotViewSet, basename="inventory-lot")
+router.register(
+    r"inventory-reservations",
+    InventoryReservationViewSet,
+    basename="inventory-reservation",
+)
 router.register(r"events", EventViewSet, basename="event")
 router.register(r"field-definitions", FieldDefinitionViewSet, basename="field-definition")
 router.register(r"field-values", FieldValueViewSet, basename="field-value")

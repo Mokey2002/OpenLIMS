@@ -1,8 +1,14 @@
+import os
+from datetime import timedelta
+from decimal import Decimal
+
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.files.base import ContentFile
-from inventory.models import Location, Container
+from django.utils import timezone
+
+from inventory.models import Container, InventoryItem, InventoryLot, Location
 from samples.models import Sample
 from results.models import WorkItem, Result
 from imports.models import InstrumentProfile, InstrumentColumnMapping, ImportJob
@@ -114,8 +120,17 @@ def get_or_create_safe(model, lookup, defaults=None):
     return obj, created
 
 
-def create_demo_user(username, password, group, *, email, first_name, last_name, is_admin=False):
-    user, _ = User.objects.get_or_create(
+def create_demo_user(
+    username,
+    group,
+    *,
+    email,
+    first_name,
+    last_name,
+    is_admin=False,
+    password=None,
+):
+    user, created = User.objects.get_or_create(
         username=username,
         defaults={
             "email": email,
@@ -127,7 +142,10 @@ def create_demo_user(username, password, group, *, email, first_name, last_name,
     user.email = email
     user.first_name = first_name
     user.last_name = last_name
-    user.set_password(password)
+    if password:
+        user.set_password(password)
+    elif created:
+        user.set_unusable_password()
     user.is_staff = is_admin
     user.is_superuser = is_admin
     user.is_active = True
@@ -160,6 +178,39 @@ def set_result_value(work_item, key, value):
             "value_number": None,
             "value_boolean": None,
         }
+
+    reference_ranges = {
+        "mean_q_score": (30, 45, "score"),
+        "percent_q30": (80, 100, "%"),
+        "purity": (90, 100, "%"),
+        "spike_recovery_percent": (80, 120, "%"),
+        "quality_score": (60, 100, "score"),
+        "rin": (7, 10, "score"),
+    }
+    if key in reference_ranges and isinstance(value, (int, float)):
+        minimum, maximum, unit = reference_ranges[key]
+        passed = minimum <= value <= maximum
+        defaults.update(
+            {
+                "reference_min": minimum,
+                "reference_max": maximum,
+                "unit": unit,
+                "qc_rule": f"{key} must be between {minimum} and {maximum} {unit}.",
+                "qc_passed": passed,
+                "qc_failure_reason": (
+                    "" if passed else f"{value} {unit} is outside {minimum} to {maximum}."
+                ),
+            }
+        )
+    elif isinstance(value, str) and value.upper() in {"PASS", "FAIL", "REVIEW"}:
+        passed = value.upper() == "PASS"
+        defaults.update(
+            {
+                "qc_rule": "Instrument QC status must be PASS.",
+                "qc_passed": passed,
+                "qc_failure_reason": "" if passed else f"Instrument reported {value.upper()}.",
+            }
+        )
 
     Result.objects.update_or_create(
         work_item=work_item,
@@ -520,58 +571,58 @@ class Command(BaseCommand):
         admin_group, _ = Group.objects.get_or_create(name="admin")
         tech_group, _ = Group.objects.get_or_create(name="tech")
         viewer_group, _ = Group.objects.get_or_create(name="viewer")
+        qc_reviewer_group, _ = Group.objects.get_or_create(name="qc_reviewer")
 
         # --------------------------------------------------
         # Users
         # --------------------------------------------------
+        demo_password = os.environ.get("OPENLIMS_DEMO_PASSWORD") or None
         director = create_demo_user(
             "director",
-            "Director123!",
             admin_group,
             email="director@example.com",
             first_name="Dana",
             last_name="Director",
             is_admin=True,
+            password=demo_password,
         )
 
         peter = create_demo_user(
             "peter",
-            "peter123",
             tech_group,
             email="peter.tech@example.com",
             first_name="Peter",
             last_name="Nguyen",
+            password=demo_password,
         )
 
         maria = create_demo_user(
             "maria",
-            "maria123",
             tech_group,
             email="maria.tech@example.com",
             first_name="Maria",
             last_name="Chen",
+            password=demo_password,
         )
+        maria.groups.add(qc_reviewer_group)
 
         michael = create_demo_user(
             "michael",
-            "michael123",
             tech_group,
             email="michael.tech@example.com",
             first_name="Michael",
             last_name="Patel",
+            password=demo_password,
         )
 
         viewer = create_demo_user(
             "viewer",
-            "viewer123",
             viewer_group,
             email="viewer@example.com",
             first_name="Vivian",
             last_name="Reviewer",
+            password=demo_password,
         )
-
-        # Keep old variable names so older seed sections stay readable.
-        admin = director
 
         # --------------------------------------------------
         # Projects
@@ -671,6 +722,45 @@ class Command(BaseCommand):
                 "kind": "Sequencing prep rack",
                 "location": sequencing_bench,
                 "description": "Rack for sequencing prep samples.",
+            },
+        )
+
+        freezer_f2, _ = get_or_create_safe(
+            Location,
+            {"name": "F2"},
+            {"kind": "FREEZER"},
+        )
+        rack_r4, _ = get_or_create_safe(
+            Container,
+            {"container_id": "R4"},
+            {"kind": "RACK", "location": freezer_f2},
+        )
+        box_b3, _ = get_or_create_safe(
+            Container,
+            {"container_id": "B3"},
+            {"kind": "BOX", "location": freezer_f2, "parent": rack_r4},
+        )
+        reagent_r100, _ = get_or_create_safe(
+            InventoryItem,
+            {"code": "R-100"},
+            {
+                "name": "Sequencing reagent",
+                "category": InventoryItem.CATEGORY_REAGENT,
+                "default_unit": "mL",
+                "reorder_level": Decimal("150"),
+            },
+        )
+        get_or_create_safe(
+            InventoryLot,
+            {"lot_code": "L-204"},
+            {
+                "item": reagent_r100,
+                "quantity": Decimal("100"),
+                "unit": "mL",
+                "expiration_date": timezone.localdate() + timedelta(days=20),
+                "status": InventoryLot.STATUS_ACTIVE,
+                "location": freezer_f2,
+                "container": box_b3,
             },
         )
 
@@ -1624,8 +1714,17 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Demo data seeded successfully."))
         self.stdout.write("")
         self.stdout.write("Demo users:")
-        self.stdout.write("  director / Director123!")
-        self.stdout.write("  peter / peter123")
-        self.stdout.write("  maria / maria123")
-        self.stdout.write("  michael / michael123")
-        self.stdout.write("  viewer / viewer123")
+        self.stdout.write("  director (admin)")
+        self.stdout.write("  peter (tech)")
+        self.stdout.write("  maria (tech + QC reviewer)")
+        self.stdout.write("  michael (tech)")
+        self.stdout.write("  viewer (read only)")
+        if demo_password:
+            self.stdout.write(
+                "Passwords were set from OPENLIMS_DEMO_PASSWORD; the value is not displayed."
+            )
+        else:
+            self.stdout.write(
+                "Existing passwords were preserved. New demo users cannot sign in until "
+                "OPENLIMS_DEMO_PASSWORD is set and seed_demo is run again."
+            )

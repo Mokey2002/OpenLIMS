@@ -16,7 +16,7 @@ function recordValues(values) {
 export default function AssistantActionPreview({ action }) {
   const preview = action?.preview || {};
   const result = action?.result || {};
-  const samples = preview.samples || [];
+  const records = preview.records || preview.samples || [];
   const excluded = preview.excluded || [];
   const warnings = preview.warnings || [];
   const validationErrors = preview.validation_errors || [];
@@ -49,7 +49,7 @@ export default function AssistantActionPreview({ action }) {
               </tr>
               <tr>
                 <th>Records affected</th>
-                <td>{preview.records_affected ?? samples.length}</td>
+                <td>{preview.records_affected ?? records.length}</td>
               </tr>
               <tr>
                 <th>Excluded</th>
@@ -66,22 +66,24 @@ export default function AssistantActionPreview({ action }) {
             </tbody>
           </Table>
 
-          {samples.length > 0 && (
+          {records.length > 0 && (
             <div className="table-responsive" style={{ maxHeight: 300 }}>
               <Table size="sm" striped bordered className="mb-2">
                 <thead>
                   <tr>
-                    <th>Sample</th>
+                    <th>Record</th>
                     <th>Current</th>
                     <th>Proposed</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {samples.map((sample, index) => (
-                    <tr key={`${sample.id || "new"}-${sample.sample_id}-${index}`}>
-                      <td>{sample.sample_id}</td>
-                      <td>{recordValues(sample.current)}</td>
-                      <td>{recordValues(sample.proposed)}</td>
+                  {records.map((record, index) => (
+                    <tr
+                      key={`${record.id || "new"}-${record.label || record.sample_id}-${index}`}
+                    >
+                      <td>{record.label || record.sample_id || `Record ${record.id}`}</td>
+                      <td>{recordValues(record.current)}</td>
+                      <td>{recordValues(record.proposed)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -113,11 +115,11 @@ export default function AssistantActionPreview({ action }) {
 
           {excluded.length > 0 && (
             <Alert variant="secondary" className="py-2 mb-2">
-              <strong>Excluded samples</strong>
+              <strong>Excluded records</strong>
               <ul className="mb-0">
-                {excluded.map((sample, index) => (
-                  <li key={`${sample.sample_id}-${index}`}>
-                    {sample.sample_id || `Record ${sample.id}`}: {sample.reason}
+                {excluded.map((record, index) => (
+                  <li key={`${record.id || record.sample_id || record.label}-${index}`}>
+                    {record.label || record.sample_id || `Record ${record.id}`}: {record.reason}
                   </li>
                 ))}
               </ul>
@@ -141,7 +143,7 @@ export default function AssistantActionPreview({ action }) {
             <ul className="mb-0">
               {failures.map((failure, index) => (
                 <li key={`${failure.id || failure.sample_id}-${index}`}>
-                  {failure.sample_id || `Record ${failure.id}`}: {failure.reason}
+                  {failure.label || failure.sample_id || `Record ${failure.id}`}: {failure.reason}
                 </li>
               ))}
             </ul>

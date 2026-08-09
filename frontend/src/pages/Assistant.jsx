@@ -18,6 +18,10 @@ const STARTER_PROMPTS = [
   "Show samples received today",
   "Find sample S-1042",
   "Which samples in Project Alpha are awaiting processing?",
+  "Which results are awaiting approval?",
+  "Show results that failed QC this week",
+  "Which reagents expire in the next 30 days?",
+  "Show inventory below its reorder level",
   "Find sample sequences",
   "Summarize sequence records",
   "Prepare BLAST for sample",
@@ -220,10 +224,10 @@ export default function Assistant() {
       {err && <Alert variant="danger">{err}</Alert>}
 
       <Alert variant="info">
-        The assistant can preview sample and bulk-sample operations and propose
-        BLAST, alignment, migration-mapping, report, and import actions. A
-        proposal expires after 15 minutes and never runs until you select
-        Confirm.
+        The assistant can preview sample, bulk-sample, QC-review, and inventory
+        operations and propose BLAST, alignment, migration-mapping, report, and
+        import actions. A proposal expires after 15 minutes and never runs until
+        you select Confirm.
       </Alert>
 
       <Alert variant="secondary">

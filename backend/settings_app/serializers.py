@@ -25,6 +25,7 @@ class SystemSettingsSerializer(serializers.ModelSerializer):
             "max_sequence_length",
             "viewer_read_only",
             "require_audit_reason",
+            "qc_separation_of_duties",
             "updated_by",
             "updated_by_username",
             "created_at",
@@ -91,4 +92,3 @@ class SystemSettingsSerializer(serializers.ModelSerializer):
             )
 
         return sorted(set(cleaned))
-

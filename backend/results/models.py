@@ -72,6 +72,18 @@ class Result(models.Model):
         (VALUE_TYPE_BOOLEAN, "Boolean"),
     ]
 
+    QC_PENDING_REVIEW = "PENDING_REVIEW"
+    QC_APPROVED = "APPROVED"
+    QC_REJECTED = "REJECTED"
+    QC_REOPENED = "REOPENED"
+
+    QC_STATUS_CHOICES = [
+        (QC_PENDING_REVIEW, "Pending Review"),
+        (QC_APPROVED, "Approved"),
+        (QC_REJECTED, "Rejected"),
+        (QC_REOPENED, "Reopened"),
+    ]
+
     work_item = models.ForeignKey(
         WorkItem,
         on_delete=models.CASCADE,
@@ -88,7 +100,43 @@ class Result(models.Model):
     value_number = models.FloatField(null=True, blank=True)
     value_boolean = models.BooleanField(null=True, blank=True)
 
+    unit = models.CharField(max_length=32, blank=True, default="")
+    reference_min = models.FloatField(null=True, blank=True)
+    reference_max = models.FloatField(null=True, blank=True)
+    qc_rule = models.CharField(max_length=255, blank=True, default="")
+    qc_passed = models.BooleanField(null=True, blank=True)
+    qc_failure_reason = models.TextField(blank=True, default="")
+    qc_status = models.CharField(
+        max_length=32,
+        choices=QC_STATUS_CHOICES,
+        default=QC_PENDING_REVIEW,
+    )
+    entered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="entered_results",
+    )
+    qc_assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_qc_results",
+    )
+    qc_reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_results",
+    )
+    qc_reviewed_at = models.DateTimeField(null=True, blank=True)
+    qc_review_note = models.TextField(blank=True, default="")
+
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         unique_together = [("work_item", "key")]
@@ -103,6 +151,18 @@ class Result(models.Model):
         if self.value_type == self.VALUE_TYPE_BOOLEAN:
             return self.value_boolean
         return self.value_string
+
+    @property
+    def reference_comparison(self):
+        if self.value_type != self.VALUE_TYPE_NUMBER or self.value_number is None:
+            return "not_numeric"
+        if self.reference_min is None and self.reference_max is None:
+            return "not_configured"
+        if self.reference_min is not None and self.value_number < self.reference_min:
+            return "below"
+        if self.reference_max is not None and self.value_number > self.reference_max:
+            return "above"
+        return "within"
 
 
 class SampleAttachment(models.Model):
