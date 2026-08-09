@@ -133,6 +133,27 @@ export async function apiGet(path) {
   return res.json();
 }
 
+export async function apiDownload(path, fallbackFilename = "openlims-download") {
+  const res = await request(path, { method: "GET" });
+
+  if (!res.ok) {
+    throw new Error(`GET ${path} failed: ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
+  const filename = match ? decodeURIComponent(match[1].replace(/"$/, "")) : fallbackFilename;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function apiPost(path, body) {
   const res = await request(path, {
     method: "POST",

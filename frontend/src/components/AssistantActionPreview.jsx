@@ -1,4 +1,6 @@
-import { Alert, Badge, Table } from "react-bootstrap";
+import { useState } from "react";
+import { Alert, Badge, Button, Table } from "react-bootstrap";
+import { apiDownload } from "../api";
 
 function displayValue(value) {
   if (value === null || value === undefined || value === "") return "—";
@@ -14,6 +16,8 @@ function recordValues(values) {
 }
 
 export default function AssistantActionPreview({ action }) {
+  const [downloadError, setDownloadError] = useState("");
+  const [downloading, setDownloading] = useState(false);
   const preview = action?.preview || {};
   const result = action?.result || {};
   const records = preview.records || preview.samples || [];
@@ -147,6 +151,29 @@ export default function AssistantActionPreview({ action }) {
                 </li>
               ))}
             </ul>
+          )}
+          {result.download_url && (
+            <div className="mt-2">
+              <Button
+                size="sm"
+                variant="outline-success"
+                disabled={downloading}
+                onClick={async () => {
+                  setDownloadError("");
+                  setDownloading(true);
+                  try {
+                    await apiDownload(result.download_url, "openlims-artifact");
+                  } catch (error) {
+                    setDownloadError(error.message || String(error));
+                  } finally {
+                    setDownloading(false);
+                  }
+                }}
+              >
+                {downloading ? "Downloading..." : "Download generated file"}
+              </Button>
+              {downloadError && <div className="text-danger mt-1">{downloadError}</div>}
+            </div>
           )}
         </Alert>
       )}

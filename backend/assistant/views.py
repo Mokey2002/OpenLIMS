@@ -1,5 +1,11 @@
 from rest_framework import serializers, status
+from django.db.models import Q
+from django.http import FileResponse
+from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
+
+from core.permissions import IsAdminOnly, is_admin
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -12,6 +18,9 @@ from .actions import (
 )
 from .llm import configured_model_info, enhance_with_llm
 from .models import AssistantAction
+from .models import GeneratedArtifact, NotificationSubscription, SOPDocument
+from .monitoring import build_admin_monitoring_status
+from .serializers import NotificationSubscriptionSerializer, SOPDocumentSerializer
 from .tools import route_assistant_message
 
 
@@ -125,3 +134,61 @@ class AssistantActionCancelView(APIView):
             )
 
         return Response(serialize_action(action), status=status.HTTP_200_OK)
+
+
+class AssistantArtifactDownloadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, artifact_id):
+        artifact = GeneratedArtifact.objects.select_related("project", "created_by").filter(id=artifact_id).first()
+        if not artifact:
+            return Response({"detail": "Artifact not found."}, status=status.HTTP_404_NOT_FOUND)
+        allowed = artifact.created_by_id == request.user.id or is_admin(request.user)
+        if artifact.project_id:
+            allowed = allowed or artifact.project.members.filter(id=request.user.id).exists()
+        if not allowed:
+            return Response({"detail": "Artifact access denied."}, status=status.HTTP_403_FORBIDDEN)
+        return FileResponse(artifact.file.open("rb"), content_type=artifact.content_type, as_attachment=True, filename=artifact.filename)
+
+
+class SOPDocumentViewSet(ModelViewSet):
+    serializer_class = SOPDocumentSerializer
+
+    def get_permissions(self):
+        if self.request.method not in ["GET", "HEAD", "OPTIONS"]:
+            return [IsAdminOnly()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        queryset = SOPDocument.objects.select_related("project", "uploaded_by").prefetch_related("allowed_groups")
+        if is_admin(self.request.user):
+            return queryset
+        return queryset.filter(
+            approved=True,
+            status=SOPDocument.STATUS_CURRENT,
+            effective_at__lte=timezone.now(),
+        ).filter(
+            Q(project__isnull=True) | Q(project__members=self.request.user)
+        ).filter(
+            Q(allowed_groups__isnull=True) | Q(allowed_groups__in=self.request.user.groups.all())
+        ).distinct()
+
+    def perform_create(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
+
+
+class NotificationSubscriptionViewSet(ReadOnlyModelViewSet):
+    serializer_class = NotificationSubscriptionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return NotificationSubscription.objects.select_related("recipient", "created_by", "project").filter(
+            Q(created_by=self.request.user) | Q(recipient=self.request.user)
+        )
+
+
+class AssistantSystemMonitoringView(APIView):
+    permission_classes = [IsAdminOnly]
+
+    def get(self, request):
+        return Response(build_admin_monitoring_status(), status=status.HTTP_200_OK)

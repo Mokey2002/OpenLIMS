@@ -7,12 +7,14 @@ class WorkItem(models.Model):
     STATUS_IN_PROGRESS = "IN_PROGRESS"
     STATUS_COMPLETED = "COMPLETED"
     STATUS_FAILED = "FAILED"
+    STATUS_CANCELLED = "CANCELLED"
 
     STATUS_CHOICES = [
         (STATUS_PENDING, "Pending"),
         (STATUS_IN_PROGRESS, "In Progress"),
         (STATUS_COMPLETED, "Completed"),
         (STATUS_FAILED, "Failed"),
+        (STATUS_CANCELLED, "Cancelled"),
     ]
 
     QC_PENDING_REVIEW = "PENDING_REVIEW"
@@ -33,12 +35,28 @@ class WorkItem(models.Model):
         related_name="work_items",
     )
     name = models.CharField(max_length=128)
+    work_type = models.CharField(max_length=64, default="GENERAL")
     status = models.CharField(
         max_length=32,
         choices=STATUS_CHOICES,
         default=STATUS_PENDING,
     )
     notes = models.TextField(blank=True)
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_work_items",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_work_items",
+    )
+    due_at = models.DateTimeField(null=True, blank=True)
 
     qc_status = models.CharField(
         max_length=32,
@@ -56,6 +74,22 @@ class WorkItem(models.Model):
     review_note = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sample", "work_type"],
+                condition=models.Q(status__in=["PENDING", "IN_PROGRESS"]),
+                name="active_work_sample_type_unique",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["status", "due_at", "assigned_to"],
+                name="work_status_due_assignee_idx",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.sample.sample_id} - {self.name}"

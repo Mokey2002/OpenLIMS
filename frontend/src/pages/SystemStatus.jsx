@@ -44,6 +44,7 @@ function jobVariant(status) {
 export default function SystemStatus() {
   const [me, setMe] = useState(null);
   const [health, setHealth] = useState(null);
+  const [monitoring, setMonitoring] = useState(null);
   const [imports, setImports] = useState([]);
   const [alignments, setAlignments] = useState([]);
 
@@ -62,6 +63,7 @@ export default function SystemStatus() {
       ]);
 
       let healthData = null;
+      let monitoringData = null;
 
       try {
         const response = await fetch("api/health/");
@@ -76,8 +78,17 @@ export default function SystemStatus() {
         };
       }
 
+      if (isAdmin(meData)) {
+        try {
+          monitoringData = await apiGet("/api/assistant/system-monitoring/");
+        } catch {
+          monitoringData = null;
+        }
+      }
+
       setMe(meData);
       setHealth(healthData);
+      setMonitoring(monitoringData);
       setImports(importData.results || importData || []);
       setAlignments(alignmentData.results || alignmentData || []);
     } catch (e) {
@@ -159,14 +170,14 @@ export default function SystemStatus() {
         <div>
           <h1 className="page-title">System Status</h1>
           <p className="page-subtitle">
-            Monitor API health, database, Redis, Clustal Omega, imports, and
-            alignment jobs.
+            Read-only monitoring for API health, dependencies, workers, queues,
+            failed tasks, storage, and backups.
           </p>
         </div>
 
         <div className="inline-actions">
-          <Badge bg={health?.status === "ok" ? "success" : "danger"}>
-            {health?.status || "unknown"}
+          <Badge bg={(monitoring?.status || health?.status) === "ok" ? "success" : "danger"}>
+            {monitoring?.status || health?.status || "unknown"}
           </Badge>
 
           <Button variant="outline-dark" size="sm" onClick={load}>
@@ -176,6 +187,64 @@ export default function SystemStatus() {
       </div>
 
       {err && <Alert variant="danger">{err}</Alert>}
+
+      {monitoring?.warnings?.length > 0 && (
+        <Alert variant="warning">
+          <strong>Operational warnings</strong>
+          <ul className="mb-0 mt-2">
+            {monitoring.warnings.map((warning) => (
+              <li key={warning.code}>
+                <a href={warning.diagnostic_url}>{warning.message}</a>
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      )}
+
+      {monitoring && (
+        <Row className="g-4 mb-4">
+          <Col md={3}>
+            <Card className="app-card metric-card h-100">
+              <Card.Body>
+                <div className="metric-label">Workers</div>
+                <div className="metric-value">{monitoring.worker_count}</div>
+                <div className="metric-note">{monitoring.worker_availability}</div>
+              </Card.Body>
+            </Card>
+          </Col>
+          <Col md={3}>
+            <Card className="app-card metric-card h-100">
+              <Card.Body>
+                <div className="metric-label">Queue depth</div>
+                <div className="metric-value">{monitoring.queue_depth ?? "-"}</div>
+                <div className="metric-note">Reserved tasks awaiting execution</div>
+              </Card.Body>
+            </Card>
+          </Col>
+          <Col md={3}>
+            <Card className="app-card metric-card h-100">
+              <Card.Body>
+                <div className="metric-label">Storage</div>
+                <div className="metric-value">{monitoring.storage?.used_percent ?? "-"}%</div>
+                <div className="metric-note">{monitoring.storage?.status || "unknown"}</div>
+              </Card.Body>
+            </Card>
+          </Col>
+          <Col md={3}>
+            <Card className="app-card metric-card h-100">
+              <Card.Body>
+                <div className="metric-label">Backup</div>
+                <div className="metric-value">{monitoring.backup?.status || "unknown"}</div>
+                <div className="metric-note">
+                  {monitoring.backup?.latest_age_hours == null
+                    ? "No recent backup detected"
+                    : `${monitoring.backup.latest_age_hours} hours old`}
+                </div>
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+      )}
 
       <Row className="g-4 mb-4">
         <Col md={3}>

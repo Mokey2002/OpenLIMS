@@ -12,6 +12,12 @@ from .attention import route_attention_summary
 from .calculations import route_worklist_or_calculation
 from .charts import route_assistant_chart
 from .inventory_operations import route_inventory_operations
+from .barcode_operations import route_barcode_operations
+from .monitoring import route_system_monitoring
+from .notification_operations import route_notification_operations
+from .reporting_operations import route_reporting_operations
+from .sop_operations import route_sop_assistant
+from .workitem_operations import route_workitem_operations
 from .qc_operations import route_qc_operations
 from .sample_operations import route_sample_management
 from .sequences import route_assistant_sequence
@@ -448,6 +454,14 @@ def route_assistant_message(message, user, context=None):
     if current_user_result:
         return current_user_result
 
+    monitoring_result = route_system_monitoring(query, user, context=context)
+    if monitoring_result:
+        return monitoring_result
+
+    sop_result = route_sop_assistant(query, user, context=context)
+    if sop_result:
+        return sop_result
+
     sample_management_result = route_sample_management(
         query,
         user,
@@ -463,6 +477,22 @@ def route_assistant_message(message, user, context=None):
     inventory_result = route_inventory_operations(query, user, context=context)
     if inventory_result:
         return inventory_result
+
+    workitem_result = route_workitem_operations(query, user, context=context)
+    if workitem_result:
+        return workitem_result
+
+    barcode_result = route_barcode_operations(query, user, context=context)
+    if barcode_result:
+        return barcode_result
+
+    notification_result = route_notification_operations(query, user, context=context)
+    if notification_result:
+        return notification_result
+
+    reporting_result = route_reporting_operations(query, user, context=context)
+    if reporting_result:
+        return reporting_result
 
     confirmed_action_result = route_confirmed_action_proposal(query, user)
     if confirmed_action_result:

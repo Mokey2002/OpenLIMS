@@ -30,6 +30,10 @@ from assistant.views import (
     AssistantActionDetailView,
     AssistantChatView,
     AssistantStatusView,
+    AssistantArtifactDownloadView,
+    AssistantSystemMonitoringView,
+    NotificationSubscriptionViewSet,
+    SOPDocumentViewSet,
 )
 from migration_toolkit.views import (
     MigrationFieldMappingViewSet,
@@ -72,6 +76,8 @@ router.register(r"system-settings", SystemSettingsViewSet, basename="system-sett
 router.register(r"blast-databases", BlastDatabaseViewSet, basename="blast-database")
 router.register(r"blast-jobs", BlastJobViewSet, basename="blast-job")
 router.register(r"mass-spec-runs", MassSpecRunViewSet, basename="mass-spec-run")
+router.register(r"sop-documents", SOPDocumentViewSet, basename="sop-document")
+router.register(r"notification-subscriptions", NotificationSubscriptionViewSet, basename="notification-subscription")
 
 router.register(r"sample-external-ids", SampleExternalIDViewSet, basename="sample-external-id")
 router.register(r"migration-profiles", MigrationProfileViewSet, basename="migration-profile")
@@ -96,5 +102,15 @@ urlpatterns = router.urls + [
         "assistant/actions/<uuid:token>/cancel/",
         AssistantActionCancelView.as_view(),
         name="assistant-action-cancel",
+    ),
+    path(
+        "assistant/artifacts/<uuid:artifact_id>/download/",
+        AssistantArtifactDownloadView.as_view(),
+        name="assistant-artifact-download",
+    ),
+    path(
+        "assistant/system-monitoring/",
+        AssistantSystemMonitoringView.as_view(),
+        name="assistant-system-monitoring",
     ),
 ]

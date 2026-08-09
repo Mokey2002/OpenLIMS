@@ -116,6 +116,14 @@ class WorkItemSerializer(serializers.ModelSerializer):
         source="reviewed_by.username",
         read_only=True,
     )
+    assigned_to_username = serializers.CharField(
+        source="assigned_to.username",
+        read_only=True,
+    )
+    created_by_username = serializers.CharField(
+        source="created_by.username",
+        read_only=True,
+    )
 
     class Meta:
         model = WorkItem
@@ -123,14 +131,21 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "id",
             "sample",
             "name",
+            "work_type",
             "status",
             "notes",
+            "assigned_to",
+            "assigned_to_username",
+            "created_by",
+            "created_by_username",
+            "due_at",
             "qc_status",
             "reviewed_by",
             "reviewed_by_username",
             "reviewed_at",
             "review_note",
             "created_at",
+            "updated_at",
             "results",
         ]
         read_only_fields = [
@@ -142,6 +157,9 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "review_note",
             "created_at",
             "results",
+            "created_by",
+            "created_by_username",
+            "updated_at",
         ]
 
 
