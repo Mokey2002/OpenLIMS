@@ -242,6 +242,7 @@ OpenLIMS includes a read-only assistant for quickly finding and summarizing reco
 
 The assistant can help users ask questions such as:
 
+- Show what needs attention across accessible lab work
 - Find a sample by sample ID
 - Summarize a project
 - Show failed migration jobs
@@ -250,6 +251,13 @@ The assistant can help users ask questions such as:
 - Identify the current logged-in OpenLIMS user
 
 The assistant uses safe backend tools as the source of truth. It does **not** directly modify database records.
+
+The attention summary is permission-filtered and checks samples that have
+remained in an active status for more than three days, missing sample
+information, QC review states, aged open work items, failed instrument
+imports, failed BLAST and alignment jobs, and admin-only system health
+warnings. Inventory quantity and expiry alerts remain unavailable until those
+values are represented in the inventory schema.
 
 ### Assistant Modes
 
@@ -751,4 +759,3 @@ LinkedIn: https://www.linkedin.com/in/edlemus/
 ## 📄 License
 
 Apache 2.0
-

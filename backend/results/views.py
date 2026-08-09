@@ -6,6 +6,8 @@ from rest_framework.viewsets import ModelViewSet
 
 from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite
 from events.models import Event
+from samples.access import get_sample_access_queryset
+from samples.models import Sample
 
 from .models import WorkItem, Result, SampleAttachment
 from .serializers import (
@@ -42,7 +44,12 @@ class WorkItemViewSet(ModelViewSet):
         if qc_status:
             queryset = queryset.filter(qc_status=qc_status)
 
-        return queryset
+        allowed_samples = get_sample_access_queryset(
+            Sample.objects.all(),
+            self.request.user,
+        )
+
+        return queryset.filter(sample__in=allowed_samples)
 
     @action(detail=True, methods=["post"], url_path="qc-review")
     def qc_review(self, request, pk=None):
@@ -183,7 +190,12 @@ class ResultViewSet(ModelViewSet):
         if project_id:
             queryset = queryset.filter(work_item__sample__project_id=project_id)
 
-        return queryset
+        allowed_samples = get_sample_access_queryset(
+            Sample.objects.all(),
+            self.request.user,
+        )
+
+        return queryset.filter(work_item__sample__in=allowed_samples)
 
 
 class SampleAttachmentViewSet(ModelViewSet):
@@ -207,4 +219,9 @@ class SampleAttachmentViewSet(ModelViewSet):
         if project_id:
             queryset = queryset.filter(sample__project_id=project_id)
 
-        return queryset
+        allowed_samples = get_sample_access_queryset(
+            Sample.objects.all(),
+            self.request.user,
+        )
+
+        return queryset.filter(sample__in=allowed_samples)

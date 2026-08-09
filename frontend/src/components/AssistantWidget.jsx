@@ -5,6 +5,7 @@ import { apiGet, apiPost } from "../api";
 import AssistantChart from "./AssistantChart";
 
 const STARTER_PROMPTS = [
+  "What needs attention?",
   "Find sample sequences",
   "Summarize sequence records",
   "Prepare BLAST for sample",
@@ -32,7 +33,7 @@ export default function AssistantWidget() {
     {
       role: "assistant",
       content:
-        "Hi, I can help you find samples, projects, migration jobs, skipped rows, and failed imports.",
+        "Hi, ask what needs attention or let me help you find samples, projects, migration jobs, skipped rows, and failed imports.",
       links: [],
       suggestions: STARTER_PROMPTS,
       modelInfo: {

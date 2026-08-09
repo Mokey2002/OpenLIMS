@@ -13,6 +13,7 @@ import AssistantChart from "../components/AssistantChart";
 import { OPENLIMS_VERSION } from "../version";
 
 const STARTER_PROMPTS = [
+  "What needs attention?",
   "Find sample sequences",
   "Summarize sequence records",
   "Prepare BLAST for sample",
@@ -35,7 +36,7 @@ export default function Assistant() {
     {
       role: "assistant",
       content:
-        "Ask me about samples, projects, migration jobs, skipped rows, failed imports, or where a sample is located.",
+        "Ask what needs attention, or ask about samples, projects, migration jobs, skipped rows, failed imports, or where a sample is located.",
       links: [],
       suggestions: STARTER_PROMPTS,
       modelInfo: {

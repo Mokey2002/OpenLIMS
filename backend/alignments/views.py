@@ -4,6 +4,7 @@ from rest_framework.response import Response
 
 from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite
 from events.models import Event
+from projects.access import get_project_access_queryset
 from sequences.models import Sequence
 
 from .models import AlignmentJob
@@ -33,7 +34,12 @@ class AlignmentJobViewSet(viewsets.ModelViewSet):
         if status_value:
             queryset = queryset.filter(status=status_value)
 
-        return queryset
+        return get_project_access_queryset(
+            queryset,
+            self.request.user,
+            project_lookup="project",
+            owner_lookup="created_by",
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

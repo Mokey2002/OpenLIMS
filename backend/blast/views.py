@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite
+from projects.access import get_project_access_queryset
 
 from .models import BlastDatabase, BlastJob
 from .serializers import BlastDatabaseSerializer, BlastJobSerializer
@@ -84,7 +85,12 @@ class BlastJobViewSet(viewsets.ModelViewSet):
         if status_value:
             queryset = queryset.filter(status=status_value)
 
-        return queryset
+        return get_project_access_queryset(
+            queryset,
+            self.request.user,
+            project_lookup="project",
+            owner_lookup="created_by",
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

@@ -20,6 +20,7 @@ from core.upload_validators import (
     validate_uploaded_file,
 )
 from events.models import Event
+from projects.access import get_project_access_queryset
 from samples.models import Sample
 from samples.access import (
     get_sample_access_queryset,
@@ -101,15 +102,12 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             .order_by("-created_at")
         )
 
-        user = self.request.user
-
-        if not user or not user.is_authenticated:
-            return queryset.none()
-
-        if user.is_superuser or user.groups.filter(name="admin").exists():
-            return queryset
-
-        return queryset.filter(project__members=user).distinct()
+        return get_project_access_queryset(
+            queryset,
+            self.request.user,
+            project_lookup="project",
+            owner_lookup="uploaded_by",
+        )
 
     def _get_validated_project(self, project_id):
         if not project_id:
