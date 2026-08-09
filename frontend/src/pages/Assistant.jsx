@@ -22,6 +22,14 @@ const STARTER_PROMPTS = [
   "Show results that failed QC this week",
   "Which reagents expire in the next 30 days?",
   "Show inventory below its reorder level",
+  "Show overdue sequencing work",
+  "Who has unassigned work today?",
+  "Create sequencing work for samples in batch B-100",
+  "Create barcode labels for batch B-100",
+  "Export sample status changes from July as CSV",
+  "How do I receive a sample?",
+  "List my notification subscriptions",
+  "Show system status",
   "Find sample sequences",
   "Summarize sequence records",
   "Prepare BLAST for sample",
@@ -62,7 +70,7 @@ export default function Assistant() {
     try {
       const data = await apiGet("/api/assistant/status/");
       setAssistantStatus(data);
-    } catch (e) {
+    } catch {
       setAssistantStatus({
         provider: "openlims",
         model: "rules",
@@ -224,10 +232,10 @@ export default function Assistant() {
       {err && <Alert variant="danger">{err}</Alert>}
 
       <Alert variant="info">
-        The assistant can preview sample, bulk-sample, QC-review, and inventory
-        operations and propose BLAST, alignment, migration-mapping, report, and
-        import actions. A proposal expires after 15 minutes and never runs until
-        you select Confirm.
+        The assistant can preview sample, QC, inventory, work assignment,
+        barcode-label, compliance-report, and notification operations. It can
+        also answer from approved SOPs and show read-only admin monitoring. A
+        proposal expires after 15 minutes and never runs until you select Confirm.
       </Alert>
 
       <Alert variant="secondary">

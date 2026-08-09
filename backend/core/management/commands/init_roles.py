@@ -13,6 +13,13 @@ from inventory.models import (
 from results.models import Result, WorkItem
 from custom_fields.models import FieldDefinition, FieldValue
 from events.models import Event
+from assistant.models import (
+    BarcodeLabel,
+    GeneratedArtifact,
+    NotificationDelivery,
+    NotificationSubscription,
+    SOPDocument,
+)
 
 
 class Command(BaseCommand):
@@ -37,6 +44,11 @@ class Command(BaseCommand):
             InventoryItem,
             InventoryLot,
             InventoryReservation,
+            BarcodeLabel,
+            GeneratedArtifact,
+            NotificationSubscription,
+            NotificationDelivery,
+            SOPDocument,
         ]
 
         for model in models:

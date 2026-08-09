@@ -23,6 +23,10 @@ from sequences.models import Sequence
 
 from .models import AssistantAction
 from .inventory_operations import execute_inventory_operation
+from .barcode_operations import execute_label_generation
+from .notification_operations import execute_notification_management
+from .reporting_operations import execute_compliance_report
+from .workitem_operations import execute_workitem_operation
 from .qc_operations import execute_qc_review
 from .sample_operations import (
     execute_bulk_sample_update,
@@ -332,6 +336,22 @@ def _inventory_operation(action):
     return AssistantAction.STATUS_COMPLETED, execute_inventory_operation(action)
 
 
+def _work_item_operation(action):
+    return AssistantAction.STATUS_COMPLETED, execute_workitem_operation(action)
+
+
+def _label_generation(action):
+    return AssistantAction.STATUS_COMPLETED, execute_label_generation(action)
+
+
+def _compliance_report(action):
+    return AssistantAction.STATUS_COMPLETED, execute_compliance_report(action)
+
+
+def _notification_management(action):
+    return AssistantAction.STATUS_COMPLETED, execute_notification_management(action)
+
+
 EXECUTORS = {
     AssistantAction.ACTION_RUN_BLAST: _run_blast,
     AssistantAction.ACTION_RUN_ALIGNMENT: _run_alignment,
@@ -342,6 +362,10 @@ EXECUTORS = {
     AssistantAction.ACTION_BULK_SAMPLE_UPDATE: _bulk_sample_update,
     AssistantAction.ACTION_QC_REVIEW: _qc_review,
     AssistantAction.ACTION_INVENTORY_OPERATION: _inventory_operation,
+    AssistantAction.ACTION_WORK_ITEM_OPERATION: _work_item_operation,
+    AssistantAction.ACTION_LABEL_GENERATION: _label_generation,
+    AssistantAction.ACTION_COMPLIANCE_REPORT: _compliance_report,
+    AssistantAction.ACTION_NOTIFICATION_MANAGEMENT: _notification_management,
 }
 
 

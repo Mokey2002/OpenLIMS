@@ -33,7 +33,13 @@ class WorkItemViewSet(ModelViewSet):
     def get_queryset(self):
         queryset = (
             WorkItem.objects
-            .select_related("sample", "sample__project", "reviewed_by")
+            .select_related(
+                "sample",
+                "sample__project",
+                "reviewed_by",
+                "assigned_to",
+                "created_by",
+            )
             .prefetch_related("results")
             .all()
             .order_by("-created_at")
@@ -42,6 +48,8 @@ class WorkItemViewSet(ModelViewSet):
         sample_id = self.request.query_params.get("sample")
         project_id = self.request.query_params.get("project")
         qc_status = self.request.query_params.get("qc_status")
+        assigned_to = self.request.query_params.get("assigned_to")
+        due_before = self.request.query_params.get("due_before")
 
         if sample_id:
             queryset = queryset.filter(sample_id=sample_id)
@@ -51,6 +59,12 @@ class WorkItemViewSet(ModelViewSet):
 
         if qc_status:
             queryset = queryset.filter(qc_status=qc_status)
+
+        if assigned_to:
+            queryset = queryset.filter(assigned_to_id=assigned_to)
+
+        if due_before:
+            queryset = queryset.filter(due_at__lte=due_before)
 
         allowed_samples = get_sample_access_queryset(
             Sample.objects.all(),
@@ -75,7 +89,22 @@ class WorkItemViewSet(ModelViewSet):
             raise PermissionDenied(
                 "QC status can only be changed through the audited QC review workflow."
             )
-        serializer.save()
+        instance = self.get_object()
+        if instance.status in [WorkItem.STATUS_COMPLETED, WorkItem.STATUS_CANCELLED] and "assigned_to" in self.request.data:
+            raise PermissionDenied("Completed or cancelled work cannot be reassigned.")
+        before_assignee = instance.assigned_to_id
+        updated = serializer.save()
+        if "assigned_to" in self.request.data and before_assignee != updated.assigned_to_id:
+            Event.objects.create(
+                entity_type="WorkItem",
+                entity_id=str(updated.id),
+                action="WORK_ITEM_REASSIGNED" if before_assignee else "WORK_ITEM_ASSIGNED",
+                actor=self.request.user,
+                payload={"before": {"assigned_to_id": before_assignee}, "after": {"assigned_to_id": updated.assigned_to_id}, "project_id": updated.sample.project_id},
+            )
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
     @action(detail=True, methods=["post"], url_path="qc-review")
     def qc_review(self, request, pk=None):

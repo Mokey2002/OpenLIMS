@@ -1,5 +1,6 @@
 from celery import shared_task
-from django.db.models import Count
+from django.db.models import Count, Q
+from django.utils import timezone
 
 from blast.models import BlastJob
 from events.models import Event
@@ -8,6 +9,8 @@ from results.models import WorkItem
 from samples.models import Sample
 
 from .models import AssistantAction
+from .models import NotificationSubscription
+from .notification_operations import dispatch_subscription
 
 
 @shared_task
@@ -82,3 +85,22 @@ def generate_assistant_report(action_id):
             },
         )
         raise
+
+
+@shared_task
+def dispatch_due_notifications():
+    now = timezone.now()
+    subscription_ids = list(
+        NotificationSubscription.objects.filter(
+            active=True,
+            next_run_at__lte=now,
+        )
+        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+        .values_list("id", flat=True)[:500]
+    )
+    delivered = 0
+    for subscription_id in subscription_ids:
+        subscription = NotificationSubscription.objects.filter(id=subscription_id).first()
+        if subscription and dispatch_subscription(subscription, now=now):
+            delivered += 1
+    return {"checked": len(subscription_ids), "delivered_or_skipped": delivered}
