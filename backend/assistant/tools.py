@@ -11,6 +11,7 @@ from .action_routes import route_confirmed_action_proposal
 from .attention import route_attention_summary
 from .calculations import route_worklist_or_calculation
 from .charts import route_assistant_chart
+from .sample_operations import route_sample_management
 from .sequences import route_assistant_sequence
 
 
@@ -444,6 +445,14 @@ def route_assistant_message(message, user, context=None):
     current_user_result = answer_current_user(query, user)
     if current_user_result:
         return current_user_result
+
+    sample_management_result = route_sample_management(
+        query,
+        user,
+        context=context,
+    )
+    if sample_management_result:
+        return sample_management_result
 
     confirmed_action_result = route_confirmed_action_proposal(query, user)
     if confirmed_action_result:

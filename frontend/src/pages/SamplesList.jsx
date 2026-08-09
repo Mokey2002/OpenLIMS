@@ -21,6 +21,7 @@ const STATUS_OPTIONS = [
   "IN_PROGRESS",
   "QC",
   "REPORTED",
+  "CANCELLED",
   "ARCHIVED",
 ];
 
@@ -62,6 +63,8 @@ function statusVariant(status) {
       return "warning";
     case "REPORTED":
       return "success";
+    case "CANCELLED":
+      return "danger";
     case "ARCHIVED":
       return "dark";
     default:

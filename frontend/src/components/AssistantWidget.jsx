@@ -3,9 +3,13 @@ import { Alert, Badge, Button, Form, Spinner } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import AssistantChart from "./AssistantChart";
+import AssistantActionPreview from "./AssistantActionPreview";
 
 const STARTER_PROMPTS = [
   "What needs attention?",
+  "Show samples received today",
+  "Find sample S-1042",
+  "Which samples in Project Alpha are awaiting processing?",
   "Find sample sequences",
   "Summarize sequence records",
   "Prepare BLAST for sample",
@@ -148,6 +152,12 @@ export default function AssistantWidget() {
         `/api/assistant/actions/${pendingAction.confirmation_token}/${operation}/`,
         body
       );
+      if (updated.result?.context) {
+        setConversationContext((current) => ({
+          ...current,
+          ...updated.result.context,
+        }));
+      }
       updateHistoryAction(index, updated);
     } catch (e) {
       updateHistoryAction(index, pendingAction, e.message || String(e));
@@ -257,6 +267,7 @@ export default function AssistantWidget() {
                       >
                         {item.pendingAction.status}
                       </Badge>
+                      <AssistantActionPreview action={item.pendingAction} />
                       {item.pendingAction.status === "PROPOSED" && (
                         <div className="d-flex gap-2 mt-2">
                           <Button

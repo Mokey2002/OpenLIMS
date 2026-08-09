@@ -1,5 +1,31 @@
-from django.db import models
 from django.conf import settings
+from django.db import models
+from django.db.models.functions import Lower
+from django.utils import timezone
+
+
+class SampleBatch(models.Model):
+    code = models.CharField(max_length=64, unique=True)
+    project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.PROTECT,
+        related_name="sample_batches",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_sample_batches",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["code"]
+
+    def __str__(self):
+        return self.code
 
 
 class Sample(models.Model):
@@ -7,6 +33,7 @@ class Sample(models.Model):
     STATUS_IN_PROGRESS = "IN_PROGRESS"
     STATUS_QC = "QC"
     STATUS_REPORTED = "REPORTED"
+    STATUS_CANCELLED = "CANCELLED"
     STATUS_ARCHIVED = "ARCHIVED"
 
     STATUS_CHOICES = [
@@ -14,6 +41,7 @@ class Sample(models.Model):
         (STATUS_IN_PROGRESS, "In Progress"),
         (STATUS_QC, "QC"),
         (STATUS_REPORTED, "Reported"),
+        (STATUS_CANCELLED, "Cancelled"),
         (STATUS_ARCHIVED, "Archived"),
     ]
 
@@ -43,6 +71,22 @@ class Sample(models.Model):
         related_name="samples",
     )
 
+    batch = models.ForeignKey(
+        SampleBatch,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="samples",
+    )
+
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_samples",
+    )
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -52,6 +96,16 @@ class Sample(models.Model):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+    status_changed_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                Lower("sample_id"),
+                name="samples_sample_id_ci_unique",
+            )
+        ]
 
     def __str__(self):
         return self.sample_id

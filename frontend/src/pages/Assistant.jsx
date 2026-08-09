@@ -10,10 +10,14 @@ import {
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import AssistantChart from "../components/AssistantChart";
+import AssistantActionPreview from "../components/AssistantActionPreview";
 import { OPENLIMS_VERSION } from "../version";
 
 const STARTER_PROMPTS = [
   "What needs attention?",
+  "Show samples received today",
+  "Find sample S-1042",
+  "Which samples in Project Alpha are awaiting processing?",
   "Find sample sequences",
   "Summarize sequence records",
   "Prepare BLAST for sample",
@@ -147,6 +151,12 @@ export default function Assistant() {
         `/api/assistant/actions/${pendingAction.confirmation_token}/confirm/`,
         { confirm: true }
       );
+      if (updated.result?.context) {
+        setConversationContext((current) => ({
+          ...current,
+          ...updated.result.context,
+        }));
+      }
       updateHistoryAction(index, updated);
     } catch (e) {
       updateHistoryAction(
@@ -210,9 +220,10 @@ export default function Assistant() {
       {err && <Alert variant="danger">{err}</Alert>}
 
       <Alert variant="info">
-        The assistant can propose BLAST, alignment, migration-mapping, report,
-        and import actions. A proposal expires after 15 minutes and never runs
-        until you select Confirm.
+        The assistant can preview sample and bulk-sample operations and propose
+        BLAST, alignment, migration-mapping, report, and import actions. A
+        proposal expires after 15 minutes and never runs until you select
+        Confirm.
       </Alert>
 
       <Alert variant="secondary">
@@ -291,6 +302,8 @@ export default function Assistant() {
                             {item.pendingAction.status}
                           </Badge>
                         </div>
+
+                        <AssistantActionPreview action={item.pendingAction} />
 
                         {item.pendingAction.status === "PROPOSED" && (
                           <div className="d-flex gap-2 mt-3">

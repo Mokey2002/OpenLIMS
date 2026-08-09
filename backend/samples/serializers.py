@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Sample, SingleSampleAttachment
+from .models import Sample, SampleBatch, SingleSampleAttachment
 from .access import user_can_modify_sample
 
 
@@ -15,6 +15,8 @@ class SampleSerializer(serializers.ModelSerializer):
     linked_project_summaries = serializers.SerializerMethodField()
     created_by_username = serializers.SerializerMethodField()
     can_modify = serializers.SerializerMethodField()
+    batch_code = serializers.SerializerMethodField()
+    assigned_to_username = serializers.SerializerMethodField()
 
     class Meta:
         model = Sample
@@ -31,12 +33,18 @@ class SampleSerializer(serializers.ModelSerializer):
             "container",
             "container_id",
             "container_code",
+            "batch",
+            "batch_code",
+            "assigned_to",
+            "assigned_to_username",
             "location_id",
             "location_name",
             "created_by",
             "created_by_username",
             "can_modify",
             "created_at",
+            "status_changed_at",
+            "updated_at",
         ]
         read_only_fields = [
             "id",
@@ -46,12 +54,18 @@ class SampleSerializer(serializers.ModelSerializer):
             "linked_project_summaries",
             "container_id",
             "container_code",
+            "batch",
+            "batch_code",
+            "assigned_to",
+            "assigned_to_username",
             "location_id",
             "location_name",
             "created_by",
             "created_by_username",
             "can_modify",
             "created_at",
+            "status_changed_at",
+            "updated_at",
         ]
 
     def get_linked_project_summaries(self, obj):
@@ -71,6 +85,12 @@ class SampleSerializer(serializers.ModelSerializer):
 
     def get_created_by_username(self, obj):
         return obj.created_by.username if obj.created_by else None
+
+    def get_batch_code(self, obj):
+        return obj.batch.code if obj.batch else None
+
+    def get_assigned_to_username(self, obj):
+        return obj.assigned_to.username if obj.assigned_to else None
 
     def get_project_id(self, obj):
         return obj.project.id if obj.project else None
@@ -92,6 +112,35 @@ class SampleSerializer(serializers.ModelSerializer):
 
     def get_location_name(self, obj):
         return obj.container.location.name if obj.container and obj.container.location else None
+
+
+class SampleBatchSerializer(serializers.ModelSerializer):
+    project_code = serializers.CharField(source="project.code", read_only=True)
+    project_name = serializers.CharField(source="project.name", read_only=True)
+    sample_count = serializers.IntegerField(source="samples.count", read_only=True)
+
+    class Meta:
+        model = SampleBatch
+        fields = [
+            "id",
+            "code",
+            "project",
+            "project_code",
+            "project_name",
+            "sample_count",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "project_code",
+            "project_name",
+            "sample_count",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
 class SingleSampleAttachmentSerializer(serializers.ModelSerializer):
     filename = serializers.SerializerMethodField()
     uploaded_by_username = serializers.SerializerMethodField()

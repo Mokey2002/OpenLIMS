@@ -21,6 +21,10 @@ from samples.models import Sample
 from sequences.models import Sequence
 
 from .models import AssistantAction
+from .sample_operations import (
+    execute_bulk_sample_update,
+    execute_create_samples,
+)
 from .tasks import generate_assistant_report
 
 
@@ -39,6 +43,11 @@ def serialize_action(action):
         "status": action.status,
         "confirmation_token": str(action.confirmation_token),
         "expires_at": action.expires_at.isoformat(),
+        "requested_user": {
+            "id": action.requested_by_id,
+            "username": action.requested_by.username,
+        },
+        "preview": (action.payload or {}).get("preview") or {},
         "result": action.result,
         "error_message": action.error_message,
     }
@@ -301,12 +310,22 @@ def _queue_report(action):
     }
 
 
+def _create_samples(action):
+    return AssistantAction.STATUS_COMPLETED, execute_create_samples(action)
+
+
+def _bulk_sample_update(action):
+    return AssistantAction.STATUS_COMPLETED, execute_bulk_sample_update(action)
+
+
 EXECUTORS = {
     AssistantAction.ACTION_RUN_BLAST: _run_blast,
     AssistantAction.ACTION_RUN_ALIGNMENT: _run_alignment,
     AssistantAction.ACTION_CREATE_MIGRATION_MAPPINGS: _create_migration_mappings,
     AssistantAction.ACTION_QUEUE_REPORT: _queue_report,
     AssistantAction.ACTION_QUEUE_IMPORT: _queue_import,
+    AssistantAction.ACTION_CREATE_SAMPLES: _create_samples,
+    AssistantAction.ACTION_BULK_SAMPLE_UPDATE: _bulk_sample_update,
 }
 
 
