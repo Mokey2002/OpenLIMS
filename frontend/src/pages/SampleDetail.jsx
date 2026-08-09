@@ -23,6 +23,8 @@ function statusVariant(status) {
       return "warning";
     case "REPORTED":
       return "success";
+    case "CANCELLED":
+      return "danger";
     case "ARCHIVED":
       return "dark";
     default:

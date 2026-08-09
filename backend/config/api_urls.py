@@ -1,6 +1,10 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
-from samples.views import SampleViewSet, SingleSampleAttachmentViewSet
+from samples.views import (
+    SampleBatchViewSet,
+    SampleViewSet,
+    SingleSampleAttachmentViewSet,
+)
 from inventory.views import LocationViewSet, ContainerViewSet
 from events.views import EventViewSet
 from custom_fields.views import FieldDefinitionViewSet, FieldValueViewSet
@@ -31,6 +35,7 @@ from migration_toolkit.views import (
 
 router = DefaultRouter()
 router.register(r"samples", SampleViewSet, basename="sample")
+router.register(r"sample-batches", SampleBatchViewSet, basename="sample-batch")
 router.register(r"locations", LocationViewSet, basename="location")
 router.register(r"containers", ContainerViewSet, basename="container")
 router.register(r"events", EventViewSet, basename="event")

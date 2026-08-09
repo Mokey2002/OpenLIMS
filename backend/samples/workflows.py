@@ -1,8 +1,9 @@
 ALLOWED_TRANSITIONS = {
-    "RECEIVED": ["IN_PROGRESS"],
-    "IN_PROGRESS": ["QC"],
-    "QC": ["REPORTED"],
+    "RECEIVED": ["IN_PROGRESS", "CANCELLED"],
+    "IN_PROGRESS": ["QC", "CANCELLED"],
+    "QC": ["REPORTED", "CANCELLED"],
     "REPORTED": ["ARCHIVED"],
+    "CANCELLED": ["ARCHIVED"],
     "ARCHIVED": [],
 }
 

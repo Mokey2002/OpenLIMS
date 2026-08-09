@@ -1,3 +1,6 @@
+import json
+
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.forms.models import model_to_dict
@@ -7,7 +10,7 @@ from samples.models import Sample
 
 
 def snapshot(instance):
-    return model_to_dict(instance)
+    return json.loads(json.dumps(model_to_dict(instance), cls=DjangoJSONEncoder))
 
 
 def actor_from_instance(instance):

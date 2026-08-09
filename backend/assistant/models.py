@@ -11,6 +11,8 @@ class AssistantAction(models.Model):
     ACTION_CREATE_MIGRATION_MAPPINGS = "CREATE_MIGRATION_MAPPINGS"
     ACTION_QUEUE_REPORT = "QUEUE_REPORT"
     ACTION_QUEUE_IMPORT = "QUEUE_IMPORT"
+    ACTION_CREATE_SAMPLES = "CREATE_SAMPLES"
+    ACTION_BULK_SAMPLE_UPDATE = "BULK_SAMPLE_UPDATE"
 
     ACTION_CHOICES = [
         (ACTION_RUN_BLAST, "Run BLAST"),
@@ -18,6 +20,8 @@ class AssistantAction(models.Model):
         (ACTION_CREATE_MIGRATION_MAPPINGS, "Create migration mappings"),
         (ACTION_QUEUE_REPORT, "Queue report"),
         (ACTION_QUEUE_IMPORT, "Queue import"),
+        (ACTION_CREATE_SAMPLES, "Create samples"),
+        (ACTION_BULK_SAMPLE_UPDATE, "Bulk sample update"),
     ]
 
     STATUS_PROPOSED = "PROPOSED"

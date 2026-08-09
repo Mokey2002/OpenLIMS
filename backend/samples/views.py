@@ -1,15 +1,20 @@
 import csv
 
+from django.utils import timezone
 from django.http import HttpResponse
 from django.db.models import Q
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 
-from .models import Sample, SingleSampleAttachment
-from .serializers import SampleSerializer, SingleSampleAttachmentSerializer
+from .models import Sample, SampleBatch, SingleSampleAttachment
+from .serializers import (
+    SampleBatchSerializer,
+    SampleSerializer,
+    SingleSampleAttachmentSerializer,
+)
 from .workflows import get_allowed_transitions
 from .access import (
     get_sample_access_queryset,
@@ -33,6 +38,8 @@ def sample_audit_state(sample):
         "status": sample.status,
         "project_id": sample.project_id,
         "container_id": sample.container_id,
+        "batch_id": sample.batch_id,
+        "assigned_to_id": sample.assigned_to_id,
     }
 
 
@@ -111,6 +118,8 @@ class SampleViewSet(ModelViewSet):
                 "container",
                 "container__location",
                 "created_by",
+                "batch",
+                "assigned_to",
             )
             .prefetch_related("linked_projects")
             .all()
@@ -175,7 +184,11 @@ class SampleViewSet(ModelViewSet):
             reason = validate_change_reason(get_change_reason(self.request))
             validate_status_transition(sample.status, requested_status)
 
-        updated = serializer.save()
+        save_kwargs = {}
+        if status_changed:
+            save_kwargs["status_changed_at"] = timezone.now()
+
+        updated = serializer.save(**save_kwargs)
         after = sample_audit_state(updated)
 
         changed_fields = [
@@ -409,7 +422,8 @@ class SampleViewSet(ModelViewSet):
         before = sample_audit_state(sample)
 
         sample.status = new_status
-        sample.save(update_fields=["status"])
+        sample.status_changed_at = timezone.now()
+        sample.save(update_fields=["status", "status_changed_at", "updated_at"])
 
         after = sample_audit_state(sample)
 
@@ -541,6 +555,7 @@ class SampleViewSet(ModelViewSet):
 
                     if new_status in allowed:
                         sample.status = new_status
+                        sample.status_changed_at = timezone.now()
                         changed_fields.append("status")
                     else:
                         skipped.append({
@@ -645,7 +660,6 @@ class SampleViewSet(ModelViewSet):
             "updated_ids": updated_ids,
             "skipped": skipped,
         })
-
     @action(detail=False, methods=["post"], url_path="export-selected")
     def export_selected(self, request):
         ids = request.data.get("ids", [])
@@ -706,6 +720,24 @@ class SampleViewSet(ModelViewSet):
 
         return response
 
+
+class SampleBatchViewSet(ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
+    serializer_class = SampleBatchSerializer
+
+    def get_queryset(self):
+        queryset = (
+            SampleBatch.objects.select_related("project", "created_by")
+            .all()
+            .order_by("code")
+        )
+
+        if self.request.user.is_superuser or self.request.user.groups.filter(
+            name="admin"
+        ).exists():
+            return queryset
+
+        return queryset.filter(project__members=self.request.user).distinct()
 
 class SingleSampleAttachmentViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
