@@ -54,6 +54,17 @@ def run_alignment_job(job_id):
             f"Alignment {job.status.lower()}: {job.name}",
         )
 
+        from assistant.lifecycle import finish_queued_action
+
+        finish_queued_action(
+            action_type="RUN_ALIGNMENT",
+            result_key="alignment_job_id",
+            result_id=job.id,
+            succeeded=job.status == "COMPLETED",
+            error_message=job.error_message,
+            result_updates={"job_status": job.status},
+        )
+
         if actor and job.status == "COMPLETED":
             Notification.objects.get_or_create(
                 user=actor,
@@ -94,6 +105,17 @@ def run_alignment_job(job_id):
         broadcast_alignment_job_update(
             job,
             f"Alignment failed: {job.name}",
+        )
+
+        from assistant.lifecycle import finish_queued_action
+
+        finish_queued_action(
+            action_type="RUN_ALIGNMENT",
+            result_key="alignment_job_id",
+            result_id=job.id,
+            succeeded=False,
+            error_message=job.error_message,
+            result_updates={"job_status": job.status},
         )
 
         if actor:

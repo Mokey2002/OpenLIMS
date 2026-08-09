@@ -119,6 +119,20 @@ def run_blast_job_task(job_id):
             f"BLAST completed: {job.name} with {job.hits_count} hit(s).",
         )
 
+        if job.status == BlastJob.STATUS_COMPLETED:
+            from assistant.lifecycle import finish_queued_action
+
+            finish_queued_action(
+                action_type="RUN_BLAST",
+                result_key="blast_job_id",
+                result_id=job.id,
+                succeeded=True,
+                result_updates={
+                    "job_status": job.status,
+                    "hits_count": job.hits_count,
+                },
+            )
+
         if actor and job.status == BlastJob.STATUS_COMPLETED:
             Notification.objects.get_or_create(
                 user=actor,
@@ -134,6 +148,17 @@ def run_blast_job_task(job_id):
         broadcast_blast_job_update(
             job,
             f"BLAST failed: {job.name}",
+        )
+
+        from assistant.lifecycle import finish_queued_action
+
+        finish_queued_action(
+            action_type="RUN_BLAST",
+            result_key="blast_job_id",
+            result_id=job.id,
+            succeeded=False,
+            error_message=job.error_message or str(exc),
+            result_updates={"job_status": job.status},
         )
 
         if actor:

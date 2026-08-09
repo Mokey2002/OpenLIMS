@@ -332,6 +332,22 @@ def process_import_job(job_id):
             },
         )
 
+        from assistant.lifecycle import finish_queued_action
+
+        finish_queued_action(
+            action_type="QUEUE_IMPORT",
+            result_key="import_job_id",
+            result_id=job.id,
+            succeeded=True,
+            result_updates={
+                "job_status": job.status,
+                "rows_processed": summary.get("rows_processed", 0),
+                "samples_created": summary.get("samples_created", 0),
+                "results_created": summary.get("results_created", 0),
+                "skipped_row_count": len(summary.get("skipped_rows", [])),
+            },
+        )
+
         if job.uploaded_by:
             Notification.objects.create(
                 user=job.uploaded_by,
@@ -357,6 +373,17 @@ def process_import_job(job_id):
         broadcast_import_job_update(
             job,
             f"Import failed: {job.instrument.code}",
+        )
+
+        from assistant.lifecycle import finish_queued_action
+
+        finish_queued_action(
+            action_type="QUEUE_IMPORT",
+            result_key="import_job_id",
+            result_id=job.id,
+            succeeded=False,
+            error_message=str(e),
+            result_updates={"job_status": job.status},
         )
 
         if job.uploaded_by:

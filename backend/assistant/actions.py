@@ -376,6 +376,10 @@ def confirm_action(token, user):
                 "updated_at",
             ])
             _audit(action, "ASSISTANT_ACTION_CONFIRMED", {"result": result})
+
+            if next_status == AssistantAction.STATUS_COMPLETED:
+                _audit(action, "ASSISTANT_ACTION_COMPLETED", {"result": result})
+
             return action
     except AssistantAction.DoesNotExist as exc:
         raise AssistantActionError("Confirmation token not found.") from exc
