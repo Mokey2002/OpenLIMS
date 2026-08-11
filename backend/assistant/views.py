@@ -1,4 +1,5 @@
 from rest_framework import serializers, status
+from django.db import transaction
 from django.db.models import Q
 from django.http import FileResponse
 from django.utils import timezone
@@ -6,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 
 from core.permissions import IsAdminOnly, is_admin
+from events.models import Event
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -173,8 +175,112 @@ class SOPDocumentViewSet(ModelViewSet):
             Q(allowed_groups__isnull=True) | Q(allowed_groups__in=self.request.user.groups.all())
         ).distinct()
 
+    @transaction.atomic
     def perform_create(self, serializer):
-        serializer.save(uploaded_by=self.request.user)
+        save_kwargs = {"uploaded_by": self.request.user}
+        if (
+            serializer.validated_data.get("status")
+            == SOPDocument.STATUS_ARCHIVED
+            and not serializer.validated_data.get("archived_at")
+        ):
+            save_kwargs["archived_at"] = timezone.now()
+        document = serializer.save(**save_kwargs)
+        self._record_event(
+            document,
+            "SOP_DOCUMENT_CREATED",
+            {
+                "document_code": document.document_code,
+                "version": document.version,
+                "section": document.section,
+                "status": document.status,
+                "approved": document.approved,
+                "project_id": document.project_id,
+                "allowed_groups": list(
+                    document.allowed_groups.values_list("name", flat=True)
+                ),
+            },
+        )
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        document = serializer.instance
+        before = self._snapshot(document)
+        next_status = serializer.validated_data.get("status", document.status)
+        save_kwargs = {}
+
+        if next_status == SOPDocument.STATUS_ARCHIVED:
+            if (
+                document.status != SOPDocument.STATUS_ARCHIVED
+                or not document.archived_at
+            ):
+                save_kwargs["archived_at"] = timezone.now()
+        else:
+            save_kwargs["archived_at"] = None
+
+        document = serializer.save(**save_kwargs)
+        after = self._snapshot(document)
+        changed_fields = [
+            field
+            for field in before
+            if before[field] != after[field]
+        ]
+
+        if before["status"] != after["status"]:
+            action = (
+                "SOP_DOCUMENT_ARCHIVED"
+                if after["status"] == SOPDocument.STATUS_ARCHIVED
+                else "SOP_DOCUMENT_RESTORED"
+            )
+        else:
+            action = "SOP_DOCUMENT_UPDATED"
+
+        self._record_event(
+            document,
+            action,
+            {
+                "document_code": document.document_code,
+                "version": document.version,
+                "section": document.section,
+                "changed_fields": changed_fields,
+                "before": before,
+                "after": after,
+            },
+        )
+
+    @staticmethod
+    def _snapshot(document):
+        return {
+            "document_code": document.document_code,
+            "title": document.title,
+            "version": document.version,
+            "section": document.section,
+            "status": document.status,
+            "approved": document.approved,
+            "project_id": document.project_id,
+            "allowed_groups": sorted(
+                document.allowed_groups.values_list("name", flat=True)
+            ),
+            "effective_at": (
+                document.effective_at.isoformat()
+                if document.effective_at
+                else None
+            ),
+            "archived_at": (
+                document.archived_at.isoformat()
+                if document.archived_at
+                else None
+            ),
+            "has_source_file": bool(document.source_file),
+        }
+
+    def _record_event(self, document, action, payload):
+        Event.objects.create(
+            entity_type="SOPDocument",
+            entity_id=str(document.id),
+            action=action,
+            actor=self.request.user,
+            payload=payload,
+        )
 
 
 class NotificationSubscriptionViewSet(ReadOnlyModelViewSet):

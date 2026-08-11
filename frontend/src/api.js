@@ -49,6 +49,39 @@ export async function apiPostForm(path, formData) {
   return res.json();
 }
 
+export async function apiPatchForm(path, formData) {
+  const access = getAccessToken();
+  const headers = {};
+
+  if (access) {
+    headers.Authorization = `Bearer ${access}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PATCH",
+    headers,
+    body: formData,
+  });
+
+  if (res.status === 401) {
+    const newAccess = await refreshAccessToken();
+
+    if (newAccess) {
+      return apiPatchForm(path, formData);
+    }
+
+    redirectToLogin();
+    throw new Error("Session expired. Please log in again.");
+  }
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`PATCH ${path} failed: ${res.status} ${text}`);
+  }
+
+  return res.json();
+}
+
 async function refreshAccessToken() {
   const refresh = getRefreshToken();
 
