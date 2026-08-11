@@ -28,6 +28,7 @@ import GettingStarted from "./pages/GettingStarted";
 import DataMigration from "./pages/DataMigration";
 import Assistant from "./pages/Assistant";
 import MigrationJobDetail from "./pages/MigrationJobDetail";
+import SOPs from "./pages/SOPs";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="alignments" element={<Alignments />} />
           <Route path="reports" element={<Reports />} />
           <Route path="system-status" element={<SystemStatus />} />
+          <Route path="sops" element={<SOPs />} />
           <Route path="users" element={<Users />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="imports" element={<Imports />} />

@@ -303,6 +303,7 @@ export default function Layout() {
                 <NavDropdown title="Admin" id="admin-nav">
                   <DropdownItemLink to="/users">Users</DropdownItemLink>
                   <DropdownItemLink to="/settings">Settings</DropdownItemLink>
+                  <DropdownItemLink to="/sops">SOP Management</DropdownItemLink>
                   <DropdownItemLink to="/system-status">
                     System Status
                   </DropdownItemLink>

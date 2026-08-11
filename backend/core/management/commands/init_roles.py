@@ -63,8 +63,33 @@ class Command(BaseCommand):
             # Viewer: read-only
             viewer_group.permissions.add(*view_perms)
 
-            # Tech: read + create + update
-            tech_group.permissions.add(*view_perms, *add_perms, *change_perms)
+            # SOP authoring and approval are reserved for directors/admins.
+            # Remove legacy write grants as well, so rerunning init_roles repairs
+            # databases initialized before the SOP management policy existed.
+            if model is SOPDocument:
+                tech_group.permissions.add(*view_perms)
+                tech_group.permissions.remove(
+                    *add_perms,
+                    *change_perms,
+                    *delete_perms,
+                )
+                viewer_group.permissions.remove(
+                    *add_perms,
+                    *change_perms,
+                    *delete_perms,
+                )
+                qc_reviewer_group.permissions.remove(
+                    *add_perms,
+                    *change_perms,
+                    *delete_perms,
+                )
+            else:
+                # Tech: read + create + update
+                tech_group.permissions.add(
+                    *view_perms,
+                    *add_perms,
+                    *change_perms,
+                )
 
             # QC reviewers can read lab records and update QC review state.
             qc_reviewer_group.permissions.add(*view_perms)
