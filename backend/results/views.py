@@ -36,6 +36,7 @@ class WorkItemViewSet(ModelViewSet):
             .select_related(
                 "sample",
                 "sample__project",
+                "sample__batch",
                 "reviewed_by",
                 "assigned_to",
                 "created_by",
@@ -50,6 +51,9 @@ class WorkItemViewSet(ModelViewSet):
         qc_status = self.request.query_params.get("qc_status")
         assigned_to = self.request.query_params.get("assigned_to")
         due_before = self.request.query_params.get("due_before")
+        status_filter = self.request.query_params.get("status")
+        work_type = self.request.query_params.get("work_type")
+        batch = self.request.query_params.get("batch")
 
         if sample_id:
             queryset = queryset.filter(sample_id=sample_id)
@@ -65,6 +69,15 @@ class WorkItemViewSet(ModelViewSet):
 
         if due_before:
             queryset = queryset.filter(due_at__lte=due_before)
+
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        if work_type:
+            queryset = queryset.filter(work_type=work_type)
+
+        if batch:
+            queryset = queryset.filter(sample__batch_id=batch)
 
         allowed_samples = get_sample_access_queryset(
             Sample.objects.all(),
@@ -265,6 +278,7 @@ class ResultViewSet(ModelViewSet):
             .select_related(
                 "work_item",
                 "work_item__sample",
+                "work_item__sample__project",
                 "entered_by",
                 "qc_assigned_to",
                 "qc_reviewed_by",
@@ -276,6 +290,9 @@ class ResultViewSet(ModelViewSet):
         work_item_id = self.request.query_params.get("work_item")
         sample_id = self.request.query_params.get("sample")
         project_id = self.request.query_params.get("project")
+        qc_status = self.request.query_params.get("qc_status")
+        qc_passed = self.request.query_params.get("qc_passed")
+        qc_assigned_to = self.request.query_params.get("qc_assigned_to")
 
         if work_item_id:
             queryset = queryset.filter(work_item_id=work_item_id)
@@ -285,6 +302,24 @@ class ResultViewSet(ModelViewSet):
 
         if project_id:
             queryset = queryset.filter(work_item__sample__project_id=project_id)
+
+        if qc_status:
+            queryset = queryset.filter(qc_status=qc_status)
+
+        if qc_passed is not None:
+            normalized = str(qc_passed).lower()
+            if normalized in {"true", "1", "yes"}:
+                queryset = queryset.filter(qc_passed=True)
+            elif normalized in {"false", "0", "no"}:
+                queryset = queryset.filter(qc_passed=False)
+            elif normalized in {"none", "null", "unknown"}:
+                queryset = queryset.filter(qc_passed__isnull=True)
+
+        if qc_assigned_to:
+            if str(qc_assigned_to).lower() in {"none", "null", "unassigned"}:
+                queryset = queryset.filter(qc_assigned_to__isnull=True)
+            else:
+                queryset = queryset.filter(qc_assigned_to_id=qc_assigned_to)
 
         allowed_samples = get_sample_access_queryset(
             Sample.objects.all(),

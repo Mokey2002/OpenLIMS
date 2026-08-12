@@ -286,6 +286,11 @@ export default function Layout() {
                   <DropdownItemLink to="/imports">Imports</DropdownItemLink>
                 )}
 
+                <DropdownItemLink to="/batches">Sample Batches</DropdownItemLink>
+                <DropdownItemLink to="/qc-review">Result QC</DropdownItemLink>
+                <DropdownItemLink to="/work-queue">Work Queue</DropdownItemLink>
+                <DropdownItemLink to="/labels">Barcode Labels</DropdownItemLink>
+
                 <DropdownItemLink to="/events">Audit Events</DropdownItemLink>
                 <DropdownItemLink to="/reports">Reports</DropdownItemLink>
 

@@ -4,6 +4,23 @@ from .models import WorkItem, Result, SampleAttachment
 
 
 class ResultSerializer(serializers.ModelSerializer):
+    work_item_name = serializers.CharField(source="work_item.name", read_only=True)
+    sample_id = serializers.IntegerField(source="work_item.sample_id", read_only=True)
+    sample_code = serializers.CharField(
+        source="work_item.sample.sample_id",
+        read_only=True,
+    )
+    project_id = serializers.IntegerField(
+        source="work_item.sample.project_id",
+        read_only=True,
+        allow_null=True,
+    )
+    project_code = serializers.CharField(
+        source="work_item.sample.project.code",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
     value = serializers.SerializerMethodField()
     entered_by_username = serializers.CharField(
         source="entered_by.username",
@@ -24,6 +41,11 @@ class ResultSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "work_item",
+            "work_item_name",
+            "sample_id",
+            "sample_code",
+            "project_id",
+            "project_code",
             "key",
             "value_type",
             "value_string",
@@ -111,6 +133,24 @@ class ResultSerializer(serializers.ModelSerializer):
 
 
 class WorkItemSerializer(serializers.ModelSerializer):
+    sample_code = serializers.CharField(source="sample.sample_id", read_only=True)
+    project_id = serializers.IntegerField(
+        source="sample.project_id",
+        read_only=True,
+        allow_null=True,
+    )
+    project_code = serializers.CharField(
+        source="sample.project.code",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
+    batch_code = serializers.CharField(
+        source="sample.batch.code",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
     results = ResultSerializer(many=True, read_only=True)
     reviewed_by_username = serializers.CharField(
         source="reviewed_by.username",
@@ -130,6 +170,10 @@ class WorkItemSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "sample",
+            "sample_code",
+            "project_id",
+            "project_code",
+            "batch_code",
             "name",
             "work_type",
             "status",

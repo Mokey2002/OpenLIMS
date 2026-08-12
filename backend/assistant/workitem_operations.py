@@ -6,6 +6,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from core.permissions import is_admin, is_tech
 from events.models import Event
 from results.models import WorkItem
 from samples.access import get_sample_access_queryset
@@ -22,7 +23,11 @@ class WorkItemOperationError(ValueError):
 
 
 def _is_admin(user):
-    return user.is_superuser or user.groups.filter(name="admin").exists()
+    return is_admin(user)
+
+
+def _can_write(user):
+    return is_admin(user) or is_tech(user)
 
 
 def _can_access_project(user, project):
@@ -290,6 +295,12 @@ def route_workitem_operations(message, user, context=None):
     lower = str(message or "").lower()
     if "work" not in lower:
         return None
+    if re.search(r"\b(?:create|assign|reassign)\b", lower) and not _can_write(user):
+        return {
+            "answer": "Only Tech or Director users can create or assign work items.",
+            "links": [],
+            "skip_llm": True,
+        }
     return (
         _propose_create(message, user)
         or _propose_assignment(message, user)
@@ -300,6 +311,10 @@ def route_workitem_operations(message, user, context=None):
 def execute_workitem_operation(action):
     payload = action.payload or {}
     operation = payload.get("operation")
+    if not _can_write(action.requested_by):
+        raise WorkItemOperationError(
+            "Only Tech or Director users can create or assign work items."
+        )
     succeeded = []
     failed = []
 

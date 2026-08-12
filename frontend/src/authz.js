@@ -14,6 +14,10 @@ export function isViewer(me) {
   return hasRole(me, "viewer");
 }
 
+export function isQcReviewer(me) {
+  return isAdmin(me) || hasRole(me, "qc_reviewer");
+}
+
 export function canWrite(me) {
   return isAdmin(me) || isTech(me);
 }

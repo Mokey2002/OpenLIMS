@@ -29,6 +29,10 @@ import DataMigration from "./pages/DataMigration";
 import Assistant from "./pages/Assistant";
 import MigrationJobDetail from "./pages/MigrationJobDetail";
 import SOPs from "./pages/SOPs";
+import Batches from "./pages/Batches";
+import QCReview from "./pages/QCReview";
+import WorkQueue from "./pages/WorkQueue";
+import Labels from "./pages/Labels";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -63,6 +67,10 @@ export default function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="system-status" element={<SystemStatus />} />
           <Route path="sops" element={<SOPs />} />
+          <Route path="batches" element={<Batches />} />
+          <Route path="qc-review" element={<QCReview />} />
+          <Route path="work-queue" element={<WorkQueue />} />
+          <Route path="labels" element={<Labels />} />
           <Route path="users" element={<Users />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="imports" element={<Imports />} />
