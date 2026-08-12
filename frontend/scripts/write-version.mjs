@@ -38,8 +38,8 @@ function readCurrentFrontendVersion() {
 
 let version =
   process.env.VITE_OPENLIMS_VERSION ||
-  run("git describe --tags --abbrev=0") ||
   (existsSync(rootVersionFile) ? readFileSync(rootVersionFile, "utf8").trim() : "") ||
+  run("git describe --tags --abbrev=0") ||
   readCurrentFrontendVersion() ||
   "development";
 

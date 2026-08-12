@@ -29,6 +29,7 @@ from assistant.views import (
     AssistantActionConfirmView,
     AssistantActionDetailView,
     AssistantChatView,
+    AssistantComparisonView,
     AssistantStatusView,
     AssistantArtifactDownloadView,
     AssistantSystemMonitoringView,
@@ -87,6 +88,11 @@ router.register(r"migration-row-records", MigrationRowRecordViewSet, basename="m
 
 urlpatterns = router.urls + [
     path("assistant/chat/", AssistantChatView.as_view(), name="assistant-chat"),
+    path(
+        "assistant/comparisons/",
+        AssistantComparisonView.as_view(),
+        name="assistant-comparisons",
+    ),
     path("assistant/status/", AssistantStatusView.as_view(), name="assistant-status"),
     path(
         "assistant/actions/<uuid:token>/",

@@ -10,11 +10,16 @@ import {
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import AssistantChart from "../components/AssistantChart";
+import ComparisonTable from "../components/ComparisonTable";
 import AssistantActionPreview from "../components/AssistantActionPreview";
 import { OPENLIMS_VERSION } from "../version";
 
 const STARTER_PROMPTS = [
   "What needs attention?",
+  "Compare samples S-100, S-101, and S-102",
+  "Compare projects Alpha, Beta, and Gamma",
+  "Find unusual results in Project Alpha",
+  "Where are samples getting stuck?",
   "Show samples received today",
   "Find sample S-1042",
   "Which samples in Project Alpha are awaiting processing?",
@@ -120,6 +125,7 @@ export default function Assistant() {
           links: data.links || [],
           suggestions: data.suggestions || [],
           chart: data.chart || null,
+          comparison: data.comparison || null,
           pendingAction: data.pending_action || null,
           actionError: data.action_error || "",
           mode: data.mode || "openlims",
@@ -222,7 +228,7 @@ export default function Assistant() {
         </div>
 
         <div className="d-flex flex-column align-items-end gap-2">
-          <Badge bg="dark">{OPENLIMS_VERSION} confirmed actions</Badge>
+          <Badge bg="dark">{OPENLIMS_VERSION} visual analytics</Badge>
           <Badge bg={badgeVariantForProvider(activeProvider)}>
             Using: {activeDisplayName}
           </Badge>
@@ -232,7 +238,9 @@ export default function Assistant() {
       {err && <Alert variant="danger">{err}</Alert>}
 
       <Alert variant="info">
-        The assistant can preview sample, QC, inventory, work assignment,
+        The assistant can compare samples, projects, and batches; graph result
+        trends; find outliers and workflow bottlenecks; and preview sample, QC,
+        inventory, work assignment,
         barcode-label, compliance-report, and notification operations. It can
         also answer from approved SOPs and show read-only admin monitoring. A
         proposal expires after 15 minutes and never runs until you select Confirm.
@@ -279,6 +287,10 @@ export default function Assistant() {
                   )}
 
                   {item.chart && <AssistantChart chart={item.chart} />}
+
+                  {item.comparison && (
+                    <ComparisonTable comparison={item.comparison} />
+                  )}
 
                   {item.actionError && (
                     <Alert variant="danger" className="mt-2 mb-2">
@@ -402,7 +414,7 @@ export default function Assistant() {
               <Form.Control
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Ask about a sample, project, migration job, or failed import..."
+                placeholder="Compare samples or projects, graph results, find outliers..."
                 disabled={loading}
               />
 

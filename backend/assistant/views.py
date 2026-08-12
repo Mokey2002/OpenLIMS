@@ -22,6 +22,7 @@ from .llm import configured_model_info, enhance_with_llm
 from .models import AssistantAction
 from .models import GeneratedArtifact, NotificationSubscription, SOPDocument
 from .monitoring import build_admin_monitoring_status
+from .comparisons import run_comparison_spec
 from .serializers import NotificationSubscriptionSerializer, SOPDocumentSerializer
 from .tools import route_assistant_message
 
@@ -29,6 +30,39 @@ from .tools import route_assistant_message
 class AssistantChatSerializer(serializers.Serializer):
     message = serializers.CharField(max_length=2000)
     context = serializers.DictField(required=False, default=dict)
+
+
+class AssistantComparisonSerializer(serializers.Serializer):
+    analysis = serializers.ChoiceField(
+        choices=["compare", "trend", "outliers", "bottleneck"],
+        default="compare",
+    )
+    kind = serializers.ChoiceField(
+        choices=["sample", "project", "batch"],
+        default="project",
+    )
+    identifiers = serializers.ListField(
+        child=serializers.CharField(max_length=128),
+        required=False,
+        default=list,
+        max_length=10,
+    )
+    days = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=1,
+        max_value=3650,
+    )
+    metric = serializers.ChoiceField(
+        choices=["overview", "status", "qc", "work", "turnaround", "metadata", "results"],
+        default="overview",
+    )
+    result_key = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        max_length=128,
+    )
 
 
 class AssistantChatView(APIView):
@@ -60,6 +94,19 @@ class AssistantChatView(APIView):
                 result["action_error"] = str(exc)
 
         result = enhance_with_llm(message=message, tool_result=result)
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class AssistantComparisonView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = AssistantComparisonSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = run_comparison_spec(
+            serializer.validated_data,
+            request.user,
+        )
         return Response(result, status=status.HTTP_200_OK)
 
 

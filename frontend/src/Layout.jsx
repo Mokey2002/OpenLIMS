@@ -272,6 +272,9 @@ export default function Layout() {
 
               <NavDropdown title="Analysis" id="analysis-nav">
                 <DropdownItemLink to="/analyze">Analyze</DropdownItemLink>
+                <DropdownItemLink to="/comparisons">
+                  Comparisons & Charts
+                </DropdownItemLink>
                 <DropdownItemLink to="/sequences">Sequences</DropdownItemLink>
                 <DropdownItemLink to="/alignments">Alignments</DropdownItemLink>
                 <DropdownItemLink to="/blast">BLAST</DropdownItemLink>

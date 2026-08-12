@@ -3,10 +3,14 @@ import { Alert, Badge, Button, Form, Spinner } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import AssistantChart from "./AssistantChart";
+import ComparisonTable from "./ComparisonTable";
 import AssistantActionPreview from "./AssistantActionPreview";
 
 const STARTER_PROMPTS = [
   "What needs attention?",
+  "Compare samples S-100, S-101, and S-102",
+  "Compare projects Alpha and Beta",
+  "Find unusual results in Project Alpha",
   "Show samples received today",
   "Find sample S-1042",
   "Which samples in Project Alpha are awaiting processing?",
@@ -120,6 +124,7 @@ export default function AssistantWidget() {
           links: data.links || [],
           suggestions: data.suggestions || [],
           chart: data.chart || null,
+          comparison: data.comparison || null,
           pendingAction: data.pending_action || null,
           actionError: data.action_error || "",
           llmError: data.llm_error || "",
@@ -243,6 +248,10 @@ export default function AssistantWidget() {
                   )}
 
                   {item.chart && <AssistantChart chart={item.chart} />}
+
+                  {item.comparison && (
+                    <ComparisonTable comparison={item.comparison} />
+                  )}
 
                   {item.actionError && (
                     <Alert variant="danger" className="mt-2 mb-1 py-2">

@@ -1,0 +1,1275 @@
+import math
+import re
+from collections import Counter, defaultdict
+from datetime import timedelta
+from statistics import mean, pstdev
+
+from django.db.models import Q
+from django.utils import timezone
+
+from core.permissions import is_admin
+from custom_fields.models import FieldDefinition, FieldValue
+from projects.models import Project
+from results.models import Result, WorkItem
+from samples.access import get_sample_access_queryset
+from samples.models import Sample, SampleBatch
+
+
+MAX_COMPARISON_ENTITIES = 10
+MAX_ANALYSIS_ROWS = 100
+TERMINAL_SAMPLE_STATUSES = {
+    Sample.STATUS_REPORTED,
+    Sample.STATUS_CANCELLED,
+    Sample.STATUS_ARCHIVED,
+}
+OPEN_WORK_STATUSES = {
+    WorkItem.STATUS_PENDING,
+    WorkItem.STATUS_IN_PROGRESS,
+}
+STATUS_ORDER = [choice[0] for choice in Sample.STATUS_CHOICES]
+
+
+def _safe_days(value, default=None):
+    if value in (None, "", 0, "0"):
+        return default
+    try:
+        return min(max(int(value), 1), 3650)
+    except (TypeError, ValueError):
+        return default
+
+
+def _cutoff(days):
+    return timezone.now() - timedelta(days=days) if days else None
+
+
+def _accessible_samples(user):
+    return get_sample_access_queryset(
+        Sample.objects.select_related(
+            "project",
+            "batch",
+            "container",
+            "container__location",
+            "assigned_to",
+        ).all(),
+        user,
+    )
+
+
+def _accessible_projects(user):
+    queryset = Project.objects.all().order_by("code")
+    if is_admin(user):
+        return queryset
+    return queryset.filter(members=user).distinct()
+
+
+def _accessible_batches(user):
+    queryset = SampleBatch.objects.select_related("project").order_by("code")
+    if is_admin(user):
+        return queryset
+    return queryset.filter(project__members=user).distinct()
+
+
+def _normal(value):
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+
+
+def _entity_key(kind, entity):
+    if kind == "sample":
+        return entity.sample_id
+    return entity.code
+
+
+def _entity_label(kind, entity):
+    if kind == "project":
+        return f"{entity.code} — {entity.name}"
+    return _entity_key(kind, entity)
+
+
+def _resolve_entities(kind, identifiers, user):
+    wanted = [str(value).strip() for value in (identifiers or []) if str(value).strip()]
+    if kind == "sample":
+        queryset = _accessible_samples(user)
+        filters = Q()
+        for value in wanted:
+            filters |= Q(sample_id__iexact=value)
+        candidates = list(queryset.filter(filters)) if filters else []
+        by_key = {sample.sample_id.lower(): sample for sample in candidates}
+        ordered = [by_key[value.lower()] for value in wanted if value.lower() in by_key]
+    elif kind == "project":
+        queryset = _accessible_projects(user)
+        filters = Q()
+        for value in wanted:
+            filters |= Q(code__iexact=value) | Q(name__iexact=value)
+        candidates = list(queryset.filter(filters)) if filters else []
+        by_key = {}
+        for project in candidates:
+            by_key[project.code.lower()] = project
+            by_key[project.name.lower()] = project
+        ordered = [by_key[value.lower()] for value in wanted if value.lower() in by_key]
+    elif kind == "batch":
+        queryset = _accessible_batches(user)
+        filters = Q()
+        for value in wanted:
+            filters |= Q(code__iexact=value)
+        candidates = list(queryset.filter(filters)) if filters else []
+        by_key = {batch.code.lower(): batch for batch in candidates}
+        ordered = [by_key[value.lower()] for value in wanted if value.lower() in by_key]
+    else:
+        return [], wanted
+
+    unique = []
+    seen = set()
+    for entity in ordered:
+        if entity.pk not in seen:
+            unique.append(entity)
+            seen.add(entity.pk)
+    resolved_aliases = {_entity_key(kind, entity).lower() for entity in unique}
+    if kind == "project":
+        resolved_aliases.update(entity.name.lower() for entity in unique)
+    missing = [value for value in wanted if value.lower() not in resolved_aliases]
+    return unique[:MAX_COMPARISON_ENTITIES], missing
+
+
+def _find_mentions(message, kind, user):
+    text = str(message or "")
+    lower = text.lower()
+    if kind == "sample":
+        candidates = list(_accessible_samples(user).order_by("sample_id")[:2000])
+        values = [(sample, [sample.sample_id]) for sample in candidates]
+    elif kind == "project":
+        candidates = list(_accessible_projects(user)[:500])
+        values = [(project, [project.code, project.name]) for project in candidates]
+    else:
+        candidates = list(_accessible_batches(user)[:1000])
+        values = [(batch, [batch.code]) for batch in candidates]
+
+    positions = []
+    for entity, labels in values:
+        matches = []
+        for label in labels:
+            pattern = rf"(?<![a-z0-9_-]){re.escape(label.lower())}(?![a-z0-9_-])"
+            match = re.search(pattern, lower)
+            if match:
+                matches.append(match.start())
+        if matches:
+            positions.append((min(matches), _entity_key(kind, entity)))
+    positions.sort(key=lambda item: item[0])
+    return [value for _, value in positions[:MAX_COMPARISON_ENTITIES]]
+
+
+def _extract_days(message, default=None):
+    text = str(message or "").lower()
+    match = re.search(r"(?:last|past|previous|only)\s+(\d+)\s+days?", text)
+    if match:
+        return _safe_days(match.group(1), default)
+    if "this week" in text:
+        return 7
+    if "this month" in text:
+        return timezone.localdate().day
+    if "last month" in text:
+        return 30
+    return default
+
+
+def _metric_from_message(message, default="overview"):
+    lower = str(message or "").lower()
+    if any(word in lower for word in ["qc", "failure rate", "pass rate"]):
+        return "qc"
+    if any(word in lower for word in ["status", "statuses", "workflow stage"]):
+        return "status"
+    if any(word in lower for word in ["work", "overdue", "unassigned", "workload"]):
+        return "work"
+    if any(word in lower for word in ["turnaround", "completion time", "cycle time"]):
+        return "turnaround"
+    if any(word in lower for word in ["metadata", "incomplete", "missing field"]):
+        return "metadata"
+    if any(word in lower for word in ["result", "measurement", "analyte"]):
+        return "results"
+    return default or "overview"
+
+
+def _result_value(result):
+    if result.value_type == Result.VALUE_TYPE_NUMBER:
+        return result.value_number
+    if result.value_type == Result.VALUE_TYPE_BOOLEAN:
+        return result.value_boolean
+    return result.value_string
+
+
+def _field_value(value):
+    raw = value.value
+    if isinstance(raw, dict) and set(raw).intersection({"value", "raw", "text"}):
+        for key in ["value", "raw", "text"]:
+            if key in raw:
+                return raw[key]
+    return raw
+
+
+def _metadata_for_samples(samples):
+    sample_ids = [str(sample.id) for sample in samples]
+    values = FieldValue.objects.filter(
+        entity_type__iexact="Sample",
+        entity_id__in=sample_ids,
+    ).select_related("field_definition")
+    by_sample = defaultdict(dict)
+    for value in values:
+        by_sample[value.entity_id][value.field_definition.name] = _field_value(value)
+    required = list(
+        FieldDefinition.objects.filter(
+            entity_type__iexact="Sample",
+            required=True,
+        ).values_list("name", flat=True)
+    )
+    return by_sample, required
+
+
+def _scope_samples(kind, entity, user, cutoff=None):
+    queryset = _accessible_samples(user)
+    if kind == "project":
+        queryset = queryset.filter(
+            Q(project=entity) | Q(linked_projects=entity)
+        ).distinct()
+    elif kind == "batch":
+        queryset = queryset.filter(batch=entity)
+    elif kind == "sample":
+        queryset = queryset.filter(id=entity.id)
+    if cutoff:
+        queryset = queryset.filter(created_at__gte=cutoff)
+    return queryset
+
+
+def _work_and_results(sample_ids, cutoff=None):
+    work = WorkItem.objects.filter(sample_id__in=sample_ids)
+    results = Result.objects.filter(work_item__sample_id__in=sample_ids)
+    if cutoff:
+        work = work.filter(created_at__gte=cutoff)
+        results = results.filter(created_at__gte=cutoff)
+    return work, results
+
+
+def _status_counts(samples):
+    counts = Counter(samples.values_list("status", flat=True))
+    return {status: counts.get(status, 0) for status in STATUS_ORDER}
+
+
+def _turnaround_days(samples):
+    values = []
+    for sample in samples:
+        if sample.status not in {Sample.STATUS_REPORTED, Sample.STATUS_ARCHIVED}:
+            continue
+        delta = sample.status_changed_at - sample.created_at
+        if delta.total_seconds() >= 0:
+            values.append(delta.total_seconds() / 86400)
+    return round(mean(values), 2) if values else None
+
+
+def _metric_snapshot(kind, entity, user, days=None, required_fields=None):
+    cutoff = _cutoff(days)
+    samples = _scope_samples(kind, entity, user, cutoff=cutoff)
+    sample_list = list(samples)
+    sample_ids = [sample.id for sample in sample_list]
+    work, results = _work_and_results(sample_ids, cutoff=cutoff)
+    now = timezone.now()
+    result_total = results.count()
+    qc_passed = results.filter(qc_passed=True).count()
+    qc_failed = results.filter(qc_passed=False).count()
+    qc_known = qc_passed + qc_failed
+    required_fields = required_fields or []
+    missing_metadata = 0
+    if required_fields and sample_ids:
+        metadata, _ = _metadata_for_samples(sample_list)
+        for sample in sample_list:
+            present = metadata.get(str(sample.id), {})
+            if any(present.get(field) in (None, "", [], {}) for field in required_fields):
+                missing_metadata += 1
+    status_counts = Counter(sample.status for sample in sample_list)
+    stale_samples = [
+        sample
+        for sample in sample_list
+        if sample.status not in TERMINAL_SAMPLE_STATUSES
+        and (now - sample.status_changed_at).total_seconds() >= 7 * 86400
+    ]
+    row = {
+        "entity": _entity_key(kind, entity),
+        "label": _entity_label(kind, entity),
+        "sample_count": len(sample_list),
+        "received": status_counts.get(Sample.STATUS_RECEIVED, 0),
+        "in_progress": status_counts.get(Sample.STATUS_IN_PROGRESS, 0),
+        "qc_samples": status_counts.get(Sample.STATUS_QC, 0),
+        "reported": status_counts.get(Sample.STATUS_REPORTED, 0),
+        "cancelled": status_counts.get(Sample.STATUS_CANCELLED, 0),
+        "archived": status_counts.get(Sample.STATUS_ARCHIVED, 0),
+        "open_work": work.filter(status__in=OPEN_WORK_STATUSES).count(),
+        "overdue_work": work.filter(
+            status__in=OPEN_WORK_STATUSES,
+            due_at__lt=now,
+        ).count(),
+        "unassigned_work": work.filter(
+            status__in=OPEN_WORK_STATUSES,
+            assigned_to__isnull=True,
+        ).count(),
+        "result_count": result_total,
+        "qc_passed": qc_passed,
+        "qc_failed": qc_failed,
+        "qc_pending": results.filter(qc_status=Result.QC_PENDING_REVIEW).count(),
+        "qc_pass_rate": round(qc_passed / qc_known * 100, 1) if qc_known else None,
+        "qc_failure_rate": round(qc_failed / qc_known * 100, 1) if qc_known else None,
+        "turnaround_days": _turnaround_days(sample_list),
+        "missing_metadata": missing_metadata,
+        "stale_samples": len(stale_samples),
+    }
+    if kind == "project":
+        row["name"] = entity.name
+    if kind == "batch":
+        row["project"] = entity.project.code
+    return row
+
+
+def _chart_for_scope(kind, rows, metric):
+    if metric == "status":
+        series = [
+            ("received", "Received"),
+            ("in_progress", "In progress"),
+            ("qc_samples", "QC"),
+            ("reported", "Reported"),
+            ("cancelled", "Cancelled"),
+            ("archived", "Archived"),
+        ]
+        title = f"{kind.title()} sample status comparison"
+        stacked = True
+    elif metric == "qc":
+        series = [
+            ("qc_pass_rate", "QC pass rate (%)"),
+            ("qc_failure_rate", "QC failure rate (%)"),
+        ]
+        title = f"{kind.title()} QC rate comparison"
+        stacked = False
+    elif metric == "work":
+        series = [
+            ("open_work", "Open work"),
+            ("overdue_work", "Overdue work"),
+            ("unassigned_work", "Unassigned work"),
+        ]
+        title = f"{kind.title()} workload comparison"
+        stacked = False
+    elif metric == "turnaround":
+        series = [("turnaround_days", "Average turnaround (days)")]
+        title = f"{kind.title()} turnaround comparison"
+        stacked = False
+    elif metric == "metadata":
+        series = [("missing_metadata", "Samples missing required metadata")]
+        title = f"{kind.title()} metadata completeness comparison"
+        stacked = False
+    else:
+        series = [
+            ("sample_count", "Samples"),
+            ("qc_failed", "Failed QC results"),
+            ("overdue_work", "Overdue work"),
+            ("stale_samples", "Stale samples"),
+        ]
+        title = f"{kind.title()} operational comparison"
+        stacked = False
+    return {
+        "chartType": "bar",
+        "meta": {
+            "title": title,
+            "description": "Calculated from records currently accessible to the requesting user.",
+        },
+        "xKey": "entity",
+        "xAxisLabel": kind.title(),
+        "stacked": stacked,
+        "series": [
+            {
+                "dataKey": data_key,
+                "label": label,
+                "axisLabel": label,
+                "valueFormat": "percent" if "rate" in data_key else "number",
+            }
+            for data_key, label in series
+        ],
+        "data": rows,
+    }
+
+
+def _scope_columns(kind):
+    columns = [
+        {"key": "entity", "label": kind.title()},
+    ]
+    if kind == "project":
+        columns.append({"key": "name", "label": "Name"})
+    if kind == "batch":
+        columns.append({"key": "project", "label": "Project"})
+    columns.extend([
+        {"key": "sample_count", "label": "Samples", "format": "integer"},
+        {"key": "open_work", "label": "Open work", "format": "integer"},
+        {"key": "overdue_work", "label": "Overdue", "format": "integer"},
+        {"key": "qc_failure_rate", "label": "QC failure", "format": "percent"},
+        {"key": "turnaround_days", "label": "Turnaround (days)", "format": "number"},
+        {"key": "missing_metadata", "label": "Missing metadata", "format": "integer"},
+    ])
+    return columns
+
+
+def _numeric_result_chart(samples, results):
+    values = defaultdict(lambda: defaultdict(list))
+    units = {}
+    sample_keys = {sample.id: f"sample_{index}" for index, sample in enumerate(samples)}
+    for result in results:
+        if result.value_type != Result.VALUE_TYPE_NUMBER or result.value_number is None:
+            continue
+        sample_id = result.work_item.sample_id
+        if sample_id not in sample_keys:
+            continue
+        normalized_key = result.key.strip()
+        values[normalized_key][sample_id].append(result.value_number)
+        units[normalized_key] = result.unit
+    data = []
+    for key in sorted(values)[:20]:
+        row = {
+            "measurement": f"{key} ({units[key]})" if units.get(key) else key,
+        }
+        for sample in samples:
+            collected = values[key].get(sample.id, [])
+            row[sample_keys[sample.id]] = round(mean(collected), 4) if collected else None
+        data.append(row)
+    if not data:
+        return None
+    return {
+        "chartType": "bar",
+        "meta": {
+            "title": "Numeric result comparison",
+            "description": "Mean numeric value for each measurement and sample in the selected window.",
+        },
+        "xKey": "measurement",
+        "xAxisLabel": "Measurement",
+        "series": [
+            {
+                "dataKey": sample_keys[sample.id],
+                "label": sample.sample_id,
+                "axisLabel": "Result value",
+                "valueFormat": "number",
+            }
+            for sample in samples
+        ],
+        "data": data,
+    }
+
+
+def _compare_samples(samples, user, days=None, metric="overview"):
+    cutoff = _cutoff(days)
+    sample_ids = [sample.id for sample in samples]
+    work, results = _work_and_results(sample_ids, cutoff=cutoff)
+    result_list = list(results.select_related("work_item", "work_item__sample"))
+    metadata, required_fields = _metadata_for_samples(samples)
+    custom_field_names = sorted({
+        field_name
+        for values in metadata.values()
+        for field_name in values
+    })[:8]
+    now = timezone.now()
+    rows = []
+    links = []
+    result_by_sample = defaultdict(list)
+    work_by_sample = defaultdict(list)
+    for result in result_list:
+        result_by_sample[result.work_item.sample_id].append(result)
+    for item in work.select_related("assigned_to"):
+        work_by_sample[item.sample_id].append(item)
+    for sample in samples:
+        sample_results = result_by_sample[sample.id]
+        sample_work = work_by_sample[sample.id]
+        known_qc = [result for result in sample_results if result.qc_passed is not None]
+        failed_qc = [result for result in known_qc if result.qc_passed is False]
+        fields = metadata.get(str(sample.id), {})
+        missing = [
+            field
+            for field in required_fields
+            if fields.get(field) in (None, "", [], {})
+        ]
+        container = sample.container
+        location = None
+        if container:
+            location = getattr(getattr(container, "location", None), "name", None)
+            location = location or getattr(container, "name", None) or f"Container #{container.id}"
+        status_age = max((now - sample.status_changed_at).total_seconds() / 86400, 0)
+        row = {
+            "entity": sample.sample_id,
+            "sample_count": 1,
+            "project": sample.project.code if sample.project else None,
+            "batch": sample.batch.code if sample.batch else None,
+            "status": sample.status,
+            "location": location,
+            "assigned_to": sample.assigned_to.username if sample.assigned_to else None,
+            "status_age_days": round(status_age, 1),
+            "stale_samples": int(
+                sample.status not in TERMINAL_SAMPLE_STATUSES and status_age >= 7
+            ),
+            "open_work": sum(item.status in OPEN_WORK_STATUSES for item in sample_work),
+            "overdue_work": sum(
+                item.status in OPEN_WORK_STATUSES
+                and item.due_at is not None
+                and item.due_at < now
+                for item in sample_work
+            ),
+            "result_count": len(sample_results),
+            "qc_failed": len(failed_qc),
+            "qc_failure_rate": round(len(failed_qc) / len(known_qc) * 100, 1) if known_qc else None,
+            "missing_metadata": len(missing),
+            "missing_fields": ", ".join(missing) if missing else "None",
+        }
+        for field_index, field_name in enumerate(custom_field_names):
+            row[f"custom_{field_index}"] = fields.get(field_name)
+        rows.append(row)
+        links.append({
+            "label": f"Open {sample.sample_id}",
+            "url": f"/samples/{sample.id}",
+            "kind": "sample",
+        })
+    result_chart = _numeric_result_chart(samples, result_list)
+    chart = result_chart if metric in {"results", "overview"} and result_chart else _chart_for_scope("sample", rows, metric)
+    columns = [
+        {"key": "entity", "label": "Sample"},
+        {"key": "project", "label": "Project"},
+        {"key": "batch", "label": "Batch"},
+        {"key": "status", "label": "Status"},
+        {"key": "location", "label": "Location"},
+        {"key": "assigned_to", "label": "Assigned to"},
+        {"key": "status_age_days", "label": "Days in status", "format": "number"},
+        {"key": "open_work", "label": "Open work", "format": "integer"},
+        {"key": "result_count", "label": "Results", "format": "integer"},
+        {"key": "qc_failed", "label": "Failed QC", "format": "integer"},
+        {"key": "missing_metadata", "label": "Missing fields", "format": "integer"},
+    ]
+    columns.extend([
+        {"key": f"custom_{index}", "label": field_name}
+        for index, field_name in enumerate(custom_field_names)
+    ])
+    return rows, columns, chart, links
+
+
+def _comparison_answer(kind, rows, days, missing):
+    window = f" from the last {days} days" if days else " across all available dates"
+    lines = [f"Compared {len(rows)} accessible {kind}(s){window}."]
+    if rows:
+        highest_samples = max(rows, key=lambda row: row.get("sample_count", 1) or 0)
+        if kind != "sample":
+            lines.append(
+                f"- Largest visible sample count: {highest_samples['entity']} "
+                f"({highest_samples['sample_count']})."
+            )
+        failed = [row for row in rows if row.get("qc_failed")]
+        if failed:
+            highest_failed = max(failed, key=lambda row: row.get("qc_failed", 0))
+            lines.append(
+                f"- Most failed QC results: {highest_failed['entity']} "
+                f"({highest_failed['qc_failed']})."
+            )
+        overdue = [row for row in rows if row.get("overdue_work")]
+        if overdue:
+            highest_overdue = max(overdue, key=lambda row: row.get("overdue_work", 0))
+            lines.append(
+                f"- Most overdue work: {highest_overdue['entity']} "
+                f"({highest_overdue['overdue_work']})."
+            )
+    if missing:
+        lines.append(
+            f"- {len(missing)} requested identifier(s) were unavailable or outside your access scope."
+        )
+    lines.append("All values were calculated by OpenLIMS from permission-filtered records.")
+    return "\n".join(lines)
+
+
+def compare_entities(kind, identifiers, user, days=None, metric="overview"):
+    entities, missing = _resolve_entities(kind, identifiers, user)
+    if len(entities) < 2:
+        return {
+            "answer": (
+                f"I need at least two accessible {kind}s to compare. "
+                f"I resolved {len(entities)} from the requested identifiers."
+            ),
+            "links": [],
+            "suggestions": [
+                "Compare samples S-100, S-101, and S-102",
+                "Compare projects Alpha and Beta",
+                "Compare batches B-100 and B-101",
+            ],
+            "skip_llm": True,
+        }
+    days = _safe_days(days)
+    metric = metric or "overview"
+    if kind == "sample":
+        rows, columns, chart, links = _compare_samples(
+            entities,
+            user,
+            days=days,
+            metric=metric,
+        )
+    else:
+        required_fields = list(
+            FieldDefinition.objects.filter(
+                entity_type__iexact="Sample",
+                required=True,
+            ).values_list("name", flat=True)
+        )
+        rows = [
+            _metric_snapshot(
+                kind,
+                entity,
+                user,
+                days=days,
+                required_fields=required_fields,
+            )
+            for entity in entities
+        ]
+        columns = _scope_columns(kind)
+        chart = _chart_for_scope(kind, rows, metric)
+        links = [
+            {
+                "label": f"Open {_entity_key(kind, entity)}",
+                "url": f"/projects/{entity.id}" if kind == "project" else "/batches",
+                "kind": kind,
+            }
+            for entity in entities
+        ]
+    context = {
+        "comparison": {
+            "analysis": "compare",
+            "kind": kind,
+            "identifiers": [_entity_key(kind, entity) for entity in entities],
+            "days": days,
+            "metric": metric,
+        }
+    }
+    return {
+        "answer": _comparison_answer(kind, rows, days, missing),
+        "comparison": {
+            "title": f"{kind.title()} comparison",
+            "kind": kind,
+            "columns": columns,
+            "rows": rows,
+            "filters": context["comparison"],
+            "notes": [
+                "Linked-project samples may appear in more than one project comparison.",
+                "A blank rate means there were no pass/fail QC decisions in the selected window.",
+            ] if kind == "project" else [],
+        },
+        "chart": chart,
+        "links": links,
+        "context": context,
+        "suggestions": [
+            "Only show the last 30 days",
+            "Graph the QC failure rates",
+            "Graph overdue and unassigned work",
+            "Export this comparison as PDF",
+        ],
+        "skip_llm": True,
+    }
+
+
+def _extract_result_key(message):
+    text = str(message or "").strip()
+    patterns = [
+        r"(?:graph|plot|trend|chart)\s+(?:the\s+)?(.+?)\s+results?\s+(?:for|in|across)",
+        r"(?:graph|plot|trend|chart)\s+(?:results?\s+for\s+)?(.+?)\s+(?:for|in|across)\s+(?:project|projects|sample|samples)",
+        r"(?:outlier|unusual|anomalous)\s+(.+?)\s+results?",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            value = re.sub(r"\b(?:the|all|numeric)\b", "", match.group(1), flags=re.IGNORECASE)
+            return re.sub(r"\s+", " ", value).strip(" .,:;")
+    return ""
+
+
+def result_trend(identifiers, user, kind="project", days=90, result_key=""):
+    days = _safe_days(days, 90)
+    entities, missing = _resolve_entities(kind, identifiers, user)
+    if not entities:
+        return {
+            "answer": f"I could not resolve an accessible {kind} for that result trend.",
+            "links": [],
+            "skip_llm": True,
+        }
+    cutoff = _cutoff(days)
+    series_by_entity = defaultdict(lambda: defaultdict(list))
+    links = []
+    for entity in entities:
+        samples = _scope_samples(kind, entity, user)
+        queryset = Result.objects.filter(
+            work_item__sample__in=samples,
+            value_type=Result.VALUE_TYPE_NUMBER,
+            value_number__isnull=False,
+            created_at__gte=cutoff,
+        )
+        if result_key:
+            queryset = queryset.filter(key__icontains=result_key)
+        for result in queryset.order_by("created_at")[:5000]:
+            day = timezone.localtime(result.created_at).date().isoformat()
+            series_by_entity[_entity_key(kind, entity)][day].append(result.value_number)
+        if kind == "project":
+            url = f"/projects/{entity.id}"
+        elif kind == "sample":
+            url = f"/samples/{entity.id}"
+        else:
+            url = "/batches"
+        links.append({
+            "label": f"Open {_entity_key(kind, entity)}",
+            "url": url,
+            "kind": kind,
+        })
+    all_days = sorted({day for values in series_by_entity.values() for day in values})
+    data = []
+    series = []
+    for index, entity in enumerate(entities):
+        key = _entity_key(kind, entity)
+        data_key = f"entity_{index}"
+        series.append({
+            "dataKey": data_key,
+            "label": key,
+            "axisLabel": result_key or "Numeric result",
+            "valueFormat": "number",
+        })
+        for day in all_days:
+            if len(data) < len(all_days):
+                data.append({"day": day})
+            values = series_by_entity[key].get(day, [])
+            data[all_days.index(day)][data_key] = round(mean(values), 4) if values else None
+    data = [row for row in data if any(row.get(item["dataKey"]) is not None for item in series)]
+    if not data:
+        return {
+            "answer": (
+                f"No accessible numeric results matching '{result_key or 'any result'}' "
+                f"were found in the last {days} days."
+            ),
+            "links": links,
+            "skip_llm": True,
+        }
+    rows = []
+    for entity in entities:
+        key = _entity_key(kind, entity)
+        values = [value for day_values in series_by_entity[key].values() for value in day_values]
+        rows.append({
+            "entity": key,
+            "measurements": len(values),
+            "average": round(mean(values), 4) if values else None,
+            "minimum": round(min(values), 4) if values else None,
+            "maximum": round(max(values), 4) if values else None,
+        })
+    context = {
+        "comparison": {
+            "analysis": "trend",
+            "kind": kind,
+            "identifiers": [_entity_key(kind, entity) for entity in entities],
+            "days": days,
+            "metric": "results",
+            "result_key": result_key,
+        }
+    }
+    return {
+        "answer": (
+            f"Graphed {sum(row['measurements'] for row in rows)} numeric measurement(s) "
+            f"across {len(entities)} {kind}(s) for the last {days} days."
+            + (f" {len(missing)} identifier(s) were unavailable." if missing else "")
+        ),
+        "comparison": {
+            "title": f"{result_key or 'Numeric result'} trend summary",
+            "kind": "trend",
+            "columns": [
+                {"key": "entity", "label": kind.title()},
+                {"key": "measurements", "label": "Measurements", "format": "integer"},
+                {"key": "average", "label": "Average", "format": "number"},
+                {"key": "minimum", "label": "Minimum", "format": "number"},
+                {"key": "maximum", "label": "Maximum", "format": "number"},
+            ],
+            "rows": rows,
+            "filters": context["comparison"],
+            "notes": ["Each point is the arithmetic mean of matching measurements recorded that day."],
+        },
+        "chart": {
+            "chartType": "line",
+            "meta": {
+                "title": f"{result_key or 'Numeric results'} over time",
+                "description": f"Daily mean across the last {days} days.",
+            },
+            "xKey": "day",
+            "xAxisLabel": "Day",
+            "series": series,
+            "data": data,
+        },
+        "links": links,
+        "context": context,
+        "suggestions": [
+            "Only show the last 30 days",
+            "Find unusual results in this comparison",
+            "Export this comparison as PDF",
+        ],
+        "skip_llm": True,
+    }
+
+
+def find_outliers(identifiers, user, kind="project", days=90, result_key=""):
+    days = _safe_days(days, 90)
+    entities, _ = _resolve_entities(kind, identifiers, user)
+    if identifiers and not entities:
+        return {
+            "answer": f"I could not resolve an accessible {kind} for that outlier review.",
+            "links": [],
+            "skip_llm": True,
+        }
+    if not entities:
+        entities = list(_accessible_projects(user)[:MAX_COMPARISON_ENTITIES])
+        kind = "project"
+    cutoff = _cutoff(days)
+    sample_entity = {}
+    allowed_sample_ids = set()
+    for entity in entities:
+        for sample_id in _scope_samples(kind, entity, user).values_list("id", flat=True):
+            allowed_sample_ids.add(sample_id)
+            sample_entity.setdefault(sample_id, _entity_key(kind, entity))
+    queryset = Result.objects.select_related(
+        "work_item",
+        "work_item__sample",
+    ).filter(
+        work_item__sample_id__in=allowed_sample_ids,
+        value_type=Result.VALUE_TYPE_NUMBER,
+        value_number__isnull=False,
+        created_at__gte=cutoff,
+    )
+    if result_key:
+        queryset = queryset.filter(key__icontains=result_key)
+    groups = defaultdict(list)
+    results = list(queryset.order_by("created_at")[:5000])
+    for result in results:
+        groups[(result.key, result.unit)].append(result)
+    rows = []
+    for (key, unit), group in groups.items():
+        values = [result.value_number for result in group]
+        average = mean(values)
+        deviation = pstdev(values) if len(values) >= 4 else 0
+        for result in group:
+            z_score = (result.value_number - average) / deviation if deviation else 0
+            reference = result.reference_comparison
+            reasons = []
+            if reference in {"above", "below"}:
+                reasons.append(f"{reference} reference range")
+            if len(values) >= 4 and abs(z_score) >= 2.5:
+                reasons.append(f"z-score {z_score:.2f}")
+            if not reasons:
+                continue
+            sample = result.work_item.sample
+            rows.append({
+                "entity": f"{sample.sample_id} · {key}",
+                "sample": sample.sample_id,
+                "scope": sample_entity.get(sample.id),
+                "result": key,
+                "value": result.value_number,
+                "unit": unit,
+                "reason": "; ".join(reasons),
+                "deviation_score": round(abs(z_score), 2),
+                "result_id": result.id,
+            })
+    rows.sort(key=lambda row: (row["deviation_score"], row["sample"]), reverse=True)
+    rows = rows[:MAX_ANALYSIS_ROWS]
+    context = {
+        "comparison": {
+            "analysis": "outliers",
+            "kind": kind,
+            "identifiers": [_entity_key(kind, entity) for entity in entities],
+            "days": days,
+            "metric": "results",
+            "result_key": result_key,
+        }
+    }
+    return {
+        "answer": (
+            f"Found {len(rows)} unusual numeric result(s) in the last {days} days. "
+            "Outliers are flagged by configured reference limits or an absolute z-score of at least 2.5."
+        ),
+        "comparison": {
+            "title": "Outlier review",
+            "kind": "outliers",
+            "columns": [
+                {"key": "sample", "label": "Sample"},
+                {"key": "scope", "label": kind.title()},
+                {"key": "result", "label": "Result"},
+                {"key": "value", "label": "Value", "format": "number"},
+                {"key": "unit", "label": "Unit"},
+                {"key": "reason", "label": "Reason"},
+            ],
+            "rows": rows,
+            "filters": context["comparison"],
+            "notes": [
+                "This is a review aid, not an automatic QC decision.",
+                "Small groups use reference ranges only because z-scores are unstable with fewer than four values.",
+            ],
+        },
+        "chart": {
+            "chartType": "bar",
+            "meta": {
+                "title": "Largest outlier scores",
+                "description": "Absolute z-score; reference-only flags may have a score of zero.",
+            },
+            "xKey": "entity",
+            "xAxisLabel": "Sample and result",
+            "series": [{
+                "dataKey": "deviation_score",
+                "label": "Absolute z-score",
+                "axisLabel": "Score",
+                "valueFormat": "number",
+            }],
+            "data": rows[:20],
+        },
+        "links": [
+            {
+                "label": f"Open result R-{row['result_id']}",
+                "url": "/qc-review",
+                "kind": "result",
+            }
+            for row in rows[:20]
+        ],
+        "context": context,
+        "suggestions": [
+            "Only show the last 30 days",
+            "Compare the projects in this analysis",
+            "Export this comparison as CSV",
+        ],
+        "skip_llm": True,
+    }
+
+
+def find_bottlenecks(identifiers, user, kind="project", days=7):
+    stale_days = _safe_days(days, 7)
+    entities, _ = _resolve_entities(kind, identifiers, user)
+    if not entities:
+        entities = list(_accessible_projects(user)[:MAX_COMPARISON_ENTITIES])
+        kind = "project"
+    threshold = timezone.now() - timedelta(days=stale_days)
+    rows = []
+    links = []
+    for entity in entities:
+        samples = _scope_samples(kind, entity, user)
+        stale = samples.exclude(status__in=TERMINAL_SAMPLE_STATUSES).filter(
+            status_changed_at__lt=threshold,
+        )
+        work = WorkItem.objects.filter(
+            sample__in=samples,
+            status__in=OPEN_WORK_STATUSES,
+        )
+        counts = Counter(stale.values_list("status", flat=True))
+        ages = [
+            max((timezone.now() - sample.status_changed_at).total_seconds() / 86400, 0)
+            for sample in stale
+        ]
+        row = {
+            "entity": _entity_key(kind, entity),
+            "stale_samples": len(ages),
+            "average_stale_days": round(mean(ages), 1) if ages else None,
+            "oldest_stale_days": round(max(ages), 1) if ages else None,
+            "overdue_work": work.filter(due_at__lt=timezone.now()).count(),
+            "unassigned_work": work.filter(assigned_to__isnull=True).count(),
+        }
+        for status in STATUS_ORDER:
+            row[f"status_{status.lower()}"] = counts.get(status, 0)
+        rows.append(row)
+        links.append({
+            "label": f"Open {_entity_key(kind, entity)}",
+            "url": f"/projects/{entity.id}" if kind == "project" else "/batches",
+            "kind": kind,
+        })
+    context = {
+        "comparison": {
+            "analysis": "bottleneck",
+            "kind": kind,
+            "identifiers": [_entity_key(kind, entity) for entity in entities],
+            "days": stale_days,
+            "metric": "work",
+        }
+    }
+    chart_series = []
+    for status in STATUS_ORDER:
+        chart_series.append({
+            "dataKey": f"status_{status.lower()}",
+            "label": status.replace("_", " ").title(),
+            "axisLabel": "Stale samples",
+            "valueFormat": "integer",
+        })
+    return {
+        "answer": (
+            f"Bottleneck review used a {stale_days}-day status threshold across "
+            f"{len(entities)} accessible {kind}(s). "
+            f"Found {sum(row['stale_samples'] for row in rows)} stale sample(s) and "
+            f"{sum(row['overdue_work'] for row in rows)} overdue work item(s)."
+        ),
+        "comparison": {
+            "title": "Workflow bottleneck review",
+            "kind": "bottleneck",
+            "columns": [
+                {"key": "entity", "label": kind.title()},
+                {"key": "stale_samples", "label": "Stale samples", "format": "integer"},
+                {"key": "average_stale_days", "label": "Average days", "format": "number"},
+                {"key": "oldest_stale_days", "label": "Oldest days", "format": "number"},
+                {"key": "overdue_work", "label": "Overdue work", "format": "integer"},
+                {"key": "unassigned_work", "label": "Unassigned work", "format": "integer"},
+            ],
+            "rows": rows,
+            "filters": context["comparison"],
+            "notes": ["Terminal samples are excluded from stale-status calculations."],
+        },
+        "chart": {
+            "chartType": "bar",
+            "meta": {
+                "title": "Stale samples by workflow status",
+                "description": f"Samples unchanged for at least {stale_days} days.",
+            },
+            "xKey": "entity",
+            "xAxisLabel": kind.title(),
+            "stacked": True,
+            "series": chart_series,
+            "data": rows,
+        },
+        "links": links,
+        "context": context,
+        "suggestions": [
+            "Use a 14 day bottleneck threshold",
+            "Graph overdue and unassigned work",
+            "Export this comparison as PDF",
+        ],
+        "skip_llm": True,
+    }
+
+
+def _comparison_export(context, output_format):
+    spec = dict(context.get("comparison") or {})
+    output_format = "CSV" if str(output_format).upper() == "CSV" else "PDF"
+    title = spec.get("analysis", "comparison").replace("_", " ").title()
+    filters = {
+        "report_type": "COMPARISON_ANALYSIS",
+        "comparison_spec": spec,
+        "output_format": output_format,
+        "timezone": str(timezone.get_current_timezone()),
+    }
+    preview = {
+        "title": "Comparison artifact preview",
+        "operation": "GENERATE_COMPARISON_ARTIFACT",
+        "project": "Permission-filtered comparison",
+        "records_affected": len(spec.get("identifiers") or []),
+        "excluded_count": 0,
+        "records": [{
+            "id": title,
+            "label": title,
+            "current": spec,
+            "proposed": {"output": output_format},
+        }],
+        "current_values": spec,
+        "proposed_values": {
+            "format": output_format,
+            "recalculate_at_confirmation": True,
+            "audited": True,
+        },
+    }
+    return {
+        "answer": "Review the comparison filters below. Access and metrics will be recalculated when you confirm.",
+        "links": [],
+        "skip_llm": True,
+        "pending_action": {
+            "type": "COMPLIANCE_REPORT",
+            "summary": f"Export {title.lower()} as {output_format}",
+            "payload": {
+                "operation": "GENERATE_REPORT",
+                "filters": filters,
+                "preview": preview,
+            },
+        },
+    }
+
+
+def run_comparison_spec(spec, user):
+    spec = dict(spec or {})
+    analysis = str(spec.get("analysis") or "compare").lower()
+    kind = str(spec.get("kind") or "project").lower().rstrip("s")
+    identifiers = list(spec.get("identifiers") or [])
+    days = _safe_days(spec.get("days"))
+    metric = str(spec.get("metric") or "overview").lower()
+    result_key = str(spec.get("result_key") or "").strip()
+    if analysis == "trend":
+        return result_trend(
+            identifiers,
+            user,
+            kind=kind,
+            days=days or 90,
+            result_key=result_key,
+        )
+    if analysis in {"outlier", "outliers"}:
+        return find_outliers(
+            identifiers,
+            user,
+            kind=kind,
+            days=days or 90,
+            result_key=result_key,
+        )
+    if analysis in {"bottleneck", "bottlenecks"}:
+        return find_bottlenecks(
+            identifiers,
+            user,
+            kind=kind,
+            days=days or 7,
+        )
+    return compare_entities(
+        kind,
+        identifiers,
+        user,
+        days=days,
+        metric=metric,
+    )
+
+
+def _why_comparison(result, metric, user):
+    comparison = result.get("comparison") or {}
+    rows = comparison.get("rows") or []
+    if not rows:
+        return result
+    metric_keys = {
+        "qc": ("qc_failure_rate", "QC failure rate", "%"),
+        "work": ("overdue_work", "overdue work", ""),
+        "turnaround": ("turnaround_days", "average turnaround", " days"),
+        "metadata": ("missing_metadata", "samples missing metadata", ""),
+        "overview": ("sample_count", "visible sample count", ""),
+    }
+    key, label, suffix = metric_keys.get(metric, metric_keys["overview"])
+    available = [row for row in rows if row.get(key) is not None]
+    if not available:
+        result["answer"] += f"\n\nThere is not enough data to rank {label}."
+        return result
+    highest = max(available, key=lambda row: row.get(key) or 0)
+    lowest = min(available, key=lambda row: row.get(key) or 0)
+    result["answer"] += (
+        f"\n\nFor {label}, {highest['entity']} is highest at "
+        f"{highest[key]}{suffix}; {lowest['entity']} is lowest at {lowest[key]}{suffix}. "
+        "This identifies the records contributing to the difference, but does not claim a biological cause."
+    )
+    filters = comparison.get("filters") or {}
+    kind = filters.get("kind")
+    entities, _ = _resolve_entities(kind, [highest["entity"]], user)
+    if not entities:
+        return result
+    samples = _scope_samples(kind, entities[0], user)
+    cutoff = _cutoff(_safe_days(filters.get("days")))
+    if metric == "qc":
+        failures = Result.objects.filter(
+            work_item__sample__in=samples,
+            qc_passed=False,
+        )
+        if cutoff:
+            failures = failures.filter(created_at__gte=cutoff)
+        contributors = Counter(failures.values_list("key", flat=True)).most_common(3)
+        if contributors:
+            detail = ", ".join(f"{name}: {count}" for name, count in contributors)
+            result["answer"] += f" Top failed-result contributors in {highest['entity']}: {detail}."
+    elif metric == "work":
+        overdue = WorkItem.objects.filter(
+            sample__in=samples,
+            status__in=OPEN_WORK_STATUSES,
+            due_at__lt=timezone.now(),
+        )
+        if cutoff:
+            overdue = overdue.filter(created_at__gte=cutoff)
+        contributors = Counter(overdue.values_list("work_type", flat=True)).most_common(3)
+        if contributors:
+            detail = ", ".join(f"{name}: {count}" for name, count in contributors)
+            result["answer"] += f" Top overdue work types in {highest['entity']}: {detail}."
+    elif metric == "metadata":
+        sample_list = list(samples)
+        metadata, required_fields = _metadata_for_samples(sample_list)
+        missing_counts = Counter()
+        for sample in sample_list:
+            present = metadata.get(str(sample.id), {})
+            for field in required_fields:
+                if present.get(field) in (None, "", [], {}):
+                    missing_counts[field] += 1
+        if missing_counts:
+            detail = ", ".join(
+                f"{name}: {count}" for name, count in missing_counts.most_common(3)
+            )
+            result["answer"] += f" Most commonly missing fields in {highest['entity']}: {detail}."
+    return result
+
+
+def route_comparison_analytics(message, user, context=None):
+    context = context or {}
+    previous = dict(context.get("comparison") or {})
+    text = str(message or "").strip()
+    lower = text.lower()
+    follow_up = bool(previous) and any(
+        phrase in lower
+        for phrase in [
+            "only show",
+            "last ",
+            "past ",
+            "this month",
+            "graph the",
+            "show the",
+            "why is",
+            "why are",
+            "export this",
+            "download this",
+            "use a ",
+            "find unusual",
+            "find outlier",
+        ]
+    )
+    if previous and any(phrase in lower for phrase in ["export this", "download this"]):
+        return _comparison_export(context, "CSV" if "csv" in lower else "PDF")
+
+    analysis = None
+    if any(word in lower for word in ["outlier", "outliers", "unusual", "anomalous"]):
+        analysis = "outliers"
+    elif any(word in lower for word in ["bottleneck", "getting stuck", "samples stuck", "workflow delay"]):
+        analysis = "bottleneck"
+    elif "compare" in lower or "difference between" in lower or follow_up:
+        analysis = previous.get("analysis", "compare") if follow_up else "compare"
+    elif any(word in lower for word in ["trend", "graph", "plot", "chart"]):
+        if "result" in lower or _extract_result_key(text):
+            analysis = "trend"
+    if analysis is None:
+        return None
+
+    if follow_up:
+        spec = previous
+    else:
+        if "batch" in lower:
+            kind = "batch"
+        elif "project" in lower:
+            kind = "project"
+        elif "sample" in lower:
+            kind = "sample"
+        else:
+            kind = "project" if analysis in {"outliers", "bottleneck"} else "sample"
+        identifiers = _find_mentions(text, kind, user)
+        if not identifiers and analysis == "compare" and kind in {"project", "batch"}:
+            queryset = _accessible_projects(user) if kind == "project" else _accessible_batches(user)
+            identifiers = [_entity_key(kind, entity) for entity in queryset[:MAX_COMPARISON_ENTITIES]]
+        spec = {
+            "analysis": analysis,
+            "kind": kind,
+            "identifiers": identifiers,
+            "days": None,
+            "metric": "overview",
+        }
+    spec["analysis"] = analysis
+    spec["days"] = _extract_days(text, spec.get("days"))
+    spec["metric"] = _metric_from_message(text, spec.get("metric", "overview"))
+    extracted_key = _extract_result_key(text)
+    if extracted_key:
+        spec["result_key"] = extracted_key
+    if analysis == "outliers" and previous and not spec.get("identifiers"):
+        spec["identifiers"] = previous.get("identifiers", [])
+    if "find unusual" in lower and previous:
+        spec["analysis"] = "outliers"
+    result = run_comparison_spec(spec, user)
+    if any(phrase in lower for phrase in ["why is", "why are"]):
+        result = _why_comparison(
+            result,
+            spec.get("metric", "overview"),
+            user,
+        )
+    return result
