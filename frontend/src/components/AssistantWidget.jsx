@@ -4,10 +4,12 @@ import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import AssistantChart from "./AssistantChart";
 import ComparisonTable from "./ComparisonTable";
+import InvestigationPanel from "./InvestigationPanel";
 import AssistantActionPreview from "./AssistantActionPreview";
 
 const STARTER_PROMPTS = [
   "What needs attention?",
+  "Investigate why sample S-1042 failed QC",
   "Compare samples S-100, S-101, and S-102",
   "Compare projects Alpha and Beta",
   "Find unusual results in Project Alpha",
@@ -125,6 +127,7 @@ export default function AssistantWidget() {
           suggestions: data.suggestions || [],
           chart: data.chart || null,
           comparison: data.comparison || null,
+          investigation: data.investigation || null,
           pendingAction: data.pending_action || null,
           actionError: data.action_error || "",
           llmError: data.llm_error || "",
@@ -251,6 +254,10 @@ export default function AssistantWidget() {
 
                   {item.comparison && (
                     <ComparisonTable comparison={item.comparison} />
+                  )}
+
+                  {item.investigation && (
+                    <InvestigationPanel investigation={item.investigation} compact />
                   )}
 
                   {item.actionError && (

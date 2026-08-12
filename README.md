@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.20.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.23.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-proprietary-red">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -31,18 +31,18 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.22.0 — Comparisons and Visual Analytics`
+**Current release:** `v0.23.0 — Investigation Workbench`
 
-### v0.22.0 highlights
+### v0.23.0 highlights
 
-- Compare up to ten samples, projects, or batches in one request
-- Automatically graph numeric results, QC rates, workflow status, workload, turnaround, and metadata completeness
-- Continue an analysis with follow-ups such as “only show the last 30 days” or “graph QC failure rates”
-- Graph numeric-result trends across projects or samples
-- Flag unusual results using configured reference limits and transparent z-score rules
-- Identify stale samples, overdue work, and workflow bottlenecks
-- Export recalculated, permission-checked comparisons as audited CSV or PDF files with graphs
-- Run every comparison through either natural-language Assistant prompts or the regular Comparisons UI
+- Investigate a sample or result from a dedicated workbench or a natural-language Assistant request
+- Rank direct, comparative, and contextual findings with visible severity and confidence
+- Compare failed measurements with same-batch or same-project peers using transparent statistics
+- Review workflow delays, overdue work, similar QC failures, and the audit timeline together
+- Trace instrument-connector results back to their import job through existing work-item provenance
+- Review project/time-window instrument and reagent evidence without presenting association as causation
+- Graph failure rates by analyte, result entrant, or work type, plus instrument and reagent context
+- Export a recalculated, permission-checked evidence package as audited CSV or PDF
 - Keep calculations deterministic and permission-filtered; OpenAI or Ollama is optional
 
 ---
@@ -70,9 +70,9 @@ directly from the repository owner.
 | **BLAST** | Local BLAST database building and blastn/blastp search |
 | **Mass Spec** | mzML, mzXML, mzData, featureXML, consensusXML, mzID/mzIdentML review using pyOpenMS |
 | **Audit** | Audit events, reason-for-change tracking, CSV exports |
-| **Reports** | Project summaries, sample inventory, QC review, import summaries, audit activity, comparison CSV/PDF artifacts |
-| **Visual analytics** | Multi-sample/project/batch comparisons, result trends, outlier review, workflow bottlenecks, automatic charts |
-| **Assistant** | OpenLIMS Rules, optional OpenAI or Ollama, comparison follow-ups, confirmed actions with expiring user-bound tokens and audit events |
+| **Reports** | Project summaries, sample inventory, QC review, import summaries, audit activity, comparison and investigation CSV/PDF artifacts |
+| **Visual analytics** | Investigation workbench, multi-sample/project/batch comparisons, result trends, outlier review, workflow bottlenecks, automatic charts |
+| **Assistant** | OpenLIMS Rules, optional OpenAI or Ollama, investigation and comparison follow-ups, confirmed actions with expiring user-bound tokens and audit events |
 | **Jobs** | Celery/Redis background jobs and real-time WebSocket updates |
 | **Security** | JWT authentication and role-based permissions |
 

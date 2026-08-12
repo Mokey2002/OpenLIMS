@@ -34,6 +34,7 @@ import QCReview from "./pages/QCReview";
 import WorkQueue from "./pages/WorkQueue";
 import Labels from "./pages/Labels";
 import Comparisons from "./pages/Comparisons";
+import Investigations from "./pages/Investigations";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="work-queue" element={<WorkQueue />} />
           <Route path="labels" element={<Labels />} />
           <Route path="comparisons" element={<Comparisons />} />
+          <Route path="investigations" element={<Investigations />} />
           <Route path="users" element={<Users />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="imports" element={<Imports />} />

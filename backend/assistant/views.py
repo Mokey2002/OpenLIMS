@@ -23,6 +23,7 @@ from .models import AssistantAction
 from .models import GeneratedArtifact, NotificationSubscription, SOPDocument
 from .monitoring import build_admin_monitoring_status
 from .comparisons import run_comparison_spec
+from .investigations import run_investigation_spec
 from .serializers import NotificationSubscriptionSerializer, SOPDocumentSerializer
 from .tools import route_assistant_message
 
@@ -62,6 +63,25 @@ class AssistantComparisonSerializer(serializers.Serializer):
         allow_blank=True,
         default="",
         max_length=128,
+    )
+
+
+class AssistantInvestigationSerializer(serializers.Serializer):
+    subject_type = serializers.ChoiceField(
+        choices=["sample", "result"],
+        default="sample",
+    )
+    identifier = serializers.CharField(max_length=128)
+    days = serializers.IntegerField(default=90, min_value=1, max_value=3650)
+    result_key = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        max_length=128,
+    )
+    group_by = serializers.ChoiceField(
+        choices=["overview", "operator", "workflow", "reagent", "instrument"],
+        default="overview",
     )
 
 
@@ -107,6 +127,16 @@ class AssistantComparisonView(APIView):
             serializer.validated_data,
             request.user,
         )
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class AssistantInvestigationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = AssistantInvestigationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = run_investigation_spec(serializer.validated_data, request.user)
         return Response(result, status=status.HTTP_200_OK)
 
 
