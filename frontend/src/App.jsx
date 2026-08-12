@@ -33,6 +33,7 @@ import Batches from "./pages/Batches";
 import QCReview from "./pages/QCReview";
 import WorkQueue from "./pages/WorkQueue";
 import Labels from "./pages/Labels";
+import Comparisons from "./pages/Comparisons";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -71,6 +72,7 @@ export default function App() {
           <Route path="qc-review" element={<QCReview />} />
           <Route path="work-queue" element={<WorkQueue />} />
           <Route path="labels" element={<Labels />} />
+          <Route path="comparisons" element={<Comparisons />} />
           <Route path="users" element={<Users />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="imports" element={<Imports />} />

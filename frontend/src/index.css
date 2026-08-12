@@ -774,3 +774,56 @@ body {
     grid-template-columns: 72px 1fr 38px;
   }
 }
+
+.assistant-chart-canvas {
+  position: relative;
+  width: 100%;
+  min-height: 300px;
+}
+
+.comparison-result-card {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.comparison-table-wrap {
+  max-height: 440px;
+}
+
+.comparison-table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  white-space: nowrap;
+}
+
+.comparison-multi-select {
+  min-height: 220px;
+}
+
+.comparison-answer-text {
+  white-space: pre-wrap;
+}
+
+.assistant-widget-panel .assistant-chart-canvas {
+  min-height: 220px;
+}
+
+.assistant-widget-panel .comparison-result-card {
+  padding: 10px;
+  overflow: hidden;
+}
+
+.assistant-widget-panel .comparison-table-wrap {
+  max-height: 260px;
+}
+
+@media (max-width: 576px) {
+  .assistant-chart-canvas {
+    min-height: 240px;
+  }
+}

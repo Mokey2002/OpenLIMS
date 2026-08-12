@@ -3,16 +3,18 @@ import hashlib
 import re
 from datetime import datetime
 from io import BytesIO, StringIO
+from xml.sax.saxutils import escape
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.db.models import Count, Q
 from django.utils import timezone
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from reportlab.lib import colors
+from reportlab.graphics.shapes import Circle, Drawing, Line, PolyLine, Rect, String
 
 from events.models import Event
 from projects.models import Project
@@ -21,6 +23,7 @@ from samples.access import get_sample_access_queryset
 from samples.models import Sample
 
 from .models import GeneratedArtifact
+from .comparisons import run_comparison_spec
 
 
 MONTHS = {name.lower(): number for number, name in enumerate([
@@ -225,6 +228,220 @@ def _csv_bytes(rows, filters):
     return output.getvalue().encode("utf-8")
 
 
+def _comparison_value(value, value_format=None):
+    if value is None or value == "":
+        return "—"
+    if value_format == "percent":
+        try:
+            return f"{float(value):.1f}%"
+        except (TypeError, ValueError):
+            return str(value)
+    if value_format == "integer":
+        try:
+            return f"{int(value):,}"
+        except (TypeError, ValueError):
+            return str(value)
+    if value_format == "number":
+        try:
+            numeric = float(value)
+            return f"{numeric:,.2f}".rstrip("0").rstrip(".")
+        except (TypeError, ValueError):
+            return str(value)
+    return str(value)
+
+
+def _comparison_csv_bytes(result, filters):
+    comparison = result.get("comparison") or {}
+    columns = comparison.get("columns") or []
+    rows = comparison.get("rows") or []
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["OpenLIMS comparison analysis", comparison.get("title", "Comparison")])
+    writer.writerow(["Stored filters", str(filters)])
+    writer.writerow([])
+    writer.writerow([column.get("label", column.get("key")) for column in columns])
+    for row in rows:
+        writer.writerow([
+            _comparison_value(row.get(column.get("key")), column.get("format"))
+            for column in columns
+        ])
+    notes = comparison.get("notes") or []
+    if notes:
+        writer.writerow([])
+        writer.writerow(["Notes"])
+        for note in notes:
+            writer.writerow([note])
+    return output.getvalue().encode("utf-8")
+
+
+def _comparison_chart_drawing(chart):
+    data = list((chart or {}).get("data") or [])[:12]
+    series = list((chart or {}).get("series") or [])[:5]
+    if not data or not series:
+        return None
+    width = 700
+    height = 260
+    left = 48
+    right = 16
+    top = 42
+    bottom = 50
+    inner_width = width - left - right
+    inner_height = height - top - bottom
+    palette = ["#2563eb", "#16a34a", "#dc2626", "#9333ea", "#ea580c"]
+    drawing = Drawing(width, height)
+    drawing.add(Line(left, bottom, left, bottom + inner_height, strokeColor=colors.grey))
+    drawing.add(Line(left, bottom, left + inner_width, bottom, strokeColor=colors.grey))
+    values = []
+    for row in data:
+        for item in series:
+            value = row.get(item.get("dataKey"))
+            try:
+                values.append(float(value))
+            except (TypeError, ValueError):
+                continue
+    if not values:
+        return None
+    maximum = max(max(values), 1)
+    minimum = min(min(values), 0)
+    value_range = maximum - minimum or 1
+    x_key = chart.get("xKey") or "entity"
+    chart_type = chart.get("chartType")
+    for index, item in enumerate(series):
+        legend_x = left + index * 126
+        color = colors.HexColor(palette[index % len(palette)])
+        drawing.add(Rect(legend_x, height - 18, 9, 9, fillColor=color, strokeColor=color))
+        drawing.add(String(
+            legend_x + 13,
+            height - 17,
+            str(item.get("label") or item.get("dataKey"))[:18],
+            fontSize=7,
+        ))
+    category_width = inner_width / max(len(data), 1)
+    if chart_type == "line":
+        for series_index, item in enumerate(series):
+            points = []
+            color = colors.HexColor(palette[series_index % len(palette)])
+            for row_index, row in enumerate(data):
+                try:
+                    value = float(row.get(item.get("dataKey")))
+                except (TypeError, ValueError):
+                    continue
+                x = left + category_width * row_index + category_width / 2
+                y = bottom + ((value - minimum) / value_range) * inner_height
+                points.extend([x, y])
+                drawing.add(Circle(x, y, 2.2, fillColor=color, strokeColor=color))
+            if len(points) >= 4:
+                drawing.add(PolyLine(points, strokeColor=color, strokeWidth=1.5))
+    else:
+        bar_group = category_width * 0.76
+        bar_width = bar_group / max(len(series), 1)
+        for row_index, row in enumerate(data):
+            group_x = left + category_width * row_index + (category_width - bar_group) / 2
+            for series_index, item in enumerate(series):
+                try:
+                    value = float(row.get(item.get("dataKey")))
+                except (TypeError, ValueError):
+                    continue
+                color = colors.HexColor(palette[series_index % len(palette)])
+                y_zero = bottom + ((0 - minimum) / value_range) * inner_height
+                y_value = bottom + ((value - minimum) / value_range) * inner_height
+                drawing.add(Rect(
+                    group_x + series_index * bar_width,
+                    min(y_zero, y_value),
+                    max(bar_width - 1, 1),
+                    max(abs(y_value - y_zero), 0.5),
+                    fillColor=color,
+                    strokeColor=color,
+                ))
+    for row_index, row in enumerate(data):
+        label = str(row.get(x_key, ""))[:12]
+        drawing.add(String(
+            left + category_width * row_index + 2,
+            bottom - 15,
+            label,
+            fontSize=6,
+        ))
+    drawing.add(String(4, bottom + inner_height - 2, _comparison_value(maximum, "number"), fontSize=7))
+    drawing.add(String(4, bottom, _comparison_value(minimum, "number"), fontSize=7))
+    return drawing
+
+
+def _comparison_pdf_bytes(result, filters):
+    comparison = result.get("comparison") or {}
+    chart = result.get("chart") or {}
+    columns = comparison.get("columns") or []
+    rows = comparison.get("rows") or []
+    stream = BytesIO()
+    page_size = landscape(letter)
+    document = SimpleDocTemplate(
+        stream,
+        pagesize=page_size,
+        rightMargin=0.45 * inch,
+        leftMargin=0.45 * inch,
+        topMargin=0.45 * inch,
+        bottomMargin=0.45 * inch,
+    )
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph("OpenLIMS Comparison Analysis", styles["Title"]),
+        Paragraph(escape(comparison.get("title") or "Comparison"), styles["Heading2"]),
+        Paragraph(escape(result.get("answer") or ""), styles["BodyText"]),
+        Paragraph(
+            f"Stored filters: {escape(str(filters.get('comparison_spec') or {}))}",
+            styles["BodyText"],
+        ),
+        Spacer(1, 10),
+    ]
+    drawing = _comparison_chart_drawing(chart)
+    if drawing:
+        story.extend([drawing, Spacer(1, 12)])
+    if columns:
+        table_rows = [
+            [Paragraph(escape(str(column.get("label", column.get("key")))), styles["BodyText"]) for column in columns]
+        ]
+        for row in rows[:250]:
+            table_rows.append([
+                Paragraph(
+                    escape(_comparison_value(row.get(column.get("key")), column.get("format"))),
+                    styles["BodyText"],
+                )
+                for column in columns
+            ])
+        usable_width = page_size[0] - document.leftMargin - document.rightMargin
+        table = Table(
+            table_rows,
+            repeatRows=1,
+            colWidths=[usable_width / max(len(columns), 1)] * len(columns),
+        )
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.35, colors.grey),
+            ("FONTSIZE", (0, 0), (-1, -1), 6.5),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("PADDING", (0, 0), (-1, -1), 4),
+        ]))
+        story.extend([table, Spacer(1, 10)])
+    notes = comparison.get("notes") or []
+    if notes:
+        story.append(Paragraph("Method notes", styles["Heading3"]))
+        for note in notes:
+            story.append(Paragraph(f"• {escape(str(note))}", styles["BodyText"]))
+
+    def draw_footer(pdf_canvas, doc):
+        pdf_canvas.saveState()
+        pdf_canvas.setTitle("OpenLIMS Comparison Analysis")
+        pdf_canvas.setAuthor("OpenLIMS")
+        pdf_canvas.setFont("Helvetica", 7)
+        pdf_canvas.setFillColor(colors.grey)
+        pdf_canvas.drawString(doc.leftMargin, 0.25 * inch, "Permission-filtered OpenLIMS comparison")
+        pdf_canvas.drawRightString(page_size[0] - doc.rightMargin, 0.25 * inch, f"Page {doc.page}")
+        pdf_canvas.restoreState()
+
+    document.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
+    return stream.getvalue()
+
+
 def _pdf_bytes(rows, filters, project):
     stream = BytesIO()
     document = SimpleDocTemplate(stream, pagesize=letter, rightMargin=0.55 * inch, leftMargin=0.55 * inch, topMargin=0.55 * inch, bottomMargin=0.55 * inch)
@@ -293,18 +510,40 @@ def execute_compliance_report(action):
         project = Project.objects.filter(id=filters["project_id"]).first()
         if not project or not (_is_admin(action.requested_by) or project.members.filter(id=action.requested_by_id).exists()):
             raise ComplianceReportError("Project access changed before report generation.")
-    rows = _event_rows(filters, action.requested_by)
     output_format = filters.get("output_format", "PDF")
-    if output_format == "CSV":
-        content = _csv_bytes(rows, filters)
-        kind = GeneratedArtifact.KIND_REPORT_CSV
-        extension = "csv"
-        content_type = "text/csv"
+    if filters.get("report_type") == "COMPARISON_ANALYSIS":
+        comparison_result = run_comparison_spec(
+            filters.get("comparison_spec") or {},
+            action.requested_by,
+        )
+        comparison = comparison_result.get("comparison") or {}
+        rows = comparison.get("rows") or []
+        if not comparison:
+            raise ComplianceReportError(
+                comparison_result.get("answer") or "The comparison could not be recalculated."
+            )
+        if output_format == "CSV":
+            content = _comparison_csv_bytes(comparison_result, filters)
+            kind = GeneratedArtifact.KIND_REPORT_CSV
+            extension = "csv"
+            content_type = "text/csv"
+        else:
+            content = _comparison_pdf_bytes(comparison_result, filters)
+            kind = GeneratedArtifact.KIND_REPORT_PDF
+            extension = "pdf"
+            content_type = "application/pdf"
     else:
-        content = _pdf_bytes(rows, filters, project)
-        kind = GeneratedArtifact.KIND_REPORT_PDF
-        extension = "pdf"
-        content_type = "application/pdf"
+        rows = _event_rows(filters, action.requested_by)
+        if output_format == "CSV":
+            content = _csv_bytes(rows, filters)
+            kind = GeneratedArtifact.KIND_REPORT_CSV
+            extension = "csv"
+            content_type = "text/csv"
+        else:
+            content = _pdf_bytes(rows, filters, project)
+            kind = GeneratedArtifact.KIND_REPORT_PDF
+            extension = "pdf"
+            content_type = "application/pdf"
     filename = f"openlims-{filters.get('report_type', 'report').lower()}-{timezone.now():%Y%m%d-%H%M%S}.{extension}"
     checksum = hashlib.sha256(content).hexdigest()
     artifact = GeneratedArtifact.objects.create(

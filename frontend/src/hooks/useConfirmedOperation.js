@@ -7,7 +7,7 @@ export default function useConfirmedOperation(onCompleted) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function propose(command) {
+  async function propose(command, context = {}) {
     setBusy(true);
     setError("");
     setMessage("");
@@ -16,7 +16,7 @@ export default function useConfirmedOperation(onCompleted) {
     try {
       const response = await apiPost("/api/assistant/chat/", {
         message: command,
-        context: {},
+        context,
       });
 
       if (!response.pending_action) {
