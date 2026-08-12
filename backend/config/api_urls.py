@@ -30,6 +30,7 @@ from assistant.views import (
     AssistantActionDetailView,
     AssistantChatView,
     AssistantComparisonView,
+    AssistantInvestigationView,
     AssistantStatusView,
     AssistantArtifactDownloadView,
     AssistantSystemMonitoringView,
@@ -92,6 +93,11 @@ urlpatterns = router.urls + [
         "assistant/comparisons/",
         AssistantComparisonView.as_view(),
         name="assistant-comparisons",
+    ),
+    path(
+        "assistant/investigations/",
+        AssistantInvestigationView.as_view(),
+        name="assistant-investigations",
     ),
     path("assistant/status/", AssistantStatusView.as_view(), name="assistant-status"),
     path(

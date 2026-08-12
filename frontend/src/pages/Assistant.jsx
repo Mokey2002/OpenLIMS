@@ -11,11 +11,13 @@ import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import AssistantChart from "../components/AssistantChart";
 import ComparisonTable from "../components/ComparisonTable";
+import InvestigationPanel from "../components/InvestigationPanel";
 import AssistantActionPreview from "../components/AssistantActionPreview";
 import { OPENLIMS_VERSION } from "../version";
 
 const STARTER_PROMPTS = [
   "What needs attention?",
+  "Investigate why sample S-1042 failed QC",
   "Compare samples S-100, S-101, and S-102",
   "Compare projects Alpha, Beta, and Gamma",
   "Find unusual results in Project Alpha",
@@ -126,6 +128,7 @@ export default function Assistant() {
           suggestions: data.suggestions || [],
           chart: data.chart || null,
           comparison: data.comparison || null,
+          investigation: data.investigation || null,
           pendingAction: data.pending_action || null,
           actionError: data.action_error || "",
           mode: data.mode || "openlims",
@@ -228,7 +231,7 @@ export default function Assistant() {
         </div>
 
         <div className="d-flex flex-column align-items-end gap-2">
-          <Badge bg="dark">{OPENLIMS_VERSION} visual analytics</Badge>
+          <Badge bg="dark">{OPENLIMS_VERSION} investigation workbench</Badge>
           <Badge bg={badgeVariantForProvider(activeProvider)}>
             Using: {activeDisplayName}
           </Badge>
@@ -238,7 +241,7 @@ export default function Assistant() {
       {err && <Alert variant="danger">{err}</Alert>}
 
       <Alert variant="info">
-        The assistant can compare samples, projects, and batches; graph result
+        The assistant can investigate QC failures; compare samples, projects, and batches; graph result
         trends; find outliers and workflow bottlenecks; and preview sample, QC,
         inventory, work assignment,
         barcode-label, compliance-report, and notification operations. It can
@@ -290,6 +293,10 @@ export default function Assistant() {
 
                   {item.comparison && (
                     <ComparisonTable comparison={item.comparison} />
+                  )}
+
+                  {item.investigation && (
+                    <InvestigationPanel investigation={item.investigation} compact />
                   )}
 
                   {item.actionError && (

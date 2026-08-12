@@ -24,6 +24,7 @@ from samples.models import Sample
 
 from .models import GeneratedArtifact
 from .comparisons import run_comparison_spec
+from .investigations import run_investigation_spec
 
 
 MONTHS = {name.lower(): number for number, name in enumerate([
@@ -442,6 +443,129 @@ def _comparison_pdf_bytes(result, filters):
     return stream.getvalue()
 
 
+def _investigation_csv_bytes(result, filters):
+    investigation = result.get("investigation") or {}
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["OpenLIMS investigation", investigation.get("title", "Investigation")])
+    writer.writerow(["Stored filters", str(filters.get("investigation_spec") or {})])
+    writer.writerow(["Summary", result.get("answer", "")])
+    writer.writerow([])
+    writer.writerow(["FINDINGS"])
+    writer.writerow(["severity", "confidence", "evidence_type", "title", "detail"])
+    for row in investigation.get("findings") or []:
+        writer.writerow([row.get(key, "") for key in ["severity", "confidence", "evidence_type", "title", "detail"]])
+    writer.writerow([])
+    writer.writerow(["SUBJECT RESULTS"])
+    writer.writerow(["result_id", "key", "value", "unit", "reference_min", "reference_max", "qc_passed", "qc_status", "entered_by", "created_at"])
+    for row in investigation.get("results") or []:
+        writer.writerow([row.get(key, "") for key in ["id", "key", "value", "unit", "reference_min", "reference_max", "qc_passed", "qc_status", "entered_by", "created_at"]])
+    writer.writerow([])
+    writer.writerow(["SIMILAR FAILURES"])
+    writer.writerow(["sample_id", "result_id", "key", "value", "qc_status", "failure_reason", "created_at"])
+    for row in investigation.get("similar_failures") or []:
+        writer.writerow([row.get(key, "") for key in ["sample_id", "result_id", "key", "display_value", "qc_status", "failure_reason", "created_at"]])
+    writer.writerow([])
+    writer.writerow(["TIMELINE"])
+    writer.writerow(["timestamp", "actor", "entity_type", "entity_id", "action", "detail"])
+    for row in investigation.get("timeline") or []:
+        writer.writerow([row.get(key, "") for key in ["timestamp", "actor", "entity_type", "entity_id", "action", "detail"]])
+    writer.writerow([])
+    writer.writerow(["CONTEXT AND LIMITATIONS"])
+    for note in investigation.get("disclaimers") or []:
+        writer.writerow([note])
+    return output.getvalue().encode("utf-8")
+
+
+def _investigation_pdf_bytes(result, filters):
+    investigation = result.get("investigation") or {}
+    stream = BytesIO()
+    page_size = landscape(letter)
+    document = SimpleDocTemplate(
+        stream,
+        pagesize=page_size,
+        rightMargin=0.45 * inch,
+        leftMargin=0.45 * inch,
+        topMargin=0.45 * inch,
+        bottomMargin=0.45 * inch,
+    )
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph("OpenLIMS Investigation Evidence Package", styles["Title"]),
+        Paragraph(escape(investigation.get("title") or "Investigation"), styles["Heading2"]),
+        Paragraph(escape(result.get("answer") or ""), styles["BodyText"]),
+        Paragraph(
+            f"Stored filters: {escape(str(filters.get('investigation_spec') or {}))}",
+            styles["BodyText"],
+        ),
+        Spacer(1, 10),
+    ]
+    drawing = _comparison_chart_drawing(result.get("chart") or {})
+    if drawing:
+        story.extend([drawing, Spacer(1, 12)])
+
+    findings = investigation.get("findings") or []
+    story.append(Paragraph("Ranked findings", styles["Heading2"]))
+    finding_rows = [["Severity", "Confidence", "Evidence", "Finding", "Detail"]]
+    for row in findings[:100]:
+        finding_rows.append([
+            row.get("severity", "").title(),
+            row.get("confidence", "").title(),
+            row.get("evidence_type", "").title(),
+            Paragraph(escape(str(row.get("title", ""))), styles["BodyText"]),
+            Paragraph(escape(str(row.get("detail", ""))), styles["BodyText"]),
+        ])
+    if len(finding_rows) == 1:
+        finding_rows.append(["—", "—", "—", "No specific findings", "Review source records."])
+    table = Table(finding_rows, repeatRows=1, colWidths=[0.7 * inch, 0.8 * inch, 0.8 * inch, 2.1 * inch, 5.0 * inch])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.grey),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("PADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.extend([table, Spacer(1, 12)])
+
+    results = investigation.get("results") or []
+    if results:
+        story.append(Paragraph("Subject results", styles["Heading2"]))
+        result_rows = [["Result", "Analyte", "Value", "Reference", "QC", "Entered by", "Created"]]
+        for row in results[:100]:
+            reference = f"{row.get('reference_min', '—')} to {row.get('reference_max', '—')} {row.get('unit', '')}"
+            result_rows.append([
+                row.get("id"), row.get("key"), row.get("display_value"), reference,
+                row.get("qc_status"), row.get("entered_by") or "—", str(row.get("created_at", ""))[:19],
+            ])
+        table = Table(result_rows, repeatRows=1, colWidths=[0.6 * inch, 1.5 * inch, 1.2 * inch, 1.6 * inch, 1.2 * inch, 1.2 * inch, 1.4 * inch])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#374151")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.35, colors.grey),
+            ("FONTSIZE", (0, 0), (-1, -1), 7),
+            ("PADDING", (0, 0), (-1, -1), 4),
+        ]))
+        story.extend([table, Spacer(1, 12)])
+
+    story.append(Paragraph("Context and limitations", styles["Heading2"]))
+    for note in investigation.get("disclaimers") or []:
+        story.append(Paragraph(f"• {escape(str(note))}", styles["BodyText"]))
+
+    def draw_footer(pdf_canvas, doc):
+        pdf_canvas.saveState()
+        pdf_canvas.setTitle("OpenLIMS Investigation Evidence Package")
+        pdf_canvas.setAuthor("OpenLIMS")
+        pdf_canvas.setFont("Helvetica", 7)
+        pdf_canvas.setFillColor(colors.grey)
+        pdf_canvas.drawString(doc.leftMargin, 0.25 * inch, "Permission-filtered; recalculated at confirmation")
+        pdf_canvas.drawRightString(page_size[0] - doc.rightMargin, 0.25 * inch, f"Page {doc.page}")
+        pdf_canvas.restoreState()
+
+    document.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
+    return stream.getvalue()
+
+
 def _pdf_bytes(rows, filters, project):
     stream = BytesIO()
     document = SimpleDocTemplate(stream, pagesize=letter, rightMargin=0.55 * inch, leftMargin=0.55 * inch, topMargin=0.55 * inch, bottomMargin=0.55 * inch)
@@ -511,7 +635,28 @@ def execute_compliance_report(action):
         if not project or not (_is_admin(action.requested_by) or project.members.filter(id=action.requested_by_id).exists()):
             raise ComplianceReportError("Project access changed before report generation.")
     output_format = filters.get("output_format", "PDF")
-    if filters.get("report_type") == "COMPARISON_ANALYSIS":
+    if filters.get("report_type") == "INVESTIGATION_REPORT":
+        investigation_result = run_investigation_spec(
+            filters.get("investigation_spec") or {},
+            action.requested_by,
+        )
+        investigation = investigation_result.get("investigation") or {}
+        rows = investigation.get("findings") or []
+        if not investigation:
+            raise ComplianceReportError(
+                investigation_result.get("answer") or "The investigation could not be recalculated."
+            )
+        if output_format == "CSV":
+            content = _investigation_csv_bytes(investigation_result, filters)
+            kind = GeneratedArtifact.KIND_REPORT_CSV
+            extension = "csv"
+            content_type = "text/csv"
+        else:
+            content = _investigation_pdf_bytes(investigation_result, filters)
+            kind = GeneratedArtifact.KIND_REPORT_PDF
+            extension = "pdf"
+            content_type = "application/pdf"
+    elif filters.get("report_type") == "COMPARISON_ANALYSIS":
         comparison_result = run_comparison_spec(
             filters.get("comparison_spec") or {},
             action.requested_by,

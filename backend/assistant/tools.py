@@ -12,6 +12,7 @@ from .attention import route_attention_summary
 from .calculations import route_worklist_or_calculation
 from .charts import route_assistant_chart
 from .comparisons import route_comparison_analytics
+from .investigations import route_investigation_workbench
 from .inventory_operations import route_inventory_operations
 from .barcode_operations import route_barcode_operations
 from .monitoring import route_system_monitoring
@@ -462,6 +463,14 @@ def route_assistant_message(message, user, context=None):
     sop_result = route_sop_assistant(query, user, context=context)
     if sop_result:
         return sop_result
+
+    investigation_result = route_investigation_workbench(
+        query,
+        user,
+        context=context,
+    )
+    if investigation_result:
+        return investigation_result
 
     qc_result = route_qc_operations(query, user, context=context)
     if qc_result:
