@@ -1,14 +1,10 @@
 # 🧪 OpenLIMS
 
 <p align="center">
-  <strong>Open-source, self-hosted Laboratory Information Management System for practical lab workflows.</strong>
+  <strong>Self-hosted Laboratory Information Management System for practical lab workflows.</strong>
 </p>
 
 <p align="center">
-  <a href="http://16.146.193.92"><strong>Live Demo</strong></a>
-  ·
-  <a href="#-demo-users">Demo Users</a>
-  ·
   <a href="#-features">Features</a>
   ·
   <a href="#-architecture">Architecture</a>
@@ -18,7 +14,7 @@
 
 <p align="center">
   <img alt="Version" src="https://img.shields.io/badge/version-v0.20.0-blue">
-  <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
+  <img alt="License" src="https://img.shields.io/badge/license-proprietary-red">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
   <img alt="Database" src="https://img.shields.io/badge/database-PostgreSQL-336791">
@@ -29,41 +25,33 @@
 
 ## Overview
 
-**OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
+**OpenLIMS** is a self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.20.0 — Confirmed Assistant Actions`
+**Current release:** `v0.22.0 — Comparisons and Visual Analytics`
 
-### v0.20.0 highlights
+### v0.22.0 highlights
 
-- Run BLAST and Clustal Omega alignments only after explicit confirmation
-- Create migration field mappings only after confirmation
-- Queue reports and prepared CSV imports only after confirmation
-- Bind confirmations to the requesting user and the tech/admin role
-- Expire unused confirmations after 15 minutes
-- Audit proposals, confirmations, cancellations, expirations, completions, and failures
-- Prevent duplicate execution when a confirmation is submitted more than once
+- Compare up to ten samples, projects, or batches in one request
+- Automatically graph numeric results, QC rates, workflow status, workload, turnaround, and metadata completeness
+- Continue an analysis with follow-ups such as “only show the last 30 days” or “graph QC failure rates”
+- Graph numeric-result trends across projects or samples
+- Flag unusual results using configured reference limits and transparent z-score rules
+- Identify stale samples, overdue work, and workflow bottlenecks
+- Export recalculated, permission-checked comparisons as audited CSV or PDF files with graphs
+- Run every comparison through either natural-language Assistant prompts or the regular Comparisons UI
+- Keep calculations deterministic and permission-filtered; OpenAI or Ollama is optional
 
 ---
 
-## 🌐 Live Demo
+## Deployment Access
 
-OpenLIMS is currently deployed here:
-
-**http://16.146.193.92**
-
-### 👥 Demo Users
-
-| User | Password | Role |
-|---|---:|---|
-| `director` | `Director123!` | Admin / Director access |
-| `peter` | `peter123` | Lab tech access |
-| `maria` | `maria123` | Lab tech access |
-| `michael` | `michael123` | Lab tech access |
-| `viewer` | `viewer123` | Read-only access |
+Hosted deployment addresses and access credentials are intentionally not
+published in the repository. Authorized users should obtain access details
+directly from the repository owner.
 
 ---
 
@@ -82,8 +70,9 @@ OpenLIMS is currently deployed here:
 | **BLAST** | Local BLAST database building and blastn/blastp search |
 | **Mass Spec** | mzML, mzXML, mzData, featureXML, consensusXML, mzID/mzIdentML review using pyOpenMS |
 | **Audit** | Audit events, reason-for-change tracking, CSV exports |
-| **Reports** | Project summaries, sample inventory, QC review, import summaries, audit activity |
-| **Assistant** | OpenLIMS Rules, optional OpenAI or Ollama, confirmed actions with expiring user-bound tokens and audit events |
+| **Reports** | Project summaries, sample inventory, QC review, import summaries, audit activity, comparison CSV/PDF artifacts |
+| **Visual analytics** | Multi-sample/project/batch comparisons, result trends, outlier review, workflow bottlenecks, automatic charts |
+| **Assistant** | OpenLIMS Rules, optional OpenAI or Ollama, comparison follow-ups, confirmed actions with expiring user-bound tokens and audit events |
 | **Jobs** | Celery/Redis background jobs and real-time WebSocket updates |
 | **Security** | JWT authentication and role-based permissions |
 
@@ -673,7 +662,7 @@ cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.pr
 
 ## 📌 Current Project Status
 
-OpenLIMS is a production-style open-source LIMS prototype with many production-shaped patterns already in place:
+OpenLIMS is a production-style LIMS prototype with many production-shaped patterns already in place:
 
 - Dockerized services
 - PostgreSQL database
@@ -740,7 +729,7 @@ OpenLIMS aims to be:
 - Lightweight
 - Self-hosted
 - Configurable
-- Open-source friendly
+- Extensible for future open-core or commercial deployment models
 - Practical for real lab workflows
 - Easy to run locally or on low-cost cloud infrastructure
 - Useful for small labs, research groups, and biotech teams
@@ -758,4 +747,15 @@ LinkedIn: https://www.linkedin.com/in/edlemus/
 
 ## 📄 License
 
-Apache 2.0
+Copyright © 2026 Eduardo Lemus. All rights reserved.
+
+The current OpenLIMS source code is proprietary. Unauthorized copying,
+modification, distribution, or use is prohibited without prior written
+permission from the copyright owner. See [`LICENSE`](LICENSE) for the current
+terms.
+
+Earlier OpenLIMS releases that were explicitly distributed under Apache
+License 2.0 remain governed by the terms applicable to those releases. The
+final Apache-licensed snapshot is recorded as `v0.22.0-apache-final` at commit
+`ade352491f8824d5599f8cfaee01adec011f959e`. See
+[`docs/licensing_history.md`](docs/licensing_history.md) for the cutoff record.
