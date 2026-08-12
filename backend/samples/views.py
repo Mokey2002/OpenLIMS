@@ -130,6 +130,8 @@ class SampleViewSet(ModelViewSet):
         status_filter = self.request.query_params.get("status")
         project = self.request.query_params.get("project")
         container = self.request.query_params.get("container")
+        batch = self.request.query_params.get("batch")
+        assigned_to = self.request.query_params.get("assigned_to")
 
         if search:
             queryset = queryset.filter(sample_id__icontains=search)
@@ -145,6 +147,15 @@ class SampleViewSet(ModelViewSet):
 
         if container:
             queryset = queryset.filter(container_id=container)
+
+        if batch:
+            queryset = queryset.filter(batch_id=batch)
+
+        if assigned_to:
+            if str(assigned_to).lower() in {"none", "null", "unassigned"}:
+                queryset = queryset.filter(assigned_to__isnull=True)
+            else:
+                queryset = queryset.filter(assigned_to_id=assigned_to)
 
         return get_sample_access_queryset(queryset, self.request.user)
 
@@ -731,6 +742,14 @@ class SampleBatchViewSet(ReadOnlyModelViewSet):
             .all()
             .order_by("code")
         )
+
+        project = self.request.query_params.get("project")
+        search = self.request.query_params.get("search")
+
+        if project:
+            queryset = queryset.filter(project_id=project)
+        if search:
+            queryset = queryset.filter(code__icontains=search)
 
         if self.request.user.is_superuser or self.request.user.groups.filter(
             name="admin"

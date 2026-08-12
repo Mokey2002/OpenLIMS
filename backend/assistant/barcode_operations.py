@@ -9,6 +9,7 @@ from reportlab.graphics.barcode.code128 import Code128
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
+from core.permissions import is_admin, is_tech
 from events.models import Event
 from samples.access import get_sample_access_queryset
 from samples.models import Sample, SampleBatch
@@ -67,6 +68,12 @@ def route_barcode_operations(message, user, context=None):
         return None
     if not any(word in lower for word in ["create", "generate", "print", "regenerate"]):
         return None
+    if not (is_admin(user) or is_tech(user)):
+        return {
+            "answer": "Only Tech or Director users can generate or reprint labels.",
+            "links": [],
+            "skip_llm": True,
+        }
 
     samples = _selected_samples(message, user)
     if not samples:
@@ -184,6 +191,10 @@ def _render_labels(labels):
 def execute_label_generation(action):
     payload = action.payload or {}
     sample_ids = payload.get("sample_ids") or []
+    if not (is_admin(action.requested_by) or is_tech(action.requested_by)):
+        raise LabelGenerationError(
+            "Only Tech or Director users can generate or reprint labels."
+        )
     if not sample_ids or len(sample_ids) > MAX_LABELS:
         raise LabelGenerationError("The frozen label set is empty or exceeds 100 samples.")
     snapshots = payload.get("snapshots") or {}

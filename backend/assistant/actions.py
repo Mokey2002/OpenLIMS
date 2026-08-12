@@ -96,6 +96,11 @@ def _user_can_execute(user, action):
         if operation in {"APPROVE", "REJECT", "REOPEN"}:
             return is_qc_reviewer(user)
         return is_admin(user) or is_tech(user) or is_qc_reviewer(user)
+    if action.action_type in {
+        AssistantAction.ACTION_COMPLIANCE_REPORT,
+        AssistantAction.ACTION_NOTIFICATION_MANAGEMENT,
+    }:
+        return bool(user and user.is_authenticated)
     return is_admin(user) or is_tech(user)
 
 

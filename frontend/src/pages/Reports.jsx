@@ -11,6 +11,13 @@ import {
   Table,
 } from "react-bootstrap";
 import { apiGet } from "../api";
+import ConfirmedOperationCard from "../components/ConfirmedOperationCard";
+import useConfirmedOperation from "../hooks/useConfirmedOperation";
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 function formatTimestamp(value) {
   if (!value) return "-";
@@ -120,8 +127,15 @@ export default function Reports() {
   const [events, setEvents] = useState([]);
 
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [complianceType, setComplianceType] = useState("PROJECT_REPORT");
+  const [complianceFormat, setComplianceFormat] = useState("PDF");
+  const [complianceMonth, setComplianceMonth] = useState("");
+  const [complianceProjectId, setComplianceProjectId] = useState("");
+  const [complianceSampleCode, setComplianceSampleCode] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+
+  const complianceOperation = useConfirmedOperation(load);
 
   async function load() {
     setErr("");
@@ -533,6 +547,33 @@ export default function Reports() {
     );
   }
 
+  async function proposeComplianceReport(event) {
+    event.preventDefault();
+    const project = projects.find(
+      (row) => String(row.id) === String(complianceProjectId)
+    );
+    const projectText = project ? ` for Project ${project.code}` : "";
+    const monthText = complianceMonth ? ` from ${complianceMonth}` : "";
+    const formatText = ` as ${complianceFormat}`;
+    let command = "";
+
+    if (complianceType === "SAMPLE_STATUS_CHANGES") {
+      command = `Generate sample status changes report${projectText}${monthText}${formatText}`;
+    } else if (complianceType === "CHAIN_OF_CUSTODY") {
+      command = `Generate report showing every person who handled sample ${complianceSampleCode.trim()}${projectText}${monthText}${formatText}`;
+    } else if (complianceType === "QC_APPROVAL_HISTORY") {
+      command = `Generate QC approval history report${projectText}${monthText}${formatText}`;
+    } else if (complianceType === "POST_APPROVAL_CHANGES") {
+      command = `Generate report of changes after results were approved${projectText}${monthText}${formatText}`;
+    } else if (complianceType === "ASSISTANT_ACTION_HISTORY") {
+      command = `Generate assistant action history report${monthText}${formatText}`;
+    } else {
+      command = `Generate a ${complianceFormat} report${projectText}${monthText}`;
+    }
+
+    await complianceOperation.propose(command);
+  }
+
   if (loading) {
     return (
       <div className="d-flex align-items-center gap-2">
@@ -561,6 +602,71 @@ export default function Reports() {
       </div>
 
       {err && <Alert variant="danger">{err}</Alert>}
+
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <h5 className="section-title">Compliance artifact</h5>
+          <p className="feed-meta">
+            Generate a server-side CSV or PDF with stored filters, checksum, access
+            checks, and an audit event. No AI model is required.
+          </p>
+          <Form onSubmit={proposeComplianceReport}>
+            <Row className="g-3 align-items-end">
+              <Col lg={4}>
+                <Form.Label>Report type</Form.Label>
+                <Form.Select value={complianceType} onChange={(event) => setComplianceType(event.target.value)}>
+                  <option value="PROJECT_REPORT">Project compliance report</option>
+                  <option value="SAMPLE_STATUS_CHANGES">Sample status changes</option>
+                  <option value="CHAIN_OF_CUSTODY">Sample chain of custody</option>
+                  <option value="QC_APPROVAL_HISTORY">QC approval history</option>
+                  <option value="POST_APPROVAL_CHANGES">Post-approval changes</option>
+                  <option value="ASSISTANT_ACTION_HISTORY">Assistant action history</option>
+                </Form.Select>
+              </Col>
+              <Col lg={3}>
+                <Form.Label>Project scope</Form.Label>
+                <Form.Select value={complianceProjectId} onChange={(event) => setComplianceProjectId(event.target.value)} disabled={complianceType === "ASSISTANT_ACTION_HISTORY"}>
+                  <option value="">All accessible projects</option>
+                  {projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}
+                </Form.Select>
+              </Col>
+              <Col lg={2}>
+                <Form.Label>Month</Form.Label>
+                <Form.Select value={complianceMonth} onChange={(event) => setComplianceMonth(event.target.value)}>
+                  <option value="">All dates</option>
+                  {MONTHS.map((month) => <option key={month}>{month}</option>)}
+                </Form.Select>
+              </Col>
+              <Col lg={1}>
+                <Form.Label>Format</Form.Label>
+                <Form.Select value={complianceFormat} onChange={(event) => setComplianceFormat(event.target.value)}>
+                  <option>PDF</option><option>CSV</option>
+                </Form.Select>
+              </Col>
+              <Col lg={2}>
+                <Button
+                  type="submit"
+                  variant="dark"
+                  className="w-100"
+                  disabled={
+                    (complianceType === "PROJECT_REPORT" && !complianceProjectId) ||
+                    (complianceType === "CHAIN_OF_CUSTODY" && !complianceSampleCode.trim())
+                  }
+                >
+                  Preview
+                </Button>
+              </Col>
+              {complianceType === "CHAIN_OF_CUSTODY" && (
+                <Col lg={6}>
+                  <Form.Label>Sample ID</Form.Label>
+                  <Form.Control value={complianceSampleCode} onChange={(event) => setComplianceSampleCode(event.target.value)} placeholder="S-101" />
+                </Col>
+              )}
+            </Row>
+          </Form>
+          <ConfirmedOperationCard operation={complianceOperation} />
+        </Card.Body>
+      </Card>
 
       <Card className="app-card mb-4">
         <Card.Body>

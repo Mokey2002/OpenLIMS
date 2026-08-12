@@ -166,6 +166,29 @@ export async function apiGet(path) {
   return res.json();
 }
 
+export async function apiGetAll(path, maxPages = 100) {
+  const items = [];
+  let next = path;
+  let pageCount = 0;
+
+  while (next && pageCount < maxPages) {
+    let requestPath = next;
+    if (/^https?:\/\//i.test(next)) {
+      const parsed = new URL(next);
+      requestPath = `${parsed.pathname}${parsed.search}`;
+    }
+
+    const data = await apiGet(requestPath);
+    if (Array.isArray(data)) return [...items, ...data];
+
+    items.push(...(data.results || []));
+    next = data.next || null;
+    pageCount += 1;
+  }
+
+  return items;
+}
+
 export async function apiDownload(path, fallbackFilename = "openlims-download") {
   const res = await request(path, { method: "GET" });
 

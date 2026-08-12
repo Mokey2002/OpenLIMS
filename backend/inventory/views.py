@@ -191,10 +191,16 @@ class InventoryLotViewSet(ModelViewSet):
 class InventoryReservationViewSet(ModelViewSet):
     permission_classes = [InventoryAdminWritePermission]
     http_method_names = ["get", "head", "options"]
-    queryset = InventoryReservation.objects.select_related(
-        "lot",
-        "lot__item",
-        "project",
-        "created_by",
-    ).all()
     serializer_class = InventoryReservationSerializer
+
+    def get_queryset(self):
+        queryset = InventoryReservation.objects.select_related(
+            "lot",
+            "lot__item",
+            "project",
+            "created_by",
+        ).all()
+        user = self.request.user
+        if user.is_superuser or user.groups.filter(name="admin").exists():
+            return queryset
+        return queryset.filter(project__members=user).distinct()
