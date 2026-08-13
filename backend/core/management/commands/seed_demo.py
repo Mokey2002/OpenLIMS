@@ -219,6 +219,28 @@ def set_result_value(work_item, key, value):
     )
 
 
+def link_demo_import_job(import_job, sample_codes, work_item_name, actor=None):
+    """Attach seeded result work to its originating instrument import job.
+
+    The explicit update keeps the demo upgrade-safe: running ``seed_demo`` on
+    an older database adds v0.24 provenance to existing work items as well as
+    newly seeded ones.
+    """
+    work_items = WorkItem.objects.filter(
+        sample__sample_id__in=sample_codes,
+        name=work_item_name,
+    )
+    linked_work_item_count = work_items.update(source_import_job=import_job)
+    if actor:
+        work_items.filter(created_by__isnull=True).update(created_by=actor)
+
+    return {
+        "linked_sample_count": work_items.values("sample_id").distinct().count(),
+        "linked_work_item_count": linked_work_item_count,
+        "linked_result_count": Result.objects.filter(work_item__in=work_items).count(),
+    }
+
+
 def create_or_update_instrument(instrument_config):
     """Create or update an instrument by code or name.
 
@@ -1073,6 +1095,11 @@ class Command(BaseCommand):
                     "ng_ul": 84.2,
                     "nanodrop_status": "PASS",
                 },
+                "Metadata Header CSV Import": {
+                    "result": "pass",
+                    "operator": "Peter",
+                    "qc_status": "PASS",
+                },
             },
             "S-ALPHA-002": {
                 "NovaFlex Import Results": {
@@ -1207,6 +1234,7 @@ class Command(BaseCommand):
                 "results_created": 16,
                 "message": "NovaFlex demo import completed",
                 "sample_codes": ["S-ALPHA-001", "S-ALPHA-002", "S-ALPHA-003", "S-ALPHA-004"],
+                "work_item_name": "NovaFlex Import Results",
             },
             {
                 "instrument": miseq,
@@ -1217,6 +1245,7 @@ class Command(BaseCommand):
                 "results_created": 12,
                 "message": "MiSeq sequencing QC import completed",
                 "sample_codes": ["S-ALPHA-001", "S-ALPHA-002", "S-ALPHA-003"],
+                "work_item_name": "Illumina MiSeq QC",
             },
             {
                 "instrument": endosafe,
@@ -1227,6 +1256,7 @@ class Command(BaseCommand):
                 "results_created": 6,
                 "message": "Endotoxin import completed",
                 "sample_codes": ["S-ALPHA-001", "S-ALPHA-003"],
+                "work_item_name": "Endosafe Endotoxin Test",
             },
             {
                 "instrument": qpcr,
@@ -1237,6 +1267,7 @@ class Command(BaseCommand):
                 "results_created": 3,
                 "message": "qPCR quantification import completed",
                 "sample_codes": ["S-ALPHA-002"],
+                "work_item_name": "qPCR Quantification",
             },
             {
                 "instrument": nanodrop,
@@ -1247,6 +1278,7 @@ class Command(BaseCommand):
                 "results_created": 4,
                 "message": "NanoDrop purity import completed",
                 "sample_codes": ["S-ALPHA-001"],
+                "work_item_name": "NanoDrop Purity Check",
             },
             {
                 "instrument": platereader,
@@ -1257,6 +1289,7 @@ class Command(BaseCommand):
                 "results_created": 6,
                 "message": "SpectraMax plate reader import completed",
                 "sample_codes": ["S-BETA-001", "S-BETA-002"],
+                "work_item_name": "SpectraMax Plate Reader",
             },
             {
                 "instrument": sanger,
@@ -1267,6 +1300,7 @@ class Command(BaseCommand):
                 "results_created": 6,
                 "message": "Sanger sequencing QC import completed",
                 "sample_codes": ["S-BETA-001", "S-BETA-002"],
+                "work_item_name": "Sanger Sequencing QC",
             },
             {
                 "instrument": bioanalyzer,
@@ -1277,6 +1311,7 @@ class Command(BaseCommand):
                 "results_created": 3,
                 "message": "Bioanalyzer RNA QC import completed",
                 "sample_codes": ["S-BETA-003"],
+                "work_item_name": "Bioanalyzer RNA QC",
             },
             {
                 "instrument": hamilton,
@@ -1287,6 +1322,7 @@ class Command(BaseCommand):
                 "results_created": 4,
                 "message": "Hamilton STAR transfer log import completed",
                 "sample_codes": ["S-ALPHA-004"],
+                "work_item_name": "Hamilton STAR Transfer Log",
             },
             {
                 "instrument": meta_csv,
@@ -1297,6 +1333,7 @@ class Command(BaseCommand):
                 "results_created": 3,
                 "message": "Metadata-row CSV import completed using auto header detection",
                 "sample_codes": ["S-ALPHA-001"],
+                "work_item_name": "Metadata Header CSV Import",
                 "csv_metadata": {
                     "detected_header_row": 3,
                     "skipped_metadata_rows": 3,
@@ -1310,6 +1347,17 @@ class Command(BaseCommand):
                     ],
                 },
             },
+            {
+                "instrument": miseq,
+                "run_id": "MISEQ-RUN-2026-002",
+                "project": project_gamma,
+                "uploaded_by": maria,
+                "rows_processed": 2,
+                "results_created": 8,
+                "message": "Gamma MiSeq sequencing QC import completed",
+                "sample_codes": ["S-GAMMA-001", "S-GAMMA-002"],
+                "work_item_name": "MiSeq Run QC",
+            },
         ]
 
         for job_data in demo_import_jobs:
@@ -1319,13 +1367,10 @@ class Command(BaseCommand):
                 if code in sample_by_code
             ]
 
-            import_job, _ = get_or_create_safe(
-                ImportJob,
-                {
-                    "instrument": job_data["instrument"],
-                    "run_id": job_data["run_id"],
-                },
-                {
+            import_job, _ = ImportJob.objects.update_or_create(
+                instrument=job_data["instrument"],
+                run_id=job_data["run_id"],
+                defaults={
                     "project": job_data["project"],
                     "uploaded_by": job_data["uploaded_by"],
                     "source_type": "UPLOAD",
@@ -1348,7 +1393,19 @@ class Command(BaseCommand):
                 },
             )
 
-            Event.objects.get_or_create(
+            provenance_counts = link_demo_import_job(
+                import_job,
+                job_data["sample_codes"],
+                job_data["work_item_name"],
+                job_data["uploaded_by"],
+            )
+            import_job.summary = {
+                **import_job.summary,
+                "provenance": provenance_counts,
+            }
+            import_job.save(update_fields=["summary"])
+
+            Event.objects.update_or_create(
                 entity_type="ImportJob",
                 entity_id=str(import_job.id),
                 action="RESULTS_IMPORTED",
@@ -1362,6 +1419,7 @@ class Command(BaseCommand):
                         "results_created": job_data["results_created"],
                         "touched_sample_ids": sample_ids,
                         "csv_metadata": job_data.get("csv_metadata"),
+                        "provenance": provenance_counts,
                     },
                 },
             )
@@ -1699,6 +1757,18 @@ class Command(BaseCommand):
                     "demo data has been seeded."
                 ),
                 "link": "/samples",
+            },
+        )
+
+        Notification.objects.update_or_create(
+            user=director,
+            title="Instrument provenance demo ready",
+            defaults={
+                "message": (
+                    "Seeded instrument runs now link directly to their samples, "
+                    "work items, and results for v0.24 provenance demonstrations."
+                ),
+                "link": "/imports",
             },
         )
 
