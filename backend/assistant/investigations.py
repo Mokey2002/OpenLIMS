@@ -300,14 +300,21 @@ def _reagent_context(sample, cutoff):
 
 
 def _instrument_context(sample, cutoff):
-    if not sample.project_id:
-        return []
-    direct_job_ids = set()
-    for name, notes in WorkItem.objects.filter(sample=sample).values_list("name", "notes"):
+    direct_job_ids = set(
+        WorkItem.objects.filter(
+            sample=sample,
+            source_import_job__isnull=False,
+        ).values_list("source_import_job_id", flat=True)
+    )
+    legacy_job_ids = set()
+    for name, notes in WorkItem.objects.filter(
+        sample=sample,
+        source_import_job__isnull=True,
+    ).values_list("name", "notes"):
         for text in [name, notes]:
             match = re.search(r"Import Job\s+#?(\d+)", str(text or ""), re.IGNORECASE)
             if match:
-                direct_job_ids.add(int(match.group(1)))
+                legacy_job_ids.add(int(match.group(1)))
     for payload in Event.objects.filter(
         entity_type__iexact="Sample",
         entity_id=str(sample.id),
@@ -315,14 +322,18 @@ def _instrument_context(sample, cutoff):
         job_id = (payload or {}).get("import_job_id")
         try:
             if job_id:
-                direct_job_ids.add(int(job_id))
+                legacy_job_ids.add(int(job_id))
         except (TypeError, ValueError):
             continue
-    jobs = ImportJob.objects.filter(project_id=sample.project_id).select_related(
+    all_linked_job_ids = direct_job_ids | legacy_job_ids
+    job_scope = Q(id__in=all_linked_job_ids)
+    if sample.project_id:
+        job_scope |= Q(project_id=sample.project_id)
+    jobs = ImportJob.objects.filter(job_scope).select_related(
         "instrument", "uploaded_by"
     )
     if cutoff:
-        jobs = jobs.filter(Q(created_at__gte=cutoff) | Q(id__in=direct_job_ids))
+        jobs = jobs.filter(Q(created_at__gte=cutoff) | Q(id__in=all_linked_job_ids))
     return [{
         "id": job.id,
         "instrument_code": job.instrument.code,
@@ -332,7 +343,14 @@ def _instrument_context(sample, cutoff):
         "uploaded_by": job.uploaded_by.username if job.uploaded_by else "",
         "created_at": job.created_at.isoformat(),
         "summary": job.summary,
-        "direct_sample_link": job.id in direct_job_ids,
+        "direct_sample_link": job.id in all_linked_job_ids,
+        "provenance_source": (
+            "database_relation"
+            if job.id in direct_job_ids
+            else "legacy_audit_or_text"
+            if job.id in legacy_job_ids
+            else "project_time_context"
+        ),
     } for job in jobs.order_by("-created_at", "id")[:100]]
 
 

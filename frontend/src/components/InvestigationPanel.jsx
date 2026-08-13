@@ -145,7 +145,13 @@ export default function InvestigationPanel({ investigation, compact = false }) {
                       <tr key={row.id}>
                         <td>{row.instrument_code} — {row.instrument_name}</td>
                         <td>{row.run_id || `Job ${row.id}`}</td><td>{row.status}</td>
-                        <td>{row.direct_sample_link ? "Direct work-item provenance" : "Project/time context"}</td>
+                        <td>
+                          {row.provenance_source === "database_relation"
+                            ? "Direct database relation"
+                            : row.direct_sample_link
+                              ? "Legacy audit/text link"
+                              : "Project/time context"}
+                        </td>
                         <td>{shortDate(row.created_at)}</td>
                       </tr>
                     ))}

@@ -4,6 +4,7 @@ import io
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Count
 
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
@@ -98,6 +99,11 @@ class ImportJobViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = (
             ImportJob.objects.select_related("instrument", "uploaded_by", "project")
+            .annotate(
+                linked_sample_count=Count("work_items__sample", distinct=True),
+                linked_work_item_count=Count("work_items", distinct=True),
+                linked_result_count=Count("work_items__results", distinct=True),
+            )
             .all()
             .order_by("-created_at")
         )
@@ -828,7 +834,11 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         job = self.get_object()
         summary = job.summary or {}
 
-        sample_ids = summary.get("touched_sample_ids", [])
+        sample_ids = list(
+            job.work_items.values_list("sample_id", flat=True).distinct()
+        )
+
+        sample_ids.extend(summary.get("touched_sample_ids", []))
 
         if not sample_ids:
             sample_ids = (

@@ -35,6 +35,35 @@ class ResultSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     reference_comparison = serializers.CharField(read_only=True)
+    source_import_job = serializers.IntegerField(
+        source="work_item.source_import_job_id",
+        read_only=True,
+        allow_null=True,
+    )
+    source_import_run_id = serializers.CharField(
+        source="work_item.source_import_job.run_id",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
+    source_import_type = serializers.CharField(
+        source="work_item.source_import_job.source_type",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
+    source_instrument_code = serializers.CharField(
+        source="work_item.source_import_job.instrument.code",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
+    source_instrument_name = serializers.CharField(
+        source="work_item.source_import_job.instrument.name",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
 
     class Meta:
         model = Result
@@ -46,6 +75,11 @@ class ResultSerializer(serializers.ModelSerializer):
             "sample_code",
             "project_id",
             "project_code",
+            "source_import_job",
+            "source_import_run_id",
+            "source_import_type",
+            "source_instrument_code",
+            "source_instrument_name",
             "key",
             "value_type",
             "value_string",
@@ -164,6 +198,30 @@ class WorkItemSerializer(serializers.ModelSerializer):
         source="created_by.username",
         read_only=True,
     )
+    source_import_run_id = serializers.CharField(
+        source="source_import_job.run_id",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
+    source_import_type = serializers.CharField(
+        source="source_import_job.source_type",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
+    source_instrument_code = serializers.CharField(
+        source="source_import_job.instrument.code",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
+    source_instrument_name = serializers.CharField(
+        source="source_import_job.instrument.name",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
 
     class Meta:
         model = WorkItem
@@ -174,6 +232,11 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "project_id",
             "project_code",
             "batch_code",
+            "source_import_job",
+            "source_import_run_id",
+            "source_import_type",
+            "source_instrument_code",
+            "source_instrument_name",
             "name",
             "work_type",
             "status",
@@ -194,6 +257,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "source_import_job",
             "qc_status",
             "reviewed_by",
             "reviewed_by_username",

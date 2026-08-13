@@ -82,10 +82,11 @@ class AssistantInvestigationTests(APITestCase):
         )
         subject_work = WorkItem.objects.create(
             sample=self.subject,
-            name=f"AN-1 Import - Job {self.import_job.id}",
+            source_import_job=self.import_job,
+            name="Analyzer chemistry results",
             work_type="CHEMISTRY",
             status=WorkItem.STATUS_COMPLETED,
-            notes=f"Imported from Analyzer One (Import Job {self.import_job.id})",
+            notes="Imported through the instrument connector.",
             assigned_to=self.tech,
             created_by=self.tech,
         )
@@ -206,6 +207,10 @@ class AssistantInvestigationTests(APITestCase):
         self.assertEqual(investigation["subject"]["sample_id"], "S-INV-001")
         self.assertEqual(investigation["scope"]["cohort"], "batch B-INV")
         self.assertTrue(investigation["instrument_context"][0]["direct_sample_link"])
+        self.assertEqual(
+            investigation["instrument_context"][0]["provenance_source"],
+            "database_relation",
+        )
         self.assertEqual(investigation["reagent_context"][0]["lot_code"], "LOT-EXPIRED")
         self.assertTrue(any(row["action"] == "QC_REJECTED" for row in investigation["timeline"]))
         self.assertNotIn("9999", str(response.data))

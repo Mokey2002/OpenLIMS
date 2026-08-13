@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.23.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.24.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-proprietary-red">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -31,19 +31,18 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.23.0 — Investigation Workbench`
+**Current release:** `v0.24.0 — Instrument Connector Provenance`
 
-### v0.23.0 highlights
+### v0.24.0 highlights
 
-- Investigate a sample or result from a dedicated workbench or a natural-language Assistant request
-- Rank direct, comparative, and contextual findings with visible severity and confidence
-- Compare failed measurements with same-batch or same-project peers using transparent statistics
-- Review workflow delays, overdue work, similar QC failures, and the audit timeline together
-- Trace instrument-connector results back to their import job through existing work-item provenance
-- Review project/time-window instrument and reagent evidence without presenting association as causation
-- Graph failure rates by analyte, result entrant, or work type, plus instrument and reagent context
-- Export a recalculated, permission-checked evidence package as audited CSV or PDF
-- Keep calculations deterministic and permission-filtered; OpenAI or Ollama is optional
+- Link connector-created work items directly to their originating instrument import job
+- Expose instrument code, instrument name, run ID, source type, and import job on work-item and result APIs
+- Backfill legacy connector work items from the established `Import Job <id>` naming convention
+- Preserve audit/text fallback behavior for older records that cannot be linked automatically
+- Show direct instrument/run provenance beside results and work items on the sample page
+- Show linked sample, work-item, and result counts on each import job
+- Use the database relation as the highest-confidence instrument provenance in investigations
+- Keep provenance immutable through regular work-item and result APIs
 
 ---
 

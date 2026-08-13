@@ -34,6 +34,14 @@ class WorkItem(models.Model):
         on_delete=models.CASCADE,
         related_name="work_items",
     )
+    source_import_job = models.ForeignKey(
+        "imports.ImportJob",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="work_items",
+        help_text="Instrument import job that created this work item, when applicable.",
+    )
     name = models.CharField(max_length=128)
     work_type = models.CharField(max_length=64, default="GENERAL")
     status = models.CharField(

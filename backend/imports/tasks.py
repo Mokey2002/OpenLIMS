@@ -199,9 +199,11 @@ def process_rows(job, rows, actor=None):
 
         work_item = WorkItem.objects.create(
             sample=sample,
+            source_import_job=job,
             name=f"{instrument.code} Import - Job {job.id}",
             status="COMPLETED",
             notes=f"Imported from {instrument.name} (Import Job {job.id})",
+            created_by=actor,
         )
 
         for source_column, mapping in mappings.items():

@@ -353,6 +353,13 @@ async function load() {
                   </div>
 
                   <div className="soft-card">
+                    <div className="feed-meta">Linked Provenance</div>
+                    <div className="fw-semibold">
+                      {job.linked_sample_count ?? 0} samples · {job.linked_work_item_count ?? 0} work items · {job.linked_result_count ?? 0} results
+                    </div>
+                  </div>
+
+                  <div className="soft-card">
                     <div className="feed-meta">Skipped Rows</div>
                     <div className="fs-4 fw-bold">{skippedRows.length}</div>
                   </div>
