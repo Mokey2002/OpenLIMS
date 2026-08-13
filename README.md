@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.24.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.24.1-blue">
   <img alt="License" src="https://img.shields.io/badge/license-proprietary-red">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -31,10 +31,12 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.24.0 — Instrument Connector Provenance`
+**Current release:** `v0.24.1 — Instrument Provenance Demo`
 
-### v0.24.0 highlights
+### v0.24.1 highlights
 
+- Seed eleven realistic instrument runs with direct sample, work-item, and result provenance
+- Upgrade existing demo databases idempotently when `seed_demo` is run again
 - Link connector-created work items directly to their originating instrument import job
 - Expose instrument code, instrument name, run ID, source type, and import job on work-item and result APIs
 - Backfill legacy connector work items from the established `Import Job <id>` naming convention
