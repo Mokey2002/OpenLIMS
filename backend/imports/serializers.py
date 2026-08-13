@@ -52,6 +52,9 @@ class ImportJobSerializer(serializers.ModelSerializer):
     )
 
     progress_percent = serializers.SerializerMethodField()
+    linked_sample_count = serializers.IntegerField(read_only=True, default=0)
+    linked_work_item_count = serializers.IntegerField(read_only=True, default=0)
+    linked_result_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = ImportJob
@@ -74,6 +77,9 @@ class ImportJobSerializer(serializers.ModelSerializer):
             "progress_total",
             "progress_message",
             "progress_percent",
+            "linked_sample_count",
+            "linked_work_item_count",
+            "linked_result_count",
             "created_at",
         ]
 

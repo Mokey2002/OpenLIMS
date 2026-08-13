@@ -9,7 +9,7 @@ OpenLIMS v0.23.0 adds a deterministic, permission-filtered investigation workspa
 - Numeric differences from peer medians and transparent z-scores when enough peer measurements exist.
 - Failed and overdue work items, assignees, due dates, sample age, and peer workflow timing.
 - Similar failures for the same result keys in the peer cohort.
-- Instrument import provenance from the existing connector-created work-item name and notes.
+- Instrument import provenance from the explicit connector-created work-item relation, with legacy name, notes, and audit fallback.
 - Other instrument jobs and reagent reservations associated with the same project and date window.
 - Audit events for the sample, its work items, and its results.
 
@@ -21,7 +21,7 @@ OpenLIMS v0.23.0 adds a deterministic, permission-filtered investigation workspa
 | Comparative | A deterministic comparison with accessible peer samples. |
 | Contextual | A project/time association without a direct subject-level usage link. |
 
-Instrument connector imports create work items named with their import job ID. The workbench uses that established convention to identify direct result provenance. Other project import jobs remain contextual. Inventory reservations currently connect reagent lots to projects, not individual samples, so reagent evidence is always presented as context rather than causation.
+Instrument connector imports link their work items directly to the originating import job. Legacy records are backfilled from the established import-job naming convention, with audit/text fallback retained when a relation is unavailable. Other project import jobs remain contextual. Inventory reservations currently connect reagent lots to projects, not individual samples, so reagent evidence is always presented as context rather than causation.
 
 ## Example Assistant requests
 

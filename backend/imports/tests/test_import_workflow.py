@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 
 from imports.models import InstrumentProfile, InstrumentColumnMapping, ImportJob
 from samples.models import Sample
+from results.models import WorkItem
 from imports.tasks import process_import_job
 
 User = get_user_model()
@@ -68,3 +69,11 @@ def test_csv_import_workflow(client, instrument):
     job.refresh_from_db()
     assert job.status == "COMPLETED"
     assert Sample.objects.filter(sample_id="S-CSV-001").exists()
+    work_item = WorkItem.objects.get(sample__sample_id="S-CSV-001")
+    assert work_item.source_import_job_id == job.id
+
+    detail = client.get(f"/api/import-jobs/{job.id}/")
+    assert detail.status_code == 200
+    assert detail.json()["linked_sample_count"] == 1
+    assert detail.json()["linked_work_item_count"] == 1
+    assert detail.json()["linked_result_count"] == 1

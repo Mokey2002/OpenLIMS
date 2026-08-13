@@ -460,6 +460,10 @@ export default function SampleDetail() {
           id: result.id,
           workItemId: workItem.id,
           workItemName: workItem.name,
+          sourceImportJob: result.source_import_job || workItem.source_import_job,
+          sourceImportRunId: result.source_import_run_id || workItem.source_import_run_id,
+          sourceInstrumentCode:
+            result.source_instrument_code || workItem.source_instrument_code,
           key: result.key,
           value: resultDisplayValue(result),
           valueType: result.value_type,
@@ -1097,6 +1101,7 @@ export default function SampleDetail() {
               <thead>
                 <tr>
                   <th>Work Item</th>
+                  <th>Instrument Source</th>
                   <th>Key</th>
                   <th>Value</th>
                   <th>Type</th>
@@ -1107,6 +1112,15 @@ export default function SampleDetail() {
                 {resultRows.map((result) => (
                   <tr key={`${result.workItemId}-${result.id}`}>
                     <td>{result.workItemName}</td>
+                    <td>
+                      {result.sourceImportJob ? (
+                        <Link to={`/imports/${result.sourceImportJob}`}>
+                          {result.sourceInstrumentCode || "Instrument"} · {result.sourceImportRunId || `Job ${result.sourceImportJob}`}
+                        </Link>
+                      ) : (
+                        "Manual / unlinked"
+                      )}
+                    </td>
                     <td>{result.key}</td>
                     <td>{result.value}</td>
                     <td>{result.valueType}</td>
@@ -1348,6 +1362,14 @@ export default function SampleDetail() {
                           <div>
                             <div className="fw-semibold">{workItem.name}</div>
                             <div className="feed-meta">{workItem.notes}</div>
+
+                            {workItem.source_import_job && (
+                              <div className="feed-meta mt-1">
+                                Source: {workItem.source_instrument_code || "Instrument"}{" "}
+                                · {workItem.source_import_run_id || `Job ${workItem.source_import_job}`}{" "}
+                                · <Link to={`/imports/${workItem.source_import_job}`}>view import</Link>
+                              </div>
+                            )}
 
                             {workItem.reviewed_by_username && (
                               <div className="feed-meta mt-1">

@@ -2,6 +2,7 @@ import pytest
 
 from imports.models import ImportJob
 from results.models import Result, WorkItem
+from results.serializers import ResultSerializer, WorkItemSerializer
 from samples.models import Sample
 
 pytestmark = pytest.mark.django_db
@@ -47,8 +48,28 @@ def test_instrument_ingest_with_valid_key_creates_sample_and_results(
 
     sample = Sample.objects.get(sample_id="S-INGEST-001")
     work_item = WorkItem.objects.get(sample=sample)
-
+    assert work_item.source_import_job_id == job.id
     results = Result.objects.filter(work_item=work_item)
+
+    serialized_work = WorkItemSerializer(work_item).data
+    assert serialized_work["source_import_job"] == job.id
+    assert serialized_work["source_import_run_id"] == "RUN-001"
+    assert serialized_work["source_import_type"] == "API"
+    assert serialized_work["source_instrument_code"] == "NOVAFLEX"
+
+    serialized_result = ResultSerializer(results.first()).data
+    assert serialized_result["source_import_job"] == job.id
+    assert serialized_result["source_import_run_id"] == "RUN-001"
+    assert serialized_result["source_instrument_code"] == "NOVAFLEX"
+
+    attempted_override = WorkItemSerializer(
+        instance=work_item,
+        data={"source_import_job": None},
+        partial=True,
+    )
+    assert attempted_override.is_valid(), attempted_override.errors
+    assert "source_import_job" not in attempted_override.validated_data
+
     assert results.count() == 3
     assert results.filter(key="concentration").exists()
     assert results.filter(key="purity").exists()
