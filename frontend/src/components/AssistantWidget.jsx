@@ -6,24 +6,7 @@ import AssistantChart from "./AssistantChart";
 import ComparisonTable from "./ComparisonTable";
 import InvestigationPanel from "./InvestigationPanel";
 import AssistantActionPreview from "./AssistantActionPreview";
-
-const STARTER_PROMPTS = [
-  "What needs attention?",
-  "Investigate why sample S-1042 failed QC",
-  "Compare samples S-100, S-101, and S-102",
-  "Compare projects Alpha and Beta",
-  "Find unusual results in Project Alpha",
-  "Show samples received today",
-  "Find sample S-1042",
-  "Which samples in Project Alpha are awaiting processing?",
-  "Which results are awaiting approval?",
-  "Which reagents expire in the next 30 days?",
-  "Where is sample S-1042?",
-  "Find sample sequences",
-  "Summarize sequence records",
-  "Prepare BLAST for sample",
-  "Chart samples by status",
-];
+import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 
 const DEMO_ASSISTANT_NOTE =
   "Public demo note: this hosted demo uses OpenLIMS Rules because server resources are limited. Self-hosted deployments can enable OpenAI or Ollama.";
@@ -46,9 +29,9 @@ export default function AssistantWidget() {
     {
       role: "assistant",
       content:
-        "Hi, ask what needs attention or let me help you find samples, projects, migration jobs, skipped rows, and failed imports.",
+        "Try investigating S-ALPHA-003, comparing the Alpha, Beta, and Gamma demo projects, or checking samples, inventory, sequences, and system status.",
       links: [],
-      suggestions: STARTER_PROMPTS,
+      suggestions: ASSISTANT_STARTER_PROMPTS,
       modelInfo: {
         provider: "openlims",
         model: "rules",

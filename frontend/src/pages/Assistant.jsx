@@ -13,37 +13,8 @@ import AssistantChart from "../components/AssistantChart";
 import ComparisonTable from "../components/ComparisonTable";
 import InvestigationPanel from "../components/InvestigationPanel";
 import AssistantActionPreview from "../components/AssistantActionPreview";
+import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 import { OPENLIMS_VERSION } from "../version";
-
-const STARTER_PROMPTS = [
-  "What needs attention?",
-  "Investigate why sample S-1042 failed QC",
-  "Compare samples S-100, S-101, and S-102",
-  "Compare projects Alpha, Beta, and Gamma",
-  "Find unusual results in Project Alpha",
-  "Where are samples getting stuck?",
-  "Show samples received today",
-  "Find sample S-1042",
-  "Which samples in Project Alpha are awaiting processing?",
-  "Which results are awaiting approval?",
-  "Show results that failed QC this week",
-  "Which reagents expire in the next 30 days?",
-  "Show inventory below its reorder level",
-  "Show overdue sequencing work",
-  "Who has unassigned work today?",
-  "Create sequencing work for samples in batch B-100",
-  "Create barcode labels for batch B-100",
-  "Export sample status changes from July as CSV",
-  "How do I receive a sample?",
-  "List my notification subscriptions",
-  "Show system status",
-  "Find sample sequences",
-  "Summarize sequence records",
-  "Prepare BLAST for sample",
-  "Summarize BLAST results",
-  "Chart samples by status",
-  "Find sample",
-];
 
 function badgeVariantForProvider(provider) {
   if (provider === "openai") return "primary";
@@ -59,9 +30,9 @@ export default function Assistant() {
     {
       role: "assistant",
       content:
-        "Ask what needs attention, or ask about samples, projects, migration jobs, skipped rows, failed imports, or where a sample is located.",
+        "Try investigating S-ALPHA-003, comparing the Alpha, Beta, and Gamma demo projects, or checking samples, inventory, sequences, and system status.",
       links: [],
-      suggestions: STARTER_PROMPTS,
+      suggestions: ASSISTANT_STARTER_PROMPTS,
       modelInfo: {
         provider: "openlims",
         model: "rules",
@@ -442,7 +413,7 @@ export default function Assistant() {
           <h5 className="section-title">Example questions</h5>
 
           <div className="d-flex flex-wrap gap-2">
-            {STARTER_PROMPTS.map((prompt) => (
+            {ASSISTANT_STARTER_PROMPTS.map((prompt) => (
               <Button
                 key={prompt}
                 size="sm"
