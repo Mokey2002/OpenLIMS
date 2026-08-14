@@ -100,6 +100,26 @@ class AssistantPhaseSixToElevenTests(APITestCase):
         self.assertNotIn("S-PRIVATE", response.data["answer"])
         self.assertNotIn("pending_action", response.data)
 
+    def test_pending_blast_context_yields_to_explicit_non_sequence_request(self):
+        response = self.chat(
+            "Count samples by status",
+            context={
+                "intent": "RUN_BLAST",
+                "request_text": "Prepare BLAST",
+                "program": "blastn",
+            },
+        )
+
+        self.assertIn("RECEIVED", response.data["answer"])
+        self.assertNotIn("BLAST", response.data["answer"])
+        self.assertNotIn("pending_action", response.data)
+
+    def test_bare_tell_me_is_not_treated_as_notification_subscription(self):
+        response = self.chat("Tell me count samples by status")
+
+        self.assertIn("RECEIVED", response.data["answer"])
+        self.assertNotIn("notification trigger", response.data["answer"])
+
     def test_phase6_create_work_uses_frozen_samples_detects_duplicates_and_replays_once(self):
         WorkItem.objects.create(
             sample=self.samples[0],

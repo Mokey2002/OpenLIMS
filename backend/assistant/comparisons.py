@@ -1199,26 +1199,64 @@ def route_comparison_analytics(message, user, context=None):
     previous = dict(context.get("comparison") or {})
     text = str(message or "").strip()
     lower = text.lower()
-    follow_up = bool(previous) and any(
-        phrase in lower
-        for phrase in [
-            "only show",
-            "last ",
-            "past ",
-            "this month",
-            "graph the",
-            "show the",
-            "why is",
-            "why are",
-            "export this",
-            "download this",
-            "use a ",
-            "find unusual",
-            "find outlier",
-        ]
-    )
     if previous and any(phrase in lower for phrase in ["export this", "download this"]):
         return _comparison_export(context, "CSV" if "csv" in lower else "PDF")
+
+    visualization_follow_up = bool(previous) and (
+        any(word in lower for word in ["graph", "plot", "chart"])
+        and any(
+            term in lower
+            for term in [
+                "qc",
+                "failure",
+                "pass rate",
+                "status",
+                "work",
+                "turnaround",
+                "metadata",
+                "result",
+                "trend",
+            ]
+        )
+    )
+    filter_only_follow_up = bool(previous) and bool(
+        re.fullmatch(
+            r"\s*(?:(?:only\s+)?show\s+)?(?:the\s+)?"
+            r"(?:(?:last|past|previous)\s+\d+\s+days?|this\s+month)"
+            r"(?:\s+(?:only|please))?[.!?]?\s*",
+            lower,
+        )
+    )
+    explanation_follow_up = bool(previous) and (
+        any(phrase in lower for phrase in ["why is", "why are"])
+        and (
+            any(
+                word in lower
+                for word in ["higher", "lower", "more", "fewer", "different", "worse", "better"]
+            )
+            or any(str(identifier).lower() in lower for identifier in previous.get("identifiers", []))
+        )
+    )
+    style_follow_up = bool(previous) and bool(
+        re.search(r"\buse\s+a\s+(?:bar|line|scatter)\s+(?:chart|plot|graph)\b", lower)
+    )
+    follow_up = any(
+        [
+            visualization_follow_up,
+            filter_only_follow_up,
+            explanation_follow_up,
+            style_follow_up,
+        ]
+    )
+
+    unsupported_domain = any(
+        word in lower
+        for word in ["inventory", "reagent", "reagents", "lot", "lots", "instrument", "instruments"]
+    ) and not any(
+        word in lower for word in ["sample", "samples", "project", "projects", "batch", "batches", "result", "results"]
+    )
+    if unsupported_domain:
+        return None
 
     analysis = None
     if any(word in lower for word in ["outlier", "outliers", "unusual", "anomalous"]):

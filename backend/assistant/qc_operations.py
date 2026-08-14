@@ -48,6 +48,39 @@ def _result_label(result):
     return f"R-{result.id} — {result.work_item.sample.sample_id} / {result.key}"
 
 
+def _group_results_by_sample(results):
+    grouped = {}
+    for result in results:
+        sample = result.work_item.sample
+        grouped.setdefault(sample.id, {"sample": sample, "results": []})[
+            "results"
+        ].append(result)
+    return list(grouped.values())
+
+
+def _sample_result_links(groups):
+    return [
+        {
+            "label": f"Open {group['sample'].sample_id}",
+            "url": f"/samples/{group['sample'].id}",
+            "kind": "sample",
+        }
+        for group in groups[:20]
+    ]
+
+
+def _sample_result_list_answer(groups, heading, detail):
+    lines = [heading]
+    for group in groups:
+        sample = group["sample"]
+        results = group["results"]
+        result_labels = ", ".join(f"R-{result.id} ({result.key})" for result in results)
+        lines.append(
+            f"- {sample.sample_id} — {len(results)} {detail}: {result_labels}"
+        )
+    return "\n".join(lines)
+
+
 def _result_snapshot(result):
     return {
         "value_type": result.value_type,
@@ -253,6 +286,160 @@ def _read_failed_this_week(message, user):
         f"- {_result_label(result)}: {result.qc_failure_reason or result.reference_comparison}"
         for result in results
     )
+    return {
+        "answer": "\n".join(lines),
+        "links": [_result_link(result) for result in results[:20]],
+        "context": {"result_ids": [result.id for result in results]},
+        "skip_llm": True,
+    }
+
+
+def _read_samples_needing_qc(message, user):
+    lower = str(message or "").lower()
+    has_sample = re.search(r"\bsamples?\b", lower)
+    has_qc = re.search(r"\b(?:qc|quality\s+control|qc\s+review)\b", lower)
+    needs_review = re.search(
+        r"\b(?:need|needs|needing|awaiting|waiting|pending)\b",
+        lower,
+    )
+    if not (has_sample and has_qc and needs_review):
+        return None
+
+    results = list(
+        _result_queryset(user).filter(
+            qc_status__in=[Result.QC_PENDING_REVIEW, Result.QC_REOPENED]
+        )[:500]
+    )
+    groups = _group_results_by_sample(results)
+    if not groups:
+        return _error("No accessible samples currently have results needing QC review.")
+
+    answer = _sample_result_list_answer(
+        groups,
+        (
+            f"{len(groups)} accessible sample(s) have {len(results)} result(s) "
+            "needing QC review:"
+        ),
+        "result(s) needing review",
+    )
+    return {
+        "answer": answer,
+        "links": _sample_result_links(groups),
+        "context": {
+            "sample_ids": [group["sample"].id for group in groups],
+            "result_ids": [result.id for result in results],
+        },
+        "skip_llm": True,
+    }
+
+
+def _read_samples_failed_qc(message, user):
+    lower = str(message or "").lower()
+    has_sample = re.search(r"\bsamples?\b", lower)
+    failed_qc = (
+        re.search(r"\bfail(?:ed|ing)?\s+qc\b", lower)
+        or re.search(r"\bqc\s+fail(?:ure|ures|ed)?\b", lower)
+    )
+    if not (has_sample and failed_qc):
+        return None
+
+    results = list(_result_queryset(user).filter(qc_passed=False)[:500])
+    groups = _group_results_by_sample(results)
+    if not groups:
+        return _error("No accessible samples have results that failed QC.")
+
+    answer = _sample_result_list_answer(
+        groups,
+        (
+            f"{len(groups)} accessible sample(s) have {len(results)} result(s) "
+            "that failed QC:"
+        ),
+        "failed result(s)",
+    )
+    return {
+        "answer": answer,
+        "links": _sample_result_links(groups),
+        "context": {
+            "sample_ids": [group["sample"].id for group in groups],
+            "result_ids": [result.id for result in results],
+        },
+        "skip_llm": True,
+    }
+
+
+def _read_results_needing_qc(message, user):
+    lower = str(message or "").lower()
+    has_result = re.search(r"\bresults?\b", lower)
+    review_request = (
+        re.search(r"\bawaiting\s+approval\b", lower)
+        or (
+            re.search(r"\b(?:need|needs|needing|awaiting|waiting|pending)\b", lower)
+            and re.search(r"\b(?:qc|quality\s+control|review|approval)\b", lower)
+        )
+    )
+    if not (has_result and review_request):
+        return None
+
+    results = list(
+        _result_queryset(user).filter(
+            qc_status__in=[Result.QC_PENDING_REVIEW, Result.QC_REOPENED]
+        )[:100]
+    )
+    if not results:
+        return _error("No accessible results are awaiting QC review.")
+    lines = [f"{len(results)} accessible result(s) are awaiting QC review:"]
+    lines.extend(f"- {_result_label(result)} — {result.qc_status}" for result in results)
+    return {
+        "answer": "\n".join(lines),
+        "links": [_result_link(result) for result in results[:20]],
+        "context": {"result_ids": [result.id for result in results]},
+        "skip_llm": True,
+    }
+
+
+def _read_failed_results(message, user):
+    lower = str(message or "").lower()
+    if not re.search(r"\bresults?\b", lower):
+        return None
+    if not (
+        re.search(r"\bfail(?:ed|ing)?\s+qc\b", lower)
+        or re.search(r"\bqc\s+fail(?:ure|ures|ed)?\b", lower)
+    ):
+        return None
+    if re.search(r"\bthis\s+week\b", lower):
+        return None
+
+    results = list(_result_queryset(user).filter(qc_passed=False)[:100])
+    if not results:
+        return _error("No accessible results have failed QC.")
+    lines = [f"{len(results)} accessible result(s) failed QC:"]
+    lines.extend(
+        f"- {_result_label(result)}: "
+        f"{result.qc_failure_reason or result.reference_comparison or 'No reason recorded'}"
+        for result in results
+    )
+    return {
+        "answer": "\n".join(lines),
+        "links": [_result_link(result) for result in results[:20]],
+        "context": {"result_ids": [result.id for result in results]},
+        "skip_llm": True,
+    }
+
+
+def _read_approved_results(message, user):
+    lower = str(message or "").lower()
+    if not (
+        re.search(r"\b(?:show|list|which)\b.*\bapproved\s+results?\b", lower)
+        or re.search(r"\bresults?\b.*\bapproved\b", lower)
+    ):
+        return None
+    results = list(
+        _result_queryset(user).filter(qc_status=Result.QC_APPROVED)[:100]
+    )
+    if not results:
+        return _error("No accessible results are approved.")
+    lines = [f"{len(results)} accessible result(s) are approved:"]
+    lines.extend(f"- {_result_label(result)}" for result in results)
     return {
         "answer": "\n".join(lines),
         "links": [_result_link(result) for result in results[:20]],
@@ -518,15 +705,23 @@ def _propose_assign_failed(message, user):
 
 def route_qc_operations(message, user, context=None):
     text = str(message or "").strip()
+    lower = text.lower()
     context = context or {}
+    if any(term in lower for term in ["investigate", "investigation", "root cause"]):
+        return None
     for router in [_propose_review_decision, _propose_flag, _propose_assign_failed]:
         result = router(text, user)
         if result:
             return result
     for router in [
         _read_failed_this_week,
-        _read_awaiting_approval,
         _read_failure_reason,
+        _read_samples_needing_qc,
+        _read_samples_failed_qc,
+        _read_results_needing_qc,
+        _read_failed_results,
+        _read_approved_results,
+        _read_awaiting_approval,
     ]:
         result = router(text, user)
         if result:

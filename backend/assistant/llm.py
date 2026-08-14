@@ -106,6 +106,8 @@ Rules:
 - Only summarize the provided OpenLIMS tool result.
 - Preserve important IDs, sample IDs, project codes, migration job numbers, statuses, and errors.
 - Do not invent data that is not present in the tool result.
+- Do not claim that unlisted samples, results, or projects are normal, clear, or unaffected.
+- Preserve the exact scope of the tool result and do not generalize beyond it.
 - Keep the answer concise and useful.
 
 User question:
@@ -143,7 +145,8 @@ def call_ollama(prompt):
                 "role": "system",
                 "content": (
                     "You are the OpenLIMS Assistant. You are read-only. "
-                    "Only summarize the OpenLIMS tool result. Do not invent data."
+                    "Only summarize the OpenLIMS tool result. Do not invent data. "
+                    "Never make claims about unlisted records or broaden the result scope."
                 ),
             },
             {

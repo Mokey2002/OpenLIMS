@@ -464,6 +464,10 @@ def route_assistant_message(message, user, context=None):
     if sop_result:
         return sop_result
 
+    qc_result = route_qc_operations(query, user, context=context)
+    if qc_result:
+        return qc_result
+
     investigation_result = route_investigation_workbench(
         query,
         user,
@@ -471,10 +475,6 @@ def route_assistant_message(message, user, context=None):
     )
     if investigation_result:
         return investigation_result
-
-    qc_result = route_qc_operations(query, user, context=context)
-    if qc_result:
-        return qc_result
 
     comparison_result = route_comparison_analytics(
         query,

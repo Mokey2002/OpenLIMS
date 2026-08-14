@@ -59,6 +59,11 @@ def route_sop_assistant(message, user, context=None):
     ]
     if not any(signal in lower for signal in question_signals):
         return None
+    if re.search(
+        r"\bhow\s+do\s+i\s+(?:show|list|find|count|compare|graph|plot)\b",
+        lower,
+    ):
+        return None
     terms = _terms(message)
     scored = []
     for document in _accessible_documents(user):

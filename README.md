@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.24.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.24.3-blue">
   <img alt="License" src="https://img.shields.io/badge/license-proprietary-red">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -31,10 +31,16 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.24.1 — Instrument Provenance Demo`
+**Current release:** `v0.24.3 — Assistant Routing Hardening`
 
-### v0.24.1 highlights
+### v0.24.3 highlights
 
+- Prevent retained investigation, comparison, and BLAST context from capturing unrelated questions
+- Distinguish samples in QC, samples needing QC review, and samples with failed QC results
+- Return concise QC worklists without automatic graphs or LLM rewriting
+- Require focused investigation follow-ups and show charts only for explicit visualization requests
+- Keep notification language, SOP questions, and analytical comparisons within their intended domains
+- Prevent LLM summaries from generalizing findings to unlisted records
 - Seed eleven realistic instrument runs with direct sample, work-item, and result provenance
 - Upgrade existing demo databases idempotently when `seed_demo` is run again
 - Link connector-created work items directly to their originating instrument import job

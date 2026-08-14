@@ -198,6 +198,22 @@ class AssistantComparisonTests(APITestCase):
         self.assertIn("Top failed-result contributors in BETA", explanation.data["answer"])
         self.assertIn("glucose: 1", explanation.data["answer"])
 
+    def test_comparison_context_does_not_capture_inventory_or_reagent_questions(self):
+        first = self.chat("Compare Project Alpha and Project Beta")
+
+        inventory = self.chat(
+            "Show the inventory below its reorder level",
+            context=first.data["context"],
+        )
+        reagent = self.chat(
+            "Why is this reagent unusually low?",
+            context=first.data["context"],
+        )
+
+        for response in [inventory, reagent]:
+            self.assertNotIn("comparison", response.data)
+            self.assertNotIn("chart", response.data)
+
     def test_regular_endpoint_compares_batches(self):
         response = self.client.post(
             "/api/assistant/comparisons/",
