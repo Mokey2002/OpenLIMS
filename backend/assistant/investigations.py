@@ -706,12 +706,73 @@ def route_investigation_workbench(message, user, context=None):
     if previous and any(phrase in lower for phrase in ["export this", "download this"]):
         return _export_investigation(context, "CSV" if "csv" in lower else "PDF")
 
-    follow_up = bool(previous) and any(word in lower for word in [
-        "graph", "show", "compare this", "similar", "reagent", "instrument", "operator", "workflow",
-    ])
-    trigger = any(word in lower for word in ["investigate", "investigation", "root cause"])
+    visualization_requested = any(
+        word in lower for word in ["graph", "plot", "chart", "visualize"]
+    )
+    evidence_terms = (
+        "failure",
+        "failures",
+        "finding",
+        "findings",
+        "evidence",
+        "operator",
+        "instrument",
+        "reagent",
+        "workflow",
+        "similar",
+    )
+    explicit_context_reference = any(
+        phrase in lower
+        for phrase in [
+            "this investigation",
+            "the investigation",
+            "this failure",
+            "these findings",
+            "this sample",
+            "this result",
+        ]
+    )
+    focused_follow_up = any(
+        phrase in lower
+        for phrase in [
+            "show reagent lot context",
+            "show instrument import context",
+            "show instrument evidence",
+            "show workflow evidence",
+            "show similar failures",
+            "compare this failure",
+            "compare this sample",
+            "group by operator",
+            "group by instrument",
+            "group by reagent",
+            "group by workflow",
+        ]
+    )
+    follow_up = bool(previous) and (
+        focused_follow_up
+        or (
+            visualization_requested
+            and any(term in lower for term in evidence_terms)
+        )
+        or (
+            explicit_context_reference
+            and any(term in lower for term in evidence_terms)
+        )
+    )
+
+    subject_signal = bool(
+        re.search(r"\b(?:sample|result)\b", lower)
+        or re.search(r"\bR-?\d+\b", text, re.IGNORECASE)
+    )
+    trigger = (
+        any(word in lower for word in ["investigate", "investigation", "root cause"])
+        and subject_signal
+    )
     if not trigger and "sample" in lower:
-        trigger = any(phrase in lower for phrase in ["why did", "why has", "why is"])
+        trigger = bool(
+            any(phrase in lower for phrase in ["why did", "why has", "why is"])
+            and re.search(r"\b(?:fail(?:ed|ing)?\s+qc|qc\s+failure)\b", lower)
+        )
     if not trigger and not follow_up:
         return None
 
@@ -734,4 +795,7 @@ def route_investigation_workbench(message, user, context=None):
         spec["group_by"] = "reagent"
     elif "workflow" in lower or "timing" in lower:
         spec["group_by"] = "workflow"
-    return run_investigation_spec(spec, user)
+    result = run_investigation_spec(spec, user)
+    if follow_up and not visualization_requested:
+        result.pop("chart", None)
+    return result

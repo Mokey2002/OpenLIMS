@@ -229,6 +229,32 @@ class AssistantInvestigationTests(APITestCase):
         self.assertEqual(follow_up.data["context"]["investigation"]["group_by"], "operator")
         self.assertEqual(follow_up.data["chart"]["meta"]["title"], "QC failure rate by result entrant")
 
+        focused = self.chat(
+            "Show instrument import context",
+            context=first.data["context"],
+        )
+        self.assertIn("investigation", focused.data)
+        self.assertNotIn("chart", focused.data)
+
+    def test_investigation_context_does_not_capture_new_inventory_request(self):
+        first = self.chat("Investigate why sample S-INV-001 failed QC")
+        inventory = self.chat(
+            "Show the inventory below its reorder level",
+            context=first.data["context"],
+        )
+
+        self.assertNotIn("investigation", inventory.data)
+        self.assertNotIn("chart", inventory.data)
+        self.assertIn("reorder level", inventory.data["answer"])
+
+    def test_non_qc_why_and_non_sample_investigation_do_not_start_workbench(self):
+        workflow = self.chat("Why is sample S-INV-001 still processing?")
+        import_job = self.chat("Investigate the root cause of the failed import job")
+
+        for response in [workflow, import_job]:
+            self.assertNotIn("investigation", response.data)
+            self.assertNotIn("chart", response.data)
+
     def test_result_identifier_uses_same_permission_checked_investigation(self):
         response = self.client.post(
             "/api/assistant/investigations/",

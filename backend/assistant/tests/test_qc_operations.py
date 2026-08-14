@@ -107,6 +107,70 @@ class AssistantQCOperationsTests(APITestCase):
         self.assertIn("QC rule:", compare.data["answer"])
         self.assertIn("Reference comparison: below", compare.data["answer"])
 
+    def test_qc_sample_lists_distinguish_review_failures_and_workflow_status(self):
+        needing_review = self.chat("Show me which samples need QC")
+        failed = self.chat("Which samples failed QC?")
+
+        self.sample.status = Sample.STATUS_QC
+        self.sample.save(update_fields=["status", "updated_at"])
+        in_qc = self.chat("Which samples are in QC?")
+
+        self.assertIn("result(s) needing QC review", needing_review.data["answer"])
+        self.assertIn(self.sample.sample_id, needing_review.data["answer"])
+        self.assertNotIn("chart", needing_review.data)
+        self.assertNotIn("investigation", needing_review.data)
+
+        self.assertIn("result(s) that failed QC", failed.data["answer"])
+        self.assertIn(f"R-{self.failed.id}", failed.data["answer"])
+        self.assertNotIn(f"R-{self.passed.id}", failed.data["answer"])
+
+        self.assertIn("sample(s) in QC", in_qc.data["answer"])
+        self.assertIn(self.sample.sample_id, in_qc.data["answer"])
+
+    def test_explicit_qc_question_overrides_investigation_context_without_graph(self):
+        context = {
+            "investigation": {
+                "subject_type": "sample",
+                "identifier": self.sample.sample_id,
+                "days": 90,
+                "group_by": "overview",
+            }
+        }
+
+        samples = self.chat(
+            "Tell me which samples need QC",
+            context=context,
+        )
+        results = self.chat(
+            "Show results that failed QC this week",
+            context=context,
+        )
+
+        for response in [samples, results]:
+            self.assertNotIn("chart", response.data)
+            self.assertNotIn("investigation", response.data)
+            self.assertIn(self.sample.sample_id, response.data["answer"])
+
+    def test_results_needing_review_and_approved_results_are_concise_lists(self):
+        pending = self.chat("Which results need QC review?")
+        self.assertIn(f"R-{self.failed.id}", pending.data["answer"])
+        self.assertNotIn("chart", pending.data)
+
+        self.passed.qc_status = Result.QC_APPROVED
+        self.passed.save(update_fields=["qc_status", "updated_at"])
+        approved = self.chat("Show approved results")
+
+        self.assertIn(f"R-{self.passed.id}", approved.data["answer"])
+        self.assertNotIn("pending_action", approved.data)
+        self.assertNotIn("chart", approved.data)
+
+    def test_data_style_how_do_i_question_is_not_hijacked_by_sop_router(self):
+        response = self.chat("How do I show which samples need QC?")
+
+        self.assertIn(self.sample.sample_id, response.data["answer"])
+        self.assertNotIn("Approved documentation answer", response.data["answer"])
+        self.assertNotIn("chart", response.data)
+
     def test_approval_requires_reason_confirmation_and_is_replay_safe(self):
         missing_reason = self.chat(
             f"Approve result R-{self.passed.id}.",

@@ -139,7 +139,17 @@ def route_notification_operations(message, user, context=None):
     cancelled = _propose_cancel(message, user)
     if cancelled:
         return cancelled
-    if not any(word in lower for word in ["notify", "tell me", "alert"]):
+    notification_request = any(word in lower for word in ["notify", "alert"])
+    notification_request = notification_request or any(
+        phrase in lower
+        for phrase in [
+            "tell me when",
+            "tell me if",
+            "let me know when",
+            "let me know if",
+        ]
+    )
+    if not notification_request:
         return None
     recipient, recipient_error = _resolve_recipient(message, user)
     if recipient_error:

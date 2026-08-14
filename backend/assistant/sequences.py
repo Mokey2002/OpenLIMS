@@ -1307,6 +1307,52 @@ def route_assistant_sequence(message, user, context=None):
         pending_blast = False
 
     if pending_blast:
+        still_about_sequences = any(
+            term in lower
+            for term in [
+                "blast",
+                "sequence",
+                "sequences",
+                "fasta",
+                "nucleotide",
+                "protein",
+                "dna",
+                "rna",
+            ]
+        )
+        explicit_new_request = any(
+            phrase in lower
+            for phrase in [
+                "system status",
+                "what needs attention",
+                "needs attention",
+                "migration",
+                "inventory",
+                "reagent",
+                "quality control",
+                " qc",
+                "qc ",
+                "barcode",
+                "notification",
+                "subscription",
+                "count samples",
+                "samples by status",
+                "sample status",
+                "samples received",
+                "awaiting processing",
+                "compare samples",
+                "compare projects",
+                "compare batches",
+                "investigate",
+                "where is sample",
+                "find sample ",
+                "overdue work",
+                "unassigned work",
+            ]
+        )
+        if explicit_new_request and not still_about_sequences:
+            return None
+
         is_sequence_lookup = (
             any(term in lower for term in ["find", "show", "list"])
             and any(term in lower for term in ["sample", "sequence"])
@@ -1364,5 +1410,4 @@ def route_assistant_sequence(message, user, context=None):
         return find_sample_sequences(text, user)
 
     return summarize_sequence_records(text, user)
-
 
