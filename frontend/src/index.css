@@ -447,6 +447,95 @@ body {
   margin-top: 12px;
 }
 
+.assistant-context-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding: 11px 13px;
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  border-radius: 12px;
+  background: #eff6ff;
+}
+
+.assistant-context-copy {
+  min-width: 0;
+}
+
+.assistant-context-eyebrow {
+  margin-bottom: 2px;
+  color: #1d4ed8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.assistant-context-label {
+  color: #172554;
+  font-size: 0.88rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.assistant-context-detail {
+  margin-top: 1px;
+  color: #475569;
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+
+.assistant-context-clear {
+  flex: 0 0 auto;
+}
+
+.assistant-context-bar-compact {
+  margin-bottom: 0;
+  padding: 9px 10px;
+}
+
+.assistant-context-bar-compact .assistant-context-detail {
+  font-size: 0.72rem;
+}
+
+.assistant-clarification {
+  margin-top: 12px;
+}
+
+.assistant-clarification-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.assistant-clarification-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 70px;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: normal;
+}
+
+.assistant-clarification-option-label {
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.assistant-clarification-option-description {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.assistant-clarification-option:hover .assistant-clarification-option-description,
+.assistant-clarification-option:focus .assistant-clarification-option-description {
+  color: inherit;
+}
+
 /* Floating OpenLIMS Assistant */
 
 .assistant-widget-button {
@@ -595,6 +684,14 @@ body {
 .assistant-widget-links,
 .assistant-widget-suggestions {
   margin-top: 10px;
+}
+
+.assistant-widget-panel .assistant-clarification-options {
+  grid-template-columns: 1fr;
+}
+
+.assistant-widget-panel .assistant-clarification-option {
+  min-height: auto;
 }
 
 .assistant-widget-form {

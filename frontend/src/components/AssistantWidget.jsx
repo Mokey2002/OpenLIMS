@@ -6,6 +6,8 @@ import AssistantChart from "./AssistantChart";
 import ComparisonTable from "./ComparisonTable";
 import InvestigationPanel from "./InvestigationPanel";
 import AssistantActionPreview from "./AssistantActionPreview";
+import AssistantClarification from "./AssistantClarification";
+import AssistantContextBar from "./AssistantContextBar";
 import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 
 const DEMO_ASSISTANT_NOTE =
@@ -111,6 +113,7 @@ export default function AssistantWidget() {
           chart: data.chart || null,
           comparison: data.comparison || null,
           investigation: data.investigation || null,
+          clarification: data.clarification || null,
           pendingAction: data.pending_action || null,
           actionError: data.action_error || "",
           llmError: data.llm_error || "",
@@ -195,6 +198,13 @@ export default function AssistantWidget() {
           </div>
 
           <div className="assistant-widget-body">
+            <AssistantContextBar
+              context={conversationContext}
+              compact
+              disabled={loading}
+              onClear={() => setConversationContext({})}
+            />
+
             {err && (
               <Alert variant="danger" className="assistant-widget-alert">
                 {err}
@@ -231,6 +241,14 @@ export default function AssistantWidget() {
                     <Alert variant="warning" className="mt-2 mb-1 py-2">
                       {item.llmError}
                     </Alert>
+                  )}
+
+                  {item.clarification && (
+                    <AssistantClarification
+                      clarification={item.clarification}
+                      disabled={loading}
+                      onChoose={sendMessage}
+                    />
                   )}
 
                   {item.chart && <AssistantChart chart={item.chart} />}

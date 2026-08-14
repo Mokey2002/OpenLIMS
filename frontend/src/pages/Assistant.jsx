@@ -13,6 +13,8 @@ import AssistantChart from "../components/AssistantChart";
 import ComparisonTable from "../components/ComparisonTable";
 import InvestigationPanel from "../components/InvestigationPanel";
 import AssistantActionPreview from "../components/AssistantActionPreview";
+import AssistantClarification from "../components/AssistantClarification";
+import AssistantContextBar from "../components/AssistantContextBar";
 import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 import { OPENLIMS_VERSION } from "../version";
 
@@ -100,6 +102,7 @@ export default function Assistant() {
           chart: data.chart || null,
           comparison: data.comparison || null,
           investigation: data.investigation || null,
+          clarification: data.clarification || null,
           pendingAction: data.pending_action || null,
           actionError: data.action_error || "",
           mode: data.mode || "openlims",
@@ -202,7 +205,7 @@ export default function Assistant() {
         </div>
 
         <div className="d-flex flex-column align-items-end gap-2">
-          <Badge bg="dark">{OPENLIMS_VERSION} investigation workbench</Badge>
+          <Badge bg="dark">{OPENLIMS_VERSION} clarification and context</Badge>
           <Badge bg={badgeVariantForProvider(activeProvider)}>
             Using: {activeDisplayName}
           </Badge>
@@ -218,6 +221,8 @@ export default function Assistant() {
         barcode-label, compliance-report, and notification operations. It can
         also answer from approved SOPs and show read-only admin monitoring. A
         proposal expires after 15 minutes and never runs until you select Confirm.
+        Ambiguous requests show clarification choices, and retained context is
+        always visible and removable.
       </Alert>
 
       <Alert variant="secondary">
@@ -229,6 +234,12 @@ export default function Assistant() {
 
       <Card className="app-card mb-4">
         <Card.Body>
+          <AssistantContextBar
+            context={conversationContext}
+            disabled={loading}
+            onClear={() => setConversationContext({})}
+          />
+
           <div className="assistant-chat-window">
             {history.map((item, index) => {
               const provider = item.modelInfo?.provider || "openlims";
@@ -258,6 +269,14 @@ export default function Assistant() {
                     <Alert variant="warning" className="mt-2 mb-2">
                       {item.llmError}
                     </Alert>
+                  )}
+
+                  {item.clarification && (
+                    <AssistantClarification
+                      clarification={item.clarification}
+                      disabled={loading}
+                      onChoose={sendMessage}
+                    />
                   )}
 
                   {item.chart && <AssistantChart chart={item.chart} />}
