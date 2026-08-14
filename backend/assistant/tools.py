@@ -11,6 +11,7 @@ from .action_routes import route_confirmed_action_proposal
 from .attention import route_attention_summary
 from .calculations import route_worklist_or_calculation
 from .charts import route_assistant_chart
+from .clarifications import route_assistant_clarification
 from .comparisons import route_comparison_analytics
 from .investigations import route_investigation_workbench
 from .inventory_operations import route_inventory_operations
@@ -459,6 +460,10 @@ def route_assistant_message(message, user, context=None):
     monitoring_result = route_system_monitoring(query, user, context=context)
     if monitoring_result:
         return monitoring_result
+
+    clarification_result = route_assistant_clarification(query, context=context)
+    if clarification_result:
+        return clarification_result
 
     sop_result = route_sop_assistant(query, user, context=context)
     if sop_result:

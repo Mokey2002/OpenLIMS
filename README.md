@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.24.3-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.25.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-proprietary-red">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -31,7 +31,16 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.24.3 — Assistant Routing Hardening`
+**Current release:** `v0.25.0 — Assistant Clarification and Context`
+
+### v0.25.0 highlights
+
+- Ask a focused clarification question instead of guessing when a request has multiple valid meanings
+- Offer semantic choices for ambiguous QC sample/result, general sample/result, failure, and inventory requests
+- Preserve the current conversation context while the user chooses a clarification option
+- Show the active investigation, comparison, BLAST setup, sample, result, batch, or inventory context in both assistant interfaces
+- Let users clear retained context before asking an unrelated follow-up
+- Keep clarification prompts rule-based so OpenAI or Ollama cannot rewrite the available choices
 
 ### v0.24.3 highlights
 
@@ -79,7 +88,7 @@ directly from the repository owner.
 | **Audit** | Audit events, reason-for-change tracking, CSV exports |
 | **Reports** | Project summaries, sample inventory, QC review, import summaries, audit activity, comparison and investigation CSV/PDF artifacts |
 | **Visual analytics** | Investigation workbench, multi-sample/project/batch comparisons, result trends, outlier review, workflow bottlenecks, automatic charts |
-| **Assistant** | OpenLIMS Rules, optional OpenAI or Ollama, investigation and comparison follow-ups, confirmed actions with expiring user-bound tokens and audit events |
+| **Assistant** | OpenLIMS Rules, optional OpenAI or Ollama, clarification choices, visible removable context, investigation and comparison follow-ups, confirmed actions with expiring user-bound tokens and audit events |
 | **Jobs** | Celery/Redis background jobs and real-time WebSocket updates |
 | **Security** | JWT authentication and role-based permissions |
 
