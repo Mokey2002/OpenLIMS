@@ -64,6 +64,16 @@ class AssistantComparisonSerializer(serializers.Serializer):
         default="",
         max_length=128,
     )
+    chart_type = serializers.ChoiceField(
+        choices=["auto", "bar", "line", "scatter", "dot"],
+        default="auto",
+    )
+    result_keys = serializers.ListField(
+        child=serializers.CharField(max_length=64),
+        required=False,
+        default=list,
+        max_length=10,
+    )
 
 
 class AssistantInvestigationSerializer(serializers.Serializer):

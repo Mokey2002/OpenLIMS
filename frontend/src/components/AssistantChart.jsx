@@ -47,6 +47,7 @@ function buildChartData(chart) {
   const rows = chart.data || [];
   const series = chart.series || [];
   const xKey = chart.xKey;
+  const isDot = chart.chartType === "dot";
 
   if (chart.chartType === "scatter") {
     return {
@@ -77,12 +78,13 @@ function buildChartData(chart) {
           ? `${COLORS[index % COLORS.length]}22`
           : COLORS[index % COLORS.length],
       borderColor: COLORS[index % COLORS.length],
-      borderWidth: chart.chartType === "line" ? 2 : 1,
+      borderWidth: chart.chartType === "line" || isDot ? 2 : 1,
       fill: chart.chartType === "line" && series.length === 1,
-      tension: 0.24,
+      showLine: !isDot,
+      tension: chart.chartType === "line" ? 0.24 : 0,
       spanGaps: true,
-      pointRadius: chart.chartType === "line" ? 3 : undefined,
-      pointHoverRadius: chart.chartType === "line" ? 5 : undefined,
+      pointRadius: isDot ? 5 : chart.chartType === "line" ? 3 : undefined,
+      pointHoverRadius: isDot ? 7 : chart.chartType === "line" ? 5 : undefined,
     })),
   };
 }
@@ -144,9 +146,10 @@ function buildOptions(chart) {
 }
 
 export default function AssistantChart({ chart }) {
+  const supportedChartTypes = new Set(["bar", "line", "scatter", "dot"]);
   if (
     !chart ||
-    !chart.chartType ||
+    !supportedChartTypes.has(chart.chartType) ||
     !Array.isArray(chart.data) ||
     !Array.isArray(chart.series)
   ) {
@@ -169,6 +172,7 @@ export default function AssistantChart({ chart }) {
       <div className="assistant-chart-canvas">
         {chart.chartType === "bar" && <Bar data={data} options={options} />}
         {chart.chartType === "line" && <Line data={data} options={options} />}
+        {chart.chartType === "dot" && <Line data={data} options={options} />}
         {chart.chartType === "scatter" && (
           <Scatter data={data} options={options} />
         )}

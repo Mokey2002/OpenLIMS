@@ -29,6 +29,7 @@ OPEN_WORK_STATUSES = {
     WorkItem.STATUS_IN_PROGRESS,
 }
 STATUS_ORDER = [choice[0] for choice in Sample.STATUS_CHOICES]
+COMPARISON_CHART_TYPES = {"auto", "bar", "line", "scatter", "dot"}
 
 
 def _safe_days(value, default=None):
@@ -190,6 +191,133 @@ def _metric_from_message(message, default="overview"):
     return default or "overview"
 
 
+def _extract_chart_type(message, default=None):
+    lower = str(message or "").lower()
+    if re.search(r"\bscatter(?:\s+(?:plot|chart|graph))?\b", lower):
+        return "scatter"
+    if re.search(
+        r"\b(?:plot|graph|chart)\b.*\b(?:vs\.?|versus|against)\b",
+        lower,
+    ):
+        return "scatter"
+    if (
+        re.search(r"\bdot\s+(?:plot|chart|graph)\b", lower)
+        or re.search(r"\bplotted\s+(?:dots|points)\b", lower)
+        or re.search(
+            r"\b(?:plot|show|display|graph|render|use)\b.*"
+            r"\b(?:as|with|using)\s+(?:plotted\s+)?(?:dots|points)\b",
+            lower,
+        )
+    ):
+        return "dot"
+    if re.search(r"\bbar\s+(?:chart|graph|plot)\b|\bshow\b.*\bas\s+bars\b", lower):
+        return "bar"
+    if re.search(r"\bline\s+(?:chart|graph|plot)\b", lower):
+        return "line"
+    return default
+
+
+def _extract_result_key_candidates(message):
+    text = str(message or "").strip()
+    patterns = [
+        (
+            r"(?:scatter\s+(?:plot|chart|graph)|"
+            r"(?:bar|line|dot)\s+(?:chart|graph|plot))\s+"
+            r"(?:of|for)\s+(.+?)"
+            r"(?=\s+(?:for|in|across)\s+(?:samples?|projects?|batches?)\b|$)"
+        ),
+        (
+            r"(?:plot|graph|chart)\s+(?:the\s+)?(.+?)"
+            r"(?=\s+(?:for|in|across)\s+(?:samples?|projects?|batches?)\b|$)"
+        ),
+    ]
+    payload = ""
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            payload = match.group(1)
+            break
+    if not payload:
+        return []
+    payload = re.sub(
+        r"\s+as\s+(?:a\s+)?(?:bar|line|scatter|dot)\s+"
+        r"(?:chart|graph|plot)\s*$",
+        "",
+        payload,
+        flags=re.IGNORECASE,
+    )
+    values = re.split(
+        r"\s+(?:vs\.?|versus|against|and)\s+|\s*,\s*",
+        payload,
+        flags=re.IGNORECASE,
+    )
+    return [
+        value.strip(" \t\r\n.,;:!?'\"")
+        for value in values
+        if value.strip(" \t\r\n.,;:!?'\"")
+    ][:10]
+
+
+def _resolve_requested_result_keys(requested_result_keys, results):
+    canonical = {}
+    for result in results:
+        if result.value_type != Result.VALUE_TYPE_NUMBER or result.value_number is None:
+            continue
+        canonical.setdefault(_normal(result.key), result.key.strip())
+    resolved = []
+    for value in requested_result_keys or []:
+        key = canonical.get(_normal(value))
+        if key and key not in resolved:
+            resolved.append(key)
+    return resolved
+
+
+def _unresolved_result_keys(requested_result_keys, resolved_result_keys):
+    resolved = {_normal(key) for key in resolved_result_keys}
+    return [
+        str(value).strip()
+        for value in requested_result_keys or []
+        if str(value).strip() and _normal(value) not in resolved
+    ]
+
+
+def _mentioned_numeric_result_keys(message, results):
+    normalized_message = _normal(message)
+    if not normalized_message:
+        return []
+    candidates = {}
+    for result in results:
+        if result.value_type != Result.VALUE_TYPE_NUMBER or result.value_number is None:
+            continue
+        normalized_key = _normal(result.key)
+        if normalized_key:
+            candidates.setdefault(normalized_key, result.key.strip())
+
+    matches = []
+    for normalized_key, key in candidates.items():
+        key_pattern = r"\s+".join(
+            re.escape(part) for part in normalized_key.split()
+        )
+        match = re.search(
+            rf"(?<![a-z0-9]){key_pattern}(?![a-z0-9])",
+            normalized_message,
+        )
+        if match:
+            matches.append((match.start(), match.end(), key))
+
+    selected = []
+    occupied = []
+    for start, end, key in sorted(
+        matches,
+        key=lambda item: (item[0], -(item[1] - item[0])),
+    ):
+        if any(start < used_end and end > used_start for used_start, used_end in occupied):
+            continue
+        occupied.append((start, end))
+        selected.append((start, key))
+    return [key for _, key in sorted(selected)]
+
+
 def _result_value(result):
     if result.value_type == Result.VALUE_TYPE_NUMBER:
         return result.value_number
@@ -327,7 +455,7 @@ def _metric_snapshot(kind, entity, user, days=None, required_fields=None):
     return row
 
 
-def _chart_for_scope(kind, rows, metric):
+def _chart_for_scope(kind, rows, metric, chart_type="bar"):
     if metric == "status":
         series = [
             ("received", "Received"),
@@ -372,7 +500,7 @@ def _chart_for_scope(kind, rows, metric):
         title = f"{kind.title()} operational comparison"
         stacked = False
     return {
-        "chartType": "bar",
+        "chartType": chart_type if chart_type in {"bar", "line", "dot"} else "bar",
         "meta": {
             "title": title,
             "description": "Calculated from records currently accessible to the requesting user.",
@@ -412,12 +540,20 @@ def _scope_columns(kind):
     return columns
 
 
-def _numeric_result_chart(samples, results):
+def _numeric_result_chart(
+    samples,
+    results,
+    result_keys=None,
+    chart_type="bar",
+):
     values = defaultdict(lambda: defaultdict(list))
     units = {}
     sample_keys = {sample.id: f"sample_{index}" for index, sample in enumerate(samples)}
+    selected = {_normal(key) for key in (result_keys or [])}
     for result in results:
         if result.value_type != Result.VALUE_TYPE_NUMBER or result.value_number is None:
+            continue
+        if selected and _normal(result.key) not in selected:
             continue
         sample_id = result.work_item.sample_id
         if sample_id not in sample_keys:
@@ -437,7 +573,7 @@ def _numeric_result_chart(samples, results):
     if not data:
         return None
     return {
-        "chartType": "bar",
+        "chartType": chart_type if chart_type in {"bar", "line", "dot"} else "bar",
         "meta": {
             "title": "Numeric result comparison",
             "description": "Mean numeric value for each measurement and sample in the selected window.",
@@ -457,7 +593,101 @@ def _numeric_result_chart(samples, results):
     }
 
 
-def _compare_samples(samples, user, days=None, metric="overview"):
+def _result_axis_label(result_key, units):
+    nonempty_units = sorted({unit for unit in units if unit})
+    if len(nonempty_units) == 1:
+        return f"{result_key} ({nonempty_units[0]})"
+    return result_key
+
+
+def _scatter_result_chart(samples, results, result_keys):
+    if len(result_keys) < 2:
+        return None, (
+            "A scatter plot needs two numeric result names for its X and Y axes. "
+            "For example: ‘Plot concentration versus purity for these samples.’"
+        )
+
+    x_key, y_key = result_keys[:2]
+    normalized_axes = {_normal(x_key): "x", _normal(y_key): "y"}
+    values = defaultdict(lambda: defaultdict(list))
+    units = defaultdict(set)
+    for result in results:
+        axis = normalized_axes.get(_normal(result.key))
+        if (
+            not axis
+            or result.value_type != Result.VALUE_TYPE_NUMBER
+            or result.value_number is None
+        ):
+            continue
+        values[result.work_item.sample_id][axis].append(result.value_number)
+        units[axis].add(result.unit)
+
+    for axis, key in [("x", x_key), ("y", y_key)]:
+        nonempty_units = {unit for unit in units[axis] if unit}
+        if len(nonempty_units) > 1:
+            return None, (
+                f"I could not plot {key} because its accessible results use multiple units. "
+                "Choose results with consistent units or normalize them first."
+            )
+
+    data = []
+    missing = []
+    for sample in samples:
+        sample_values = values.get(sample.id, {})
+        if not sample_values.get("x") or not sample_values.get("y"):
+            missing.append(sample.sample_id)
+            continue
+        data.append({
+            "sample": sample.sample_id,
+            "x": round(mean(sample_values["x"]), 4),
+            "y": round(mean(sample_values["y"]), 4),
+        })
+    if not data:
+        return None, (
+            f"None of the selected samples has both numeric {x_key} and {y_key} results "
+            "in the selected date window."
+        )
+
+    x_label = _result_axis_label(x_key, units["x"])
+    y_label = _result_axis_label(y_key, units["y"])
+    warning = ""
+    if missing:
+        warning = (
+            f"Excluded {len(missing)} sample(s) without both plotted results: "
+            f"{', '.join(missing)}."
+        )
+    return {
+        "chartType": "scatter",
+        "meta": {
+            "title": f"{y_key} versus {x_key}",
+            "description": (
+                "Each dot represents one sample using the mean accessible value "
+                "for each selected result."
+            ),
+        },
+        "xKey": "x",
+        "xAxisLabel": x_label,
+        "series": [
+            {
+                "dataKey": "y",
+                "label": y_key,
+                "axisLabel": y_label,
+                "valueFormat": "number",
+            }
+        ],
+        "data": data,
+    }, warning
+
+
+def _compare_samples(
+    samples,
+    user,
+    days=None,
+    metric="overview",
+    chart_type="auto",
+    result_keys=None,
+    request_text="",
+):
     cutoff = _cutoff(days)
     sample_ids = [sample.id for sample in samples]
     work, results = _work_and_results(sample_ids, cutoff=cutoff)
@@ -527,8 +757,63 @@ def _compare_samples(samples, user, days=None, metric="overview"):
             "url": f"/samples/{sample.id}",
             "kind": "sample",
         })
-    result_chart = _numeric_result_chart(samples, result_list)
-    chart = result_chart if metric in {"results", "overview"} and result_chart else _chart_for_scope("sample", rows, metric)
+    extracted_result_keys = (
+        _extract_result_key_candidates(request_text)
+        if metric in {"overview", "results"} or chart_type == "scatter"
+        else []
+    )
+    requested_result_keys = extracted_result_keys or list(result_keys or [])
+    selected_result_keys = _resolve_requested_result_keys(
+        requested_result_keys,
+        result_list,
+    )
+    if not requested_result_keys:
+        selected_result_keys = _mentioned_numeric_result_keys(
+            request_text,
+            result_list,
+        )
+    unresolved_result_keys = _unresolved_result_keys(
+        requested_result_keys,
+        selected_result_keys,
+    )
+    context_result_keys = requested_result_keys or selected_result_keys
+    chart_warning = ""
+    if unresolved_result_keys:
+        chart_warning = (
+            "No accessible numeric result matched: "
+            f"{', '.join(unresolved_result_keys)}."
+        )
+    if chart_type == "scatter":
+        chart, scatter_warning = _scatter_result_chart(
+            samples,
+            result_list,
+            selected_result_keys,
+        )
+        if scatter_warning:
+            chart_warning = " ".join(
+                warning for warning in [chart_warning, scatter_warning] if warning
+            )
+    else:
+        rendered_chart_type = chart_type if chart_type != "auto" else "bar"
+        result_chart = None
+        if selected_result_keys or not requested_result_keys:
+            result_chart = _numeric_result_chart(
+                samples,
+                result_list,
+                result_keys=selected_result_keys,
+                chart_type=rendered_chart_type,
+            )
+        if metric in {"results", "overview"} and result_chart:
+            chart = result_chart
+        elif requested_result_keys and metric in {"results", "overview"}:
+            chart = None
+        else:
+            chart = _chart_for_scope(
+                "sample",
+                rows,
+                metric,
+                chart_type=rendered_chart_type,
+            )
     columns = [
         {"key": "entity", "label": "Sample"},
         {"key": "project", "label": "Project"},
@@ -546,7 +831,14 @@ def _compare_samples(samples, user, days=None, metric="overview"):
         {"key": f"custom_{index}", "label": field_name}
         for index, field_name in enumerate(custom_field_names)
     ])
-    return rows, columns, chart, links
+    return (
+        rows,
+        columns,
+        chart,
+        links,
+        context_result_keys,
+        chart_warning,
+    )
 
 
 def _comparison_answer(kind, rows, days, missing):
@@ -581,7 +873,16 @@ def _comparison_answer(kind, rows, days, missing):
     return "\n".join(lines)
 
 
-def compare_entities(kind, identifiers, user, days=None, metric="overview"):
+def compare_entities(
+    kind,
+    identifiers,
+    user,
+    days=None,
+    metric="overview",
+    chart_type="auto",
+    result_keys=None,
+    request_text="",
+):
     entities, missing = _resolve_entities(kind, identifiers, user)
     if len(entities) < 2:
         return {
@@ -599,12 +900,25 @@ def compare_entities(kind, identifiers, user, days=None, metric="overview"):
         }
     days = _safe_days(days)
     metric = metric or "overview"
+    chart_type = chart_type if chart_type in COMPARISON_CHART_TYPES else "auto"
+    selected_result_keys = list(result_keys or [])
+    chart_warning = ""
     if kind == "sample":
-        rows, columns, chart, links = _compare_samples(
+        (
+            rows,
+            columns,
+            chart,
+            links,
+            selected_result_keys,
+            chart_warning,
+        ) = _compare_samples(
             entities,
             user,
             days=days,
             metric=metric,
+            chart_type=chart_type,
+            result_keys=result_keys,
+            request_text=request_text,
         )
     else:
         required_fields = list(
@@ -624,7 +938,20 @@ def compare_entities(kind, identifiers, user, days=None, metric="overview"):
             for entity in entities
         ]
         columns = _scope_columns(kind)
-        chart = _chart_for_scope(kind, rows, metric)
+        if chart_type == "scatter":
+            chart = None
+            chart_warning = (
+                "Scatter plots currently require two numeric result names and a sample "
+                "comparison. Use a bar, line, or dot chart for project and batch summaries."
+            )
+        else:
+            rendered_chart_type = chart_type if chart_type != "auto" else "bar"
+            chart = _chart_for_scope(
+                kind,
+                rows,
+                metric,
+                chart_type=rendered_chart_type,
+            )
         links = [
             {
                 "label": f"Open {_entity_key(kind, entity)}",
@@ -640,10 +967,15 @@ def compare_entities(kind, identifiers, user, days=None, metric="overview"):
             "identifiers": [_entity_key(kind, entity) for entity in entities],
             "days": days,
             "metric": metric,
+            "chart_type": chart_type,
+            "result_keys": selected_result_keys,
         }
     }
+    answer = _comparison_answer(kind, rows, days, missing)
+    if chart_warning:
+        answer += f"\n\n{chart_warning}"
     return {
-        "answer": _comparison_answer(kind, rows, days, missing),
+        "answer": answer,
         "comparison": {
             "title": f"{kind.title()} comparison",
             "kind": kind,
@@ -662,6 +994,7 @@ def compare_entities(kind, identifiers, user, days=None, metric="overview"):
             "Only show the last 30 days",
             "Graph the QC failure rates",
             "Graph overdue and unassigned work",
+            "Use a dot plot",
             "Export this comparison as PDF",
         ],
         "skip_llm": True,
@@ -1093,6 +1426,15 @@ def run_comparison_spec(spec, user):
     days = _safe_days(spec.get("days"))
     metric = str(spec.get("metric") or "overview").lower()
     result_key = str(spec.get("result_key") or "").strip()
+    chart_type = str(spec.get("chart_type") or "auto").lower()
+    if chart_type not in COMPARISON_CHART_TYPES:
+        chart_type = "auto"
+    result_keys = [
+        str(value).strip()
+        for value in (spec.get("result_keys") or [])
+        if str(value).strip()
+    ][:10]
+    request_text = str(spec.get("_request_text") or "")
     if analysis == "trend":
         return result_trend(
             identifiers,
@@ -1122,6 +1464,9 @@ def run_comparison_spec(spec, user):
         user,
         days=days,
         metric=metric,
+        chart_type=chart_type,
+        result_keys=result_keys,
+        request_text=request_text,
     )
 
 
@@ -1201,6 +1546,7 @@ def route_comparison_analytics(message, user, context=None):
     previous = dict(context.get("comparison") or {})
     text = str(message or "").strip()
     lower = text.lower()
+    requested_chart_type = _extract_chart_type(text)
     if previous and contains_any_intent_phrase(
         text,
         ["export this", "download this"],
@@ -1242,9 +1588,7 @@ def route_comparison_analytics(message, user, context=None):
             or any(str(identifier).lower() in lower for identifier in previous.get("identifiers", []))
         )
     )
-    style_follow_up = bool(previous) and bool(
-        re.search(r"\buse\s+a\s+(?:bar|line|scatter)\s+(?:chart|plot|graph)\b", lower)
-    )
+    style_follow_up = bool(previous) and requested_chart_type is not None
     follow_up = any(
         [
             visualization_follow_up,
@@ -1254,11 +1598,10 @@ def route_comparison_analytics(message, user, context=None):
         ]
     )
 
-    unsupported_domain = any(
-        word in lower
-        for word in ["inventory", "reagent", "reagents", "lot", "lots", "instrument", "instruments"]
-    ) and not any(
-        word in lower for word in ["sample", "samples", "project", "projects", "batch", "batches", "result", "results"]
+    unsupported_domain = bool(
+        re.search(r"\b(?:inventory|reagents?|lots?|instruments?)\b", lower)
+    ) and not bool(
+        re.search(r"\b(?:samples?|projects?|batches?|results?)\b", lower)
     )
     if unsupported_domain:
         return None
@@ -1270,6 +1613,17 @@ def route_comparison_analytics(message, user, context=None):
         analysis = "bottleneck"
     elif "compare" in lower or "difference between" in lower or follow_up:
         analysis = previous.get("analysis", "compare") if follow_up else "compare"
+    elif requested_chart_type == "scatter":
+        analysis = "compare"
+    elif requested_chart_type:
+        if "batch" in lower:
+            requested_kind = "batch"
+        elif "project" in lower:
+            requested_kind = "project"
+        else:
+            requested_kind = "sample"
+        if len(_find_mentions(text, requested_kind, user)) >= 2:
+            analysis = "compare"
     elif any(word in lower for word in ["trend", "graph", "plot", "chart"]):
         if "result" in lower or _extract_result_key(text):
             analysis = "trend"
@@ -1297,6 +1651,8 @@ def route_comparison_analytics(message, user, context=None):
             "identifiers": identifiers,
             "days": None,
             "metric": "overview",
+            "chart_type": requested_chart_type or "auto",
+            "result_keys": [],
         }
     spec["analysis"] = analysis
     spec["days"] = _extract_days(text, spec.get("days"))
@@ -1304,6 +1660,9 @@ def route_comparison_analytics(message, user, context=None):
     extracted_key = _extract_result_key(text)
     if extracted_key:
         spec["result_key"] = extracted_key
+    if requested_chart_type:
+        spec["chart_type"] = requested_chart_type
+    spec["_request_text"] = text
     if analysis == "outliers" and previous and not spec.get("identifiers"):
         spec["identifiers"] = previous.get("identifiers", [])
     if "find unusual" in lower and previous:
