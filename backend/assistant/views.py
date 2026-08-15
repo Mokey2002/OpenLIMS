@@ -1,6 +1,10 @@
+import hashlib
+import time
+from datetime import timedelta
+
 from rest_framework import serializers, status
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Avg, Count, Q
 from django.http import FileResponse
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
@@ -19,19 +23,32 @@ from .actions import (
     serialize_action,
 )
 from .llm import classify_route_with_llm, configured_model_info, enhance_with_llm
-from .models import AssistantAction
+from .context_state import update_conversation_context
+from .models import AssistantAction, AssistantFeedback, AssistantInteraction
 from .models import GeneratedArtifact, NotificationSubscription, SOPDocument
 from .monitoring import build_admin_monitoring_status
 from .comparisons import run_comparison_spec
 from .investigations import run_investigation_spec
 from .serializers import NotificationSubscriptionSerializer, SOPDocumentSerializer
 from .suggestions import assistant_starter_suggestions
+from .response_contracts import normalize_assistant_response
 from .tools import route_assistant_message
 
 
 class AssistantChatSerializer(serializers.Serializer):
     message = serializers.CharField(max_length=2000)
     context = serializers.DictField(required=False, default=dict)
+
+
+class AssistantFeedbackSerializer(serializers.Serializer):
+    rating = serializers.ChoiceField(choices=["UP", "DOWN"])
+    category = serializers.ChoiceField(
+        choices=["", "WRONG_ROUTE", "WRONG_RECORDS", "MISSING_DETAIL", "UNWANTED_CHART", "OTHER"],
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    note = serializers.CharField(required=False, allow_blank=True, default="", max_length=1000)
 
 
 class AssistantComparisonSerializer(serializers.Serializer):
@@ -100,49 +117,169 @@ class AssistantChatView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        started_at = time.monotonic()
         serializer = AssistantChatSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         message = serializer.validated_data["message"]
         context = serializer.validated_data["context"]
+        message_hash = hashlib.sha256(message.encode("utf-8")).hexdigest()
 
-        result = route_assistant_message(
-            message=message,
+        try:
+            result = route_assistant_message(
+                message=message,
+                user=request.user,
+                context=context,
+            )
+            unmatched = result.pop("route_unmatched", False)
+            if unmatched:
+                route_hint = classify_route_with_llm(message, context=context)
+                if route_hint:
+                    hinted_result = route_assistant_message(
+                        message=message,
+                        user=request.user,
+                        context=context,
+                        route_hint=route_hint,
+                    )
+                    hinted_result.pop("route_unmatched", None)
+                    existing_routing = hinted_result.get("routing") or {}
+                    hinted_result["routing"] = {
+                        "source": f"{route_hint.get('provider', 'llm')}_fallback",
+                        "route": route_hint.get("route", "unknown"),
+                        "confidence": route_hint.get("confidence", 0),
+                        "plan": existing_routing.get("plan") or {
+                            key: route_hint.get(key)
+                            for key in ["intent", "entities", "filters", "metrics", "chart_type"]
+                            if route_hint.get(key) not in (None, [], {}, "")
+                        },
+                    }
+                    result = hinted_result
+            proposal = result.pop("pending_action", None)
+
+            if proposal:
+                try:
+                    action = propose_action(
+                        user=request.user,
+                        action_type=proposal["type"],
+                        summary=proposal["summary"],
+                        payload=proposal.get("payload") or {},
+                    )
+                    result["pending_action"] = serialize_action(action)
+                except (AssistantActionError, KeyError) as exc:
+                    result["action_error"] = str(exc)
+
+            result["context"] = update_conversation_context(
+                message,
+                context,
+                result,
+            )
+            result = normalize_assistant_response(message, result)
+            result = enhance_with_llm(message=message, tool_result=result)
+            result = normalize_assistant_response(message, result)
+            routing = result.get("routing") or {}
+            presentation = result.get("presentation") or {}
+            interaction = AssistantInteraction.objects.create(
+                user=request.user,
+                message_hash=message_hash,
+                route=routing.get("route", "unknown"),
+                routing_source=routing.get("source", "rules"),
+                confidence=float(routing.get("confidence", 0) or 0),
+                response_type=presentation.get("mode", result.get("response_type", "text")),
+                record_count=int(presentation.get("record_count", 0) or 0),
+                clarification_requested=bool(result.get("clarification")),
+                success=True,
+                latency_ms=max(int((time.monotonic() - started_at) * 1000), 0),
+                context_keys=sorted(result.get("context", {}).keys()),
+            )
+            result["interaction_id"] = str(interaction.id)
+            return Response(result, status=status.HTTP_200_OK)
+        except Exception as exc:
+            AssistantInteraction.objects.create(
+                user=request.user,
+                message_hash=message_hash,
+                route="error",
+                routing_source="server",
+                success=False,
+                latency_ms=max(int((time.monotonic() - started_at) * 1000), 0),
+                context_keys=sorted(context.keys()),
+                error_code=type(exc).__name__[:128],
+            )
+            raise
+
+
+class AssistantFeedbackView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, interaction_id):
+        serializer = AssistantFeedbackSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            interaction = AssistantInteraction.objects.get(
+                id=interaction_id,
+                user=request.user,
+            )
+        except AssistantInteraction.DoesNotExist:
+            return Response(
+                {"detail": "Assistant interaction not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        feedback, _created = AssistantFeedback.objects.update_or_create(
+            interaction=interaction,
             user=request.user,
-            context=context,
+            defaults=serializer.validated_data,
         )
-        unmatched = result.pop("route_unmatched", False)
-        if unmatched:
-            route_hint = classify_route_with_llm(message, context=context)
-            if route_hint:
-                hinted_result = route_assistant_message(
-                    message=message,
-                    user=request.user,
-                    context=context,
-                    route_hint=route_hint,
-                )
-                hinted_result.pop("route_unmatched", None)
-                hinted_result["routing"] = {
-                    "source": f"{route_hint.get('provider', 'llm')}_fallback",
-                    "route": route_hint.get("route", "unknown"),
-                    "confidence": route_hint.get("confidence", 0),
-                }
-                result = hinted_result
-        proposal = result.pop("pending_action", None)
+        return Response(
+            {
+                "interaction_id": str(interaction.id),
+                "rating": feedback.rating,
+                "category": feedback.category,
+                "note": feedback.note,
+            },
+            status=status.HTTP_200_OK,
+        )
 
-        if proposal:
-            try:
-                action = propose_action(
-                    user=request.user,
-                    action_type=proposal["type"],
-                    summary=proposal["summary"],
-                    payload=proposal.get("payload") or {},
-                )
-                result["pending_action"] = serialize_action(action)
-            except (AssistantActionError, KeyError) as exc:
-                result["action_error"] = str(exc)
 
-        result = enhance_with_llm(message=message, tool_result=result)
-        return Response(result, status=status.HTTP_200_OK)
+class AssistantMetricsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not is_admin(request.user):
+            return Response(
+                {"detail": "Admin access is required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            days = min(max(int(request.query_params.get("days", 30)), 1), 365)
+        except (TypeError, ValueError):
+            days = 30
+        cutoff = timezone.now() - timedelta(days=days)
+        interactions = AssistantInteraction.objects.filter(created_at__gte=cutoff)
+        routes = list(
+            interactions.values("route").annotate(
+                requests=Count("id"),
+                failures=Count("id", filter=Q(success=False)),
+                clarifications=Count("id", filter=Q(clarification_requested=True)),
+                average_latency_ms=Avg("latency_ms"),
+                average_confidence=Avg("confidence"),
+            ).order_by("-requests", "route")
+        )
+        ratings = {
+            item["rating"]: item["count"]
+            for item in AssistantFeedback.objects.filter(
+                interaction__created_at__gte=cutoff
+            ).values("rating").annotate(count=Count("id"))
+        }
+        return Response(
+            {
+                "days": days,
+                "requests": interactions.count(),
+                "routes": routes,
+                "feedback": {
+                    "helpful": ratings.get(AssistantFeedback.RATING_UP, 0),
+                    "not_helpful": ratings.get(AssistantFeedback.RATING_DOWN, 0),
+                },
+                "privacy": "Raw assistant questions are not stored in interaction telemetry.",
+            }
+        )
 
 
 class AssistantComparisonView(APIView):

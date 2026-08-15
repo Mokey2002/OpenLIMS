@@ -15,6 +15,7 @@ import InvestigationPanel from "../components/InvestigationPanel";
 import AssistantActionPreview from "../components/AssistantActionPreview";
 import AssistantClarification from "../components/AssistantClarification";
 import AssistantContextBar from "../components/AssistantContextBar";
+import AssistantFeedback from "../components/AssistantFeedback";
 import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 import { OPENLIMS_VERSION } from "../version";
 
@@ -126,6 +127,7 @@ export default function Assistant() {
               model: "rules",
               display_name: "OpenLIMS Rules",
             },
+          interactionId: data.interaction_id || "",
         },
       ]);
 
@@ -403,6 +405,10 @@ export default function Assistant() {
                         </Button>
                       ))}
                     </div>
+                  )}
+
+                  {item.role === "assistant" && (
+                    <AssistantFeedback interactionId={item.interactionId} />
                   )}
                 </div>
               );

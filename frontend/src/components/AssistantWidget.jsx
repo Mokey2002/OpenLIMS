@@ -8,6 +8,7 @@ import InvestigationPanel from "./InvestigationPanel";
 import AssistantActionPreview from "./AssistantActionPreview";
 import AssistantClarification from "./AssistantClarification";
 import AssistantContextBar from "./AssistantContextBar";
+import AssistantFeedback from "./AssistantFeedback";
 import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 
 const DEMO_ASSISTANT_NOTE =
@@ -129,6 +130,7 @@ export default function AssistantWidget() {
           actionError: data.action_error || "",
           llmError: data.llm_error || "",
           modelInfo,
+          interactionId: data.interaction_id || "",
         },
       ]);
 
@@ -360,6 +362,13 @@ export default function AssistantWidget() {
                         </Button>
                       ))}
                     </div>
+                  )}
+
+                  {item.role === "assistant" && (
+                    <AssistantFeedback
+                      interactionId={item.interactionId}
+                      compact
+                    />
                   )}
                 </div>
               );

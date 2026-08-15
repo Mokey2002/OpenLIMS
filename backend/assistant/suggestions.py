@@ -130,8 +130,18 @@ def assistant_starter_suggestions(user):
         if failed_samples
         else None
     )
+    samples = get_sample_access_queryset(Sample.objects.all(), user)
+    has_instrument_results = Result.objects.filter(
+        work_item__sample__in=samples,
+        work_item__source_import_job__isnull=False,
+    ).exists()
     return without_empty(
         "What needs attention?",
+        "Group samples by project",
+        "Which instrument has the highest QC failure rate?"
+        if has_instrument_results
+        else None,
+        "Show failed QC results from the last 30 days" if failed_samples else None,
         failed_sample_prompt,
         comparison_prompt(user, "sample", chart_type="bar"),
         comparison_prompt(user, "sample", chart_type="dot"),

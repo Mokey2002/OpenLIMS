@@ -5,32 +5,9 @@ import urllib.request
 from django.conf import settings
 from django.utils import timezone
 
-logger = logging.getLogger(__name__)
+from .routing import ASSISTANT_ROUTES, validate_routing_plan
 
-ASSISTANT_ROUTES = {
-    "attention",
-    "barcode",
-    "calculation",
-    "chart",
-    "clarification",
-    "comparison",
-    "confirmed_action",
-    "general",
-    "identity",
-    "investigation",
-    "inventory",
-    "migration",
-    "monitoring",
-    "notifications",
-    "qc",
-    "record_search",
-    "reporting",
-    "samples",
-    "sequences",
-    "sop",
-    "unknown",
-    "work_items",
-}
+logger = logging.getLogger(__name__)
 
 try:
     from openai import OpenAI
@@ -125,6 +102,9 @@ def build_assistant_prompt(message, tool_result):
         "links": tool_result.get("links", []),
         "suggestions": tool_result.get("suggestions", []),
         "chart": tool_result.get("chart"),
+        "comparison": tool_result.get("comparison"),
+        "investigation": tool_result.get("investigation"),
+        "presentation": tool_result.get("presentation"),
     }
 
     return f"""
@@ -182,10 +162,11 @@ def build_route_classifier_prompt(message, context=None):
     context = context or {}
     active_context = [
         key
-        for key in ["comparison", "investigation", "intent", "result_id", "sample_id"]
+        for key in ["analytics", "comparison", "investigation", "intent", "result_id", "sample_id"]
         if context.get(key)
     ]
     route_descriptions = {
+        "analytics": "safe allow-listed grouping, counting, rates, or ranked aggregate summaries",
         "attention": "general priorities, pending items, or what needs review",
         "barcode": "create or reprint sample barcode labels",
         "calculation": "counts, percentages, or worklists",
@@ -217,13 +198,14 @@ def build_route_classifier_prompt(message, context=None):
 Classify one OpenLIMS user request. Do not answer the request and do not run a tool.
 
 Return strict JSON only with this shape:
-{{"route": "one_allowed_route", "confidence": 0.0}}
+{{"route":"one_allowed_route","intent":"short_intent","entities":[{{"kind":"sample|project|batch|result","identifier":"record identifier"}}],"filters":{{"days":30,"status":"optional"}},"metrics":["optional metric"],"chart_type":"auto|bar|line|scatter|dot","confidence":0.0}}
 
 Allowed routes:
 {routes}
 
 Rules:
 - Select chart only when the user explicitly requests a visual.
+- Select analytics for allow-listed grouping, aggregate rates, or ranked summaries.
 - Select attention for broad questions about priorities, pending work, or what needs review.
 - Select clarification when the domain is named but the requested subset is ambiguous.
 - Select general only when the request can be answered without OpenLIMS records, tools, approved SOP content, or an application action.
@@ -309,22 +291,13 @@ def _parse_route_classification(raw):
             data = json.loads(text[start : end + 1])
         except json.JSONDecodeError:
             return None
-    route = str(data.get("route") or "").strip().lower()
-    if route not in ASSISTANT_ROUTES:
-        return None
-    try:
-        confidence = float(data.get("confidence", 0))
-    except (TypeError, ValueError):
-        return None
     threshold = float(
         getattr(settings, "OPENLIMS_ASSISTANT_LLM_ROUTING_MIN_CONFIDENCE", 0.65)
     )
-    if confidence < threshold:
+    plan = validate_routing_plan(data, min_confidence=threshold)
+    if not plan or not plan["accepted"]:
         return None
-    return {
-        "route": route,
-        "confidence": min(max(confidence, 0.0), 1.0),
-    }
+    return plan
 
 
 def classify_route_with_llm(message, context=None):
