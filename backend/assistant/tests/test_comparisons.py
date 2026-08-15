@@ -155,8 +155,9 @@ class AssistantComparisonTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["comparison"]["rows"]), 3)
-        self.assertEqual(response.data["chart"]["chartType"], "bar")
-        self.assertEqual(len(response.data["chart"]["series"]), 3)
+        self.assertIsNone(response.data["chart"])
+        self.assertEqual(response.data["chart_available"]["chartType"], "bar")
+        self.assertEqual(response.data["presentation"]["mode"], "table")
         source_column = next(
             column
             for column in response.data["comparison"]["columns"]
@@ -454,7 +455,9 @@ class AssistantComparisonTests(APITestCase):
         self.assertEqual(row["entity"], "ALPHA")
         self.assertEqual(row["stale_samples"], 1)
         self.assertEqual(row["overdue_work"], 1)
-        self.assertTrue(response.data["chart"]["stacked"])
+        self.assertIsNone(response.data["chart"])
+        self.assertEqual(response.data["presentation"]["mode"], "table")
+        self.assertEqual(response.data["chart_available"]["chartType"], "bar")
 
     def test_private_identifier_is_not_resolved_for_comparison(self):
         response = self.chat("Compare samples S-100 and S-PRIVATE")

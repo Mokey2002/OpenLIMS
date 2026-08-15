@@ -21,7 +21,8 @@ ALLOWED_CONTEXT_KEYS = {
 }
 
 FOLLOW_UP_PATTERN = re.compile(
-    r"\b(?:also|and those|do that|include|it|make it|now|same|them|these|those)\b",
+    r"\b(?:also|and those|do that|include|make it|show it|plot it|graph it|"
+    r"chart it|use it|export it|same|them|these|those)\b",
     re.IGNORECASE,
 )
 
