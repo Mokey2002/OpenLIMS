@@ -510,6 +510,8 @@ INSTRUMENT_API_KEY=my-shared-lab-instrument-key
 
 OPENLIMS_ASSISTANT_LLM_ENABLED=false
 OPENLIMS_ASSISTANT_LLM_PROVIDER=ollama
+OPENLIMS_ASSISTANT_LLM_ROUTING_ENABLED=true
+OPENLIMS_ASSISTANT_LLM_ROUTING_MIN_CONFIDENCE=0.65
 OLLAMA_BASE_URL=http://ollama:11434
 OLLAMA_MODEL=llama3.2:1b
 OLLAMA_TIMEOUT_SECONDS=25
@@ -553,10 +555,18 @@ Enable the assistant in `deploy/.env`:
 ```env
 OPENLIMS_ASSISTANT_LLM_ENABLED=true
 OPENLIMS_ASSISTANT_LLM_PROVIDER=ollama
+OPENLIMS_ASSISTANT_LLM_ROUTING_ENABLED=true
+OPENLIMS_ASSISTANT_LLM_ROUTING_MIN_CONFIDENCE=0.65
 OLLAMA_BASE_URL=http://ollama:11434
 OLLAMA_MODEL=llama3.2:1b
 OLLAMA_TIMEOUT_SECONDS=25
 ```
+
+OpenLIMS first uses normalized deterministic routes. If no route matches, the
+configured model may return a constrained, confidence-gated route hint from a
+fixed allowlist. OpenLIMS then runs the normal permission checks, frozen
+previews, and confirmation requirements. Invalid, low-confidence, or
+unavailable model classifications fall back to an honest rule-based response.
 
 Start the Ollama container:
 
