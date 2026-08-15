@@ -28,11 +28,12 @@ export default function Assistant() {
   const [message, setMessage] = useState("");
   const [conversationContext, setConversationContext] = useState({});
   const [assistantStatus, setAssistantStatus] = useState(null);
+  const [starterPrompts, setStarterPrompts] = useState(ASSISTANT_STARTER_PROMPTS);
   const [history, setHistory] = useState([
     {
       role: "assistant",
       content:
-        "Try investigating S-ALPHA-003, comparing the Alpha, Beta, and Gamma demo projects, or checking samples, inventory, sequences, and system status.",
+        "Ask about samples, projects, QC, comparisons, inventory, sequences, or system status.",
       links: [],
       suggestions: ASSISTANT_STARTER_PROMPTS,
       modelInfo: {
@@ -50,6 +51,18 @@ export default function Assistant() {
     try {
       const data = await apiGet("/api/assistant/status/");
       setAssistantStatus(data);
+      setStarterPrompts(data.suggestions || ASSISTANT_STARTER_PROMPTS);
+      setHistory((current) => {
+        if (!current.length || current[0].role !== "assistant") return current;
+        return [
+          {
+            ...current[0],
+            content: data.welcome_message || current[0].content,
+            suggestions: data.suggestions || current[0].suggestions,
+          },
+          ...current.slice(1),
+        ];
+      });
     } catch {
       setAssistantStatus({
         provider: "openlims",
@@ -432,7 +445,7 @@ export default function Assistant() {
           <h5 className="section-title">Example questions</h5>
 
           <div className="d-flex flex-wrap gap-2">
-            {ASSISTANT_STARTER_PROMPTS.map((prompt) => (
+            {starterPrompts.map((prompt) => (
               <Button
                 key={prompt}
                 size="sm"

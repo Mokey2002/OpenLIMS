@@ -9,7 +9,7 @@ from django.core.files.base import ContentFile
 from django.utils import timezone
 
 from inventory.models import Container, InventoryItem, InventoryLot, Location
-from samples.models import Sample
+from samples.models import Sample, SampleBatch
 from results.models import WorkItem, Result
 from imports.models import InstrumentProfile, InstrumentColumnMapping, ImportJob
 from events.models import Event
@@ -212,11 +212,12 @@ def set_result_value(work_item, key, value):
             }
         )
 
-    Result.objects.update_or_create(
+    result, _ = Result.objects.update_or_create(
         work_item=work_item,
         key=key,
         defaults=clean_kwargs(Result, defaults),
     )
+    return result
 
 
 def link_demo_import_job(import_job, sample_codes, work_item_name, actor=None):
@@ -598,7 +599,7 @@ class Command(BaseCommand):
         # --------------------------------------------------
         # Users
         # --------------------------------------------------
-        demo_password = os.environ.get("OPENLIMS_DEMO_PASSWORD") or None
+        configured_login_password = os.environ.get("OPENLIMS_DEMO_PASSWORD") or None
         director = create_demo_user(
             "director",
             admin_group,
@@ -606,7 +607,7 @@ class Command(BaseCommand):
             first_name="Dana",
             last_name="Director",
             is_admin=True,
-            password=demo_password,
+            password=configured_login_password,
         )
 
         peter = create_demo_user(
@@ -615,7 +616,7 @@ class Command(BaseCommand):
             email="peter.tech@example.com",
             first_name="Peter",
             last_name="Nguyen",
-            password=demo_password,
+            password=configured_login_password,
         )
 
         maria = create_demo_user(
@@ -624,7 +625,7 @@ class Command(BaseCommand):
             email="maria.tech@example.com",
             first_name="Maria",
             last_name="Chen",
-            password=demo_password,
+            password=configured_login_password,
         )
         maria.groups.add(qc_reviewer_group)
 
@@ -634,7 +635,7 @@ class Command(BaseCommand):
             email="michael.tech@example.com",
             first_name="Michael",
             last_name="Patel",
-            password=demo_password,
+            password=configured_login_password,
         )
 
         viewer = create_demo_user(
@@ -643,7 +644,7 @@ class Command(BaseCommand):
             email="viewer@example.com",
             first_name="Vivian",
             last_name="Reviewer",
-            password=demo_password,
+            password=configured_login_password,
         )
 
         # --------------------------------------------------
@@ -944,18 +945,98 @@ class Command(BaseCommand):
         meta_csv = instruments["META-CSV"]
 
         # --------------------------------------------------
-        # Samples
+        # Sample batches + samples
         # --------------------------------------------------
+        batch_data = [
+            ("B-ALPHA-01", project_alpha),
+            ("B-ALPHA-02", project_alpha),
+            ("B-BETA-01", project_beta),
+            ("B-GAMMA-01", project_gamma),
+        ]
+        batches = {}
+        for batch_code, batch_project in batch_data:
+            batch, _ = SampleBatch.objects.update_or_create(
+                code=batch_code,
+                defaults={
+                    "project": batch_project,
+                    "created_by": director,
+                },
+            )
+            batches[batch_code] = batch
+
         sample_data = [
-            {"sample_id": "S-ALPHA-001", "status": "RECEIVED", "project": project_alpha, "container": rack_a},
-            {"sample_id": "S-ALPHA-002", "status": "IN_PROGRESS", "project": project_alpha, "container": rack_a},
-            {"sample_id": "S-ALPHA-003", "status": "QC", "project": project_alpha, "container": rack_a},
-            {"sample_id": "S-ALPHA-004", "status": "IN_PROGRESS", "project": project_alpha, "container": rack_a},
-            {"sample_id": "S-BETA-001", "status": "REPORTED", "project": project_beta, "container": rack_b},
-            {"sample_id": "S-BETA-002", "status": "ARCHIVED", "project": project_beta, "container": rack_b},
-            {"sample_id": "S-BETA-003", "status": "QC", "project": project_beta, "container": rack_b},
-            {"sample_id": "S-GAMMA-001", "status": "RECEIVED", "project": project_gamma, "container": rack_c},
-            {"sample_id": "S-GAMMA-002", "status": "IN_PROGRESS", "project": project_gamma, "container": rack_c},
+            {
+                "sample_id": "S-ALPHA-001",
+                "status": "RECEIVED",
+                "project": project_alpha,
+                "container": rack_a,
+                "batch": batches["B-ALPHA-01"],
+                "assigned_to": peter,
+            },
+            {
+                "sample_id": "S-ALPHA-002",
+                "status": "IN_PROGRESS",
+                "project": project_alpha,
+                "container": rack_a,
+                "batch": batches["B-ALPHA-01"],
+                "assigned_to": peter,
+            },
+            {
+                "sample_id": "S-ALPHA-003",
+                "status": "QC",
+                "project": project_alpha,
+                "container": rack_a,
+                "batch": batches["B-ALPHA-02"],
+                "assigned_to": maria,
+            },
+            {
+                "sample_id": "S-ALPHA-004",
+                "status": "IN_PROGRESS",
+                "project": project_alpha,
+                "container": rack_a,
+                "batch": batches["B-ALPHA-02"],
+                "assigned_to": michael,
+            },
+            {
+                "sample_id": "S-BETA-001",
+                "status": "REPORTED",
+                "project": project_beta,
+                "container": rack_b,
+                "batch": batches["B-BETA-01"],
+                "assigned_to": michael,
+            },
+            {
+                "sample_id": "S-BETA-002",
+                "status": "ARCHIVED",
+                "project": project_beta,
+                "container": rack_b,
+                "batch": batches["B-BETA-01"],
+                "assigned_to": maria,
+            },
+            {
+                "sample_id": "S-BETA-003",
+                "status": "QC",
+                "project": project_beta,
+                "container": rack_b,
+                "batch": batches["B-BETA-01"],
+                "assigned_to": peter,
+            },
+            {
+                "sample_id": "S-GAMMA-001",
+                "status": "RECEIVED",
+                "project": project_gamma,
+                "container": rack_c,
+                "batch": batches["B-GAMMA-01"],
+                "assigned_to": maria,
+            },
+            {
+                "sample_id": "S-GAMMA-002",
+                "status": "IN_PROGRESS",
+                "project": project_gamma,
+                "container": rack_c,
+                "batch": batches["B-GAMMA-01"],
+                "assigned_to": michael,
+            },
         ]
 
         samples = []
@@ -966,6 +1047,9 @@ class Command(BaseCommand):
                 {"sample_id": row["sample_id"]},
                 row,
             )
+            sample.batch = row["batch"]
+            sample.assigned_to = row["assigned_to"]
+            sample.save(update_fields=["batch", "assigned_to", "updated_at"])
             samples.append(sample)
 
             if created:
@@ -1220,6 +1304,125 @@ class Command(BaseCommand):
 
                 for key, value in values.items():
                     set_result_value(work_item, key, value)
+
+        # --------------------------------------------------
+        # Assistant analytics demo: comparable metrics across every project
+        # --------------------------------------------------
+        comparison_metrics = {
+            "S-ALPHA-001": [12.4, 97.1, 88.0, 37.8, 92.4, 95.0],
+            "S-ALPHA-002": [10.2, 95.8, 79.3, 35.9, 88.7, 87.0],
+            "S-ALPHA-003": [6.5, 89.2, 61.0, 26.1, 61.8, 54.0],
+            "S-ALPHA-004": [13.8, 96.4, 84.6, 36.8, 90.2, 91.0],
+            "S-BETA-001": [11.6, 96.2, 86.5, 36.7, 91.1, 89.0],
+            "S-BETA-002": [4.9, 87.8, 52.0, 24.8, 58.2, 41.0],
+            "S-BETA-003": [9.8, 94.1, 75.0, 34.2, 84.5, 82.0],
+            "S-GAMMA-001": [14.1, 97.5, 92.1, 38.6, 94.1, 97.0],
+            "S-GAMMA-002": [8.1, 91.3, 68.4, 31.2, 78.6, 69.0],
+        }
+        metric_keys = [
+            "concentration",
+            "purity",
+            "yield",
+            "mean_q_score",
+            "percent_q30",
+            "response_percent",
+        ]
+        for sample_code, metric_values in comparison_metrics.items():
+            sample = sample_by_code[sample_code]
+            work_item, _ = WorkItem.objects.update_or_create(
+                sample=sample,
+                name="Assistant Comparison Metrics",
+                defaults={
+                    "work_type": "ASSISTANT_DEMO_ANALYTICS",
+                    "status": WorkItem.STATUS_COMPLETED,
+                    "notes": (
+                        "Seeded cross-project metrics for bar, line, dot, scatter, "
+                        "trend, and outlier demonstrations."
+                    ),
+                    "created_by": director,
+                },
+            )
+            for key, value in zip(metric_keys, metric_values):
+                existing = Result.objects.filter(
+                    work_item__sample=sample,
+                    key=key,
+                ).exclude(work_item=work_item)
+                if existing.exists():
+                    continue
+                result = set_result_value(work_item, key, value)
+                result.entered_by = peter
+                if result.qc_passed is True:
+                    result.qc_status = Result.QC_APPROVED
+                    result.qc_reviewed_by = maria
+                    result.qc_reviewed_at = result.qc_reviewed_at or timezone.now()
+                    result.qc_review_note = "Approved demo result within its configured range."
+                    result.qc_assigned_to = None
+                elif result.qc_passed is False:
+                    result.qc_status = Result.QC_PENDING_REVIEW
+                    result.qc_assigned_to = maria
+                    result.qc_reviewed_by = None
+                    result.qc_reviewed_at = None
+                    result.qc_review_note = ""
+                result.save()
+
+        # --------------------------------------------------
+        # Assistant attention demo: active, overdue, and unassigned work
+        # --------------------------------------------------
+        operational_work = [
+            (
+                "S-ALPHA-002",
+                "Library preparation follow-up",
+                "LIBRARY_PREP",
+                WorkItem.STATUS_IN_PROGRESS,
+                peter,
+                2,
+            ),
+            (
+                "S-ALPHA-003",
+                "QC failure investigation",
+                "QC_INVESTIGATION",
+                WorkItem.STATUS_PENDING,
+                maria,
+                -2,
+            ),
+            (
+                "S-BETA-003",
+                "RNA QC review",
+                "RNA_QC_REVIEW",
+                WorkItem.STATUS_PENDING,
+                None,
+                0,
+            ),
+            (
+                "S-GAMMA-002",
+                "Sequencing rerun review",
+                "SEQUENCING_RERUN",
+                WorkItem.STATUS_IN_PROGRESS,
+                None,
+                -1,
+            ),
+        ]
+        for sample_code, name, work_type, status_value, assignee, due_offset in operational_work:
+            WorkItem.objects.update_or_create(
+                sample=sample_by_code[sample_code],
+                name=name,
+                defaults={
+                    "work_type": work_type,
+                    "status": status_value,
+                    "assigned_to": assignee,
+                    "created_by": director,
+                    "due_at": timezone.now() + timedelta(days=due_offset),
+                    "notes": (
+                        "Seeded active work for assistant attention and "
+                        "bottleneck demonstrations."
+                    ),
+                },
+            )
+
+        for sample_code, age_days in {"S-ALPHA-003": 14, "S-GAMMA-002": 10}.items():
+            Sample.objects.filter(pk=sample_by_code[sample_code].pk).update(
+                status_changed_at=timezone.now() - timedelta(days=age_days)
+            )
 
         # --------------------------------------------------
         # Demo import jobs
@@ -1789,7 +1992,7 @@ class Command(BaseCommand):
         self.stdout.write("  maria (tech + QC reviewer)")
         self.stdout.write("  michael (tech)")
         self.stdout.write("  viewer (read only)")
-        if demo_password:
+        if configured_login_password:
             self.stdout.write(
                 "Passwords were set from OPENLIMS_DEMO_PASSWORD; the value is not displayed."
             )

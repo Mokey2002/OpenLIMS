@@ -14,8 +14,20 @@ from settings_app.models import SystemSettings
 
 from .models import AssistantAction
 from .sample_operations import assistant_bulk_max_records
+from .suggestions import accessible_result_references
 
 RESULT_REFERENCE_RE = re.compile(r"\bR-?(\d+)\b", re.IGNORECASE)
+
+
+def _result_request_help(user, instruction, example, *, failed_only=False):
+    references = accessible_result_references(
+        user,
+        limit=1,
+        failed_only=failed_only,
+    )
+    if not references:
+        return instruction
+    return f"{instruction} For example: {example.format(result=references[0])}."
 
 
 def _result_queryset(user):
@@ -473,7 +485,14 @@ def _read_failure_reason(message, user):
         return None
     result_id = _result_id_from_message(message)
     if not result_id:
-        return _error("Tell me the result ID, for example R-204.")
+        return _error(
+            _result_request_help(
+                user,
+                "Tell me the result ID.",
+                "Why did result {result} fail QC?",
+                failed_only=True,
+            )
+        )
     result, error = _get_result(result_id, user)
     if error:
         return _error(error)
@@ -495,7 +514,13 @@ def _read_reference_comparison(message, user, context):
         return None
     result_id = _result_id_from_message(message) or context.get("result_id")
     if not result_id:
-        return _error("Tell me which result to compare, for example R-204.")
+        return _error(
+            _result_request_help(
+                user,
+                "Tell me which result to compare.",
+                "Compare result {result} with its reference range",
+            )
+        )
     result, error = _get_result(int(result_id), user)
     if error:
         return _error(error)
@@ -635,7 +660,13 @@ def _propose_flag(message, user):
         return None
     result_id = _result_id_from_message(message)
     if not result_id:
-        return _error("Tell me which result to flag, for example R-204.")
+        return _error(
+            _result_request_help(
+                user,
+                "Tell me which result to flag.",
+                "Flag result {result} for review",
+            )
+        )
     result, error = _get_result(result_id, user)
     if error:
         return _error(error)

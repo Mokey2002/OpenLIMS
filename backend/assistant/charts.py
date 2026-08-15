@@ -453,7 +453,7 @@ def result_scatter_chart(message, user):
         return {
             "answer": (
                 "Tell me which numeric result fields to use for X and Y. "
-                "Example: Plot concentration vs response for PRJ-ABC."
+                "Example: Plot concentration versus purity for two samples."
             ),
             "links": [],
             "suggestions": [

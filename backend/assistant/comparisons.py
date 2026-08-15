@@ -15,6 +15,11 @@ from samples.access import get_sample_access_queryset
 from samples.models import Sample, SampleBatch
 
 from .intent_matching import contains_any_intent_phrase
+from .suggestions import (
+    accessible_batch_codes,
+    accessible_project_codes,
+    accessible_sample_ids,
+)
 
 
 MAX_COMPARISON_ENTITIES = 10
@@ -131,6 +136,88 @@ def _resolve_entities(kind, identifiers, user):
         resolved_aliases.update(entity.name.lower() for entity in unique)
     missing = [value for value in wanted if value.lower() not in resolved_aliases]
     return unique[:MAX_COMPARISON_ENTITIES], missing
+
+
+def _explicit_identifier_candidates(message, kind):
+    """Extract code-like identifiers even when they are not accessible records.
+
+    ``_find_mentions`` intentionally searches only permission-filtered records. That
+    is correct for resolution, but it used to make an unavailable identifier look
+    exactly like a request that contained no identifiers at all.
+    """
+    noun = {"sample": "sample", "project": "project", "batch": "batch"}.get(
+        kind
+    )
+    if not noun:
+        return []
+    text = str(message or "")
+    pattern = (
+        rf"\b{noun}s?\b\s+(.+?)"
+        rf"(?=\s+(?:using|with|as|for|over|during|from|by|on)\b|[?.!]|$)"
+    )
+    candidates = []
+    for match in re.finditer(pattern, text, re.IGNORECASE):
+        for value in re.split(
+            r"\s*(?:,|\band\b|\bversus\b|\bvs\.?\b)\s*",
+            match.group(1),
+            flags=re.IGNORECASE,
+        ):
+            value = re.sub(
+                rf"^(?:the\s+)?{noun}\s+",
+                "",
+                value.strip(),
+                flags=re.IGNORECASE,
+            )
+            value = value.strip(" \t\r\n'\"()[]{}:;")
+            if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]*", value or ""):
+                candidates.append(value)
+    return list(dict.fromkeys(candidates))[:MAX_COMPARISON_ENTITIES]
+
+
+def _requested_identifiers(message, kind, user):
+    identifiers = list(_find_mentions(message, kind, user))
+    seen = {value.lower() for value in identifiers}
+    for value in _explicit_identifier_candidates(message, kind):
+        if value.lower() not in seen:
+            identifiers.append(value)
+            seen.add(value.lower())
+    return identifiers[:MAX_COMPARISON_ENTITIES]
+
+
+def _human_join(values):
+    values = [str(value) for value in values if str(value)]
+    if len(values) < 2:
+        return "".join(values)
+    if len(values) == 2:
+        return f"{values[0]} and {values[1]}"
+    return f"{', '.join(values[:-1])}, and {values[-1]}"
+
+
+def _comparison_suggestions(kind, user):
+    if kind == "sample":
+        identifiers = accessible_sample_ids(user, limit=3)
+        plural = "samples"
+    elif kind == "project":
+        identifiers = accessible_project_codes(user, limit=3)
+        plural = "projects"
+    elif kind == "batch":
+        identifiers = accessible_batch_codes(user, limit=3)
+        plural = "batches"
+    else:
+        return []
+    if len(identifiers) < 2:
+        return [f"Show accessible {plural}"]
+    request = f"Compare {plural} {_human_join(identifiers)}"
+    suggestions = [request]
+    if kind == "sample":
+        pair = f"Compare samples {_human_join(identifiers[:2])}"
+        suggestions.extend(
+            [
+                f"{pair} using a bar chart",
+                f"{pair} using a dot plot",
+            ]
+        )
+    return suggestions
 
 
 def _find_mentions(message, kind, user):
@@ -885,17 +972,45 @@ def compare_entities(
 ):
     entities, missing = _resolve_entities(kind, identifiers, user)
     if len(entities) < 2:
+        requested = list(
+            dict.fromkeys(
+                str(value).strip()
+                for value in (identifiers or [])
+                if str(value).strip()
+            )
+        )
+        plural = "batches" if kind == "batch" else f"{kind}s"
+        if requested:
+            answer = (
+                f"I need at least two accessible {plural} to compare. "
+                f"I found {len(entities)} of {len(requested)} requested identifiers "
+                "in the records you can access. Choose at least two from the suggestions below."
+            )
+        else:
+            answer = (
+                f"Which {plural} would you like to compare? "
+                f"Choose at least two accessible {plural}."
+            )
         return {
-            "answer": (
-                f"I need at least two accessible {kind}s to compare. "
-                f"I resolved {len(entities)} from the requested identifiers."
-            ),
+            "answer": answer,
             "links": [],
-            "suggestions": [
-                "Compare samples S-100, S-101, and S-102",
-                "Compare projects Alpha and Beta",
-                "Compare batches B-100 and B-101",
-            ],
+            "context": {
+                "comparison": {
+                    "analysis": "compare",
+                    "kind": kind,
+                    "identifiers": [],
+                    "days": _safe_days(days),
+                    "metric": metric or "overview",
+                    "chart_type": (
+                        chart_type
+                        if chart_type in COMPARISON_CHART_TYPES
+                        else "auto"
+                    ),
+                    "result_keys": list(result_keys or []),
+                    "awaiting_identifiers": True,
+                }
+            },
+            "suggestions": _comparison_suggestions(kind, user),
             "skip_llm": True,
         }
     days = _safe_days(days)
@@ -1588,6 +1703,14 @@ def route_comparison_analytics(message, user, context=None):
             or any(str(identifier).lower() in lower for identifier in previous.get("identifiers", []))
         )
     )
+    awaiting_identifiers = bool(previous.get("awaiting_identifiers"))
+    requested_kind = str(previous.get("kind") or "sample")
+    identifier_follow_up_values = (
+        _requested_identifiers(text, requested_kind, user)
+        if awaiting_identifiers
+        else []
+    )
+    identifier_follow_up = awaiting_identifiers and bool(identifier_follow_up_values)
     style_follow_up = bool(previous) and requested_chart_type is not None
     follow_up = any(
         [
@@ -1595,6 +1718,7 @@ def route_comparison_analytics(message, user, context=None):
             filter_only_follow_up,
             explanation_follow_up,
             style_follow_up,
+            identifier_follow_up,
         ]
     )
 
@@ -1632,6 +1756,9 @@ def route_comparison_analytics(message, user, context=None):
 
     if follow_up:
         spec = previous
+        if identifier_follow_up:
+            spec["identifiers"] = identifier_follow_up_values
+            spec.pop("awaiting_identifiers", None)
     else:
         if "batch" in lower:
             kind = "batch"
@@ -1641,7 +1768,7 @@ def route_comparison_analytics(message, user, context=None):
             kind = "sample"
         else:
             kind = "project" if analysis in {"outliers", "bottleneck"} else "sample"
-        identifiers = _find_mentions(text, kind, user)
+        identifiers = _requested_identifiers(text, kind, user)
         if not identifiers and analysis == "compare" and kind in {"project", "batch"}:
             queryset = _accessible_projects(user) if kind == "project" else _accessible_batches(user)
             identifiers = [_entity_key(kind, entity) for entity in queryset[:MAX_COMPARISON_ENTITIES]]

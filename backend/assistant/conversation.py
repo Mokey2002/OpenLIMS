@@ -4,6 +4,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from .intent_matching import contains_any_intent_phrase, normalize_intent_text
+from .suggestions import comparison_prompt, without_empty
 
 
 OPENLIMS_SUGGESTIONS = [
@@ -98,7 +99,7 @@ def _is_help_question(message, normalized):
     )
 
 
-def route_conversation_utility(message):
+def route_conversation_utility(message, user=None):
     normalized = normalize_intent_text(message)
     if not normalized:
         return None
@@ -133,12 +134,12 @@ def route_conversation_utility(message):
             "I can compare or investigate records, create charts when requested, and "
             "preview supported actions for explicit confirmation. I can also answer "
             "basic conversational and general-knowledge questions when an LLM is enabled.",
-            suggestions=[
+            suggestions=without_empty(
                 "What needs my attention?",
                 "Which samples need QC review?",
-                "Compare projects PRJ-ALPHA and PRJ-BETA",
+                comparison_prompt(user, "project") or "Compare two projects",
                 "What time is it?",
-            ],
+            ),
         )
 
     if _is_greeting(normalized):

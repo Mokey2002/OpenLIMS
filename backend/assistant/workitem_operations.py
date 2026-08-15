@@ -12,6 +12,8 @@ from results.models import WorkItem
 from samples.access import get_sample_access_queryset
 from samples.models import Sample, SampleBatch
 
+from .suggestions import batch_prompt
+
 
 ACTIVE_STATUSES = [WorkItem.STATUS_PENDING, WorkItem.STATUS_IN_PROGRESS]
 LOCKED_STATUSES = [WorkItem.STATUS_COMPLETED, WorkItem.STATUS_CANCELLED]
@@ -147,8 +149,15 @@ def _propose_create(message, user):
         return None
     match = re.search(r"\bbatch\s+([A-Za-z0-9_.-]+)", message, re.IGNORECASE)
     if not match:
+        example = batch_prompt(
+            user,
+            "Create sequencing work for samples in batch",
+        )
+        answer = "Specify an accessible batch code."
+        if example:
+            answer += f" For example: {example}."
         return {
-            "answer": "Specify a batch code, for example: Create sequencing work for samples in batch B-100.",
+            "answer": answer,
             "links": [],
             "skip_llm": True,
         }

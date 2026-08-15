@@ -31,7 +31,7 @@ export default function AssistantWidget() {
     {
       role: "assistant",
       content:
-        "Try investigating S-ALPHA-003, comparing the Alpha, Beta, and Gamma demo projects, or checking samples, inventory, sequences, and system status.",
+        "Ask about samples, projects, QC, comparisons, inventory, sequences, or system status.",
       links: [],
       suggestions: ASSISTANT_STARTER_PROMPTS,
       modelInfo: {
@@ -48,6 +48,17 @@ export default function AssistantWidget() {
     try {
       const data = await apiGet("/api/assistant/status/");
       setAssistantStatus(data);
+      setHistory((current) => {
+        if (!current.length || current[0].role !== "assistant") return current;
+        return [
+          {
+            ...current[0],
+            content: data.welcome_message || current[0].content,
+            suggestions: data.suggestions || current[0].suggestions,
+          },
+          ...current.slice(1),
+        ];
+      });
     } catch {
       setAssistantStatus({
         provider: "openlims",

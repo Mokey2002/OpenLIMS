@@ -14,7 +14,7 @@ from core.management.commands.seed_demo import (
 from imports.models import ImportJob, InstrumentProfile
 from projects.models import Project
 from results.models import Result, WorkItem
-from samples.models import Sample
+from samples.models import Sample, SampleBatch
 
 
 User = get_user_model()
@@ -158,6 +158,35 @@ class DemoSeedProvenanceIntegrationTests(TestCase):
                 call_command("seed_demo")
 
         self.assertEqual(WorkItem.objects.count(), first_work_item_count)
+        self.assertEqual(
+            set(SampleBatch.objects.values_list("code", flat=True)),
+            {"B-ALPHA-01", "B-ALPHA-02", "B-BETA-01", "B-GAMMA-01"},
+        )
+        self.assertFalse(
+            Sample.objects.filter(sample_id__startswith="S-", batch__isnull=True).exists()
+        )
+        for sample in Sample.objects.filter(sample_id__startswith="S-"):
+            keys = set(
+                Result.objects.filter(work_item__sample=sample).values_list(
+                    "key",
+                    flat=True,
+                )
+            )
+            self.assertIn("concentration", keys)
+            self.assertIn("purity", keys)
+            self.assertIn("response_percent", keys)
+        self.assertEqual(
+            WorkItem.objects.filter(
+                status__in=[WorkItem.STATUS_PENDING, WorkItem.STATUS_IN_PROGRESS],
+                work_type__in=[
+                    "LIBRARY_PREP",
+                    "QC_INVESTIGATION",
+                    "RNA_QC_REVIEW",
+                    "SEQUENCING_RERUN",
+                ],
+            ).count(),
+            4,
+        )
         jobs = ImportJob.objects.filter(run_id__in=expected_runs)
         self.assertEqual(set(jobs.values_list("run_id", flat=True)), expected_runs)
         for job in jobs:

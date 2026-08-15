@@ -143,7 +143,7 @@ export default function Batches() {
                       <Form.Control
                         value={batchCode}
                         onChange={(event) => setBatchCode(event.target.value)}
-                        placeholder="Batch code, e.g. B-100"
+                        placeholder="Batch code, e.g. B-ALPHA-01"
                       />
                     </Col>
                     <Col md={2}>

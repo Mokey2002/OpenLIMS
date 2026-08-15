@@ -15,6 +15,7 @@ from samples.access import get_sample_access_queryset
 from samples.models import Sample
 
 from .intent_matching import contains_any_intent_phrase
+from .suggestions import sample_prompt, without_empty
 
 
 MAX_COHORT_SAMPLES = 250
@@ -525,7 +526,10 @@ def run_investigation_spec(spec, user):
         return {
             "answer": "The requested sample or result was not found in your accessible records.",
             "links": [],
-            "suggestions": ["Investigate sample S-1042", "Open the Investigation Workbench"],
+            "suggestions": without_empty(
+                sample_prompt(user, "Investigate sample"),
+                "Open the Investigation Workbench",
+            ),
             "skip_llm": True,
         }
 

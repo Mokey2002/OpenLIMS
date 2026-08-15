@@ -174,6 +174,65 @@ class AssistantComparisonTests(APITestCase):
         )
         self.assertNotIn("pending_action", response.data)
 
+    def test_vague_sample_comparison_asks_for_accessible_identifiers(self):
+        response = self.chat("Can you compare two samples?")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            "Which samples would you like to compare?",
+            response.data["answer"],
+        )
+        self.assertTrue(
+            response.data["context"]["comparison"]["awaiting_identifiers"]
+        )
+        self.assertIn(
+            "Compare samples S-100, S-101, and S-102",
+            response.data["suggestions"],
+        )
+        self.assertNotIn("S-PRIVATE", str(response.data["suggestions"]))
+
+    def test_comparison_clarification_accepts_identifier_only_follow_up(self):
+        clarification = self.chat("Can you compare two samples?")
+        response = self.chat(
+            "S-100 and S-102",
+            context=clarification.data["context"],
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["context"]["comparison"]["identifiers"],
+            ["S-100", "S-102"],
+        )
+        self.assertEqual(len(response.data["comparison"]["rows"]), 2)
+
+    def test_unavailable_identifiers_get_permission_filtered_suggestions(self):
+        response = self.chat(
+            "Compare samples NOT-SEEDED-001 and NOT-SEEDED-002"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("found 0 of 2 requested identifiers", response.data["answer"])
+        self.assertNotIn("resolved 0", response.data["answer"])
+        self.assertIn(
+            "Compare samples S-100, S-101, and S-102",
+            response.data["suggestions"],
+        )
+        self.assertNotIn("S-PRIVATE", str(response.data["suggestions"]))
+
+    def test_comparison_suggestions_are_generated_from_current_records(self):
+        replacement_ids = ["DEMO-ALPHA-001", "DEMO-ALPHA-002", "DEMO-BETA-001"]
+        for sample, sample_id in zip(self.samples, replacement_ids):
+            sample.sample_id = sample_id
+            sample.save(update_fields=["sample_id"])
+
+        response = self.chat("Can you compare two samples?")
+
+        self.assertIn(
+            "Compare samples DEMO-ALPHA-001, DEMO-ALPHA-002, and DEMO-BETA-001",
+            response.data["suggestions"],
+        )
+        self.assertNotIn("S-100", str(response.data["suggestions"]))
+
     def test_sample_comparison_honors_bar_chart_and_named_result(self):
         response = self.chat(
             "Compare samples S-100 and S-102 using a bar chart of glucose"
