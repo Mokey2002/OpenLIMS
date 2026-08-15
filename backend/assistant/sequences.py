@@ -9,6 +9,8 @@ from blast.models import BlastDatabase
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
 
+from .intent_matching import compact_command_text, contains_any_intent_phrase
+
 
 SEQUENCE_VALUE_FIELDS = [
     "sequence",
@@ -1272,7 +1274,7 @@ def route_assistant_sequence(message, user, context=None):
 
     pending_blast = context.get("intent") == "RUN_BLAST"
 
-    if pending_blast and lower in [
+    if pending_blast and compact_command_text(text) in [
         "cancel",
         "cancel blast",
         "never mind",
@@ -1290,16 +1292,13 @@ def route_assistant_sequence(message, user, context=None):
             "context": {},
         }
 
-    starts_new_blast = (
-        "blast" in lower
-        and any(
-            lower.startswith(prefix)
-            for prefix in [
-                "run blast",
-                "prepare blast",
-                "start blast",
-            ]
-        )
+    starts_new_blast = contains_any_intent_phrase(
+        text,
+        [
+            "run blast",
+            "prepare blast",
+            "start blast",
+        ],
     )
 
     if pending_blast and starts_new_blast:
@@ -1320,37 +1319,17 @@ def route_assistant_sequence(message, user, context=None):
                 "rna",
             ]
         )
-        explicit_new_request = any(
-            phrase in lower
-            for phrase in [
-                "system status",
-                "what needs attention",
-                "needs attention",
-                "migration",
-                "inventory",
-                "reagent",
-                "quality control",
-                " qc",
-                "qc ",
-                "barcode",
-                "notification",
-                "subscription",
-                "count samples",
-                "samples by status",
-                "sample status",
-                "samples received",
-                "awaiting processing",
-                "compare samples",
-                "compare projects",
-                "compare batches",
-                "investigate",
-                "where is sample",
-                "find sample ",
-                "overdue work",
-                "unassigned work",
-            ]
+        structured_follow_up = bool(
+            re.search(
+                r"\b(?:use|choose|select)\s+(?:sequence|database|blastn|blastp)\b",
+                lower,
+            )
+            or re.search(r"\bsequence\s*#?\s*\d+\b", lower)
+            or re.search(r"\b(?:blastn|blastp|blastx|tblastn|tblastx)\b", lower)
+            or re.fullmatch(r"[A-Za-z]+[-_][A-Za-z0-9_-]+[.!?]?", text)
+            or extract_raw_sequence(text)
         )
-        if explicit_new_request and not still_about_sequences:
+        if not still_about_sequences and not structured_follow_up:
             return None
 
         is_sequence_lookup = (
@@ -1410,4 +1389,3 @@ def route_assistant_sequence(message, user, context=None):
         return find_sample_sequences(text, user)
 
     return summarize_sequence_records(text, user)
-
