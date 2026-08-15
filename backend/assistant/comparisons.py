@@ -14,6 +14,8 @@ from results.models import Result, WorkItem
 from samples.access import get_sample_access_queryset
 from samples.models import Sample, SampleBatch
 
+from .intent_matching import contains_any_intent_phrase
+
 
 MAX_COMPARISON_ENTITIES = 10
 MAX_ANALYSIS_ROWS = 100
@@ -1199,7 +1201,10 @@ def route_comparison_analytics(message, user, context=None):
     previous = dict(context.get("comparison") or {})
     text = str(message or "").strip()
     lower = text.lower()
-    if previous and any(phrase in lower for phrase in ["export this", "download this"]):
+    if previous and contains_any_intent_phrase(
+        text,
+        ["export this", "download this"],
+    ):
         return _comparison_export(context, "CSV" if "csv" in lower else "PDF")
 
     visualization_follow_up = bool(previous) and (
@@ -1228,7 +1233,7 @@ def route_comparison_analytics(message, user, context=None):
         )
     )
     explanation_follow_up = bool(previous) and (
-        any(phrase in lower for phrase in ["why is", "why are"])
+        contains_any_intent_phrase(text, ["why is", "why are"])
         and (
             any(
                 word in lower
@@ -1304,7 +1309,7 @@ def route_comparison_analytics(message, user, context=None):
     if "find unusual" in lower and previous:
         spec["analysis"] = "outliers"
     result = run_comparison_spec(spec, user)
-    if any(phrase in lower for phrase in ["why is", "why are"]):
+    if contains_any_intent_phrase(text, ["why is", "why are"]):
         result = _why_comparison(
             result,
             spec.get("metric", "overview"),
