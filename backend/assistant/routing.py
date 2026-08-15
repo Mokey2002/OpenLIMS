@@ -106,18 +106,33 @@ def classify_route_with_rules(message, context=None):
     if not text:
         return None
 
+    context = context or {}
     route = None
     confidence = 0.0
-    if _contains(text, r"\b(?:compare|comparar|compara|difference between|versus|\bvs\.?\b|outliers?|inusuales?|unusual|bottlenecks?|trend|tendencia)\b"):
+    if (
+        (context.get("result_id") or context.get("result_ids"))
+        and _contains(
+            text,
+            r"\b(?:this|that)\s+(?:value|result)\b|\breference range\b|\bqc rule\b",
+        )
+    ):
+        route, confidence = "qc", 0.98
+    elif _contains(text, r"\b(?:compare|comparar|compara|difference between|versus|\bvs\.?\b|outliers?|inusuales?|unusual|bottlenecks?|trend|tendencia)\b"):
         route, confidence = "comparison", 0.94
     elif _contains(
         text,
         r"\b(?:group|agrupa|agrupar|break\s+down|aggregate)\b.*\b(?:by|per|por)\b|"
         r"\b(?:count|how many)\b.*\b(?:by|per)\b|"
-        r"\b(?:highest|lowest|average|rate)\b.*\b(?:qc|failure|samples?|results?|instrument)\b",
+        r"\b(?:highest|lowest|average|rate)\b.*\b(?:qc|failure|samples?|results?|instrument)\b|"
+        r"\b(?:instrument|project|batch|status)\b.*\b(?:highest|lowest|average|rate|count)\b",
     ):
         route, confidence = "analytics", 0.91
-    elif _contains(text, r"\b(?:what needs (?:my )?attention|what should i (?:review|look at)|priorit(?:y|ies|ize)|qu[eé] necesita mi atenci[oó]n|qu[eé] debo revisar)\b"):
+    elif _contains(
+        text,
+        r"\b(?:what needs (?:my )?attention|what should i (?:review|look at)|"
+        r"priorit(?:y|ies|ize)|qu[eé] necesita mi atenci[oó]n|qu[eé] debo revisar|"
+        r"system health warnings?|system warnings?|health warnings?)\b",
+    ):
         route, confidence = "attention", 0.96
     elif _contains(text, r"\b(?:investigate|investiga|investigar|root cause|causa ra[ií]z|why did|why has|por qu[eé])\b"):
         route, confidence = "investigation", 0.94
@@ -163,7 +178,7 @@ def classify_route_with_rules(message, context=None):
         "confidence": confidence,
         "source": "rules",
         "accepted": True,
-        "context_keys": sorted((context or {}).keys()),
+        "context_keys": sorted(context.keys()),
     }
 
 

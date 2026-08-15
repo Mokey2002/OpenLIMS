@@ -53,6 +53,7 @@ def _is_analytics_request(message):
     return bool(
         re.search(r"\b(?:group|agrupa|agrupar|break down|aggregate)\b.*\b(?:by|per|por)\b", lower)
         or re.search(r"\b(?:count|how many|rate|average|highest|lowest)\b.*\b(?:by|per|instrument|project|batch|status)\b", lower)
+        or re.search(r"\b(?:instrument|project|batch|status)\b.*\b(?:count|rate|average|highest|lowest)\b", lower)
         or (
             re.search(r"\b(?:failed|rejected|pending|approved)\b", lower)
             and re.search(r"\bqc\b", lower)
@@ -121,8 +122,12 @@ def _sample_aggregate(message, user, dimension, days):
     rows = [{"group": item.get(field) or "Unassigned", "count": item["count"]} for item in values]
     title = f"Samples by {dimension.replace('_', ' ')}"
     filters = {"entity": "samples", "group_by": dimension, "days": days}
+    detail = ", ".join(f"{row['group']}: {row['count']}" for row in rows)
+    answer = f"Found {sum(row['count'] for row in rows)} accessible sample(s) across {len(rows)} group(s)."
+    if detail:
+        answer += f" Breakdown: {detail}."
     return {
-        "answer": f"Found {sum(row['count'] for row in rows)} accessible sample(s) across {len(rows)} group(s).",
+        "answer": answer,
         "comparison": _comparison(
             title,
             rows,

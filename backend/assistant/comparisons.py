@@ -278,6 +278,10 @@ def _extract_result_key_candidates(message):
     text = str(message or "").strip()
     patterns = [
         (
+            r"\b(?:plot|chart|graph)\b.*?\b(?:using|with)\s+"
+            r"(?:the\s+)?([A-Za-z0-9][A-Za-z0-9_.:/-]*)\s*$"
+        ),
+        (
             r"(?:scatter\s+(?:plot|chart|graph)|"
             r"(?:bar|line|dot)\s+(?:chart|graph|plot))\s+"
             r"(?:of|for)\s+(.+?)"
