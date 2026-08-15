@@ -63,6 +63,44 @@ class AssistantClarificationTests(APITestCase):
         self.assertEqual(failures.data["clarification"]["topic"], "failure_domain")
         self.assertEqual(inventory.data["clarification"]["topic"], "inventory_scope")
 
+    def test_polite_fillers_do_not_break_clarification_routing(self):
+        qc_samples = self.chat("Could you please show me all the QC samples?")
+        results = self.chat("Would you list all the results for me, please?")
+        inventory = self.chat("Can you show me the current inventory please?")
+
+        self.assertEqual(
+            qc_samples.data["clarification"]["topic"],
+            "qc_samples",
+        )
+        self.assertEqual(results.data["clarification"]["topic"], "result_scope")
+        self.assertEqual(
+            inventory.data["clarification"]["topic"],
+            "inventory_scope",
+        )
+
+    def test_unmatched_request_is_not_rewritten_as_a_fake_tool_result(self):
+        response = self.chat("Could you handle that thing for me?")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data["skip_llm"])
+        self.assertEqual(response.data["mode"], "openlims")
+        self.assertIn("couldn't determine", response.data["answer"].lower())
+        self.assertIn("no attention check", response.data["answer"].lower())
+        self.assertNotIn("migration job number", response.data["answer"].lower())
+
+    def test_unrelated_request_is_not_consumed_by_pending_blast_context(self):
+        response = self.chat(
+            "Could you handle that thing for me?",
+            context={
+                "intent": "RUN_BLAST",
+                "request_text": "Run BLAST for sample S-ALPHA-001",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn("BLAST", response.data["answer"])
+        self.assertTrue(response.data["skip_llm"])
+
     def test_precise_qc_questions_bypass_clarification(self):
         precise_questions = [
             "Show me which samples need QC",

@@ -22,8 +22,6 @@ INSTRUMENT_API_KEY = os.getenv("INSTRUMENT_API_KEY", "")
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-#SECRET_KEY = 'django-insecure-q9tr)+$l2s^d4t-(_b73%1o*b$s%d%74=n@)f)6dmu)li^mxdt'
-
 # SECURITY WARNING: don't run with debug turned on in production!
 #DEBUG = True
 
@@ -182,13 +180,20 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Optional LLM support for the OpenLIMS Assistant.
-# The assistant remains read-only. If no key is configured, it falls back to rule-based mode.
+# Optional LLM support for the OpenLIMS Assistant. Models can classify or explain,
+# but validated OpenLIMS routes remain authoritative for reads and confirmed writes.
 OPENLIMS_ASSISTANT_LLM_PROVIDER = os.getenv("OPENLIMS_ASSISTANT_LLM_PROVIDER", "openai")
 OPENLIMS_ASSISTANT_LLM_ENABLED = os.getenv(
     "OPENLIMS_ASSISTANT_LLM_ENABLED",
     "false",
 ).lower() in ["1", "true", "yes", "on"]
+OPENLIMS_ASSISTANT_LLM_ROUTING_ENABLED = os.getenv(
+    "OPENLIMS_ASSISTANT_LLM_ROUTING_ENABLED",
+    "true",
+).lower() in ["1", "true", "yes", "on"]
+OPENLIMS_ASSISTANT_LLM_ROUTING_MIN_CONFIDENCE = float(
+    os.getenv("OPENLIMS_ASSISTANT_LLM_ROUTING_MIN_CONFIDENCE", "0.65")
+)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
@@ -197,4 +202,3 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
 OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "60"))
-

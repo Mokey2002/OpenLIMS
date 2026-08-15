@@ -8,13 +8,14 @@ from projects.models import Project
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
 from .action_routes import route_confirmed_action_proposal
-from .attention import route_attention_summary
+from .attention import build_attention_summary, route_attention_summary
 from .calculations import route_worklist_or_calculation
 from .charts import route_assistant_chart
 from .clarifications import route_assistant_clarification
 from .comparisons import route_comparison_analytics
 from .investigations import route_investigation_workbench
 from .inventory_operations import route_inventory_operations
+from .intent_matching import contains_any_intent_phrase
 from .barcode_operations import route_barcode_operations
 from .monitoring import route_system_monitoring
 from .notification_operations import route_notification_operations
@@ -419,11 +420,13 @@ def answer_current_user(message, user):
         "whats my name",
         "who am i",
         "who am i logged in as",
+        "who i am logged in as",
+        "which user am i logged in as",
         "what user am i",
         "my username",
     ]
 
-    if not any(phrase in lower for phrase in identity_phrases):
+    if not contains_any_intent_phrase(message, identity_phrases):
         return None
 
     username = getattr(user, "username", "") or "Unknown"
@@ -448,10 +451,91 @@ def answer_current_user(message, user):
     }
 
 
-def route_assistant_message(message, user, context=None):
+def _route_from_hint(message, user, context, route_hint):
+    route = str((route_hint or {}).get("route") or "").strip().lower()
+    contextual_routers = {
+        "barcode": route_barcode_operations,
+        "comparison": route_comparison_analytics,
+        "investigation": route_investigation_workbench,
+        "inventory": route_inventory_operations,
+        "notifications": route_notification_operations,
+        "qc": route_qc_operations,
+        "reporting": route_reporting_operations,
+        "samples": route_sample_management,
+        "sequences": route_assistant_sequence,
+        "sop": route_sop_assistant,
+        "work_items": route_workitem_operations,
+    }
+    if route == "identity":
+        return answer_current_user(message, user) or answer_current_user("Who am I?", user)
+    if route == "monitoring":
+        return route_system_monitoring(message, user, context=context) or route_system_monitoring(
+            "Show system status",
+            user,
+            context=context,
+        )
+    if route == "attention":
+        return route_attention_summary(message, user) or build_attention_summary(user)
+    if route == "clarification":
+        return route_assistant_clarification(message, context=context)
+    if route == "confirmed_action":
+        return route_confirmed_action_proposal(message, user)
+    if route == "chart":
+        return route_assistant_chart(message, user)
+    if route == "calculation":
+        return route_worklist_or_calculation(message, user)
+    router = contextual_routers.get(route)
+    if router:
+        return router(message, user, context=context)
+    return None
+
+
+def _hint_clarification(route_hint):
+    route = str((route_hint or {}).get("route") or "unknown").strip().lower()
+    suggestions = {
+        "barcode": ["Create barcode labels for batch B-100"],
+        "calculation": ["Count samples by status", "How many samples need QC?"],
+        "chart": ["Graph sample status counts", "Graph QC failure rates by sample"],
+        "comparison": ["Compare projects PRJ-ALPHA and PRJ-BETA"],
+        "confirmed_action": ["Run alignment for sequences 12, 13"],
+        "investigation": ["Investigate why sample S-ALPHA-003 failed QC"],
+        "inventory": ["Show inventory below its reorder level", "Which reagents expire in the next 30 days?"],
+        "migration": ["Show failed migration jobs", "Show failed migration rows"],
+        "notifications": ["List notification subscriptions"],
+        "qc": ["Show samples needing QC review", "Show samples that failed QC"],
+        "record_search": ["Find sample S-ALPHA-001", "Summarize project PRJ-ALPHA"],
+        "reporting": ["Generate an audit report for project PRJ-ALPHA"],
+        "samples": ["Show samples received today", "Find sample S-ALPHA-001"],
+        "sequences": ["Find sample sequences", "Summarize BLAST results"],
+        "sop": ["Which SOP covers QC review?"],
+        "work_items": ["Show overdue work", "Show unassigned work today"],
+    }.get(route, [])
+    if not suggestions:
+        return None
+    label = route.replace("_", " ")
+    return {
+        "answer": (
+            f"I interpreted this as a {label} request, but I need a more specific "
+            "target or operation before OpenLIMS runs anything."
+        ),
+        "links": [],
+        "suggestions": suggestions,
+        "skip_llm": True,
+    }
+
+
+def route_assistant_message(message, user, context=None, route_hint=None):
     context = context or {}
     query = clean_query(message)
     lower = query.lower()
+
+    if route_hint:
+        hinted_result = _route_from_hint(query, user, context, route_hint)
+        if hinted_result:
+            return hinted_result
+        hinted_clarification = _hint_clarification(route_hint)
+        if hinted_clarification:
+            return hinted_clarification
 
     current_user_result = answer_current_user(query, user)
     if current_user_result:
@@ -603,9 +687,9 @@ def route_assistant_message(message, user, context=None):
 
     return {
         "answer": (
-            "I couldn't find a matching sample, project, migration job, or migration row. "
-            "Try using a sample ID, project code, migration job number, or a phrase like "
-            "'show failed migration rows'."
+            "I couldn't determine which OpenLIMS operation or record you meant. "
+            "No attention check, record search, or workflow action was run. "
+            "Try a more specific request or choose one of the suggestions below."
         ),
         "links": [],
         "suggestions": [
@@ -614,4 +698,6 @@ def route_assistant_message(message, user, context=None):
             "Show failed migration jobs",
             "Show skipped migration rows",
         ],
+        "skip_llm": True,
+        "route_unmatched": True,
     }

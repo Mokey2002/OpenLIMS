@@ -14,6 +14,8 @@ from results.models import WorkItem
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
 
+from .intent_matching import contains_any_intent_phrase, normalize_intent_text
+
 
 ATTENTION_AGE_DAYS = 3
 LINK_LIMIT_PER_CATEGORY = 5
@@ -46,18 +48,25 @@ def attention_link(label, url, kind, extra=None):
 
 
 def detect_attention_scope(message):
-    lower = str(message or "").strip().lower()
+    lower = normalize_intent_text(message)
 
-    if any(
-        phrase in lower
-        for phrase in [
+    if contains_any_intent_phrase(
+        message,
+        [
             "what needs attention",
             "needs attention",
             "attention summary",
             "what should i review",
             "what should we review",
+            "anything i need to review",
+            "anything requiring review",
+            "what should i focus on",
+            "what are my action items",
+            "do i have anything pending",
+            "anything pending for me",
+            "what is pending for me",
             "operational warnings",
-        ]
+        ],
     ):
         if "qc" in lower:
             return "qc"
@@ -65,74 +74,74 @@ def detect_attention_scope(message):
             return "samples"
         return "all"
 
-    if any(
-        phrase in lower
-        for phrase in [
+    if contains_any_intent_phrase(
+        message,
+        [
             "show stuck samples",
             "which samples are stuck",
             "stale samples",
-        ]
+        ],
     ):
         return "stuck_samples"
 
-    if any(
-        phrase in lower
-        for phrase in [
+    if contains_any_intent_phrase(
+        message,
+        [
             "samples missing information",
             "missing sample information",
             "missing required information",
-        ]
+        ],
     ):
         return "missing_sample_information"
 
-    if any(
-        phrase in lower
-        for phrase in [
+    if contains_any_intent_phrase(
+        message,
+        [
             "qc reviews",
             "qc failures",
             "failed qc",
             "pending qc",
-        ]
+        ],
     ):
         return "qc"
 
-    if any(
-        phrase in lower
-        for phrase in [
+    if contains_any_intent_phrase(
+        message,
+        [
             "overdue work",
             "old work items",
             "stale work items",
-        ]
+        ],
     ):
         return "overdue_work_items"
 
-    if any(
-        phrase in lower
-        for phrase in [
+    if contains_any_intent_phrase(
+        message,
+        [
             "show failed jobs",
             "failed background jobs",
             "failed import blast alignment",
-        ]
+        ],
     ):
         return "failed_jobs"
 
-    if any(
-        phrase in lower
-        for phrase in [
+    if contains_any_intent_phrase(
+        message,
+        [
             "system warnings",
             "system health warnings",
             "health warnings",
-        ]
+        ],
     ):
         return "system_health"
 
-    if any(
-        phrase in lower
-        for phrase in [
+    if contains_any_intent_phrase(
+        message,
+        [
             "inventory warnings",
             "low stock",
             "expiring inventory",
-        ]
+        ],
     ):
         return "inventory"
 

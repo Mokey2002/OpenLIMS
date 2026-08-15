@@ -13,6 +13,8 @@ from alignments.models import AlignmentJob
 from blast.models import BlastJob
 from imports.models import ImportJob
 
+from .intent_matching import contains_any_intent_phrase
+
 
 def _check_database():
     try:
@@ -159,8 +161,20 @@ def build_admin_monitoring_status():
 
 def route_system_monitoring(message, user, context=None):
     del context
-    lower = str(message or "").lower()
-    if not any(phrase in lower for phrase in ["system status", "system monitoring", "api health", "worker availability", "queue depth"]):
+    if not contains_any_intent_phrase(
+        message,
+        [
+            "system status",
+            "system monitoring",
+            "how is the system doing",
+            "is the system healthy",
+            "check system health",
+            "service health",
+            "api health",
+            "worker availability",
+            "queue depth",
+        ],
+    ):
         return None
     if not (user.is_superuser or user.groups.filter(name="admin").exists()):
         return {

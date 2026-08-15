@@ -19,6 +19,7 @@ from results.models import Result
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
 
+from .intent_matching import contains_any_intent_phrase
 from .models import NotificationDelivery, NotificationSubscription
 
 
@@ -140,14 +141,14 @@ def route_notification_operations(message, user, context=None):
     if cancelled:
         return cancelled
     notification_request = any(word in lower for word in ["notify", "alert"])
-    notification_request = notification_request or any(
-        phrase in lower
-        for phrase in [
+    notification_request = notification_request or contains_any_intent_phrase(
+        message,
+        [
             "tell me when",
             "tell me if",
             "let me know when",
             "let me know if",
-        ]
+        ],
     )
     if not notification_request:
         return None
