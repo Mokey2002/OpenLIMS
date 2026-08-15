@@ -6,6 +6,30 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+ASSISTANT_ROUTES = {
+    "attention",
+    "barcode",
+    "calculation",
+    "chart",
+    "clarification",
+    "comparison",
+    "confirmed_action",
+    "identity",
+    "investigation",
+    "inventory",
+    "migration",
+    "monitoring",
+    "notifications",
+    "qc",
+    "record_search",
+    "reporting",
+    "samples",
+    "sequences",
+    "sop",
+    "unknown",
+    "work_items",
+}
+
 try:
     from openai import OpenAI
 except Exception:
@@ -36,6 +60,12 @@ def assistant_llm_enabled():
         )
 
     return False
+
+
+def assistant_llm_routing_enabled():
+    return bool(
+        getattr(settings, "OPENLIMS_ASSISTANT_LLM_ROUTING_ENABLED", True)
+    ) and assistant_llm_enabled()
 
 
 def model_info_for(mode, error=""):
@@ -118,6 +148,61 @@ OpenLIMS tool result:
 """
 
 
+def build_route_classifier_prompt(message, context=None):
+    context = context or {}
+    active_context = [
+        key
+        for key in ["comparison", "investigation", "intent", "result_id", "sample_id"]
+        if context.get(key)
+    ]
+    route_descriptions = {
+        "attention": "general priorities, pending items, or what needs review",
+        "barcode": "create or reprint sample barcode labels",
+        "calculation": "counts, percentages, or worklists",
+        "chart": "an explicitly requested graph, plot, or chart",
+        "clarification": "an underspecified samples, results, failures, or inventory request",
+        "comparison": "compare samples, projects, or batches; trends, outliers, bottlenecks",
+        "confirmed_action": "run alignment/import/report or create migration mappings",
+        "identity": "current signed-in username or identity",
+        "investigation": "investigate a QC failure or its evidence and possible associations",
+        "inventory": "locations, reagent stock, lots, reservations, consumption, expiration",
+        "migration": "migration/import jobs or migration rows",
+        "monitoring": "system, API, worker, queue, database, or service health",
+        "notifications": "create, list, or cancel an alert/subscription",
+        "qc": "QC worklists, failures, approvals, results, or review actions",
+        "record_search": "find or summarize a project, sample, migration job, or row",
+        "reporting": "compliance or audit report generation",
+        "samples": "sample lookup, creation, status, archive, batch, or assignment",
+        "sequences": "sequence lookup, BLAST, FASTA, DNA, RNA, or protein",
+        "sop": "approved SOP, policy, procedure, or documentation question",
+        "unknown": "none of the supported routes is sufficiently clear",
+        "work_items": "create, assign, or list laboratory work items",
+    }
+    routes = "\n".join(
+        f"- {name}: {description}"
+        for name, description in route_descriptions.items()
+    )
+    return f"""
+Classify one OpenLIMS user request. Do not answer the request and do not run a tool.
+
+Return strict JSON only with this shape:
+{{"route": "one_allowed_route", "confidence": 0.0}}
+
+Allowed routes:
+{routes}
+
+Rules:
+- Select chart only when the user explicitly requests a visual.
+- Select attention for broad questions about priorities, pending work, or what needs review.
+- Select clarification when the domain is named but the requested subset is ambiguous.
+- Existing context may help interpret short follow-ups, but must not override an unrelated new request.
+- Use unknown when uncertain. Never invent identifiers or facts.
+
+Active context types: {safe_json(active_context)}
+User request: {message}
+"""
+
+
 def call_openai(prompt):
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
@@ -130,7 +215,7 @@ def call_openai(prompt):
     return getattr(response, "output_text", "").strip()
 
 
-def call_ollama(prompt):
+def call_ollama(prompt, system_message=None, json_response=False):
     base_url = str(
         getattr(settings, "OLLAMA_BASE_URL", "http://ollama:11434")
     ).rstrip("/")
@@ -143,7 +228,7 @@ def call_ollama(prompt):
         "messages": [
             {
                 "role": "system",
-                "content": (
+                "content": system_message or (
                     "You are the OpenLIMS Assistant. You are read-only. "
                     "Only summarize the OpenLIMS tool result. Do not invent data. "
                     "Never make claims about unlisted records or broaden the result scope."
@@ -155,6 +240,9 @@ def call_ollama(prompt):
             },
         ],
     }
+    if json_response:
+        payload["format"] = "json"
+        payload["options"] = {"temperature": 0}
 
     data = json.dumps(payload).encode("utf-8")
 
@@ -170,6 +258,67 @@ def call_ollama(prompt):
 
     parsed = json.loads(raw)
     return parsed.get("message", {}).get("content", "").strip()
+
+
+def _parse_route_classification(raw):
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            data = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return None
+    route = str(data.get("route") or "").strip().lower()
+    if route not in ASSISTANT_ROUTES:
+        return None
+    try:
+        confidence = float(data.get("confidence", 0))
+    except (TypeError, ValueError):
+        return None
+    threshold = float(
+        getattr(settings, "OPENLIMS_ASSISTANT_LLM_ROUTING_MIN_CONFIDENCE", 0.65)
+    )
+    if confidence < threshold:
+        return None
+    return {
+        "route": route,
+        "confidence": min(max(confidence, 0.0), 1.0),
+    }
+
+
+def classify_route_with_llm(message, context=None):
+    if not assistant_llm_routing_enabled():
+        return None
+    provider = llm_provider()
+    prompt = build_route_classifier_prompt(message, context=context)
+    try:
+        if provider == "openai":
+            raw = call_openai(prompt)
+        elif provider == "ollama":
+            raw = call_ollama(
+                prompt,
+                system_message=(
+                    "You are a constrained OpenLIMS intent classifier. "
+                    "Return JSON only. Never answer the user or invent a route."
+                ),
+                json_response=True,
+            )
+        else:
+            return None
+        result = _parse_route_classification(raw)
+        if result:
+            result["provider"] = provider
+        return result
+    except Exception as exc:
+        logger.warning("OpenLIMS LLM route classification unavailable: %s", exc)
+        return None
 
 
 def enhance_with_llm(message, tool_result):
