@@ -14,6 +14,8 @@ from results.models import Result, WorkItem
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
 
+from .intent_matching import contains_any_intent_phrase
+
 
 MAX_COHORT_SAMPLES = 250
 MAX_TIMELINE_EVENTS = 100
@@ -703,7 +705,10 @@ def route_investigation_workbench(message, user, context=None):
     previous = dict(context.get("investigation") or {})
     text = str(message or "").strip()
     lower = text.lower()
-    if previous and any(phrase in lower for phrase in ["export this", "download this"]):
+    if previous and contains_any_intent_phrase(
+        text,
+        ["export this", "download this"],
+    ):
         return _export_investigation(context, "CSV" if "csv" in lower else "PDF")
 
     visualization_requested = any(
@@ -721,20 +726,20 @@ def route_investigation_workbench(message, user, context=None):
         "workflow",
         "similar",
     )
-    explicit_context_reference = any(
-        phrase in lower
-        for phrase in [
+    explicit_context_reference = contains_any_intent_phrase(
+        text,
+        [
             "this investigation",
             "the investigation",
             "this failure",
             "these findings",
             "this sample",
             "this result",
-        ]
+        ],
     )
-    focused_follow_up = any(
-        phrase in lower
-        for phrase in [
+    focused_follow_up = contains_any_intent_phrase(
+        text,
+        [
             "show reagent lot context",
             "show instrument import context",
             "show instrument evidence",
@@ -746,7 +751,7 @@ def route_investigation_workbench(message, user, context=None):
             "group by instrument",
             "group by reagent",
             "group by workflow",
-        ]
+        ],
     )
     follow_up = bool(previous) and (
         focused_follow_up
@@ -770,7 +775,7 @@ def route_investigation_workbench(message, user, context=None):
     )
     if not trigger and "sample" in lower:
         trigger = bool(
-            any(phrase in lower for phrase in ["why did", "why has", "why is"])
+            contains_any_intent_phrase(text, ["why did", "why has", "why is"])
             and re.search(r"\b(?:fail(?:ed|ing)?\s+qc|qc\s+failure)\b", lower)
         )
     if not trigger and not follow_up:
