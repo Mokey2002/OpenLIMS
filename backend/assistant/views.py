@@ -18,7 +18,7 @@ from .actions import (
     propose_action,
     serialize_action,
 )
-from .llm import configured_model_info, enhance_with_llm
+from .llm import classify_route_with_llm, configured_model_info, enhance_with_llm
 from .models import AssistantAction
 from .models import GeneratedArtifact, NotificationSubscription, SOPDocument
 from .monitoring import build_admin_monitoring_status
@@ -99,6 +99,23 @@ class AssistantChatView(APIView):
             user=request.user,
             context=context,
         )
+        unmatched = result.pop("route_unmatched", False)
+        if unmatched:
+            route_hint = classify_route_with_llm(message, context=context)
+            if route_hint:
+                hinted_result = route_assistant_message(
+                    message=message,
+                    user=request.user,
+                    context=context,
+                    route_hint=route_hint,
+                )
+                hinted_result.pop("route_unmatched", None)
+                hinted_result["routing"] = {
+                    "source": f"{route_hint.get('provider', 'llm')}_fallback",
+                    "route": route_hint.get("route", "unknown"),
+                    "confidence": route_hint.get("confidence", 0),
+                }
+                result = hinted_result
         proposal = result.pop("pending_action", None)
 
         if proposal:
