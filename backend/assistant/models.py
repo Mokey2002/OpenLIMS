@@ -322,3 +322,78 @@ class NotificationDelivery(models.Model):
                 name="notification_delivery_unique",
             )
         ]
+
+
+class AssistantInteraction(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="assistant_interactions",
+    )
+    message_hash = models.CharField(max_length=64)
+    route = models.CharField(max_length=64, default="unknown")
+    routing_source = models.CharField(max_length=64, default="rules")
+    confidence = models.FloatField(default=0.0)
+    response_type = models.CharField(max_length=64, default="text")
+    record_count = models.PositiveIntegerField(default=0)
+    clarification_requested = models.BooleanField(default=False)
+    success = models.BooleanField(default=True)
+    latency_ms = models.PositiveIntegerField(default=0)
+    context_keys = models.JSONField(default=list, blank=True)
+    error_code = models.CharField(max_length=128, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["route", "success", "created_at"],
+                name="asst_route_success_idx",
+            ),
+            models.Index(
+                fields=["user", "created_at"],
+                name="asst_user_created_idx",
+            ),
+        ]
+
+
+class AssistantFeedback(models.Model):
+    RATING_UP = "UP"
+    RATING_DOWN = "DOWN"
+    RATING_CHOICES = [
+        (RATING_UP, "Helpful"),
+        (RATING_DOWN, "Not helpful"),
+    ]
+    CATEGORY_CHOICES = [
+        ("", "No category"),
+        ("WRONG_ROUTE", "Wrong route"),
+        ("WRONG_RECORDS", "Wrong records"),
+        ("MISSING_DETAIL", "Missing detail"),
+        ("UNWANTED_CHART", "Unwanted chart"),
+        ("OTHER", "Other"),
+    ]
+
+    interaction = models.ForeignKey(
+        AssistantInteraction,
+        on_delete=models.CASCADE,
+        related_name="feedback",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="assistant_feedback",
+    )
+    rating = models.CharField(max_length=8, choices=RATING_CHOICES)
+    category = models.CharField(max_length=32, choices=CATEGORY_CHOICES, blank=True, default="")
+    note = models.CharField(max_length=1000, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["interaction", "user"],
+                name="assistant_feedback_user_unique",
+            )
+        ]

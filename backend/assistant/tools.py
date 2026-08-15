@@ -3,17 +3,20 @@ from collections import Counter
 
 from django.db.models import Q
 
+from core.permissions import is_admin
 from migration_toolkit.models import MigrationJob, MigrationRowRecord
 from projects.models import Project
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
 from .action_routes import route_confirmed_action_proposal
+from .analytics import route_safe_analytics
 from .attention import build_attention_summary, route_attention_summary
 from .calculations import route_worklist_or_calculation
 from .charts import route_assistant_chart
 from .clarifications import route_assistant_clarification
 from .comparisons import route_comparison_analytics
 from .conversation import general_question_result, route_conversation_utility
+from .entity_resolution import entity_clarification, entity_identifier, resolve_entities
 from .investigations import route_investigation_workbench
 from .inventory_operations import route_inventory_operations
 from .intent_matching import contains_any_intent_phrase
@@ -33,6 +36,68 @@ from .suggestions import (
     sample_prompt,
     without_empty,
 )
+from .routing import classify_route_with_rules
+
+
+def _routed(result, route, source="rules", confidence=1.0, plan=None):
+    if not result:
+        return result
+    routed = dict(result)
+    routed.setdefault(
+        "routing",
+        {
+            "source": source,
+            "route": route,
+            "confidence": confidence,
+            "plan": {
+                key: value
+                for key, value in (plan or {}).items()
+                if key in {"intent", "entities", "entity_resolution", "filters", "metrics", "chart_type"}
+            },
+        },
+    )
+    return routed
+
+
+def _resolve_plan_entities(message, plan, user):
+    plan = dict(plan or {})
+    entities = list(plan.get("entities") or [])
+    if not entities:
+        return message, plan, None
+    rewritten = str(message or "")
+    normalized_entities = []
+    resolution_meta = {"corrected": {}, "missing": []}
+    for kind in ["sample", "project", "batch"]:
+        requested = [
+            entity.get("identifier")
+            for entity in entities
+            if entity.get("kind") == kind and entity.get("identifier")
+        ]
+        if not requested:
+            continue
+        resolution = resolve_entities(kind, requested, user, limit=10)
+        clarification = entity_clarification(kind, resolution)
+        if clarification:
+            return rewritten, plan, clarification
+        resolution_meta["corrected"].update(resolution["corrected"])
+        resolution_meta["missing"].extend(resolution["missing"])
+        for original, corrected in resolution["corrected"].items():
+            rewritten = re.sub(
+                rf"(?<![A-Za-z0-9_-]){re.escape(original)}(?![A-Za-z0-9_-])",
+                corrected,
+                rewritten,
+                flags=re.IGNORECASE,
+            )
+        normalized_entities.extend(
+            {"kind": kind, "identifier": entity_identifier(kind, entity)}
+            for entity in resolution["entities"]
+        )
+    normalized_entities.extend(
+        entity for entity in entities if entity.get("kind") == "result"
+    )
+    plan["entities"] = normalized_entities[:10]
+    plan["entity_resolution"] = resolution_meta
+    return rewritten, plan, None
 
 
 def make_link(label, url, kind="record", extra=None):
@@ -188,7 +253,16 @@ def search_samples(message, user, limit=10):
     samples = list(queryset.filter(filters).distinct()[:limit])
 
     if not samples:
-        return None
+        tokens = extract_sample_like_tokens(query)
+        if not tokens:
+            return None
+        resolution = resolve_entities("sample", tokens, user, limit=limit)
+        clarification = entity_clarification("sample", resolution)
+        if clarification:
+            return clarification
+        samples = resolution["entities"]
+        if not samples:
+            return None
 
     lines = [f"Found {len(samples)} matching sample(s):"]
     links = []
@@ -226,12 +300,15 @@ def search_samples(message, user, limit=10):
 
 def search_projects(message, user, limit=10):
     query = clean_query(message)
+    base_queryset = Project.objects.all()
+    if not is_admin(user):
+        base_queryset = base_queryset.filter(members=user).distinct()
 
-    queryset = Project.objects.filter(
+    queryset = base_queryset.filter(
         Q(code__icontains=query) | Q(name__icontains=query)
     ).order_by("code")
 
-    exact_project = Project.objects.filter(
+    exact_project = base_queryset.filter(
         Q(code__iexact=query) | Q(name__iexact=query)
     ).first()
 
@@ -241,7 +318,16 @@ def search_projects(message, user, limit=10):
     projects = list(queryset[:limit])
 
     if not projects:
-        return None
+        tokens = extract_sample_like_tokens(query)
+        resolution = resolve_entities("project", tokens, user, limit=limit) if tokens else None
+        if not resolution:
+            return None
+        clarification = entity_clarification("project", resolution)
+        if clarification:
+            return clarification
+        projects = resolution["entities"]
+        if not projects:
+            return None
 
     if len(projects) == 1:
         return summarize_project(projects[0], user)
@@ -462,6 +548,7 @@ def answer_current_user(message, user):
 def _route_from_hint(message, user, context, route_hint):
     route = str((route_hint or {}).get("route") or "").strip().lower()
     contextual_routers = {
+        "analytics": route_safe_analytics,
         "barcode": route_barcode_operations,
         "comparison": route_comparison_analytics,
         "investigation": route_investigation_workbench,
@@ -548,36 +635,77 @@ def route_assistant_message(message, user, context=None, route_hint=None):
     lower = query.lower()
 
     if route_hint:
+        query, route_hint, entity_question = _resolve_plan_entities(
+            query,
+            route_hint,
+            user,
+        )
+        if entity_question:
+            return _routed(
+                entity_question,
+                route_hint.get("route", "unknown"),
+                source=route_hint.get("provider", route_hint.get("source", "llm")),
+                confidence=route_hint.get("confidence", 0),
+                plan=route_hint,
+            )
         hinted_result = _route_from_hint(query, user, context, route_hint)
         if hinted_result:
-            return hinted_result
+            return _routed(
+                hinted_result,
+                route_hint.get("route", "unknown"),
+                source=route_hint.get("provider", route_hint.get("source", "llm")),
+                confidence=route_hint.get("confidence", 0),
+                plan=route_hint,
+            )
         hinted_clarification = _hint_clarification(route_hint, user)
         if hinted_clarification:
-            return hinted_clarification
+            return _routed(
+                hinted_clarification,
+                route_hint.get("route", "unknown"),
+                source=route_hint.get("provider", route_hint.get("source", "llm")),
+                confidence=route_hint.get("confidence", 0),
+                plan=route_hint,
+            )
 
     current_user_result = answer_current_user(query, user)
     if current_user_result:
-        return current_user_result
+        return _routed(current_user_result, "identity")
 
     conversation_result = route_conversation_utility(query, user=user)
     if conversation_result:
-        return conversation_result
+        return _routed(conversation_result, "general")
 
     monitoring_result = route_system_monitoring(query, user, context=context)
     if monitoring_result:
-        return monitoring_result
+        return _routed(monitoring_result, "monitoring")
 
     clarification_result = route_assistant_clarification(query, context=context)
     if clarification_result:
-        return clarification_result
+        return _routed(clarification_result, "clarification")
+
+    rule_plan = classify_route_with_rules(query, context=context)
+    if rule_plan:
+        planned_result = _route_from_hint(query, user, context, rule_plan)
+        if planned_result:
+            return _routed(
+                planned_result,
+                rule_plan["route"],
+                source="rules",
+                confidence=rule_plan["confidence"],
+                plan=rule_plan,
+            )
 
     sop_result = route_sop_assistant(query, user, context=context)
     if sop_result:
-        return sop_result
+        return _routed(sop_result, "sop")
+
+    analytics_result = route_safe_analytics(query, user, context=context)
+    if analytics_result:
+        return _routed(analytics_result, "analytics")
 
     qc_result = route_qc_operations(query, user, context=context)
     if qc_result:
-        return qc_result
+        return _routed(qc_result, "qc")
 
     investigation_result = route_investigation_workbench(
         query,
@@ -585,7 +713,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         context=context,
     )
     if investigation_result:
-        return investigation_result
+        return _routed(investigation_result, "investigation")
 
     comparison_result = route_comparison_analytics(
         query,
@@ -593,7 +721,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         context=context,
     )
     if comparison_result:
-        return comparison_result
+        return _routed(comparison_result, "comparison")
 
     sample_management_result = route_sample_management(
         query,
@@ -601,35 +729,35 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         context=context,
     )
     if sample_management_result:
-        return sample_management_result
+        return _routed(sample_management_result, "samples")
 
     inventory_result = route_inventory_operations(query, user, context=context)
     if inventory_result:
-        return inventory_result
+        return _routed(inventory_result, "inventory")
 
     workitem_result = route_workitem_operations(query, user, context=context)
     if workitem_result:
-        return workitem_result
+        return _routed(workitem_result, "work_items")
 
     barcode_result = route_barcode_operations(query, user, context=context)
     if barcode_result:
-        return barcode_result
+        return _routed(barcode_result, "barcode")
 
     notification_result = route_notification_operations(query, user, context=context)
     if notification_result:
-        return notification_result
+        return _routed(notification_result, "notifications")
 
     reporting_result = route_reporting_operations(query, user, context=context)
     if reporting_result:
-        return reporting_result
+        return _routed(reporting_result, "reporting")
 
     confirmed_action_result = route_confirmed_action_proposal(query, user)
     if confirmed_action_result:
-        return confirmed_action_result
+        return _routed(confirmed_action_result, "confirmed_action")
 
     attention_result = route_attention_summary(query, user)
     if attention_result:
-        return attention_result
+        return _routed(attention_result, "attention")
 
     sequence_result = route_assistant_sequence(
         query,
@@ -637,18 +765,18 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         context=context,
     )
     if sequence_result:
-        return sequence_result
+        return _routed(sequence_result, "sequences")
 
     chart_result = route_assistant_chart(query, user)
     if chart_result:
-        return chart_result
+        return _routed(chart_result, "chart")
 
     worklist_or_calculation_result = route_worklist_or_calculation(query, user)
     if worklist_or_calculation_result:
-        return worklist_or_calculation_result
+        return _routed(worklist_or_calculation_result, "calculation")
 
     if not query:
-        return {
+        return _routed({
             "answer": "Ask me about samples, projects, migration jobs, skipped rows, failed imports, or where a sample is located.",
             "links": [],
             "suggestions": without_empty(
@@ -657,7 +785,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
                 "Show failed migration jobs",
                 "Show skipped migration rows",
             ),
-        }
+        }, "unknown", confidence=0)
 
     if "migration" in lower or "import" in lower or "skipped" in lower or "failed" in lower or "error" in lower:
         if "row" in lower or "skipped" in lower or "failed" in lower or "error" in lower:
@@ -667,7 +795,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
                     "Show failed migration jobs",
                     "Show skipped migration rows",
                 ]
-                return row_result
+                return _routed(row_result, "migration")
 
         job_result = search_migration_jobs(query)
         if job_result:
@@ -676,7 +804,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
                 "Show failed migration jobs",
                 "Find samples created by this import",
             ]
-            return job_result
+            return _routed(job_result, "migration")
 
     if "project" in lower or "prj-" in lower:
         project_result = search_projects(query, user)
@@ -686,7 +814,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
                 "Show migration rows for this project",
                 "Show failed imports",
             ]
-            return project_result
+            return _routed(project_result, "record_search")
 
     sample_result = search_samples(query, user)
     if sample_result:
@@ -695,7 +823,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
             "Show related migration rows",
             "Search another sample ID",
         ]
-        return sample_result
+        return _routed(sample_result, "record_search")
 
     project_result = search_projects(query, user)
     if project_result:
@@ -704,9 +832,9 @@ def route_assistant_message(message, user, context=None, route_hint=None):
             "Show samples in this project",
             "Show migration jobs",
         ]
-        return project_result
+        return _routed(project_result, "record_search")
 
-    return {
+    return _routed({
         "answer": (
             "I couldn't determine which OpenLIMS operation or record you meant. "
             "No attention check, record search, or workflow action was run. "
@@ -721,4 +849,4 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         ),
         "skip_llm": True,
         "route_unmatched": True,
-    }
+    }, "unknown", confidence=0)

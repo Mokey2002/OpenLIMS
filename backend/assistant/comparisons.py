@@ -15,6 +15,7 @@ from samples.access import get_sample_access_queryset
 from samples.models import Sample, SampleBatch
 
 from .intent_matching import contains_any_intent_phrase
+from .entity_resolution import entity_clarification, resolve_entities
 from .suggestions import (
     accessible_batch_codes,
     accessible_project_codes,
@@ -94,48 +95,17 @@ def _entity_label(kind, entity):
 
 
 def _resolve_entities(kind, identifiers, user):
-    wanted = [str(value).strip() for value in (identifiers or []) if str(value).strip()]
-    if kind == "sample":
-        queryset = _accessible_samples(user)
-        filters = Q()
-        for value in wanted:
-            filters |= Q(sample_id__iexact=value)
-        candidates = list(queryset.filter(filters)) if filters else []
-        by_key = {sample.sample_id.lower(): sample for sample in candidates}
-        ordered = [by_key[value.lower()] for value in wanted if value.lower() in by_key]
-    elif kind == "project":
-        queryset = _accessible_projects(user)
-        filters = Q()
-        for value in wanted:
-            filters |= Q(code__iexact=value) | Q(name__iexact=value)
-        candidates = list(queryset.filter(filters)) if filters else []
-        by_key = {}
-        for project in candidates:
-            by_key[project.code.lower()] = project
-            by_key[project.name.lower()] = project
-        ordered = [by_key[value.lower()] for value in wanted if value.lower() in by_key]
-    elif kind == "batch":
-        queryset = _accessible_batches(user)
-        filters = Q()
-        for value in wanted:
-            filters |= Q(code__iexact=value)
-        candidates = list(queryset.filter(filters)) if filters else []
-        by_key = {batch.code.lower(): batch for batch in candidates}
-        ordered = [by_key[value.lower()] for value in wanted if value.lower() in by_key]
-    else:
-        return [], wanted
-
-    unique = []
-    seen = set()
-    for entity in ordered:
-        if entity.pk not in seen:
-            unique.append(entity)
-            seen.add(entity.pk)
-    resolved_aliases = {_entity_key(kind, entity).lower() for entity in unique}
-    if kind == "project":
-        resolved_aliases.update(entity.name.lower() for entity in unique)
-    missing = [value for value in wanted if value.lower() not in resolved_aliases]
-    return unique[:MAX_COMPARISON_ENTITIES], missing
+    resolution = resolve_entities(
+        kind,
+        identifiers,
+        user,
+        limit=MAX_COMPARISON_ENTITIES,
+    )
+    unresolved = [
+        *resolution["missing"],
+        *resolution["ambiguous"].keys(),
+    ]
+    return resolution["entities"], unresolved
 
 
 def _explicit_identifier_candidates(message, kind):
@@ -1712,6 +1682,20 @@ def route_comparison_analytics(message, user, context=None):
     )
     identifier_follow_up = awaiting_identifiers and bool(identifier_follow_up_values)
     style_follow_up = bool(previous) and requested_chart_type is not None
+    previous_kind = str(previous.get("kind") or "sample")
+    mentioned_follow_up_values = (
+        _requested_identifiers(text, previous_kind, user) if previous else []
+    )
+    selection_edit_follow_up = bool(previous) and bool(mentioned_follow_up_values) and bool(
+        re.search(r"\b(?:add|also|exclude|include|remove|without)\b", lower)
+    )
+    metric_follow_up = bool(previous) and bool(
+        re.search(r"\b(?:compare|show|use|using)\b", lower)
+        and (
+            re.search(r"\b(?:it|them|these|those|same)\b", lower)
+            or not re.search(r"\b(?:samples?|projects?|batches?)\b", lower)
+        )
+    )
     follow_up = any(
         [
             visualization_follow_up,
@@ -1719,6 +1703,8 @@ def route_comparison_analytics(message, user, context=None):
             explanation_follow_up,
             style_follow_up,
             identifier_follow_up,
+            selection_edit_follow_up,
+            metric_follow_up,
         ]
     )
 
@@ -1759,6 +1745,20 @@ def route_comparison_analytics(message, user, context=None):
         if identifier_follow_up:
             spec["identifiers"] = identifier_follow_up_values
             spec.pop("awaiting_identifiers", None)
+        elif selection_edit_follow_up:
+            current = list(spec.get("identifiers") or [])
+            if re.search(r"\b(?:exclude|remove|without)\b", lower):
+                remove = {value.casefold() for value in mentioned_follow_up_values}
+                spec["identifiers"] = [
+                    value for value in current if str(value).casefold() not in remove
+                ]
+            else:
+                seen = {str(value).casefold() for value in current}
+                spec["identifiers"] = current + [
+                    value
+                    for value in mentioned_follow_up_values
+                    if value.casefold() not in seen
+                ]
     else:
         if "batch" in lower:
             kind = "batch"
@@ -1794,6 +1794,27 @@ def route_comparison_analytics(message, user, context=None):
         spec["identifiers"] = previous.get("identifiers", [])
     if "find unusual" in lower and previous:
         spec["analysis"] = "outliers"
+    if spec.get("identifiers"):
+        resolution = resolve_entities(
+            spec["kind"],
+            spec["identifiers"],
+            user,
+            limit=MAX_COMPARISON_ENTITIES,
+        )
+        clarification = entity_clarification(spec["kind"], resolution)
+        if clarification:
+            clarification["context"] = {
+                "comparison": {
+                    **spec,
+                    "awaiting_identifiers": True,
+                }
+            }
+            return clarification
+        if resolution["corrected"]:
+            spec["identifiers"] = [
+                *[_entity_key(spec["kind"], entity) for entity in resolution["entities"]],
+                *resolution["missing"],
+            ]
     result = run_comparison_spec(spec, user)
     if contains_any_intent_phrase(text, ["why is", "why are"]):
         result = _why_comparison(
