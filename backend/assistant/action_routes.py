@@ -31,6 +31,15 @@ def _accessible_sequence_ids(user):
     return Sequence.objects.filter(sample_id__in=sample_ids).values_list("id", flat=True)
 
 
+def _first_accessible_job(queryset, user, predicate=None):
+    for job in queryset.select_related("project").order_by("id")[:100]:
+        if _can_access_project(user, job.project) and (
+            predicate is None or predicate(job)
+        ):
+            return job
+    return None
+
+
 def propose_alignment(message, user):
     lower = message.lower()
 
@@ -48,9 +57,16 @@ def propose_alignment(message, user):
     sequence_ids = list(dict.fromkeys(sequence_ids))
 
     if len(sequence_ids) < 2:
+        available_ids = list(_accessible_sequence_ids(user).order_by("id")[:2])
+        suggestions = []
+        if len(available_ids) == 2:
+            suggestions.append(
+                f"Run alignment for sequences {available_ids[0]}, {available_ids[1]}"
+            )
         return {
-            "answer": "Choose at least two sequence record IDs. Example: Run alignment for sequences 12, 13.",
+            "answer": "Choose at least two accessible sequence record IDs.",
             "links": [],
+            "suggestions": suggestions,
             "skip_llm": True,
         }
 
@@ -94,9 +110,18 @@ def propose_migration_mappings(message, user):
     job_id = _extract_id(message, "migration")
 
     if not job_id:
+        job = _first_accessible_job(
+            MigrationJob.objects.filter(uploaded_file__isnull=False),
+            user,
+        )
         return {
-            "answer": "Tell me which migration job to use. Example: Create migration mappings for migration job #12.",
+            "answer": "Tell me which accessible migration job to use.",
             "links": [],
+            "suggestions": (
+                [f"Create migration mappings for migration job #{job.id}"]
+                if job
+                else []
+            ),
             "skip_llm": True,
         }
 
@@ -139,9 +164,17 @@ def propose_import(message, user):
     job_id = _extract_id(message, "import")
 
     if not job_id:
+        job = _first_accessible_job(
+            ImportJob.objects.all(),
+            user,
+            predicate=lambda item: bool(
+                (item.summary or {}).get("awaiting_assistant_confirmation")
+            ),
+        )
         return {
-            "answer": "Tell me which prepared import job to queue. Example: Queue import job #12.",
+            "answer": "Tell me which accessible prepared import job to queue.",
             "links": [],
+            "suggestions": [f"Queue import job #{job.id}"] if job else [],
             "skip_llm": True,
         }
 

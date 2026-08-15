@@ -25,6 +25,7 @@ from .monitoring import build_admin_monitoring_status
 from .comparisons import run_comparison_spec
 from .investigations import run_investigation_spec
 from .serializers import NotificationSubscriptionSerializer, SOPDocumentSerializer
+from .suggestions import assistant_starter_suggestions
 from .tools import route_assistant_message
 
 
@@ -171,7 +172,18 @@ class AssistantStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(configured_model_info(), status=status.HTTP_200_OK)
+        return Response(
+            {
+                **configured_model_info(),
+                "welcome_message": (
+                    "Ask about samples, projects, QC, comparisons, inventory, "
+                    "sequences, or system status. Suggestions below are based on "
+                    "records you can currently access."
+                ),
+                "suggestions": assistant_starter_suggestions(request.user),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class AssistantActionDetailView(APIView):

@@ -659,7 +659,7 @@ export default function Reports() {
               {complianceType === "CHAIN_OF_CUSTODY" && (
                 <Col lg={6}>
                   <Form.Label>Sample ID</Form.Label>
-                  <Form.Control value={complianceSampleCode} onChange={(event) => setComplianceSampleCode(event.target.value)} placeholder="S-101" />
+                  <Form.Control value={complianceSampleCode} onChange={(event) => setComplianceSampleCode(event.target.value)} placeholder="Sample ID" />
                 </Col>
               )}
             </Row>

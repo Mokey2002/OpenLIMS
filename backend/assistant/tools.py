@@ -26,6 +26,13 @@ from .workitem_operations import route_workitem_operations
 from .qc_operations import route_qc_operations
 from .sample_operations import route_sample_management
 from .sequences import route_assistant_sequence
+from .suggestions import (
+    batch_prompt,
+    comparison_prompt,
+    project_prompt,
+    sample_prompt,
+    without_empty,
+)
 
 
 def make_link(label, url, kind="record", extra=None):
@@ -210,11 +217,11 @@ def search_samples(message, user, limit=10):
     return {
         "answer": "\n".join(lines),
         "links": links,
-        "suggestions": [
-            "Summarize project PRJ-UW-PILOT",
+        "suggestions": without_empty(
+            project_prompt(user),
             "Show failed migration jobs",
             "Show skipped migration rows",
-        ],
+        ),
     }
 
 def search_projects(message, user, limit=10):
@@ -443,11 +450,11 @@ def answer_current_user(message, user):
     return {
         "answer": f"You are logged in as {username}.{role_text}",
         "links": [],
-        "suggestions": [
-            "Find sample S-UW-101",
+        "suggestions": without_empty(
+            sample_prompt(user),
             "Show failed migration jobs",
-            "Summarize project PRJ-UW-PILOT",
-        ],
+            project_prompt(user),
+        ),
         "skip_llm": True,
     }
 
@@ -493,22 +500,30 @@ def _route_from_hint(message, user, context, route_hint):
     return None
 
 
-def _hint_clarification(route_hint):
+def _hint_clarification(route_hint, user):
     route = str((route_hint or {}).get("route") or "unknown").strip().lower()
     suggestions = {
-        "barcode": ["Create barcode labels for batch B-100"],
+        "barcode": without_empty(batch_prompt(user)),
         "calculation": ["Count samples by status", "How many samples need QC?"],
         "chart": ["Graph sample status counts", "Graph QC failure rates by sample"],
-        "comparison": ["Compare projects PRJ-ALPHA and PRJ-BETA"],
-        "confirmed_action": ["Run alignment for sequences 12, 13"],
-        "investigation": ["Investigate why sample S-ALPHA-003 failed QC"],
+        "comparison": without_empty(
+            comparison_prompt(user, "project"),
+            comparison_prompt(user, "sample", chart_type="bar"),
+        ),
+        "confirmed_action": ["Find sample sequences", "Show prepared imports"],
+        "investigation": without_empty(
+            sample_prompt(user, "Investigate sample"),
+            "Open the Investigation Workbench",
+        ),
         "inventory": ["Show inventory below its reorder level", "Which reagents expire in the next 30 days?"],
         "migration": ["Show failed migration jobs", "Show failed migration rows"],
         "notifications": ["List notification subscriptions"],
         "qc": ["Show samples needing QC review", "Show samples that failed QC"],
-        "record_search": ["Find sample S-ALPHA-001", "Summarize project PRJ-ALPHA"],
-        "reporting": ["Generate an audit report for project PRJ-ALPHA"],
-        "samples": ["Show samples received today", "Find sample S-ALPHA-001"],
+        "record_search": without_empty(sample_prompt(user), project_prompt(user)),
+        "reporting": without_empty(
+            project_prompt(user, "Generate an audit report for project")
+        ),
+        "samples": without_empty("Show samples received today", sample_prompt(user)),
         "sequences": ["Find sample sequences", "Summarize BLAST results"],
         "sop": ["Which SOP covers QC review?"],
         "work_items": ["Show overdue work", "Show unassigned work today"],
@@ -536,7 +551,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         hinted_result = _route_from_hint(query, user, context, route_hint)
         if hinted_result:
             return hinted_result
-        hinted_clarification = _hint_clarification(route_hint)
+        hinted_clarification = _hint_clarification(route_hint, user)
         if hinted_clarification:
             return hinted_clarification
 
@@ -544,7 +559,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
     if current_user_result:
         return current_user_result
 
-    conversation_result = route_conversation_utility(query)
+    conversation_result = route_conversation_utility(query, user=user)
     if conversation_result:
         return conversation_result
 
@@ -636,12 +651,12 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         return {
             "answer": "Ask me about samples, projects, migration jobs, skipped rows, failed imports, or where a sample is located.",
             "links": [],
-            "suggestions": [
-                "Summarize project PRJ-UW-PILOT",
-                "Find sample S-UW-101",
+            "suggestions": without_empty(
+                project_prompt(user),
+                sample_prompt(user),
                 "Show failed migration jobs",
                 "Show skipped migration rows",
-            ],
+            ),
         }
 
     if "migration" in lower or "import" in lower or "skipped" in lower or "failed" in lower or "error" in lower:
@@ -651,7 +666,6 @@ def route_assistant_message(message, user, context=None, route_hint=None):
                 row_result["suggestions"] = [
                     "Show failed migration jobs",
                     "Show skipped migration rows",
-                    "Summarize migration job #1",
                 ]
                 return row_result
 
@@ -699,12 +713,12 @@ def route_assistant_message(message, user, context=None, route_hint=None):
             "Try a more specific request or choose one of the suggestions below."
         ),
         "links": [],
-        "suggestions": [
-            "Find sample S-UW-101",
-            "Summarize project PRJ-UW-PILOT",
+        "suggestions": without_empty(
+            sample_prompt(user),
+            project_prompt(user),
             "Show failed migration jobs",
             "Show skipped migration rows",
-        ],
+        ),
         "skip_llm": True,
         "route_unmatched": True,
     }

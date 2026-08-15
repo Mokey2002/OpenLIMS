@@ -103,7 +103,7 @@ export default function Investigations() {
                     list={subjectType === "sample" ? "investigation-samples" : undefined}
                     value={identifier}
                     onChange={(event) => setIdentifier(event.target.value)}
-                    placeholder={subjectType === "sample" ? "Example: S-1042" : "Example: 481 or R-481"}
+                    placeholder={subjectType === "sample" ? "Example: S-ALPHA-003" : "Example: result ID or R-ID"}
                   />
                   <datalist id="investigation-samples">
                     {samples.map((sample) => <option key={sample.id} value={sample.sample_id} />)}

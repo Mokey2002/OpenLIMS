@@ -6,6 +6,9 @@ from django.test import SimpleTestCase, override_settings
 from rest_framework.test import APITestCase
 
 from assistant.conversation import route_conversation_utility
+from projects.models import Project
+from results.models import Result, WorkItem
+from samples.models import Sample
 
 
 class ConversationUtilityTests(SimpleTestCase):
@@ -68,7 +71,70 @@ class GeneralConversationIntegrationTests(APITestCase):
         self.user = get_user_model().objects.create_user(
             username="conversation-user"
         )
+        self.outsider = get_user_model().objects.create_user(username="outsider")
+        self.project = Project.objects.create(code="LIVE-A", name="Live A")
+        self.second_project = Project.objects.create(code="LIVE-B", name="Live B")
+        self.private_project = Project.objects.create(code="PRIVATE", name="Private")
+        self.project.members.add(self.user)
+        self.second_project.members.add(self.user)
+        self.private_project.members.add(self.outsider)
+        first_sample = Sample.objects.create(
+            sample_id="LIVE-SAMPLE-001",
+            project=self.project,
+            created_by=self.user,
+        )
+        Sample.objects.create(
+            sample_id="LIVE-SAMPLE-002",
+            project=self.second_project,
+            created_by=self.user,
+        )
+        private_sample = Sample.objects.create(
+            sample_id="PRIVATE-SAMPLE",
+            project=self.private_project,
+            created_by=self.outsider,
+        )
+        work = WorkItem.objects.create(
+            sample=first_sample,
+            name="QC",
+            status=WorkItem.STATUS_COMPLETED,
+        )
+        Result.objects.create(
+            work_item=work,
+            key="purity",
+            value_type=Result.VALUE_TYPE_NUMBER,
+            value_number=80,
+            qc_passed=False,
+        )
+        private_work = WorkItem.objects.create(
+            sample=private_sample,
+            name="Private QC",
+            status=WorkItem.STATUS_COMPLETED,
+        )
+        Result.objects.create(
+            work_item=private_work,
+            key="purity",
+            value_type=Result.VALUE_TYPE_NUMBER,
+            value_number=1,
+            qc_passed=False,
+        )
         self.client.force_authenticate(self.user)
+
+    def test_status_returns_permission_filtered_database_suggestions(self):
+        response = self.client.get("/api/assistant/status/")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        suggestions = response.data["suggestions"]
+        self.assertIn(
+            "Compare samples LIVE-SAMPLE-001 and LIVE-SAMPLE-002 using a bar chart",
+            suggestions,
+        )
+        self.assertIn("Compare projects LIVE-A and LIVE-B", suggestions)
+        self.assertIn(
+            "Investigate why sample LIVE-SAMPLE-001 failed QC",
+            suggestions,
+        )
+        self.assertNotIn("PRIVATE", str(suggestions))
+        self.assertNotIn("S-UW-101", str(suggestions))
 
     @patch("assistant.views.classify_route_with_llm")
     def test_utility_question_bypasses_the_llm_classifier(self, classifier):

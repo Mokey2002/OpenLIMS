@@ -23,6 +23,8 @@ from samples.access import (
 from samples.models import Sample, SampleBatch
 from samples.workflows import can_transition
 
+from .suggestions import batch_prompt
+
 
 STATUS_ALIASES = {
     "RECEIVED": Sample.STATUS_RECEIVED,
@@ -955,7 +957,11 @@ def _propose_add_to_batch(message, user, context):
     )
     batch_code = batch_match.group(1) if batch_match else context.get("batch_code")
     if not batch_code:
-        return _error_result("Tell me which batch to use, for example batch B-100.")
+        example = batch_prompt(user, "Add the selected samples to batch")
+        message = "Tell me which accessible batch to use."
+        if example:
+            message += f" For example: {example}."
+        return _error_result(message)
 
     samples, excluded = _samples_from_codes_or_context(
         message,
