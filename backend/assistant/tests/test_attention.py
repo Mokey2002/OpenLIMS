@@ -315,6 +315,49 @@ class AssistantAttentionTests(APITestCase):
         self.assertNotIn("Samples in the same", response.data["answer"])
         self.assertIn("Failed BLAST jobs: 1", response.data["answer"])
 
+    @patch("assistant.attention.build_health_status")
+    def test_natural_attention_paraphrases_use_the_attention_route(
+        self,
+        health_mock,
+    ):
+        questions = [
+            "What needs my attention?",
+            "What requires my attention?",
+            "Is there anything I need to review?",
+            "What should I focus on right now?",
+            "Do I have anything pending?",
+        ]
+
+        for question in questions:
+            with self.subTest(question=question):
+                response = self.post_attention_question(self.tech, question)
+                self.assertEqual(response.status_code, 200, response.data)
+                self.assertEqual(response.data["attention"]["scope"], "all")
+                self.assertEqual(response.data["attention"]["total"], 8)
+                self.assertTrue(response.data["skip_llm"])
+                self.assertNotIn("matching sample", response.data["answer"].lower())
+
+        health_mock.assert_not_called()
+
+    def test_attention_request_escapes_pending_blast_context(self):
+        self.client.force_authenticate(self.tech)
+        response = self.client.post(
+            "/api/assistant/chat/",
+            {
+                "message": "What requires my attention?",
+                "context": {
+                    "intent": "RUN_BLAST",
+                    "request_text": "Run BLAST for sample S-ALPHA-001",
+                },
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn("attention", response.data)
+        self.assertNotIn("pending_action", response.data)
+        self.assertNotIn("Prepared a BLAST", response.data["answer"])
+
     def test_inventory_scope_explains_current_coverage(self):
         response = self.post_attention_question(
             self.tech,
