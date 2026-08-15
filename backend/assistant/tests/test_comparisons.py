@@ -174,6 +174,140 @@ class AssistantComparisonTests(APITestCase):
         )
         self.assertNotIn("pending_action", response.data)
 
+    def test_sample_comparison_honors_bar_chart_and_named_result(self):
+        response = self.chat(
+            "Compare samples S-100 and S-102 using a bar chart of glucose"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["chart"]["chartType"], "bar")
+        self.assertEqual(
+            [row["measurement"] for row in response.data["chart"]["data"]],
+            ["glucose (mg/dL)"],
+        )
+        self.assertEqual(
+            response.data["context"]["comparison"]["result_keys"],
+            ["glucose"],
+        )
+
+    def test_sample_comparison_honors_line_chart(self):
+        response = self.chat(
+            "Compare samples S-100 and S-102 using a line chart of glucose"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["chart"]["chartType"], "line")
+
+    def test_chart_style_follow_up_switches_comparison_to_dot_plot(self):
+        first = self.chat(
+            "Compare samples S-100 and S-102 using a bar chart of glucose"
+        )
+        follow_up = self.chat(
+            "Use a dot plot",
+            context=first.data["context"],
+        )
+
+        self.assertEqual(follow_up.status_code, 200)
+        self.assertEqual(follow_up.data["chart"]["chartType"], "dot")
+        self.assertEqual(
+            follow_up.data["context"]["comparison"]["result_keys"],
+            ["glucose"],
+        )
+        self.assertEqual(
+            follow_up.data["context"]["comparison"]["chart_type"],
+            "dot",
+        )
+
+    def test_dot_request_with_two_ids_does_not_require_compare_keyword(self):
+        response = self.chat(
+            "Show samples S-100 and S-102 as plotted dots for glucose"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["chart"]["chartType"], "dot")
+        self.assertEqual(
+            response.data["context"]["comparison"]["identifiers"],
+            ["S-100", "S-102"],
+        )
+
+    def test_scatter_plot_uses_two_named_numeric_results_as_axes(self):
+        for index in [0, 2]:
+            Result.objects.create(
+                work_item=self.samples[index].work_items.get(),
+                key="purity",
+                value_type=Result.VALUE_TYPE_NUMBER,
+                value_number=[95.0, 88.0][0 if index == 0 else 1],
+                unit="%",
+                qc_passed=index == 0,
+            )
+
+        response = self.chat(
+            "Plot glucose versus purity for samples S-100 and S-102 as a scatter plot"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["chart"]["chartType"], "scatter")
+        self.assertEqual(response.data["chart"]["xAxisLabel"], "glucose (mg/dL)")
+        self.assertEqual(
+            response.data["chart"]["series"][0]["axisLabel"],
+            "purity (%)",
+        )
+        self.assertEqual(
+            {row["sample"] for row in response.data["chart"]["data"]},
+            {"S-100", "S-102"},
+        )
+        self.assertEqual(
+            response.data["context"]["comparison"]["result_keys"],
+            ["glucose", "purity"],
+        )
+
+    def test_scatter_plot_without_two_result_names_requests_axes(self):
+        response = self.chat(
+            "Compare samples S-100 and S-102 using a scatter plot"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["chart"])
+        self.assertIn("needs two numeric result names", response.data["answer"])
+
+    def test_named_result_that_does_not_exist_does_not_fall_back_to_other_data(self):
+        response = self.chat(
+            "Compare samples S-100 and S-102 using a bar chart of lactate"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["chart"])
+        self.assertIn(
+            "No accessible numeric result matched: lactate",
+            response.data["answer"],
+        )
+        self.assertNotIn("glucose (mg/dL)", str(response.data))
+
+        follow_up = self.chat(
+            "Use a dot plot",
+            context=response.data["context"],
+        )
+        self.assertIsNone(follow_up.data["chart"])
+        self.assertIn("matched: lactate", follow_up.data["answer"])
+
+    def test_regular_endpoint_accepts_dot_chart_and_result_filter(self):
+        response = self.client.post(
+            "/api/assistant/comparisons/",
+            {
+                "analysis": "compare",
+                "kind": "sample",
+                "identifiers": ["S-100", "S-102"],
+                "metric": "results",
+                "chart_type": "dot",
+                "result_keys": ["glucose"],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["chart"]["chartType"], "dot")
+        self.assertEqual(len(response.data["chart"]["data"]), 1)
+
     def test_project_follow_up_preserves_scope_and_changes_graph(self):
         first = self.chat("Compare Project Alpha and Project Beta")
         follow_up = self.chat(
