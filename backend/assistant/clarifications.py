@@ -1,8 +1,20 @@
 import re
 
+from .intent_matching import compact_command_text, normalize_intent_text
+
 
 def _normalize(message):
-    return re.sub(r"\s+", " ", str(message or "").strip().lower())
+    return normalize_intent_text(message)
+
+
+def _is_bare_request(message, subjects):
+    compact = compact_command_text(message)
+    verbs = ["show", "list", "find", "which", "tell"]
+    return compact in {
+        f"{verb} {subject}"
+        for verb in verbs
+        for subject in subjects
+    }
 
 
 def _option(option_id, label, message, description):
@@ -114,10 +126,7 @@ def _qc_result_clarification(lower, context):
 
 
 def _bare_sample_clarification(lower, context):
-    if not re.fullmatch(
-        r"(?:show|list|find|which|show me|tell me)(?: all| the)? samples?\??",
-        lower,
-    ):
+    if not _is_bare_request(lower, ["sample", "samples"]):
         return None
     return _response(
         "sample_scope",
@@ -153,10 +162,7 @@ def _bare_sample_clarification(lower, context):
 
 
 def _bare_result_clarification(lower, context):
-    if not re.fullmatch(
-        r"(?:show|list|find|which|show me|tell me)(?: all| the)? results?\??",
-        lower,
-    ):
+    if not _is_bare_request(lower, ["result", "results"]):
         return None
     return _response(
         "result_scope",
@@ -186,11 +192,7 @@ def _bare_result_clarification(lower, context):
 
 
 def _bare_failure_clarification(lower, context):
-    if not re.fullmatch(
-        r"(?:show|list|find|which|show me|tell me)(?: all| the)? "
-        r"(?:failed|failures|errors)\??",
-        lower,
-    ):
+    if not _is_bare_request(lower, ["failed", "failures", "errors"]):
         return None
     return _response(
         "failure_domain",
@@ -220,10 +222,17 @@ def _bare_failure_clarification(lower, context):
 
 
 def _bare_inventory_clarification(lower, context):
-    if not re.fullmatch(
-        r"(?:show|list|find|which|show me|tell me)(?: all| the)? "
-        r"(?:inventory|reagents?|inventory items?|inventory lots?)\??",
+    if not _is_bare_request(
         lower,
+        [
+            "inventory",
+            "reagent",
+            "reagents",
+            "inventory item",
+            "inventory items",
+            "inventory lot",
+            "inventory lots",
+        ],
     ):
         return None
     return _response(
