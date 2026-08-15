@@ -37,6 +37,16 @@ class LLMRouteClassifierTests(SimpleTestCase):
         self.assertIsNone(classify_route_with_llm("Do something"))
         self.assertIsNone(classify_route_with_llm("Maybe review things"))
 
+    @patch("assistant.llm.call_ollama")
+    def test_accepts_general_questions_as_a_constrained_route(self, call_mock):
+        call_mock.return_value = '{"route":"general","confidence":0.92}'
+
+        result = classify_route_with_llm("Why is the sky blue?")
+
+        self.assertEqual(result["route"], "general")
+        self.assertEqual(result["provider"], "ollama")
+        self.assertEqual(result["confidence"], 0.92)
+
 
 class LLMRoutingFallbackIntegrationTests(APITestCase):
     def setUp(self):

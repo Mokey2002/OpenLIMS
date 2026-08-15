@@ -3,6 +3,7 @@ import logging
 import urllib.request
 
 from django.conf import settings
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ ASSISTANT_ROUTES = {
     "clarification",
     "comparison",
     "confirmed_action",
+    "general",
     "identity",
     "investigation",
     "inventory",
@@ -148,6 +150,34 @@ OpenLIMS tool result:
 """
 
 
+GENERAL_ASSISTANT_SYSTEM_MESSAGE = (
+    "You are the OpenLIMS Assistant in constrained general-conversation mode. "
+    "Answer the user's non-OpenLIMS question concisely. You have no database, "
+    "record, tool, web, or workflow access in this mode. Never claim that you "
+    "looked up or changed OpenLIMS data. If the request actually requires "
+    "OpenLIMS records or an application action, say that it needs a supported "
+    "OpenLIMS tool instead of inventing a result. Admit uncertainty and avoid "
+    "presenting high-stakes medical, legal, or financial guidance as definitive."
+)
+
+
+def build_general_assistant_prompt(message):
+    now = timezone.now()
+    if timezone.is_aware(now):
+        now = timezone.localtime(now)
+    current_time = now.isoformat()
+    app_timezone = str(getattr(settings, "TIME_ZONE", "UTC") or "UTC")
+    return f"""
+Answer this general user question without using or implying access to OpenLIMS data.
+
+Current OpenLIMS application time: {current_time}
+Application timezone: {app_timezone}
+
+User question:
+{message}
+"""
+
+
 def build_route_classifier_prompt(message, context=None):
     context = context or {}
     active_context = [
@@ -163,6 +193,7 @@ def build_route_classifier_prompt(message, context=None):
         "clarification": "an underspecified samples, results, failures, or inventory request",
         "comparison": "compare samples, projects, or batches; trends, outliers, bottlenecks",
         "confirmed_action": "run alignment/import/report or create migration mappings",
+        "general": "greetings, small talk, general knowledge, or educational questions that require no OpenLIMS data or action",
         "identity": "current signed-in username or identity",
         "investigation": "investigate a QC failure or its evidence and possible associations",
         "inventory": "locations, reagent stock, lots, reservations, consumption, expiration",
@@ -195,6 +226,9 @@ Rules:
 - Select chart only when the user explicitly requests a visual.
 - Select attention for broad questions about priorities, pending work, or what needs review.
 - Select clarification when the domain is named but the requested subset is ambiguous.
+- Select general only when the request can be answered without OpenLIMS records, tools, approved SOP content, or an application action.
+- Educational or scientific explanations unrelated to the user's records may use general.
+- Never select general for an unsupported request to read or change samples, projects, QC, inventory, instruments, users, or system state; use unknown instead.
 - Existing context may help interpret short follow-ups, but must not override an unrelated new request.
 - Use unknown when uncertain. Never invent identifiers or facts.
 
@@ -336,14 +370,24 @@ def enhance_with_llm(message, tool_result):
         return fallback
 
     provider = llm_provider()
-    prompt = build_assistant_prompt(message, tool_result)
+    is_general = tool_result.get("response_type") == "general"
+    prompt = (
+        build_general_assistant_prompt(message)
+        if is_general
+        else build_assistant_prompt(message, tool_result)
+    )
 
     try:
         if provider == "openai":
             answer = call_openai(prompt)
             mode = "openai"
         elif provider == "ollama":
-            answer = call_ollama(prompt)
+            answer = call_ollama(
+                prompt,
+                system_message=(
+                    GENERAL_ASSISTANT_SYSTEM_MESSAGE if is_general else None
+                ),
+            )
             mode = "ollama"
         else:
             return fallback

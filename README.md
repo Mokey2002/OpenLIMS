@@ -274,6 +274,15 @@ values are represented in the inventory schema.
 
 If an LLM is unavailable, the assistant falls back to **OpenLIMS Rules** mode.
 
+The rules layer also handles common conversational requests such as greetings,
+help, the current application date, and the current application time. If a
+question is unrelated to OpenLIMS but can be answered conversationally, the
+constrained route classifier can send it to a separate general-conversation
+prompt. That prompt receives no database records or tool output and cannot run
+an OpenLIMS action. Requests that appear to require unsupported laboratory data
+or application operations remain explicit unsupported requests instead of being
+answered as general chat.
+
 The UI displays the active engine/model, such as:
 
 ```text
