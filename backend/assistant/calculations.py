@@ -4,6 +4,8 @@ from django.db.models import Count, Q
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
 
+from .intent_matching import contains_any_intent_phrase
+
 try:
     from migration_toolkit.models import MigrationJob, MigrationRowRecord
 except Exception:
@@ -297,10 +299,10 @@ def route_worklist_or_calculation(message, user):
         if any(term in lower for term in ["how many", "count", "number of"]):
             return count_samples_in_qc(text, user)
 
-    if "count samples by status" in lower:
-        return count_samples_by_status(text, user)
-
-    if "samples by status" in lower:
+    if contains_any_intent_phrase(
+        text,
+        ["count samples by status", "samples by status"],
+    ):
         return count_samples_by_status(text, user)
 
     if "how many samples" in lower and "status" in lower:
