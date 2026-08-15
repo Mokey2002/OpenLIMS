@@ -13,6 +13,7 @@ from .calculations import route_worklist_or_calculation
 from .charts import route_assistant_chart
 from .clarifications import route_assistant_clarification
 from .comparisons import route_comparison_analytics
+from .conversation import general_question_result, route_conversation_utility
 from .investigations import route_investigation_workbench
 from .inventory_operations import route_inventory_operations
 from .intent_matching import contains_any_intent_phrase
@@ -468,6 +469,8 @@ def _route_from_hint(message, user, context, route_hint):
     }
     if route == "identity":
         return answer_current_user(message, user) or answer_current_user("Who am I?", user)
+    if route == "general":
+        return general_question_result()
     if route == "monitoring":
         return route_system_monitoring(message, user, context=context) or route_system_monitoring(
             "Show system status",
@@ -540,6 +543,10 @@ def route_assistant_message(message, user, context=None, route_hint=None):
     current_user_result = answer_current_user(query, user)
     if current_user_result:
         return current_user_result
+
+    conversation_result = route_conversation_utility(query)
+    if conversation_result:
+        return conversation_result
 
     monitoring_result = route_system_monitoring(query, user, context=context)
     if monitoring_result:
