@@ -4,6 +4,7 @@ from django.utils import timezone
 
 from events.models import Event
 
+from .intent_matching import contains_any_intent_phrase
 from .models import SOPDocument
 
 
@@ -54,10 +55,12 @@ def route_sop_assistant(message, user, context=None):
     del context
     lower = str(message or "").lower()
     question_signals = [
-        "how do i", "procedure", "which sop", "why can't", "why can’t",
+        "how do i", "how can i", "what is the procedure", "procedure",
+        "which sop", "why can't", "why can’t",
+        "what does the sop say", "show the sop", "according to the sop",
         "documentation", "instruction", "policy",
     ]
-    if not any(signal in lower for signal in question_signals):
+    if not contains_any_intent_phrase(message, question_signals):
         return None
     if re.search(
         r"\bhow\s+do\s+i\s+(?:show|list|find|count|compare|graph|plot)\b",
