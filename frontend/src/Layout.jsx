@@ -315,6 +315,9 @@ export default function Layout() {
                   <DropdownItemLink to="/users">Users</DropdownItemLink>
                   <DropdownItemLink to="/settings">Settings</DropdownItemLink>
                   <DropdownItemLink to="/sops">SOP Management</DropdownItemLink>
+                  <DropdownItemLink to="/workflow-designer">
+                    Workflow Designer
+                  </DropdownItemLink>
                   <DropdownItemLink to="/system-status">
                     System Status
                   </DropdownItemLink>

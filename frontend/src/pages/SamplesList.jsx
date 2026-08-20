@@ -110,6 +110,7 @@ export default function SamplesList() {
   const [bulkResult, setBulkResult] = useState(null);
 
   const [sampleId, setSampleId] = useState("");
+  const [sampleType, setSampleType] = useState("GENERAL");
   const [projectId, setProjectId] = useState("");
 
   const [search, setSearch] = useState("");
@@ -233,11 +234,13 @@ export default function SamplesList() {
     try {
       await apiPost("/api/samples/", {
         sample_id: id,
+        sample_type: sampleType.trim() || "GENERAL",
         status: "RECEIVED",
         project: projectId ? Number(projectId) : null,
       });
 
       setSampleId("");
+      setSampleType("GENERAL");
       setProjectId("");
       setSuccess("Sample created.");
       await load();
@@ -385,7 +388,7 @@ export default function SamplesList() {
 
           <Form onSubmit={createSample}>
             <Row className="g-2">
-              <Col md={6}>
+              <Col md={4}>
                 <Form.Control
                   value={sampleId}
                   onChange={(e) => setSampleId(e.target.value)}
@@ -393,7 +396,15 @@ export default function SamplesList() {
                 />
               </Col>
 
-              <Col md={4}>
+              <Col md={3}>
+                <Form.Control
+                  value={sampleType}
+                  onChange={(e) => setSampleType(e.target.value)}
+                  placeholder="Sample type, e.g. DNA"
+                />
+              </Col>
+
+              <Col md={3}>
                 <Form.Select
                   value={projectId}
                   onChange={(e) => setProjectId(e.target.value)}
@@ -673,6 +684,7 @@ export default function SamplesList() {
                   </th>
                   <th>ID</th>
                   <th>Sample ID</th>
+                  <th>Sample Type</th>
                   <th>Primary Project</th>
                   <th>Linked Projects</th>
                   <th>Status</th>
@@ -701,6 +713,8 @@ export default function SamplesList() {
                         {sample.sample_id}
                       </Link>
                     </td>
+
+                    <td>{sample.sample_type || "GENERAL"}</td>
 
                     <td>
                       {sample.project_code ? (

@@ -76,6 +76,8 @@ directly from the repository owner.
 | Area | Capabilities |
 |---|---|
 | **Samples** | Sample lifecycle tracking, statuses, attachments, custom fields, reason-for-change logging |
+| **Pipelines** | Reusable ordered templates, project/sample-type defaults, per-sample execution, automatic next-step work creation, failure blocking, QC gates |
+| **Analyses & procedures** | Admin-configurable analysis types, required result schemas, versioned procedures, SOP links, expected duration |
 | **Projects** | Project workspaces, project-scoped visibility, project membership, cross-project sample linking |
 | **Inventory** | Locations, containers, sample placement |
 | **Imports** | Instrument CSV imports, flexible header detection, direct instrument/API ingestion |

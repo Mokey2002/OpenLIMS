@@ -222,6 +222,24 @@ class WorkItemSerializer(serializers.ModelSerializer):
         allow_null=True,
         default=None,
     )
+    pipeline_step_run_id = serializers.IntegerField(
+        source="pipeline_step_run.id",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
+    pipeline_run_id = serializers.IntegerField(
+        source="pipeline_step_run.pipeline_run_id",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
+    pipeline_step_position = serializers.IntegerField(
+        source="pipeline_step_run.position",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
 
     class Meta:
         model = WorkItem
@@ -237,6 +255,9 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "source_import_type",
             "source_instrument_code",
             "source_instrument_name",
+            "pipeline_step_run_id",
+            "pipeline_run_id",
+            "pipeline_step_position",
             "name",
             "work_type",
             "status",

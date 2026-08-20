@@ -68,6 +68,8 @@ Por lo tanto, el uso esperado no se limita a crear muestras manualmente y despu�
 |---|---|
 | **Proyectos** | Espacios de trabajo, miembros, notas, muestras y visibilidad por proyecto |
 | **Muestras** | Alta, estados, responsable, lote, archivos adjuntos, campos personalizados y proyectos vinculados |
+| **Pipelines** | Plantillas ordenadas, valores predeterminados por proyecto o tipo de muestra, ejecución por muestra, avance automático, bloqueo por fallas y compuertas de QC |
+| **Análisis y procedimientos** | Tipos de análisis configurables, resultados obligatorios, procedimientos versionados, vínculo con SOP y duración esperada |
 | **Inventario** | Ubicaciones, contenedores y colocación física de muestras |
 | **Cola de trabajo** | Creación de trabajos para muestras o lotes, asignación, fechas límite y seguimiento de estado |
 | **Resultados** | Valores estructurados de texto, número o booleano, unidades y rangos de referencia |
@@ -113,7 +115,7 @@ Cada trabajo puede tener responsable, fecha límite, estado operativo y estado d
 
 ## 5. Pipelines y workflows
 
-OpenLIMS actualmente permite:
+OpenLIMS permite:
 
 - Mantener un ciclo de estados para cada muestra.
 - Crear trabajos para muestras individuales o lotes.
@@ -122,8 +124,18 @@ OpenLIMS actualmente permite:
 - Identificar trabajos pendientes, vencidos, sin responsable o bloqueados.
 - Relacionar resultados con el trabajo y la muestra correspondientes.
 - Ejecutar importaciones y análisis pesados en segundo plano.
+- Crear plantillas reutilizables con pasos ordenados desde el **Workflow Designer**.
+- Relacionar cada paso con un procedimiento y un tipo de análisis configurables.
+- Definir un pipeline predeterminado por proyecto, tipo de muestra o ambos.
+- Iniciar automáticamente el pipeline correspondiente al dar de alta manualmente una muestra.
+- Crear únicamente el trabajo del paso actual y mantener los pasos posteriores bloqueados.
+- Validar los resultados obligatorios antes de completar un paso.
+- Crear automáticamente el trabajo siguiente cuando el paso actual se completa.
+- Esperar la aprobación de QC cuando el paso la requiere.
+- Bloquear el pipeline cuando un trabajo falla o la revisión de QC no lo aprueba.
+- Conservar una copia estable del nombre, procedimiento, versión y requisitos de cada paso durante la ejecución.
 
-Actualmente no incluye un diseñador visual y completamente configurable que permita construir desde la interfaz pipelines arbitrarios como:
+Un pipeline típico puede representarse así:
 
 ```text
 Recepción
@@ -134,12 +146,12 @@ PCR
    ↓
 Secuenciación
    ↓
-QC ── falla ──→ Repetición
+QC ── falla ──→ BLOQUEADO para revisión
    ↓ aprobación
 Reporte
 ```
 
-El encadenamiento automático de pasos, las ramas condicionales, los requisitos de aprobación y la creación automática del siguiente trabajo son extensiones que pueden desarrollarse sobre la estructura actual.
+Las ramas condicionales arbitrarias, ciclos, repeticiones automáticas y rutas alternativas todavía no están incluidas. Una falla o rechazo de QC bloquea la ejecución para que el personal revise el caso de forma explícita.
 
 Para definir un pipeline nuevo se recomienda documentar:
 
@@ -156,13 +168,18 @@ Para definir un pipeline nuevo se recomienda documentar:
 
 Un administrador puede configurar sin modificar el código:
 
+- Tipos de análisis con código, nombre, categoría y descripción.
+- Campos de resultado obligatorios de texto, número o booleano para cada análisis.
+- Procedimientos versionados con instrucciones, duración esperada y documento SOP asociado.
+- Plantillas de pipeline con orden, nombre visible y requisito de QC por paso.
+- Pipelines predeterminados por proyecto y tipo de muestra.
 - Campos personalizados.
 - Perfiles de instrumentos.
 - Mapeos de columnas.
 - Rangos y reglas de QC.
 - Perfiles de migración.
 - Documentos SOP y sus versiones.
-- Trabajos y asignaciones.
+- Trabajos, asignaciones y seguimiento de ejecución.
 - Configuración general del laboratorio.
 
 Los documentos SOP pueden incluir código, título, versión, sección, contenido, fecha de vigencia, proyecto, roles permitidos y archivo fuente. El asistente solo utiliza procedimientos aprobados, actuales y accesibles para el usuario.

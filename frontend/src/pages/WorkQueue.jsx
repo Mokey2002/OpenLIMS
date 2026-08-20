@@ -9,12 +9,12 @@ import {
   Row,
   Table,
 } from "react-bootstrap";
-import { apiGet, apiGetAll } from "../api";
+import { apiGet, apiGetAll, apiPatch } from "../api";
 import { canWrite } from "../authz";
 import ConfirmedOperationCard from "../components/ConfirmedOperationCard";
 import useConfirmedOperation from "../hooks/useConfirmedOperation";
 
-const WORK_TYPES = ["GENERAL", "SEQUENCING", "EXTRACTION", "PCR", "ANALYSIS"];
+const BASE_WORK_TYPES = ["GENERAL", "SEQUENCING", "EXTRACTION", "PCR", "ANALYSIS"];
 
 function statusVariant(status) {
   if (status === "COMPLETED") return "success";
@@ -26,6 +26,7 @@ function statusVariant(status) {
 export default function WorkQueue() {
   const [workItems, setWorkItems] = useState([]);
   const [batches, setBatches] = useState([]);
+  const [analysisDefinitions, setAnalysisDefinitions] = useState([]);
   const [me, setMe] = useState(null);
   const [error, setError] = useState("");
   const [batchId, setBatchId] = useState("");
@@ -41,13 +42,15 @@ export default function WorkQueue() {
   async function load() {
     setError("");
     try {
-      const [workRows, batchRows, meData] = await Promise.all([
+      const [workRows, batchRows, analysisRows, meData] = await Promise.all([
         apiGetAll("/api/work-items/"),
         apiGetAll("/api/sample-batches/"),
+        apiGetAll("/api/analysis-definitions/"),
         apiGet("/api/me/"),
       ]);
       setWorkItems(workRows);
       setBatches(batchRows);
+      setAnalysisDefinitions(analysisRows);
       setMe(meData);
     } catch (requestError) {
       setError(requestError.message || String(requestError));
@@ -69,6 +72,14 @@ export default function WorkQueue() {
         return true;
       }),
     [workItems, statusFilter, typeFilter]
+  );
+
+  const workTypes = useMemo(
+    () => Array.from(new Set([
+      ...BASE_WORK_TYPES,
+      ...analysisDefinitions.filter((analysis) => analysis.active).map((analysis) => analysis.code),
+    ])).sort(),
+    [analysisDefinitions]
   );
 
   async function proposeCreation(event) {
@@ -94,6 +105,17 @@ export default function WorkQueue() {
     await operation.propose(
       `Assign ${scopeText}unassigned ${assignType.toLowerCase()} work to ${targetUsername.trim()}`
     );
+  }
+
+  async function updateWorkStatus(item, nextStatus) {
+    if (!nextStatus || nextStatus === item.status) return;
+    setError("");
+    try {
+      await apiPatch(`/api/work-items/${item.id}/`, { status: nextStatus });
+      await load();
+    } catch (requestError) {
+      setError(requestError.message || String(requestError));
+    }
   }
 
   const writable = canWrite(me);
@@ -136,7 +158,7 @@ export default function WorkQueue() {
                   <Form.Group className="mb-3">
                     <Form.Label>Work type</Form.Label>
                     <Form.Select value={createType} onChange={(event) => setCreateType(event.target.value)}>
-                      {WORK_TYPES.map((type) => <option key={type}>{type}</option>)}
+                      {workTypes.map((type) => <option key={type}>{type}</option>)}
                     </Form.Select>
                   </Form.Group>
                   <Button type="submit" variant="dark" disabled={!batchId}>Preview work creation</Button>
@@ -161,7 +183,7 @@ export default function WorkQueue() {
                     <Col md={4}>
                       <Form.Label>Work type</Form.Label>
                       <Form.Select value={assignType} onChange={(event) => setAssignType(event.target.value)}>
-                        {WORK_TYPES.map((type) => <option key={type}>{type}</option>)}
+                        {workTypes.map((type) => <option key={type}>{type}</option>)}
                       </Form.Select>
                     </Col>
                     <Col md={4}>
@@ -211,7 +233,7 @@ export default function WorkQueue() {
             <Col md={4}>
               <Form.Select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
                 <option value="">All work types</option>
-                {WORK_TYPES.map((type) => <option key={type}>{type}</option>)}
+                {workTypes.map((type) => <option key={type}>{type}</option>)}
               </Form.Select>
             </Col>
             <Col md={4}>
@@ -229,7 +251,7 @@ export default function WorkQueue() {
             <div className="empty-state">No work items match these filters.</div>
           ) : (
             <Table responsive hover className="app-table">
-              <thead><tr><th>Work</th><th>Sample</th><th>Batch</th><th>Project</th><th>Type</th><th>Status</th><th>Assignee</th><th>Due</th></tr></thead>
+              <thead><tr><th>Work</th><th>Sample</th><th>Batch</th><th>Project</th><th>Type</th><th>Status</th><th>Assignee</th><th>Due</th>{writable && <th>Update</th>}</tr></thead>
               <tbody>
                 {filteredItems.map((item) => (
                   <tr key={item.id}>
@@ -241,6 +263,25 @@ export default function WorkQueue() {
                     <td><Badge bg={statusVariant(item.status)}>{item.status}</Badge></td>
                     <td>{item.assigned_to_username || "Unassigned"}</td>
                     <td>{item.due_at ? new Date(item.due_at).toLocaleString() : "—"}</td>
+                    {writable && (
+                      <td>
+                        {["COMPLETED", "FAILED", "CANCELLED"].includes(item.status) ? (
+                          <span className="feed-meta">Final</span>
+                        ) : (
+                          <Form.Select
+                            size="sm"
+                            value={item.status}
+                            onChange={(event) => updateWorkStatus(item, event.target.value)}
+                          >
+                            <option value="PENDING">PENDING</option>
+                            <option value="IN_PROGRESS">IN_PROGRESS</option>
+                            <option value="COMPLETED">COMPLETED</option>
+                            <option value="FAILED">FAILED</option>
+                            <option value="CANCELLED">CANCELLED</option>
+                          </Form.Select>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
