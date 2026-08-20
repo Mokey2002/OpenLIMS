@@ -1,28 +1,26 @@
 # OpenLIMS Licensing History
 
-## Licensing cutoff
+## Current license
 
-The final OpenLIMS development snapshot distributed under Apache License 2.0
-is:
+OpenLIMS is open-source software. The entire current repository is distributed
+under the Apache License 2.0 by its copyright owner, unless a file explicitly
+identifies separately licensed third-party material.
 
-- Tag: `v0.22.0-apache-final`
-- Commit: `ade352491f8824d5599f8cfaee01adec011f959e`
-- Archive branch: `archive/v0.22.0-apache-final`
-- Version: `v0.22.0`
+The controlling terms are in the repository root [`LICENSE`](../LICENSE)
+file.
 
-The tag and archive branch preserve the exact cutoff commit in the private
-GitHub repository. The historical Apache `LICENSE` remains available in that
-commit and in earlier commits and release tags.
+## History
 
-## Current development
+OpenLIMS was originally released under Apache License 2.0. Version `v0.22.0`
+was recorded at commit `ade352491f8824d5599f8cfaee01adec011f959e` and tag
+`v0.22.0-apache-final` before a temporary period of private development.
 
-Development after the cutoff is proprietary:
-
-Copyright © 2026 Eduardo Lemus. All rights reserved.
-
-The current terms are in the repository root [`LICENSE`](../LICENSE) file.
-Previously granted Apache-2.0 rights for explicitly Apache-licensed versions
-are not replaced or revoked by the current proprietary terms.
+On August 20, 2026, the copyright owner restored Apache License 2.0 for the
+current project and relicensed the subsequent OpenLIMS development contained
+in this repository under the same terms. The temporary private-development
+notice is superseded for the current repository distribution by the root
+Apache 2.0 license. Rights already granted under earlier Apache-licensed
+releases remain unchanged.
 
 ## Third-party software
 
