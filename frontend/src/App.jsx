@@ -35,6 +35,7 @@ import WorkQueue from "./pages/WorkQueue";
 import Labels from "./pages/Labels";
 import Comparisons from "./pages/Comparisons";
 import Investigations from "./pages/Investigations";
+import WorkflowDesigner from "./pages/WorkflowDesigner";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -77,6 +78,7 @@ export default function App() {
           <Route path="investigations" element={<Investigations />} />
           <Route path="users" element={<Users />} />
           <Route path="settings" element={<AdminSettings />} />
+          <Route path="workflow-designer" element={<WorkflowDesigner />} />
           <Route path="imports" element={<Imports />} />
           <Route path="data-migration" element={<DataMigration />} />
           <Route path="data-migration/jobs/:id" element={<MigrationJobDetail />} />

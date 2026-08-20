@@ -92,6 +92,27 @@ function massSpecStatusVariant(status) {
   }
 }
 
+function pipelineStatusVariant(status) {
+  switch (status) {
+    case "COMPLETED":
+      return "success";
+    case "ACTIVE":
+    case "IN_PROGRESS":
+      return "primary";
+    case "READY":
+      return "info";
+    case "AWAITING_QC":
+      return "warning";
+    case "FAILED":
+    case "BLOCKED":
+      return "danger";
+    case "CANCELLED":
+      return "secondary";
+    default:
+      return "secondary";
+  }
+}
+
 function actionVariant(action) {
   switch (action) {
     case "CREATED":
@@ -336,6 +357,8 @@ export default function SampleDetail() {
   const [sampleAttachments, setSampleAttachments] = useState([]);
   const [sampleSequences, setSampleSequences] = useState([]);
   const [massSpecRuns, setMassSpecRuns] = useState([]);
+  const [pipelineRuns, setPipelineRuns] = useState([]);
+  const [pipelineTemplates, setPipelineTemplates] = useState([]);
   const [me, setMe] = useState(null);
 
   const [err, setErr] = useState("");
@@ -349,6 +372,8 @@ export default function SampleDetail() {
   const [selectedAttachmentFile, setSelectedAttachmentFile] = useState(null);
   const [selectedContainer, setSelectedContainer] = useState("");
   const [linkedProjectId, setLinkedProjectId] = useState("");
+  const [selectedPipelineTemplate, setSelectedPipelineTemplate] = useState("");
+  const [sampleTypeInput, setSampleTypeInput] = useState("GENERAL");
 
   const [statusTransitionTarget, setStatusTransitionTarget] = useState("");
   const [statusChangeReason, setStatusChangeReason] = useState("");
@@ -367,6 +392,8 @@ export default function SampleDetail() {
         attachmentsData,
         sequencesData,
         massSpecData,
+        pipelineRunData,
+        pipelineTemplateData,
         meData,
       ] = await Promise.all([
         apiGet(`/api/samples/${id}/`),
@@ -378,6 +405,8 @@ export default function SampleDetail() {
         apiGet(`/api/sample-attachments/?sample=${id}`),
         apiGet(`/api/sequences/?sample=${id}`),
         apiGet(`/api/mass-spec-runs/?sample=${id}`),
+        apiGet(`/api/pipeline-runs/?sample=${id}`),
+        apiGet("/api/pipeline-templates/"),
         apiGet("/api/me/"),
       ]);
 
@@ -388,10 +417,13 @@ export default function SampleDetail() {
       const attachmentList = attachmentsData.results || attachmentsData || [];
       const sequenceList = sequencesData.results || sequencesData || [];
       const massSpecList = massSpecData.results || massSpecData || [];
+      const pipelineRunList = pipelineRunData.results || pipelineRunData || [];
+      const pipelineTemplateList = pipelineTemplateData.results || pipelineTemplateData || [];
 
       const allowedTransitions = transitionData.allowed_transitions || [];
 
       setSample(sampleData);
+      setSampleTypeInput(sampleData.sample_type || "GENERAL");
       setAllowed(allowedTransitions);
       setStatusTransitionTarget((current) =>
         current && allowedTransitions.includes(current)
@@ -405,6 +437,8 @@ export default function SampleDetail() {
       setSampleAttachments(attachmentList);
       setSampleSequences(sequenceList);
       setMassSpecRuns(massSpecList);
+      setPipelineRuns(pipelineRunList);
+      setPipelineTemplates(pipelineTemplateList.filter((template) => template.active));
       setMe(meData);
 
       const sampleEvents = eventList.filter((event) => {
@@ -729,6 +763,43 @@ export default function SampleDetail() {
     }
   }
 
+  async function updateSampleType(e) {
+    e.preventDefault();
+    if (!userCanWrite) return;
+    setErr("");
+    setSuccess("");
+    try {
+      const updated = await apiPatch(`/api/samples/${id}/`, {
+        sample_type: sampleTypeInput.trim() || "GENERAL",
+      });
+      setSuccess(`Sample type updated to ${updated.sample_type}.`);
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
+  async function startPipeline(e) {
+    e.preventDefault();
+
+    if (!userCanWrite) return;
+    setErr("");
+    setSuccess("");
+
+    try {
+      const payload = { sample: Number(id) };
+      if (selectedPipelineTemplate) {
+        payload.template = Number(selectedPipelineTemplate);
+      }
+      const run = await apiPost("/api/pipeline-runs/", payload);
+      setSelectedPipelineTemplate("");
+      setSuccess(`Pipeline ${run.template_code} started. Step 1 is ready in the work queue.`);
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
   if (!sample) {
     return (
       <div className="w-100">
@@ -847,6 +918,15 @@ export default function SampleDetail() {
 
                 <div className="col-md-4">
                   <div className="soft-card">
+                    <div className="feed-meta">Sample Type</div>
+                    <div className="fw-semibold">
+                      {sample.sample_type || "GENERAL"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="col-md-4">
+                  <div className="soft-card">
                     <div className="feed-meta">Created</div>
                     <div className="fw-semibold">
                       {formatTimestamp(sample.created_at)}
@@ -946,6 +1026,24 @@ export default function SampleDetail() {
 
             {userCanWrite && (
               <div className="col-lg-4">
+                <h5 className="section-title">Sample Classification</h5>
+                <Form onSubmit={updateSampleType} className="mb-4">
+                  <Form.Group className="mb-2">
+                    <Form.Label>Sample Type</Form.Label>
+                    <Form.Control
+                      value={sampleTypeInput}
+                      onChange={(e) => setSampleTypeInput(e.target.value)}
+                      placeholder="GENERAL, DNA, RNA..."
+                    />
+                    <div className="feed-meta mt-1">
+                      Used with the primary project to select a default pipeline.
+                    </div>
+                  </Form.Group>
+                  <Button type="submit" variant="outline-dark" size="sm">
+                    Save Sample Type
+                  </Button>
+                </Form>
+
                 <h5 className="section-title">Change Status</h5>
 
                 {allowed.length === 0 ? (
@@ -999,6 +1097,82 @@ export default function SampleDetail() {
               </div>
             )}
           </div>
+        </Card.Body>
+      </Card>
+
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <div className="toolbar-row mb-3">
+            <div>
+              <h5 className="section-title mb-0">Pipeline Execution</h5>
+              <div className="feed-meta">
+                Ordered procedure steps, current work, QC gates, and execution history.
+              </div>
+            </div>
+            <Badge bg="dark">{pipelineRuns.length} run(s)</Badge>
+          </div>
+
+          {userCanWrite && !pipelineRuns.some((run) => ["ACTIVE", "BLOCKED"].includes(run.status)) && (
+            <Form onSubmit={startPipeline} className="soft-card mb-3">
+              <Row className="g-2 align-items-end">
+                <Col md={8}>
+                  <Form.Label>Pipeline template</Form.Label>
+                  <Form.Select value={selectedPipelineTemplate} onChange={(e) => setSelectedPipelineTemplate(e.target.value)}>
+                    <option value="">Use project/sample-type default</option>
+                    {pipelineTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.code} — {template.name} ({template.steps.length} steps)
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col md={4}>
+                  <Button type="submit" variant="dark" className="w-100">
+                    Start Pipeline
+                  </Button>
+                </Col>
+              </Row>
+            </Form>
+          )}
+
+          {pipelineRuns.length === 0 ? (
+            <div className="empty-state">No pipeline has been started for this sample.</div>
+          ) : (
+            <div className="d-grid gap-3">
+              {pipelineRuns.map((run) => (
+                <div className="feed-item" key={run.id}>
+                  <div className="toolbar-row mb-3">
+                    <div>
+                      <div className="fw-semibold">{run.template_code} — {run.template_name}</div>
+                      <div className="feed-meta">
+                        Started {formatTimestamp(run.started_at)} by {run.started_by_username || "system"}
+                      </div>
+                    </div>
+                    <Badge bg={pipelineStatusVariant(run.status)}>{run.status}</Badge>
+                  </div>
+                  <Table responsive hover size="sm" className="app-table mb-0">
+                    <thead><tr><th>Step</th><th>Procedure</th><th>Requirements</th><th>Work Item</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {run.steps.map((step) => (
+                        <tr key={step.id}>
+                          <td><strong>{step.position}. {step.name}</strong><div className="feed-meta">{step.analysis_code}</div></td>
+                          <td>{step.procedure_code} v{step.procedure_version}</td>
+                          <td>
+                            {(step.required_fields || []).filter((field) => field.required !== false).length
+                              ? step.required_fields.filter((field) => field.required !== false).map((field) => field.label || field.key).join(", ")
+                              : "None"}
+                            {step.requires_qc && <div className="feed-meta">QC approval required</div>}
+                          </td>
+                          <td>{step.work_item ? `#${step.work_item} · ${step.work_item_status}` : "Not created"}</td>
+                          <td><Badge bg={pipelineStatusVariant(step.status)}>{step.status}</Badge>{step.failure_reason && <div className="text-danger small mt-1">{step.failure_reason}</div>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              ))}
+            </div>
+          )}
         </Card.Body>
       </Card>
 

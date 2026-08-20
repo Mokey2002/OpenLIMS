@@ -46,6 +46,11 @@ class Sample(models.Model):
     ]
 
     sample_id = models.CharField(max_length=64, unique=True)
+    sample_type = models.CharField(
+        max_length=64,
+        default="GENERAL",
+        help_text="Configurable sample classification used to select default pipelines.",
+    )
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_RECEIVED)
 
     project = models.ForeignKey(

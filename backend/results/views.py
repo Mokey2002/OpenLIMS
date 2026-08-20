@@ -11,6 +11,7 @@ from events.models import Event
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
 from settings_app.models import SystemSettings
+from pipelines.services import validate_work_item_pipeline_completion
 
 from .models import WorkItem, Result, SampleAttachment
 from .serializers import (
@@ -105,9 +106,12 @@ class WorkItemViewSet(ModelViewSet):
                 "QC status can only be changed through the audited QC review workflow."
             )
         instance = self.get_object()
+        requested_status = serializer.validated_data.get("status", instance.status)
+        validate_work_item_pipeline_completion(instance, requested_status)
         if instance.status in [WorkItem.STATUS_COMPLETED, WorkItem.STATUS_CANCELLED] and "assigned_to" in self.request.data:
             raise PermissionDenied("Completed or cancelled work cannot be reassigned.")
         before_assignee = instance.assigned_to_id
+        instance._pipeline_actor = self.request.user
         updated = serializer.save()
         if "assigned_to" in self.request.data and before_assignee != updated.assigned_to_id:
             Event.objects.create(
@@ -185,6 +189,7 @@ class WorkItemViewSet(ModelViewSet):
         work_item.review_note = review_note
         work_item.reviewed_by = request.user
         work_item.reviewed_at = timezone.now()
+        work_item._pipeline_actor = request.user
         work_item.save(
             update_fields=[
                 "qc_status",

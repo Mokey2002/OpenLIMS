@@ -23,6 +23,7 @@ class SampleSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "sample_id",
+            "sample_type",
             "status",
             "project",
             "project_id",
@@ -46,6 +47,12 @@ class SampleSerializer(serializers.ModelSerializer):
             "status_changed_at",
             "updated_at",
         ]
+
+    def validate_sample_type(self, value):
+        normalized = str(value or "GENERAL").strip().upper()
+        if not normalized:
+            return "GENERAL"
+        return normalized
         read_only_fields = [
             "id",
             "project_id",

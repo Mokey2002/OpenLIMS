@@ -46,6 +46,12 @@ from migration_toolkit.views import (
     MigrationRowRecordViewSet,
     SampleExternalIDViewSet,
 )
+from pipelines.views import (
+    AnalysisDefinitionViewSet,
+    PipelineRunViewSet,
+    PipelineTemplateViewSet,
+    ProcedureDefinitionViewSet,
+)
 
 router = DefaultRouter()
 router.register(r"samples", SampleViewSet, basename="sample")
@@ -88,6 +94,10 @@ router.register(r"migration-profiles", MigrationProfileViewSet, basename="migrat
 router.register(r"migration-field-mappings", MigrationFieldMappingViewSet, basename="migration-field-mapping")
 router.register(r"migration-jobs", MigrationJobViewSet, basename="migration-job")
 router.register(r"migration-row-records", MigrationRowRecordViewSet, basename="migration-row-record")
+router.register(r"analysis-definitions", AnalysisDefinitionViewSet, basename="analysis-definition")
+router.register(r"procedure-definitions", ProcedureDefinitionViewSet, basename="procedure-definition")
+router.register(r"pipeline-templates", PipelineTemplateViewSet, basename="pipeline-template")
+router.register(r"pipeline-runs", PipelineRunViewSet, basename="pipeline-run")
 
 urlpatterns = router.urls + [
     path("assistant/chat/", AssistantChatView.as_view(), name="assistant-chat"),

@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'mass_spec',
     'migration_toolkit',
     'assistant',
+    'pipelines',
 ]
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (

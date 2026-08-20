@@ -2,6 +2,7 @@ import csv
 
 from django.utils import timezone
 from django.http import HttpResponse
+from django.db import transaction
 from django.db.models import Q
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from rest_framework.decorators import action
@@ -35,6 +36,7 @@ REASON_MIN_LENGTH = 10
 
 def sample_audit_state(sample):
     return {
+        "sample_type": sample.sample_type,
         "status": sample.status,
         "project_id": sample.project_id,
         "container_id": sample.container_id,
@@ -166,7 +168,14 @@ class SampleViewSet(ModelViewSet):
         validate_sample_project_assignment(self.request.user, project)
         validate_linked_projects_for_user(self.request.user, linked_projects)
 
-        serializer.save(created_by=self.request.user)
+        with transaction.atomic():
+            sample = serializer.save(created_by=self.request.user)
+
+            # A configured default pipeline should make intake deterministic while
+            # still allowing labs to create samples before any defaults exist.
+            from pipelines.services import start_default_pipeline_for_sample
+
+            start_default_pipeline_for_sample(sample, self.request.user)
 
     def perform_update(self, serializer):
         sample = self.get_object()
@@ -705,6 +714,7 @@ class SampleViewSet(ModelViewSet):
         writer.writerow([
             "id",
             "sample_id",
+            "sample_type",
             "status",
             "project_code",
             "project_name",
@@ -717,6 +727,7 @@ class SampleViewSet(ModelViewSet):
             writer.writerow([
                 sample.id,
                 sample.sample_id,
+                sample.sample_type,
                 sample.status,
                 sample.project.code if sample.project else "",
                 sample.project.name if sample.project else "",
