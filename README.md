@@ -1,7 +1,7 @@
 # 🧪 OpenLIMS
 
 <p align="center">
-  <strong>Self-hosted Laboratory Information Management System for practical lab workflows.</strong>
+  <strong>Open-source, self-hosted Laboratory Information Management System for practical lab workflows.</strong>
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
 
 <p align="center">
   <img alt="Version" src="https://img.shields.io/badge/version-v0.25.0-blue">
-  <img alt="License" src="https://img.shields.io/badge/license-proprietary-red">
+  <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
   <img alt="Database" src="https://img.shields.io/badge/database-PostgreSQL-336791">
@@ -25,7 +25,7 @@
 
 ## Overview
 
-**OpenLIMS** is a self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
+**OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
@@ -764,7 +764,7 @@ OpenLIMS aims to be:
 - Lightweight
 - Self-hosted
 - Configurable
-- Extensible for future open-core or commercial deployment models
+- Open source and extensible for laboratory-specific workflows and integrations
 - Practical for real lab workflows
 - Easy to run locally or on low-cost cloud infrastructure
 - Useful for small labs, research groups, and biotech teams
@@ -782,15 +782,12 @@ LinkedIn: https://www.linkedin.com/in/edlemus/
 
 ## 📄 License
 
-Copyright © 2026 Eduardo Lemus. All rights reserved.
+Copyright © 2026 Eduardo Lemus.
 
-The current OpenLIMS source code is proprietary. Unauthorized copying,
-modification, distribution, or use is prohibited without prior written
-permission from the copyright owner. See [`LICENSE`](LICENSE) for the current
-terms.
+OpenLIMS is open-source software licensed under the
+[Apache License 2.0](LICENSE). You may use, modify, and distribute the source
+code in accordance with the license terms.
 
-Earlier OpenLIMS releases that were explicitly distributed under Apache
-License 2.0 remain governed by the terms applicable to those releases. The
-final Apache-licensed snapshot is recorded as `v0.22.0-apache-final` at commit
-`ade352491f8824d5599f8cfaee01adec011f959e`. See
-[`docs/licensing_history.md`](docs/licensing_history.md) for the cutoff record.
+Third-party dependencies and bundled components remain subject to their own
+licenses. See [`docs/licensing_history.md`](docs/licensing_history.md) for the
+project's licensing history.
