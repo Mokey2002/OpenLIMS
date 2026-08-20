@@ -123,7 +123,10 @@ def _activate_step(step, actor):
 def start_pipeline(*, sample, template, actor):
     from samples.models import Sample
 
-    sample = Sample.objects.select_for_update().select_related("project").get(pk=sample.pk)
+    # Lock only the sample row. Joining the nullable project relation here makes
+    # PostgreSQL reject the query because FOR UPDATE cannot lock the nullable
+    # side of an outer join.
+    sample = Sample.objects.select_for_update().get(pk=sample.pk)
     if PipelineRun.objects.filter(
         sample=sample,
         status__in=[PipelineRun.STATUS_ACTIVE, PipelineRun.STATUS_BLOCKED],
