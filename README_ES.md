@@ -86,6 +86,7 @@ Por lo tanto, el uso esperado no se limita a crear muestras manualmente y despu�
 | **Reportes** | Resúmenes de proyectos, inventario, QC, importaciones, comparaciones, investigaciones y auditoría |
 | **Auditoría** | Actor, fecha, entidad, cambios, razón del cambio y exportaciones |
 | **Seguridad** | Autenticación JWT y permisos por rol y proyecto |
+| **Idioma** | Interfaz completa en inglés o español, seleccionada por dirección para toda la instancia |
 
 ---
 
