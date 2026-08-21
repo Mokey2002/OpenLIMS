@@ -366,5 +366,64 @@ class PipelineRunStartSerializer(serializers.Serializer):
     template = serializers.IntegerField(required=False, allow_null=True)
 
 
+class WorkflowAssignmentSerializer(serializers.Serializer):
+    SCOPE_SAMPLE = "SAMPLE"
+    SCOPE_BATCH = "BATCH"
+    SCOPE_PROJECT = "PROJECT"
+    ASSIGNMENT_ANALYSIS = "ANALYSIS"
+    ASSIGNMENT_PIPELINE = "PIPELINE"
+
+    scope_type = serializers.ChoiceField(
+        choices=[SCOPE_SAMPLE, SCOPE_BATCH, SCOPE_PROJECT]
+    )
+    assignment_type = serializers.ChoiceField(
+        choices=[ASSIGNMENT_ANALYSIS, ASSIGNMENT_PIPELINE]
+    )
+    sample = serializers.IntegerField(required=False)
+    batch = serializers.IntegerField(required=False)
+    project = serializers.IntegerField(required=False)
+    analysis = serializers.IntegerField(required=False)
+    pipeline_template = serializers.IntegerField(required=False)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        scope_type = attrs["scope_type"]
+        assignment_type = attrs["assignment_type"]
+        scope_fields = {
+            self.SCOPE_SAMPLE: "sample",
+            self.SCOPE_BATCH: "batch",
+            self.SCOPE_PROJECT: "project",
+        }
+        expected_scope_field = scope_fields[scope_type]
+        supplied_scope_fields = [
+            field for field in scope_fields.values() if attrs.get(field) is not None
+        ]
+        if supplied_scope_fields != [expected_scope_field]:
+            raise serializers.ValidationError({
+                expected_scope_field: (
+                    f"Provide only {expected_scope_field} when scope_type is {scope_type}."
+                )
+            })
+
+        expected_assignment_field = (
+            "analysis"
+            if assignment_type == self.ASSIGNMENT_ANALYSIS
+            else "pipeline_template"
+        )
+        supplied_assignment_fields = [
+            field
+            for field in ["analysis", "pipeline_template"]
+            if attrs.get(field) is not None
+        ]
+        if supplied_assignment_fields != [expected_assignment_field]:
+            raise serializers.ValidationError({
+                expected_assignment_field: (
+                    f"Provide only {expected_assignment_field} when assignment_type "
+                    f"is {assignment_type}."
+                )
+            })
+        return attrs
+
+
 class PipelineRunCancelSerializer(serializers.Serializer):
     reason = serializers.CharField(min_length=10, max_length=2000)

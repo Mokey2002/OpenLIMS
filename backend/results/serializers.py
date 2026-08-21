@@ -260,6 +260,8 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "pipeline_step_position",
             "name",
             "work_type",
+            "analysis_code",
+            "required_fields",
             "status",
             "notes",
             "assigned_to",
@@ -279,6 +281,8 @@ class WorkItemSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "source_import_job",
+            "analysis_code",
+            "required_fields",
             "qc_status",
             "reviewed_by",
             "reviewed_by_username",

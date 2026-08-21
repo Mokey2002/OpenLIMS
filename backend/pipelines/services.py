@@ -7,7 +7,7 @@ from rest_framework.exceptions import ValidationError
 from events.models import Event
 from results.models import WorkItem
 
-from .models import PipelineRun, PipelineStepRun, PipelineTemplate
+from .models import AnalysisDefinition, PipelineRun, PipelineStepRun, PipelineTemplate
 
 
 ACTIVE_WORK_STATUSES = [WorkItem.STATUS_PENDING, WorkItem.STATUS_IN_PROGRESS]
@@ -100,6 +100,8 @@ def _activate_step(step, actor):
         sample=step.pipeline_run.sample,
         name=step.name,
         work_type=step.work_type,
+        analysis_code=step.analysis_code,
+        required_fields=step.required_fields,
         status=WorkItem.STATUS_PENDING,
         notes=(
             f"Pipeline {step.pipeline_run.template_code}, step {step.position}; "
@@ -193,7 +195,8 @@ def start_pipeline(*, sample, template, actor):
 def missing_required_fields(work_item, step=None):
     if step is None:
         step = PipelineStepRun.objects.filter(work_item=work_item).first()
-    if not step:
+    definitions = step.required_fields if step else work_item.required_fields
+    if not definitions:
         return []
 
     result_map = {
@@ -201,7 +204,7 @@ def missing_required_fields(work_item, step=None):
         for result in work_item.results.all()
     }
     missing = []
-    for definition in step.required_fields or []:
+    for definition in definitions:
         if not definition.get("required", True):
             continue
         key = str(definition.get("key") or "").strip()
@@ -220,7 +223,7 @@ def missing_required_fields(work_item, step=None):
 
 def validate_work_item_pipeline_completion(work_item, next_status):
     step = PipelineStepRun.objects.filter(work_item=work_item).first()
-    if not step:
+    if not step and not work_item.required_fields:
         return
     terminal_statuses = [
         WorkItem.STATUS_COMPLETED,
@@ -237,11 +240,54 @@ def validate_work_item_pipeline_completion(work_item, next_status):
     if missing:
         raise ValidationError({
             "status": (
-                "Pipeline work cannot be completed until these required result "
+                "Work cannot be completed until these required result "
                 f"fields are recorded: {', '.join(missing)}."
             ),
             "missing_required_fields": missing,
         })
+
+
+@transaction.atomic
+def assign_analysis(*, sample, analysis, actor, scope_type, scope_id):
+    from samples.models import Sample
+
+    sample = Sample.objects.select_for_update().get(pk=sample.pk)
+    analysis = AnalysisDefinition.objects.filter(pk=analysis.pk, active=True).first()
+    if not analysis:
+        raise ValidationError({"analysis": "Active analysis not found."})
+    if WorkItem.objects.filter(
+        sample=sample,
+        work_type=analysis.code,
+        status__in=ACTIVE_WORK_STATUSES,
+    ).exists():
+        raise ValidationError({
+            "detail": f"Active {analysis.code} work already exists for this sample."
+        })
+
+    work_item = WorkItem.objects.create(
+        sample=sample,
+        name=analysis.name,
+        work_type=analysis.code,
+        analysis_code=analysis.code,
+        required_fields=analysis.required_fields,
+        status=WorkItem.STATUS_PENDING,
+        notes=f"Analysis {analysis.code} assigned through {scope_type.lower()} scope.",
+        created_by=actor if actor and actor.is_authenticated else None,
+    )
+    payload = {
+        "work_item_id": work_item.id,
+        "analysis_id": analysis.id,
+        "analysis_code": analysis.code,
+        "analysis_name": analysis.name,
+        "sample_id": sample.id,
+        "sample_code": sample.sample_id,
+        "project_id": sample.project_id,
+        "scope_type": scope_type,
+        "scope_id": scope_id,
+    }
+    _event("WorkItem", work_item.id, "ANALYSIS_ASSIGNED", actor, payload)
+    _event("Sample", sample.id, "ANALYSIS_ASSIGNED", actor, payload)
+    return work_item
 
 
 def _complete_step(step, actor):

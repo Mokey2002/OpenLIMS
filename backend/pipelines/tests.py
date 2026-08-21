@@ -5,7 +5,7 @@ from rest_framework.test import APITestCase
 from events.models import Event
 from projects.models import Project
 from results.models import Result, WorkItem
-from samples.models import Sample
+from samples.models import Sample, SampleBatch
 
 from .models import (
     AnalysisDefinition,
@@ -358,3 +358,204 @@ class PipelineWorkflowTests(APITestCase):
                 payload__reason__icontains="damaged sample",
             ).exists()
         )
+
+    def test_analysis_can_be_assigned_to_one_sample_with_required_results(self):
+        analysis = AnalysisDefinition.objects.create(
+            code="PH",
+            name="pH analysis",
+            required_fields=[
+                {
+                    "key": "ph",
+                    "label": "pH",
+                    "value_type": "NUMBER",
+                    "required": True,
+                    "unit": "",
+                }
+            ],
+            created_by=self.admin,
+        )
+        sample = Sample.objects.create(
+            sample_id="SCOPE-SAMPLE-001",
+            project=self.project,
+            created_by=self.tech,
+        )
+        self.client.force_authenticate(self.tech)
+
+        response = self.client.post(
+            "/api/pipeline-runs/assign/",
+            {
+                "scope_type": "SAMPLE",
+                "sample": sample.id,
+                "assignment_type": "ANALYSIS",
+                "analysis": analysis.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["assigned_count"], 1)
+        work_item = WorkItem.objects.get(sample=sample)
+        self.assertEqual(work_item.analysis_code, "PH")
+        self.assertEqual(work_item.required_fields, analysis.required_fields)
+
+        completion = self.client.patch(
+            f"/api/work-items/{work_item.id}/",
+            {"status": WorkItem.STATUS_COMPLETED},
+            format="json",
+        )
+        self.assertEqual(completion.status_code, 400, completion.data)
+        self.assertEqual(completion.data["missing_required_fields"], ["ph"])
+
+        Result.objects.create(
+            work_item=work_item,
+            key="ph",
+            value_type=Result.VALUE_TYPE_NUMBER,
+            value_number=7.2,
+            entered_by=self.tech,
+        )
+        completion = self.client.patch(
+            f"/api/work-items/{work_item.id}/",
+            {"status": WorkItem.STATUS_COMPLETED},
+            format="json",
+        )
+        self.assertEqual(completion.status_code, 200, completion.data)
+
+    def test_analysis_can_be_assigned_to_every_sample_in_a_batch(self):
+        analysis = AnalysisDefinition.objects.create(
+            code="MICRO",
+            name="Microbiology screen",
+            required_fields=[],
+            created_by=self.admin,
+        )
+        batch = SampleBatch.objects.create(
+            code="BATCH-001",
+            project=self.project,
+            created_by=self.tech,
+        )
+        samples = [
+            Sample.objects.create(
+                sample_id=f"BATCH-SAMPLE-{index}",
+                project=self.project,
+                batch=batch,
+                created_by=self.tech,
+            )
+            for index in range(1, 3)
+        ]
+        self.client.force_authenticate(self.tech)
+
+        response = self.client.post(
+            "/api/pipeline-runs/assign/",
+            {
+                "scope_type": "BATCH",
+                "batch": batch.id,
+                "assignment_type": "ANALYSIS",
+                "analysis": analysis.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["assigned_count"], 2)
+        self.assertEqual(
+            WorkItem.objects.filter(
+                sample__in=samples,
+                analysis_code="MICRO",
+            ).count(),
+            2,
+        )
+
+        duplicate = self.client.post(
+            "/api/pipeline-runs/assign/",
+            {
+                "scope_type": "BATCH",
+                "batch": batch.id,
+                "assignment_type": "ANALYSIS",
+                "analysis": analysis.id,
+            },
+            format="json",
+        )
+        self.assertEqual(duplicate.status_code, 200, duplicate.data)
+        self.assertEqual(duplicate.data["assigned_count"], 0)
+        self.assertEqual(duplicate.data["skipped_count"], 2)
+
+    def test_pipeline_project_assignment_reports_assigned_and_skipped_samples(self):
+        template = self.create_template()
+        first = Sample.objects.create(
+            sample_id="PROJECT-SAMPLE-001",
+            project=self.project,
+            created_by=self.tech,
+        )
+        second = Sample.objects.create(
+            sample_id="PROJECT-SAMPLE-002",
+            project=self.project,
+            created_by=self.tech,
+        )
+        Sample.objects.create(
+            sample_id="PROJECT-SAMPLE-ARCHIVED",
+            project=self.project,
+            status=Sample.STATUS_ARCHIVED,
+            created_by=self.tech,
+        )
+        self.client.force_authenticate(self.tech)
+        existing = self.client.post(
+            "/api/pipeline-runs/",
+            {"sample": first.id, "template": template.id},
+            format="json",
+        )
+        self.assertEqual(existing.status_code, 201, existing.data)
+
+        response = self.client.post(
+            "/api/pipeline-runs/assign/",
+            {
+                "scope_type": "PROJECT",
+                "project": self.project.id,
+                "assignment_type": "PIPELINE",
+                "pipeline_template": template.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["assigned_count"], 1)
+        self.assertEqual(response.data["skipped_count"], 2)
+        self.assertEqual(response.data["assigned"][0]["sample"], second.id)
+        self.assertEqual(PipelineRun.objects.filter(sample=second).count(), 1)
+        self.assertTrue(
+            Event.objects.filter(
+                entity_type="Project",
+                entity_id=str(self.project.id),
+                action="WORKFLOW_ASSIGNMENT_COMPLETED",
+                payload__assigned_count=1,
+                payload__skipped_count=2,
+            ).exists()
+        )
+
+    def test_viewer_cannot_assign_project_workflows(self):
+        viewer_group, _ = Group.objects.get_or_create(name="viewer")
+        viewer = User.objects.create_user(username="project-viewer", password="pass")
+        viewer.groups.add(viewer_group)
+        self.project.members.add(viewer)
+        analysis = AnalysisDefinition.objects.create(
+            code="VIEW-ONLY",
+            name="View only analysis",
+            created_by=self.admin,
+        )
+        Sample.objects.create(
+            sample_id="VIEWER-SAMPLE-001",
+            project=self.project,
+            created_by=self.tech,
+        )
+        self.client.force_authenticate(viewer)
+
+        response = self.client.post(
+            "/api/pipeline-runs/assign/",
+            {
+                "scope_type": "PROJECT",
+                "project": self.project.id,
+                "assignment_type": "ANALYSIS",
+                "analysis": analysis.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403, response.data)

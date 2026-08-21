@@ -66,9 +66,9 @@ Por lo tanto, el uso esperado no se limita a crear muestras manualmente y despu�
 
 | Área | Funciones disponibles |
 |---|---|
-| **Proyectos** | Espacios de trabajo, miembros, notas, muestras y visibilidad por proyecto |
+| **Proyectos** | Espacios de trabajo, miembros, notas, muestras, visibilidad y vista unificada desde la muestra hasta el reporte |
 | **Muestras** | Alta, estados, responsable, lote, archivos adjuntos, campos personalizados y proyectos vinculados |
-| **Pipelines** | Plantillas ordenadas, valores predeterminados por proyecto o tipo de muestra, ejecución por muestra, avance automático, bloqueo por fallas y compuertas de QC |
+| **Pipelines** | Plantillas ordenadas, asignación por muestra, lote o proyecto, valores predeterminados, avance automático, bloqueo por fallas y compuertas de QC |
 | **Análisis y procedimientos** | Tipos de análisis configurables, resultados obligatorios, procedimientos versionados, vínculo con SOP y duración esperada |
 | **Inventario** | Ubicaciones, contenedores y colocación física de muestras |
 | **Cola de trabajo** | Creación de trabajos para muestras o lotes, asignación, fechas límite y seguimiento de estado |
@@ -125,6 +125,8 @@ OpenLIMS permite:
 - Relacionar resultados con el trabajo y la muestra correspondientes.
 - Ejecutar importaciones y análisis pesados en segundo plano.
 - Crear plantillas reutilizables con pasos ordenados desde el **Workflow Designer**.
+- Asignar un análisis o pipeline a una muestra, a todas las muestras de un lote o a todas las muestras principales de un proyecto.
+- Revisar desde el proyecto la ruta completa: muestras, trabajo, resultados, QC y estado de reporte.
 - Relacionar cada paso con un procedimiento y un tipo de análisis configurables.
 - Definir un pipeline predeterminado por proyecto, tipo de muestra o ambos.
 - Iniciar automáticamente el pipeline correspondiente al dar de alta manualmente una muestra.
