@@ -15,6 +15,7 @@ class SystemSettingsSerializer(serializers.ModelSerializer):
             "id",
             "lab_name",
             "organization_name",
+            "ui_language",
             "default_timezone",
             "default_sample_status",
             "max_upload_size_mb",

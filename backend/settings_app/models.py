@@ -3,8 +3,20 @@ from django.db import models
 
 
 class SystemSettings(models.Model):
+    UI_LANGUAGE_ENGLISH = "en"
+    UI_LANGUAGE_SPANISH = "es"
+    UI_LANGUAGE_CHOICES = [
+        (UI_LANGUAGE_ENGLISH, "English"),
+        (UI_LANGUAGE_SPANISH, "Español"),
+    ]
+
     lab_name = models.CharField(max_length=255, default="OpenLIMS Demo Lab")
     organization_name = models.CharField(max_length=255, default="OpenLIMS")
+    ui_language = models.CharField(
+        max_length=5,
+        choices=UI_LANGUAGE_CHOICES,
+        default=UI_LANGUAGE_ENGLISH,
+    )
 
     default_timezone = models.CharField(max_length=100, default="UTC")
     default_sample_status = models.CharField(max_length=50, default="RECEIVED")
@@ -57,6 +69,7 @@ class SystemSettings(models.Model):
             defaults={
                 "lab_name": "OpenLIMS Demo Lab",
                 "organization_name": "OpenLIMS",
+                "ui_language": cls.UI_LANGUAGE_ENGLISH,
                 "default_timezone": "UTC",
                 "default_sample_status": "RECEIVED",
                 "max_upload_size_mb": 10,

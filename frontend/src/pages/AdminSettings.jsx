@@ -11,12 +11,13 @@ import {
 } from "react-bootstrap";
 import { apiGet, apiPatch, apiPost } from "../api";
 import { isAdmin, readOnlyMessage } from "../authz";
+import { useLanguage } from "../i18n";
 
-function formatTimestamp(value) {
+function formatTimestamp(value, locale) {
   if (!value) return "-";
 
   try {
-    return new Date(value).toLocaleString();
+    return new Date(value).toLocaleString(locale);
   } catch {
     return value;
   }
@@ -31,6 +32,7 @@ function parseExtensionText(value) {
 }
 
 export default function AdminSettings() {
+  const { locale, setLanguage } = useLanguage();
   const [me, setMe] = useState(null);
   const [settings, setSettings] = useState(null);
   const [form, setForm] = useState(null);
@@ -100,6 +102,7 @@ export default function AdminSettings() {
       const payload = {
         lab_name: form.lab_name,
         organization_name: form.organization_name,
+        ui_language: form.ui_language,
         default_timezone: form.default_timezone,
         default_sample_status: form.default_sample_status,
         max_upload_size_mb: Number(form.max_upload_size_mb),
@@ -117,6 +120,7 @@ export default function AdminSettings() {
 
       const data = await apiPatch("/api/system-settings/1/", payload);
 
+      setLanguage(data.ui_language);
       setSettings(data);
       setForm({
         ...data,
@@ -146,6 +150,7 @@ export default function AdminSettings() {
     try {
       const data = await apiPost("/api/system-settings/reset-defaults/", {});
 
+      setLanguage(data.ui_language);
       setSettings(data);
       setForm({
         ...data,
@@ -228,6 +233,21 @@ export default function AdminSettings() {
                       updateField("organization_name", e.target.value)
                     }
                   />
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>UI Language</Form.Label>
+                  <Form.Select
+                    value={form.ui_language || "en"}
+                    disabled={!userIsAdmin}
+                    onChange={(e) => updateField("ui_language", e.target.value)}
+                  >
+                    <option value="en">English</option>
+                    <option value="es">Spanish</option>
+                  </Form.Select>
+                  <div className="form-text">
+                    Choose the language shown to every signed-in OpenLIMS user.
+                  </div>
                 </Form.Group>
 
                 <Form.Group className="mb-3">
@@ -395,7 +415,7 @@ export default function AdminSettings() {
                 <div className="soft-card">
                   <div className="feed-meta">Last Updated</div>
                   <div className="fw-semibold">
-                    {formatTimestamp(settings?.updated_at)}
+                    {formatTimestamp(settings?.updated_at, locale)}
                   </div>
 
                   <div className="feed-meta mt-3">Updated By</div>

@@ -21,7 +21,7 @@ from imports.views import InstrumentProfileViewSet,InstrumentColumnMappingViewSe
 from notifications.views import NotificationViewSet
 from sequences.views import SequenceViewSet
 from alignments.views import AlignmentJobViewSet
-from settings_app.views import SystemSettingsViewSet
+from settings_app.views import PublicUISettingsView, SystemSettingsViewSet
 from blast.views import BlastDatabaseViewSet, BlastJobViewSet
 from mass_spec.views import MassSpecRunViewSet
 from assistant.views import (
@@ -100,6 +100,7 @@ router.register(r"pipeline-templates", PipelineTemplateViewSet, basename="pipeli
 router.register(r"pipeline-runs", PipelineRunViewSet, basename="pipeline-run")
 
 urlpatterns = router.urls + [
+    path("ui-settings/", PublicUISettingsView.as_view(), name="public-ui-settings"),
     path("assistant/chat/", AssistantChatView.as_view(), name="assistant-chat"),
     path(
         "assistant/interactions/<uuid:interaction_id>/feedback/",

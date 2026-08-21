@@ -1,12 +1,22 @@
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from core.permissions import IsAuthenticatedReadOnlyAdminWrite
 from events.models import Event
 
 from .models import SystemSettings
 from .serializers import SystemSettingsSerializer
+
+
+class PublicUISettingsView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        settings_obj = SystemSettings.load()
+        return Response({"ui_language": settings_obj.ui_language})
 
 
 class SystemSettingsViewSet(viewsets.ModelViewSet):
@@ -74,6 +84,7 @@ class SystemSettingsViewSet(viewsets.ModelViewSet):
 
         settings_obj.lab_name = "OpenLIMS Demo Lab"
         settings_obj.organization_name = "OpenLIMS"
+        settings_obj.ui_language = SystemSettings.UI_LANGUAGE_ENGLISH
         settings_obj.default_timezone = "UTC"
         settings_obj.default_sample_status = "RECEIVED"
         settings_obj.max_upload_size_mb = 10

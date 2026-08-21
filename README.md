@@ -93,6 +93,7 @@ directly from the repository owner.
 | **Assistant** | OpenLIMS Rules, optional OpenAI or Ollama, clarification choices, visible removable context, investigation and comparison follow-ups, confirmed actions with expiring user-bound tokens and audit events |
 | **Jobs** | Celery/Redis background jobs and real-time WebSocket updates |
 | **Security** | JWT authentication and role-based permissions |
+| **Localization** | Director-controlled, instance-wide English or Spanish UI, including the sign-in screen and workflow pages |
 
 ---
 
@@ -728,6 +729,7 @@ OpenLIMS is a production-style LIMS prototype with many production-shaped patter
 - Optional Docker-based local Ollama assistant
 - Assistant engine/model indicator in the UI
 - Admin settings
+- Director-controlled English/Spanish interface
 - System health checks
 - CI checks
 
