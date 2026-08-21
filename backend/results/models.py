@@ -44,6 +44,17 @@ class WorkItem(models.Model):
     )
     name = models.CharField(max_length=128)
     work_type = models.CharField(max_length=64, default="GENERAL")
+    analysis_code = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Analysis code snapshot for directly assigned or pipeline work.",
+    )
+    required_fields = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Result requirements captured when the work is assigned.",
+    )
     status = models.CharField(
         max_length=32,
         choices=STATUS_CHOICES,

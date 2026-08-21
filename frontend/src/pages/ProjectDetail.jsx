@@ -10,7 +10,7 @@ import {
   Col,
   Table,
 } from "react-bootstrap";
-import { apiGet, apiPatch, apiPostForm } from "../api";
+import { apiGet, apiPatch, apiPost, apiPostForm } from "../api";
 import ProjectSequences from "../components/ProjectSequences";
 import { canWrite, isAdmin, readOnlyMessage } from "../authz";
 
@@ -86,6 +86,23 @@ function jobVariant(status) {
   }
 }
 
+function workStatusVariant(status) {
+  switch (status) {
+    case "COMPLETED":
+      return "success";
+    case "FAILED":
+      return "danger";
+    case "IN_PROGRESS":
+      return "primary";
+    case "CANCELLED":
+      return "dark";
+    case "PENDING":
+      return "warning";
+    default:
+      return "secondary";
+  }
+}
+
 function countBy(items, field) {
   return items.reduce((acc, item) => {
     const key = item[field] || "UNKNOWN";
@@ -133,6 +150,10 @@ export default function ProjectDetail() {
   const [samples, setSamples] = useState([]);
   const [sampleCustomFields, setSampleCustomFields] = useState({});
   const [workItems, setWorkItems] = useState([]);
+  const [pipelineRuns, setPipelineRuns] = useState([]);
+  const [batches, setBatches] = useState([]);
+  const [analyses, setAnalyses] = useState([]);
+  const [pipelineTemplates, setPipelineTemplates] = useState([]);
   const [posts, setPosts] = useState([]);
   const [users, setUsers] = useState([]);
   const [imports, setImports] = useState([]);
@@ -142,6 +163,16 @@ export default function ProjectDetail() {
   const [me, setMe] = useState(null);
 
   const [err, setErr] = useState("");
+  const [assignmentResult, setAssignmentResult] = useState(null);
+  const [assigningWorkflow, setAssigningWorkflow] = useState(false);
+  const [assignmentForm, setAssignmentForm] = useState({
+    scope_type: "PROJECT",
+    sample: "",
+    batch: "",
+    assignment_type: "PIPELINE",
+    analysis: "",
+    pipeline_template: "",
+  });
   const [savingMembers, setSavingMembers] = useState(false);
 
   const [note, setNote] = useState("");
@@ -158,6 +189,10 @@ export default function ProjectDetail() {
         projectData,
         samplesData,
         workItemsData,
+        pipelineRunsData,
+        batchesData,
+        analysesData,
+        pipelineTemplatesData,
         postsData,
         importsData,
         sequencesData,
@@ -167,7 +202,11 @@ export default function ProjectDetail() {
       ] = await Promise.all([
         apiGet(`/api/projects/${id}/`),
         apiGetAllPages(`/api/samples/?project=${id}`),
-        apiGet(`/api/work-items/?project=${id}`),
+        apiGetAllPages(`/api/work-items/?project=${id}`),
+        apiGetAllPages(`/api/pipeline-runs/?project=${id}`),
+        apiGetAllPages(`/api/sample-batches/?project=${id}`),
+        apiGetAllPages("/api/analysis-definitions/"),
+        apiGetAllPages("/api/pipeline-templates/"),
         apiGet(`/api/project-posts/?project=${id}`),
         apiGet(`/api/import-jobs/`),
         apiGet(`/api/sequences/?project=${id}`),
@@ -178,6 +217,11 @@ export default function ProjectDetail() {
 
       const sampleList = samplesData.results || samplesData || [];
       const workItemList = workItemsData.results || workItemsData || [];
+      const pipelineRunList = pipelineRunsData.results || pipelineRunsData || [];
+      const batchList = batchesData.results || batchesData || [];
+      const analysisList = analysesData.results || analysesData || [];
+      const pipelineTemplateList =
+        pipelineTemplatesData.results || pipelineTemplatesData || [];
       const postList = postsData.results || postsData || [];
       const importList = importsData.results || importsData || [];
       const sequenceList = sequencesData.results || sequencesData || [];
@@ -203,6 +247,10 @@ export default function ProjectDetail() {
       setProject(projectData);
       setSamples(sampleList);
       setWorkItems(workItemList);
+      setPipelineRuns(pipelineRunList);
+      setBatches(batchList);
+      setAnalyses(analysisList);
+      setPipelineTemplates(pipelineTemplateList);
       setPosts(postList);
       setSequences(sequenceList);
       setAlignments(alignmentList);
@@ -254,6 +302,14 @@ export default function ProjectDetail() {
   const userIsAdmin = isAdmin(me);
   const userCanWrite = canWrite(me);
   const readOnlyText = readOnlyMessage(me);
+  const assignmentScopeReady =
+    assignmentForm.scope_type === "PROJECT" ||
+    (assignmentForm.scope_type === "BATCH" && assignmentForm.batch) ||
+    (assignmentForm.scope_type === "SAMPLE" && assignmentForm.sample);
+  const assignmentDefinitionReady =
+    (assignmentForm.assignment_type === "PIPELINE" &&
+      assignmentForm.pipeline_template) ||
+    (assignmentForm.assignment_type === "ANALYSIS" && assignmentForm.analysis);
 
   const filteredUsers = useMemo(() => {
     const q = memberQuery.trim().toLowerCase();
@@ -273,6 +329,85 @@ export default function ProjectDetail() {
   const sampleStatusCounts = useMemo(() => {
     return countBy(samples, "status");
   }, [samples]);
+
+  const workflowRows = useMemo(() => {
+    const workBySample = new Map();
+    const runsBySample = new Map();
+
+    workItems.forEach((item) => {
+      const key = String(item.sample);
+      workBySample.set(key, [...(workBySample.get(key) || []), item]);
+    });
+    pipelineRuns.forEach((run) => {
+      const key = String(run.sample);
+      runsBySample.set(key, [...(runsBySample.get(key) || []), run]);
+    });
+
+    return samples.map((sample) => {
+      const sampleWork = workBySample.get(String(sample.id)) || [];
+      const sampleRuns = runsBySample.get(String(sample.id)) || [];
+      const openWork = sampleWork.filter((item) =>
+        ["PENDING", "IN_PROGRESS"].includes(item.status)
+      );
+      const resultCount = sampleWork.reduce(
+        (total, item) => total + (item.results?.length || 0),
+        0
+      );
+      const pendingQc = sampleWork.filter(
+        (item) => item.qc_status === "PENDING_REVIEW"
+      ).length;
+      const rejectedQc = sampleWork.filter((item) =>
+        ["REJECTED", "RERUN_REQUIRED"].includes(item.qc_status)
+      ).length;
+      const workStatus = sampleWork.some((item) => item.status === "FAILED")
+        ? "FAILED"
+        : sampleWork.some((item) => item.status === "IN_PROGRESS")
+          ? "IN_PROGRESS"
+          : sampleWork.some((item) => item.status === "PENDING")
+            ? "PENDING"
+            : sampleWork.some((item) => item.status === "CANCELLED")
+              ? "CANCELLED"
+              : sampleWork.length
+                ? "COMPLETED"
+                : null;
+      const activeRun = sampleRuns.find((run) => run.status === "ACTIVE");
+      const latestRun = activeRun || sampleRuns[0];
+      const directAnalyses = Array.from(
+        new Set(
+          sampleWork
+            .filter((item) => !item.pipeline_run_id && item.analysis_code)
+            .map((item) => item.analysis_code)
+        )
+      );
+
+      return {
+        sample,
+        workItems: sampleWork,
+        openWork,
+        resultCount,
+        pendingQc,
+        rejectedQc,
+        workStatus,
+        latestRun,
+        directAnalyses,
+      };
+    });
+  }, [samples, workItems, pipelineRuns]);
+
+  const workflowTotals = useMemo(() => {
+    return {
+      openWork: workItems.filter((item) =>
+        ["PENDING", "IN_PROGRESS"].includes(item.status)
+      ).length,
+      results: workItems.reduce(
+        (total, item) => total + (item.results?.length || 0),
+        0
+      ),
+      qc: workItems.filter((item) => item.qc_status === "PENDING_REVIEW")
+        .length,
+      reported: samples.filter((sample) => sample.status === "REPORTED").length,
+    };
+  }, [samples, workItems]);
 
   const sampleCustomFieldColumns = useMemo(() => {
     const names = new Set();
@@ -320,6 +455,43 @@ export default function ProjectDetail() {
       .sort((a, b) => new Date(b.timestamp || b.created_at) - new Date(a.timestamp || a.created_at))
       .slice(0, 8);
   }, [events]);
+
+  async function assignWorkflow(e) {
+    e.preventDefault();
+    if (!userCanWrite) return;
+
+    setErr("");
+    setAssignmentResult(null);
+    setAssigningWorkflow(true);
+    const payload = {
+      scope_type: assignmentForm.scope_type,
+      assignment_type: assignmentForm.assignment_type,
+    };
+
+    if (assignmentForm.scope_type === "PROJECT") {
+      payload.project = Number(id);
+    } else if (assignmentForm.scope_type === "BATCH") {
+      payload.batch = Number(assignmentForm.batch);
+    } else {
+      payload.sample = Number(assignmentForm.sample);
+    }
+
+    if (assignmentForm.assignment_type === "PIPELINE") {
+      payload.pipeline_template = Number(assignmentForm.pipeline_template);
+    } else {
+      payload.analysis = Number(assignmentForm.analysis);
+    }
+
+    try {
+      const result = await apiPost("/api/pipeline-runs/assign/", payload);
+      setAssignmentResult(result);
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setAssigningWorkflow(false);
+    }
+  }
 
   async function createPost(e) {
     e.preventDefault();
@@ -461,6 +633,294 @@ export default function ProjectDetail() {
           </Card.Body>
         </Card>
       </div>
+
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <div className="toolbar-row mb-3">
+            <div>
+              <h5 className="section-title mb-1">Project Workflow</h5>
+              <div className="feed-meta">
+                Project → samples → work → results → QC → report
+              </div>
+            </div>
+            <div className="inline-actions">
+              <Link className="btn btn-sm btn-outline-dark" to="/work-queue">
+                Work Queue
+              </Link>
+              <Link className="btn btn-sm btn-outline-dark" to={`/reports?project=${id}`}>
+                Reports
+              </Link>
+            </div>
+          </div>
+
+          <Row className="g-2 mb-4">
+            {[
+              ["Project", 1, project.code],
+              ["Samples", samples.length, "Associated records"],
+              ["Open Work", workflowTotals.openWork, `${workItems.length} total`],
+              ["Results", workflowTotals.results, "Recorded values"],
+              ["QC Pending", workflowTotals.qc, `${qcStats.approved} approved`],
+              ["Reported", workflowTotals.reported, `${samples.length} samples`],
+            ].map(([label, value, note]) => (
+              <Col xs={6} md={4} xl={2} key={label}>
+                <div className="soft-card h-100">
+                  <div className="metric-label">{label}</div>
+                  <div className="metric-value">{value}</div>
+                  <div className="metric-note">{note}</div>
+                </div>
+              </Col>
+            ))}
+          </Row>
+
+          {userCanWrite && (
+            <div className="soft-card mb-4">
+              <div className="toolbar-row mb-3">
+                <div>
+                  <strong>Assign analysis or pipeline</strong>
+                  <div className="feed-meta">
+                    Apply work to one sample, a project batch, or every primary sample in this project.
+                  </div>
+                </div>
+              </div>
+
+              <Form onSubmit={assignWorkflow}>
+                <Row className="g-3 align-items-end">
+                  <Col md={2}>
+                    <Form.Label>Scope</Form.Label>
+                    <Form.Select
+                      value={assignmentForm.scope_type}
+                      onChange={(e) =>
+                        setAssignmentForm({
+                          ...assignmentForm,
+                          scope_type: e.target.value,
+                          sample: "",
+                          batch: "",
+                        })
+                      }
+                    >
+                      <option value="PROJECT">Entire project</option>
+                      <option value="BATCH">Sample batch</option>
+                      <option value="SAMPLE">One sample</option>
+                    </Form.Select>
+                  </Col>
+
+                  <Col md={3}>
+                    <Form.Label>Target</Form.Label>
+                    {assignmentForm.scope_type === "PROJECT" && (
+                      <Form.Control value={`${project.code} — ${project.name}`} disabled />
+                    )}
+                    {assignmentForm.scope_type === "BATCH" && (
+                      <Form.Select
+                        required
+                        value={assignmentForm.batch}
+                        onChange={(e) =>
+                          setAssignmentForm({ ...assignmentForm, batch: e.target.value })
+                        }
+                      >
+                        <option value="">Select batch</option>
+                        {batches.map((batch) => (
+                          <option key={batch.id} value={batch.id}>
+                            {batch.code} · {batch.sample_count} samples
+                          </option>
+                        ))}
+                      </Form.Select>
+                    )}
+                    {assignmentForm.scope_type === "SAMPLE" && (
+                      <Form.Select
+                        required
+                        value={assignmentForm.sample}
+                        onChange={(e) =>
+                          setAssignmentForm({ ...assignmentForm, sample: e.target.value })
+                        }
+                      >
+                        <option value="">Select sample</option>
+                        {samples.map((sample) => (
+                          <option key={sample.id} value={sample.id}>
+                            {sample.sample_id} · {sample.sample_type}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    )}
+                  </Col>
+
+                  <Col md={2}>
+                    <Form.Label>Assignment</Form.Label>
+                    <Form.Select
+                      value={assignmentForm.assignment_type}
+                      onChange={(e) =>
+                        setAssignmentForm({
+                          ...assignmentForm,
+                          assignment_type: e.target.value,
+                          analysis: "",
+                          pipeline_template: "",
+                        })
+                      }
+                    >
+                      <option value="PIPELINE">Pipeline</option>
+                      <option value="ANALYSIS">Analysis</option>
+                    </Form.Select>
+                  </Col>
+
+                  <Col md={3}>
+                    <Form.Label>
+                      {assignmentForm.assignment_type === "PIPELINE"
+                        ? "Pipeline template"
+                        : "Analysis"}
+                    </Form.Label>
+                    {assignmentForm.assignment_type === "PIPELINE" ? (
+                      <Form.Select
+                        required
+                        value={assignmentForm.pipeline_template}
+                        onChange={(e) =>
+                          setAssignmentForm({
+                            ...assignmentForm,
+                            pipeline_template: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="">Select pipeline</option>
+                        {pipelineTemplates
+                          .filter((template) => template.active)
+                          .map((template) => (
+                            <option key={template.id} value={template.id}>
+                              {template.code} — {template.name}
+                            </option>
+                          ))}
+                      </Form.Select>
+                    ) : (
+                      <Form.Select
+                        required
+                        value={assignmentForm.analysis}
+                        onChange={(e) =>
+                          setAssignmentForm({ ...assignmentForm, analysis: e.target.value })
+                        }
+                      >
+                        <option value="">Select analysis</option>
+                        {analyses
+                          .filter((analysis) => analysis.active)
+                          .map((analysis) => (
+                            <option key={analysis.id} value={analysis.id}>
+                              {analysis.code} — {analysis.name}
+                            </option>
+                          ))}
+                      </Form.Select>
+                    )}
+                  </Col>
+
+                  <Col md={2}>
+                    <Button
+                      type="submit"
+                      variant="dark"
+                      className="w-100"
+                      disabled={
+                        assigningWorkflow ||
+                        !assignmentScopeReady ||
+                        !assignmentDefinitionReady
+                      }
+                    >
+                      {assigningWorkflow ? "Assigning..." : "Assign"}
+                    </Button>
+                  </Col>
+                </Row>
+              </Form>
+            </div>
+          )}
+
+          {assignmentResult && (
+            <Alert variant={assignmentResult.assigned_count ? "success" : "warning"}>
+              Assigned {assignmentResult.assignment.code} to {assignmentResult.assigned_count} sample(s).
+              {assignmentResult.skipped_count > 0 && (
+                <>
+                  {" "}{assignmentResult.skipped_count} sample(s) could not be assigned.
+                  <ul className="mb-0 mt-2">
+                    {assignmentResult.skipped.slice(0, 5).map((item) => (
+                      <li key={item.sample}>
+                        {item.sample_code}: {item.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </Alert>
+          )}
+
+          {workflowRows.length === 0 ? (
+            <div className="empty-state">No samples are associated with this project.</div>
+          ) : (
+            <Table responsive hover className="app-table mb-0">
+              <thead>
+                <tr>
+                  <th>Sample</th>
+                  <th>Batch</th>
+                  <th>Pipeline / Analysis</th>
+                  <th>Work</th>
+                  <th>Results</th>
+                  <th>QC</th>
+                  <th>Report</th>
+                </tr>
+              </thead>
+              <tbody>
+                {workflowRows.map((row) => (
+                  <tr key={row.sample.id}>
+                    <td>
+                      <Link to={`/samples/${row.sample.id}`}>{row.sample.sample_id}</Link>
+                      <div className="feed-meta">{row.sample.sample_type}</div>
+                    </td>
+                    <td>{row.sample.batch_code || "—"}</td>
+                    <td>
+                      {row.latestRun && (
+                        <>
+                          <strong>{row.latestRun.template_code}</strong>
+                          <div className="feed-meta">Pipeline · {row.latestRun.status}</div>
+                        </>
+                      )}
+                      {row.directAnalyses.length > 0 && (
+                        <div className={row.latestRun ? "feed-meta mt-1" : ""}>
+                          Analysis · {row.directAnalyses.join(", ")}
+                        </div>
+                      )}
+                      {!row.latestRun && row.directAnalyses.length === 0 && "—"}
+                    </td>
+                    <td>
+                      {row.workItems.length ? (
+                        <>
+                          <Badge
+                            bg={workStatusVariant(row.workStatus)}
+                          >
+                            {row.openWork.length
+                              ? `${row.openWork.length} open`
+                              : row.workStatus}
+                          </Badge>
+                          <div className="feed-meta">{row.workItems.length} total</div>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td>{row.resultCount}</td>
+                    <td>
+                      {row.rejectedQc ? (
+                        <Badge bg="danger">{row.rejectedQc} attention</Badge>
+                      ) : row.pendingQc ? (
+                        <Badge bg="warning">{row.pendingQc} pending</Badge>
+                      ) : row.workItems.length ? (
+                        <Badge bg="success">Approved</Badge>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td>
+                      <Badge bg={sampleStatusVariant(row.sample.status)}>
+                        {row.sample.status}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Card.Body>
+      </Card>
 
       <Row className="g-4 mb-4">
         <Col lg={8}>
