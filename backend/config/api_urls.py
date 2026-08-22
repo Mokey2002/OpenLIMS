@@ -40,6 +40,8 @@ from assistant.views import (
     SOPDocumentViewSet,
 )
 from migration_toolkit.views import (
+    MigrationDatabaseConnectionViewSet,
+    MigrationDatasetViewSet,
     MigrationFieldMappingViewSet,
     MigrationJobViewSet,
     MigrationProfileViewSet,
@@ -90,6 +92,12 @@ router.register(r"sop-documents", SOPDocumentViewSet, basename="sop-document")
 router.register(r"notification-subscriptions", NotificationSubscriptionViewSet, basename="notification-subscription")
 
 router.register(r"sample-external-ids", SampleExternalIDViewSet, basename="sample-external-id")
+router.register(
+    r"migration-database-connections",
+    MigrationDatabaseConnectionViewSet,
+    basename="migration-database-connection",
+)
+router.register(r"migration-datasets", MigrationDatasetViewSet, basename="migration-dataset")
 router.register(r"migration-profiles", MigrationProfileViewSet, basename="migration-profile")
 router.register(r"migration-field-mappings", MigrationFieldMappingViewSet, basename="migration-field-mapping")
 router.register(r"migration-jobs", MigrationJobViewSet, basename="migration-job")

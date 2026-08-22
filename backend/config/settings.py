@@ -176,6 +176,18 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Read-only legacy database migration sources. Remote hosts must be explicitly
+# allowed; SQLite files must stay below the configured source directory.
+MIGRATION_DB_ALLOWED_HOSTS = env.list(
+    "MIGRATION_DB_ALLOWED_HOSTS",
+    default=["localhost", "127.0.0.1", "db", "host.docker.internal"],
+)
+MIGRATION_DB_CONNECT_TIMEOUT = env.int("MIGRATION_DB_CONNECT_TIMEOUT", default=10)
+MIGRATION_DB_MAX_ROWS = env.int("MIGRATION_DB_MAX_ROWS", default=50000)
+MIGRATION_SQLITE_ROOT = Path(
+    os.getenv("MIGRATION_SQLITE_ROOT", str(BASE_DIR / "migration_sources"))
+)
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 

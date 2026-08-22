@@ -200,19 +200,17 @@ S-ALPHA-001,pass,Peter,PASS
 OpenLIMS includes a data migration toolkit for bringing legacy lab database exports into OpenLIMS in a safer, reviewable way.
 
 ```text
-Legacy database export
-   ↓
-CSV upload
+SISBI / legacy PostgreSQL, MySQL, SQLite, or CSV
    ↓
 Migration profile
    ↓
-Field mapping
+Read-only datasets and field mapping
    ↓
 Preview / dry run
    ↓
 Confirm import
    ↓
-Projects, samples, external IDs, custom fields, work items, and results created
+Projects, inactive users, samples, metadata, work items, and historical results
 ```
 
 The migration toolkit supports:
@@ -220,8 +218,14 @@ The migration toolkit supports:
 - Migration profiles
 - Reusable field mappings
 - CSV upload
+- Director-managed read-only PostgreSQL, MySQL/MariaDB, and SQLite sources
+- Schema/table inspection without arbitrary SQL
+- Separate datasets for projects, users, samples, and historical results
 - Preview / dry-run before import
+- Required-field, data-type, relationship, status, and timestamp validation
+- A source-and-mapping fingerprint that blocks a changed source after preview
 - Project creation or matching
+- Inactive user creation with unusable passwords and safe non-admin roles
 - Sample creation or matching
 - External sample IDs and aliases
 - Custom field values
@@ -230,6 +234,12 @@ The migration toolkit supports:
 - Paginated migration row review
 - Skipped/error row filtering
 - CSV export for migration review
+
+Database passwords are never stored in OpenLIMS. Configure the password in an
+environment variable, enter only that variable's name in the connection, and
+use a source account that has `SELECT` permission only. Remote hosts must also
+be listed in `MIGRATION_DB_ALLOWED_HOSTS`. Each dataset has a row safety limit;
+the final commit re-reads and fingerprints the source before writing anything.
 
 ### External Sample IDs and Aliases
 
@@ -749,7 +759,7 @@ Remaining production-readiness work includes:
 
 Planned and future improvements include:
 
-- More advanced migration support for multi-file exports and direct database imports
+- More advanced migration support for multi-file exports and system-specific API connectors
 - Expanded relationship tracking for derived samples
 - More advanced QC approval workflows
 - Better dashboards for lab operations
