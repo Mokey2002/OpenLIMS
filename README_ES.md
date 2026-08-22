@@ -222,13 +222,11 @@ Esta procedencia demuestra de dónde se obtuvo un resultado. No implica por sí 
 El flujo actual de migración es:
 
 ```text
-Exportación del sistema anterior
-   ↓
-Archivo CSV
+SISBI, PostgreSQL, MySQL, SQLite o CSV anterior
    ↓
 Perfil de migración
    ↓
-Mapeo de campos
+Datasets de solo lectura y mapeo de campos
    ↓
 Vista previa o dry run
    ↓
@@ -242,20 +240,31 @@ Revisión de filas importadas, omitidas o con error
 La herramienta puede crear o relacionar:
 
 - Proyectos.
+- Usuarios inactivos sin contraseñas importadas.
 - Muestras.
 - Identificadores externos y alias.
 - Campos personalizados.
 - Trabajos.
 - Resultados.
+- Fechas históricas, unidades, referencias y estado de QC cuando estén mapeados.
 
 Las columnas no reconocidas pueden conservarse como campos personalizados para reducir la pérdida de información.
 
-### Alcance actual
+### Fuentes de base de datos
 
-El tipo de fuente soportado directamente es CSV. OpenLIMS no se conecta automáticamente a cualquier base de datos de laboratorio. Para otro sistema se puede:
+Dirección puede configurar conexiones de solo lectura a PostgreSQL,
+MySQL/MariaDB o SQLite, inspeccionar tablas y definir un dataset separado para
+proyectos, usuarios, muestras y resultados históricos. OpenLIMS no permite SQL
+arbitrario desde la interfaz.
 
-1. Exportar sus datos a CSV y configurar un perfil reutilizable.
-2. Crear un conector específico para su base de datos o API.
+La contraseña nunca se guarda en OpenLIMS: se configura en una variable de
+entorno y la conexión conserva únicamente el nombre de esa variable. Los hosts
+remotos deben incluirse en `MIGRATION_DB_ALLOWED_HOSTS` y la cuenta de origen
+debe tener solamente permiso `SELECT`.
+
+La vista previa valida campos obligatorios, tipos, relaciones, estados y fechas.
+También genera una huella de los datos y del mapeo. Si SISBI cambia después de
+la revisión, la confirmación se bloquea y se debe generar una vista previa nueva.
 
 ### Uso de modelos de lenguaje
 
@@ -410,7 +419,7 @@ Las principales funciones que todavía requieren ampliación son:
 - Dependencias automáticas entre trabajos.
 - Ramas condicionales y repetición automática según QC.
 - Creación de nuevos algoritmos ejecutables completamente desde la interfaz administrativa.
-- Conectores universales para bases de datos externas.
+- Conectores específicos para APIs de sistemas externos.
 - Validación formal para entornos clínicos o regulados.
 
 OpenLIMS se encuentra en desarrollo activo. El autor está abierto a trabajar con laboratorios que utilicen el sistema para priorizar los pipelines, conectores, procedimientos, automatizaciones y reportes que necesiten.

@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import io
 import json
 import re
@@ -69,7 +70,7 @@ def get_unmapped_data(row, mapped_columns):
 
 
 def mappings_by_type(profile):
-    mappings = profile.field_mappings.all().order_by("id")
+    mappings = profile.field_mappings.filter(dataset__isnull=True).order_by("id")
 
     grouped = {}
 
@@ -77,6 +78,33 @@ def mappings_by_type(profile):
         grouped.setdefault(mapping.target_type, []).append(mapping)
 
     return grouped
+
+
+def build_csv_source_snapshot(profile, uploaded_file, default_project=None):
+    uploaded_file.seek(0)
+    content = uploaded_file.read()
+    uploaded_file.seek(0)
+    mapping_config = [
+        {
+            "source": mapping.source_column,
+            "target": mapping.target_type,
+            "field": mapping.target_field,
+            "value_type": mapping.value_type,
+            "required": mapping.required,
+        }
+        for mapping in profile.field_mappings.filter(dataset__isnull=True).order_by("id")
+    ]
+    snapshot = {
+        "file_sha256": hashlib.sha256(content).hexdigest(),
+        "mapping_sha256": hashlib.sha256(
+            json.dumps(mapping_config, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
+        "default_project_id": default_project.id if default_project else None,
+    }
+    fingerprint = hashlib.sha256(
+        json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return snapshot, fingerprint
 
 
 def get_first_value(row, mappings, target_type):
@@ -168,6 +196,28 @@ def build_preview(profile, uploaded_file, default_project=None, preview_limit=10
 
     for row_number, row in enumerate(rows, start=1):
         row_errors = []
+
+        for mapping_list in mappings.values():
+            for mapping in mapping_list:
+                raw_value = row.get(mapping.source_column)
+                if mapping.required and raw_value in [None, ""]:
+                    row_errors.append(
+                        f"Required column {mapping.source_column} is empty."
+                    )
+                    continue
+                if raw_value in [None, ""]:
+                    continue
+                try:
+                    converted = normalize_value(raw_value, mapping.value_type)
+                    if (
+                        mapping.value_type == MigrationFieldMapping.VALUE_TYPE_BOOLEAN
+                        and converted is None
+                    ):
+                        raise ValueError
+                except (TypeError, ValueError):
+                    row_errors.append(
+                        f"{mapping.source_column} cannot be converted to {mapping.value_type}."
+                    )
 
         sample_code, _ = get_first_value(
             row,
@@ -270,7 +320,13 @@ def build_preview(profile, uploaded_file, default_project=None, preview_limit=10
             "errors": row_errors,
         })
 
+    source_snapshot, preview_fingerprint = build_csv_source_snapshot(
+        profile,
+        uploaded_file,
+        default_project,
+    )
     return {
+        "source_type": "CSV",
         "rows_processed": len(rows),
         "projects_to_create": sorted(projects_to_create),
         "projects_matched": sorted(projects_matched),
@@ -285,6 +341,10 @@ def build_preview(profile, uploaded_file, default_project=None, preview_limit=10
         "preview_limit": preview_limit,
         "preview_rows_returned": min(len(preview_rows), preview_limit),
         "fieldnames": fieldnames,
+        "validation_error_count": sum(len(item["errors"]) for item in skipped_rows),
+        "ready_to_commit": not skipped_rows,
+        "source_snapshot": source_snapshot,
+        "preview_fingerprint": preview_fingerprint,
     }
 
 
@@ -585,6 +645,7 @@ def apply_migration(
     progress_callback=None,
 ):
     rows, fieldnames = read_csv(uploaded_file)
+    total_rows = len(rows)
     mappings = mappings_by_type(profile)
     mapped_columns = get_mapped_columns(mappings)
 

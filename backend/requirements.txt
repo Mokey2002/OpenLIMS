@@ -11,6 +11,7 @@ celery
 redis
 gunicorn
 psycopg2-binary
+PyMySQL>=1.1,<2.0
 channels
 channels-redis
 daphne

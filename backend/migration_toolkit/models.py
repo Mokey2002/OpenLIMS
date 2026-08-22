@@ -27,9 +27,11 @@ class SampleExternalID(models.Model):
 
 class MigrationProfile(models.Model):
     SOURCE_TYPE_CSV = "CSV"
+    SOURCE_TYPE_DATABASE = "DATABASE"
 
     SOURCE_TYPE_CHOICES = [
         (SOURCE_TYPE_CSV, "CSV"),
+        (SOURCE_TYPE_DATABASE, "Database"),
     ]
 
     name = models.CharField(max_length=128, unique=True)
@@ -53,6 +55,86 @@ class MigrationProfile(models.Model):
         return self.name
 
 
+class MigrationDatabaseConnection(models.Model):
+    ENGINE_POSTGRESQL = "POSTGRESQL"
+    ENGINE_MYSQL = "MYSQL"
+    ENGINE_SQLITE = "SQLITE"
+
+    ENGINE_CHOICES = [
+        (ENGINE_POSTGRESQL, "PostgreSQL"),
+        (ENGINE_MYSQL, "MySQL / MariaDB"),
+        (ENGINE_SQLITE, "SQLite"),
+    ]
+
+    name = models.CharField(max_length=128, unique=True)
+    engine = models.CharField(max_length=32, choices=ENGINE_CHOICES)
+    host = models.CharField(max_length=255, blank=True)
+    port = models.PositiveIntegerField(null=True, blank=True)
+    database_name = models.CharField(
+        max_length=512,
+        help_text="Database name, or a path below MIGRATION_SQLITE_ROOT for SQLite.",
+    )
+    username = models.CharField(max_length=128, blank=True)
+    password_env_var = models.CharField(
+        max_length=128,
+        blank=True,
+        help_text="Environment variable containing the read-only source password.",
+    )
+    ssl_mode = models.CharField(max_length=32, default="prefer", blank=True)
+    active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="migration_database_connections",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+
+class MigrationDataset(models.Model):
+    ENTITY_PROJECT = "PROJECT"
+    ENTITY_USER = "USER"
+    ENTITY_SAMPLE = "SAMPLE"
+    ENTITY_RESULT = "RESULT"
+
+    ENTITY_CHOICES = [
+        (ENTITY_PROJECT, "Projects"),
+        (ENTITY_USER, "Users"),
+        (ENTITY_SAMPLE, "Samples"),
+        (ENTITY_RESULT, "Historical results"),
+    ]
+
+    profile = models.ForeignKey(
+        MigrationProfile,
+        on_delete=models.CASCADE,
+        related_name="datasets",
+    )
+    connection = models.ForeignKey(
+        MigrationDatabaseConnection,
+        on_delete=models.PROTECT,
+        related_name="datasets",
+    )
+    name = models.CharField(max_length=128)
+    entity_type = models.CharField(max_length=32, choices=ENTITY_CHOICES)
+    source_schema = models.CharField(max_length=128, blank=True)
+    source_table = models.CharField(max_length=128)
+    source_key_column = models.CharField(max_length=128)
+    row_limit = models.PositiveIntegerField(default=10000)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["entity_type", "id"]
+        unique_together = [("profile", "name")]
+
+    def __str__(self):
+        return f"{self.profile.name}: {self.name}"
+
+
 class MigrationFieldMapping(models.Model):
     TARGET_PROJECT_CODE = "PROJECT_CODE"
     TARGET_PROJECT_NAME = "PROJECT_NAME"
@@ -61,6 +143,25 @@ class MigrationFieldMapping(models.Model):
     TARGET_CUSTOM_FIELD = "CUSTOM_FIELD"
     TARGET_WORK_ITEM_NAME = "WORK_ITEM_NAME"
     TARGET_RESULT_VALUE = "RESULT_VALUE"
+    TARGET_PROJECT_DESCRIPTION = "PROJECT_DESCRIPTION"
+    TARGET_USER_USERNAME = "USER_USERNAME"
+    TARGET_USER_EMAIL = "USER_EMAIL"
+    TARGET_USER_FIRST_NAME = "USER_FIRST_NAME"
+    TARGET_USER_LAST_NAME = "USER_LAST_NAME"
+    TARGET_USER_ROLE = "USER_ROLE"
+    TARGET_SAMPLE_TYPE = "SAMPLE_TYPE"
+    TARGET_SAMPLE_STATUS = "SAMPLE_STATUS"
+    TARGET_SAMPLE_CREATED_AT = "SAMPLE_CREATED_AT"
+    TARGET_WORK_ITEM_TYPE = "WORK_ITEM_TYPE"
+    TARGET_WORK_ITEM_STATUS = "WORK_ITEM_STATUS"
+    TARGET_WORK_ITEM_CREATED_AT = "WORK_ITEM_CREATED_AT"
+    TARGET_RESULT_KEY = "RESULT_KEY"
+    TARGET_RESULT_UNIT = "RESULT_UNIT"
+    TARGET_RESULT_CREATED_AT = "RESULT_CREATED_AT"
+    TARGET_RESULT_QC_STATUS = "RESULT_QC_STATUS"
+    TARGET_RESULT_ENTERED_BY = "RESULT_ENTERED_BY"
+    TARGET_RESULT_REFERENCE_MIN = "RESULT_REFERENCE_MIN"
+    TARGET_RESULT_REFERENCE_MAX = "RESULT_REFERENCE_MAX"
 
     TARGET_TYPE_CHOICES = [
         (TARGET_PROJECT_CODE, "Project Code"),
@@ -70,6 +171,25 @@ class MigrationFieldMapping(models.Model):
         (TARGET_CUSTOM_FIELD, "Sample Custom Field"),
         (TARGET_WORK_ITEM_NAME, "Work Item Name"),
         (TARGET_RESULT_VALUE, "Result Value"),
+        (TARGET_PROJECT_DESCRIPTION, "Project Description"),
+        (TARGET_USER_USERNAME, "User Username"),
+        (TARGET_USER_EMAIL, "User Email"),
+        (TARGET_USER_FIRST_NAME, "User First Name"),
+        (TARGET_USER_LAST_NAME, "User Last Name"),
+        (TARGET_USER_ROLE, "User Role"),
+        (TARGET_SAMPLE_TYPE, "Sample Type"),
+        (TARGET_SAMPLE_STATUS, "Sample Status"),
+        (TARGET_SAMPLE_CREATED_AT, "Sample Created At"),
+        (TARGET_WORK_ITEM_TYPE, "Work Item Type"),
+        (TARGET_WORK_ITEM_STATUS, "Work Item Status"),
+        (TARGET_WORK_ITEM_CREATED_AT, "Work Item Created At"),
+        (TARGET_RESULT_KEY, "Result Key"),
+        (TARGET_RESULT_UNIT, "Result Unit"),
+        (TARGET_RESULT_CREATED_AT, "Result Created At"),
+        (TARGET_RESULT_QC_STATUS, "Result QC Status"),
+        (TARGET_RESULT_ENTERED_BY, "Result Entered By"),
+        (TARGET_RESULT_REFERENCE_MIN, "Result Reference Minimum"),
+        (TARGET_RESULT_REFERENCE_MAX, "Result Reference Maximum"),
     ]
 
     VALUE_TYPE_STRING = "STRING"
@@ -87,6 +207,14 @@ class MigrationFieldMapping(models.Model):
         on_delete=models.CASCADE,
         related_name="field_mappings",
     )
+    dataset = models.ForeignKey(
+        MigrationDataset,
+        on_delete=models.CASCADE,
+        related_name="field_mappings",
+        null=True,
+        blank=True,
+        help_text="Database dataset for this mapping; leave empty for CSV profiles.",
+    )
     source_column = models.CharField(max_length=128)
     target_type = models.CharField(max_length=64, choices=TARGET_TYPE_CHOICES)
     target_field = models.CharField(
@@ -102,7 +230,18 @@ class MigrationFieldMapping(models.Model):
     required = models.BooleanField(default=False)
 
     class Meta:
-        unique_together = [("profile", "source_column", "target_type", "target_field")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["profile", "dataset", "source_column", "target_type", "target_field"],
+                condition=models.Q(dataset__isnull=False),
+                name="migration_db_mapping_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["profile", "source_column", "target_type", "target_field"],
+                condition=models.Q(dataset__isnull=True),
+                name="migration_csv_mapping_unique",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.profile.name}: {self.source_column} -> {self.target_type}"
@@ -138,6 +277,13 @@ class MigrationJob(models.Model):
         related_name="migration_jobs",
     )
     uploaded_file = models.FileField(upload_to="migration_jobs/", null=True, blank=True)
+    source_connection = models.ForeignKey(
+        MigrationDatabaseConnection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="migration_jobs",
+    )
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -151,6 +297,16 @@ class MigrationJob(models.Model):
         default=STATUS_PREVIEWED,
     )
     summary = models.JSONField(default=dict, blank=True)
+    source_snapshot = models.JSONField(default=dict, blank=True)
+    preview_fingerprint = models.CharField(max_length=64, blank=True)
+    committed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="committed_migration_jobs",
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -173,6 +329,15 @@ class MigrationRowRecord(models.Model):
         on_delete=models.CASCADE,
         related_name="row_records",
     )
+    source_dataset = models.ForeignKey(
+        MigrationDataset,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="row_records",
+    )
+    entity_type = models.CharField(max_length=32, blank=True)
+    source_key = models.CharField(max_length=255, blank=True)
     project = models.ForeignKey(
         "projects.Project",
         on_delete=models.SET_NULL,
@@ -203,7 +368,18 @@ class MigrationRowRecord(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = [("migration_job", "row_number")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["migration_job", "source_dataset", "row_number"],
+                condition=models.Q(source_dataset__isnull=False),
+                name="migration_db_row_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["migration_job", "row_number"],
+                condition=models.Q(source_dataset__isnull=True),
+                name="migration_csv_row_unique",
+            ),
+        ]
         indexes = [
             models.Index(fields=["migration_job", "row_number"]),
             models.Index(fields=["project", "sample"]),

@@ -2,7 +2,8 @@ from celery import shared_task
 from django.utils import timezone
 
 from .models import MigrationJob
-from .services import apply_migration
+from .database_services import apply_database_migration
+from .services import apply_migration, build_csv_source_snapshot
 
 
 @shared_task(bind=True)
@@ -41,16 +42,27 @@ def run_migration_job(self, job_id):
         job.save(update_fields=["summary"])
 
     try:
-        job.uploaded_file.open("rb")
-
-        summary = apply_migration(
-            profile=job.profile,
-            uploaded_file=job.uploaded_file,
-            actor=job.uploaded_by,
-            default_project=job.project,
-            job=job,
-            progress_callback=update_progress,
-        )
+        if job.profile.source_type == job.profile.SOURCE_TYPE_DATABASE:
+            summary = apply_database_migration(job=job, actor=job.committed_by or job.uploaded_by)
+        else:
+            job.uploaded_file.open("rb")
+            _, fingerprint = build_csv_source_snapshot(
+                job.profile,
+                job.uploaded_file,
+                job.project,
+            )
+            if fingerprint != job.preview_fingerprint:
+                raise ValueError(
+                    "The CSV or field mappings changed after preview. Preview again before committing."
+                )
+            summary = apply_migration(
+                profile=job.profile,
+                uploaded_file=job.uploaded_file,
+                actor=job.committed_by or job.uploaded_by,
+                default_project=job.project,
+                job=job,
+                progress_callback=update_progress,
+            )
 
         summary["started_at"] = job.summary.get("started_at")
         summary["finished_at"] = timezone.now().isoformat()

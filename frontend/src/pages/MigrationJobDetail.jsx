@@ -132,7 +132,8 @@ export default function MigrationJobDetail() {
   }
 
   useEffect(() => {
-    load(1);
+    const timer = window.setTimeout(() => load(1), 0);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -253,8 +254,8 @@ export default function MigrationJobDetail() {
 
             <Col md={4}>
               <div className="soft-card">
-                <div className="feed-meta">Default Project</div>
-                <div>{job.project_code || "Project from CSV mapping"}</div>
+                <div className="feed-meta">Source</div>
+                <div>{job.source_connection_name || job.project_code || "Project from CSV mapping"}</div>
               </div>
             </Col>
 
@@ -353,6 +354,8 @@ export default function MigrationJobDetail() {
                   <tr>
                     <th>Row</th>
                     <th>Status</th>
+                    <th>Dataset / Entity</th>
+                    <th>Source Key</th>
                     <th>Project</th>
                     <th>Sample</th>
                     <th>Errors</th>
@@ -369,6 +372,11 @@ export default function MigrationJobDetail() {
                           {row.status}
                         </Badge>
                       </td>
+                      <td>
+                        {row.source_dataset ? `#${row.source_dataset} / ` : ""}
+                        {row.entity_type || "CSV"}
+                      </td>
+                      <td>{row.source_key || "-"}</td>
                       <td>
                         {row.project ? (
                           <Link to={`/projects/${row.project}`}>
