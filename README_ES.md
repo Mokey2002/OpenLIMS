@@ -67,8 +67,8 @@ Por lo tanto, el uso esperado no se limita a crear muestras manualmente y despu�
 | Área | Funciones disponibles |
 |---|---|
 | **Proyectos** | Espacios de trabajo, miembros, notas, muestras, visibilidad y vista unificada desde la muestra hasta el reporte |
-| **Muestras** | Alta, estados, responsable, lote, archivos adjuntos, campos personalizados y proyectos vinculados |
-| **Pipelines** | Plantillas ordenadas, asignación por muestra, lote o proyecto, valores predeterminados, avance automático, bloqueo por fallas y compuertas de QC |
+| **Muestras** | Alta, alícuotas, linaje de origen y derivación, custodia, estados, responsable, lote, archivos adjuntos, campos personalizados y proyectos vinculados |
+| **Pipelines** | Grafos de dependencias, pasos paralelos y condicionales, pasos opcionales, reintentos controlados, asignación por muestra, lote o proyecto y compuertas de QC |
 | **Análisis y procedimientos** | Tipos de análisis configurables, resultados obligatorios, procedimientos versionados, vínculo con SOP y duración esperada |
 | **Inventario** | Ubicaciones, contenedores y colocación física de muestras |
 | **Cola de trabajo** | Creación de trabajos para muestras o lotes, asignación, fechas límite y seguimiento de estado |
@@ -84,7 +84,7 @@ Por lo tanto, el uso esperado no se limita a crear muestras manualmente y despu�
 | **Asistente** | Consultas en lenguaje natural, resúmenes, comparaciones, investigación de QC y acciones confirmadas |
 | **SOP** | Administración de procedimientos aprobados, versiones, secciones, vigencia y acceso por proyecto o rol |
 | **Reportes** | Resúmenes de proyectos, inventario, QC, importaciones, comparaciones, investigaciones y auditoría |
-| **Auditoría** | Actor, fecha, entidad, cambios, razón del cambio y exportaciones |
+| **Auditoría** | Actor, fecha, entidad, cambios, escaneos de cadena de custodia, razón del cambio y exportaciones |
 | **Seguridad** | Autenticación JWT y permisos por rol y proyecto |
 | **Idioma** | Interfaz completa en inglés o español, seleccionada por dirección para toda la instancia |
 
@@ -97,6 +97,15 @@ OpenLIMS incluye un ciclo de vida controlado:
 ```text
 RECEIVED → IN_PROGRESS → QC → REPORTED → ARCHIVED
 ```
+
+También permite crear alícuotas, divisiones, muestras derivadas y componentes
+de una mezcla sin perder la relación con la muestra de origen. El sistema evita
+ciclos de linaje y registra cantidad, unidad, usuario, fecha y motivo.
+
+La pantalla de etiquetas acepta el código de barras o el ID de la muestra para
+registrar recepción, retiro, devolución, transferencia de custodia, cambio de
+almacenamiento, procesamiento y disposición. Cada escaneo conserva el contenedor
+y custodio anterior y nuevo dentro del historial auditable.
 
 Una muestra también puede cancelarse desde las etapas activas y archivarse posteriormente.
 

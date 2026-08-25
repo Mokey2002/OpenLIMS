@@ -42,7 +42,18 @@ function emptyProcedure() {
 }
 
 function emptyPipelineStep() {
-  return { procedure: "", name: "", requires_qc: false };
+  return {
+    procedure: "",
+    name: "",
+    requires_qc: false,
+    dependencies: "previous",
+    optional: false,
+    max_retries: 0,
+    condition_source: "",
+    condition_key: "",
+    condition_operator: "EQ",
+    condition_value: "",
+  };
 }
 
 function emptyPipeline() {
@@ -255,6 +266,16 @@ export default function WorkflowDesigner() {
         procedure: String(step.procedure),
         name: step.name || "",
         requires_qc: step.requires_qc,
+        dependencies:
+          step.dependency_positions?.length
+            ? step.dependency_positions.join(",")
+            : "none",
+        optional: step.optional,
+        max_retries: step.max_retries || 0,
+        condition_source: step.activation_condition?.source_position || "",
+        condition_key: step.activation_condition?.result_key || "",
+        condition_operator: step.activation_condition?.operator || "EQ",
+        condition_value: step.activation_condition?.value ?? "",
       })),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -271,9 +292,27 @@ export default function WorkflowDesigner() {
         ? Number(pipelineForm.default_project)
         : null,
       steps: pipelineForm.steps.map((step, index) => ({
-        ...step,
         position: index + 1,
         procedure: Number(step.procedure),
+        name: step.name,
+        requires_qc: step.requires_qc,
+        optional: step.optional,
+        max_retries: Number(step.max_retries || 0),
+        dependency_positions:
+          step.dependencies.trim().toLowerCase() === "none"
+            ? []
+            : step.dependencies.trim().toLowerCase() === "previous" || !step.dependencies.trim()
+              ? (index === 0 ? [] : [index])
+              : step.dependencies.split(",").map((value) => Number(value.trim())).filter(Boolean),
+        activation_condition:
+          step.condition_source && step.condition_key.trim()
+            ? {
+                source_position: Number(step.condition_source),
+                result_key: step.condition_key.trim(),
+                operator: step.condition_operator,
+                value: step.condition_value,
+              }
+            : {},
       })),
     };
     try {
@@ -378,15 +417,24 @@ export default function WorkflowDesigner() {
               <Col md={4}><Form.Label>Default project</Form.Label><Form.Select disabled={!pipelineForm.is_default} value={pipelineForm.default_project} onChange={(event) => setPipelineForm({ ...pipelineForm, default_project: event.target.value })}><option value="">All projects</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</Form.Select></Col>
               <Col md={4}><Form.Label>Default sample type</Form.Label><Form.Control disabled={!pipelineForm.is_default} value={pipelineForm.default_sample_type} onChange={(event) => setPipelineForm({ ...pipelineForm, default_sample_type: event.target.value })} placeholder="DNA (blank means all)" /></Col>
             </Row>
-            <div className="toolbar-row mt-4 mb-2"><div><strong>Ordered steps</strong><div className="feed-meta">Only the current step receives a work item; later steps remain blocked.</div></div><Button type="button" size="sm" variant="outline-dark" onClick={() => setPipelineForm({ ...pipelineForm, steps: [...pipelineForm.steps, emptyPipelineStep()] })}>Add step</Button></div>
+            <div className="toolbar-row mt-4 mb-2"><div><strong>Dependency-aware steps</strong><div className="feed-meta">Use previous for a sequential step, none for a parallel root, or list prerequisite positions such as 1,2.</div></div><Button type="button" size="sm" variant="outline-dark" onClick={() => setPipelineForm({ ...pipelineForm, steps: [...pipelineForm.steps, emptyPipelineStep()] })}>Add step</Button></div>
             {pipelineForm.steps.map((step, index) => (
-              <Row className="g-2 mb-2 align-items-center" key={index}>
-                <Col md={1}><Badge bg="dark">Step {index + 1}</Badge></Col>
-                <Col md={4}><Form.Select required value={step.procedure} onChange={(event) => updatePipelineStep(index, "procedure", event.target.value)}><option value="">Select procedure</option>{activeProcedures.map((procedure) => <option key={procedure.id} value={procedure.id}>{procedure.code} v{procedure.version} — {procedure.name}</option>)}</Form.Select></Col>
-                <Col md={3}><Form.Control value={step.name} onChange={(event) => updatePipelineStep(index, "name", event.target.value)} placeholder="Optional step name" /></Col>
-                <Col md={2}><Form.Check label="QC approval required" checked={step.requires_qc} onChange={(event) => updatePipelineStep(index, "requires_qc", event.target.checked)} /></Col>
-                <Col md={2} className="inline-actions"><Button type="button" size="sm" variant="outline-secondary" disabled={index === 0} onClick={() => movePipelineStep(index, -1)}>↑</Button><Button type="button" size="sm" variant="outline-secondary" disabled={index === pipelineForm.steps.length - 1} onClick={() => movePipelineStep(index, 1)}>↓</Button><Button type="button" size="sm" variant="outline-danger" disabled={pipelineForm.steps.length === 1} onClick={() => setPipelineForm({ ...pipelineForm, steps: pipelineForm.steps.filter((_, itemIndex) => itemIndex !== index) })}>×</Button></Col>
-              </Row>
+              <Card className="soft-card mb-3" key={index}><Card.Body>
+                <Row className="g-2 align-items-center">
+                  <Col md={1}><Badge bg="dark">Step {index + 1}</Badge></Col>
+                  <Col md={4}><Form.Select required value={step.procedure} onChange={(event) => updatePipelineStep(index, "procedure", event.target.value)}><option value="">Select procedure</option>{activeProcedures.map((procedure) => <option key={procedure.id} value={procedure.id}>{procedure.code} v{procedure.version} — {procedure.name}</option>)}</Form.Select></Col>
+                  <Col md={3}><Form.Control value={step.name} onChange={(event) => updatePipelineStep(index, "name", event.target.value)} placeholder="Optional step name" /></Col>
+                  <Col md={2}><Form.Check label="QC approval required" checked={step.requires_qc} onChange={(event) => updatePipelineStep(index, "requires_qc", event.target.checked)} /></Col>
+                  <Col md={2} className="inline-actions"><Button type="button" size="sm" variant="outline-secondary" disabled={index === 0} onClick={() => movePipelineStep(index, -1)}>↑</Button><Button type="button" size="sm" variant="outline-secondary" disabled={index === pipelineForm.steps.length - 1} onClick={() => movePipelineStep(index, 1)}>↓</Button><Button type="button" size="sm" variant="outline-danger" disabled={pipelineForm.steps.length === 1} onClick={() => setPipelineForm({ ...pipelineForm, steps: pipelineForm.steps.filter((_, itemIndex) => itemIndex !== index) })}>×</Button></Col>
+                  <Col md={3}><Form.Label>Dependencies</Form.Label><Form.Control value={step.dependencies} onChange={(event) => updatePipelineStep(index, "dependencies", event.target.value)} placeholder="previous, none, or 1,2" /></Col>
+                  <Col md={2}><Form.Label>Retries</Form.Label><Form.Control type="number" min="0" max="10" value={step.max_retries} onChange={(event) => updatePipelineStep(index, "max_retries", event.target.value)} /></Col>
+                  <Col md={2} className="d-flex align-items-end"><Form.Check label="Optional step" checked={step.optional} onChange={(event) => updatePipelineStep(index, "optional", event.target.checked)} /></Col>
+                  <Col md={2}><Form.Label>Condition step</Form.Label><Form.Control type="number" min="1" value={step.condition_source} onChange={(event) => updatePipelineStep(index, "condition_source", event.target.value)} placeholder="Position" /></Col>
+                  <Col md={2}><Form.Label>Result key</Form.Label><Form.Control value={step.condition_key} onChange={(event) => updatePipelineStep(index, "condition_key", event.target.value)} placeholder="qc_status" /></Col>
+                  <Col md={1}><Form.Label>Operator</Form.Label><Form.Select value={step.condition_operator} onChange={(event) => updatePipelineStep(index, "condition_operator", event.target.value)}><option>EQ</option><option>NE</option><option>GT</option><option>GTE</option><option>LT</option><option>LTE</option><option>IN</option></Form.Select></Col>
+                  <Col md={2}><Form.Label>Expected value</Form.Label><Form.Control value={step.condition_value} onChange={(event) => updatePipelineStep(index, "condition_value", event.target.value)} /></Col>
+                </Row>
+              </Card.Body></Card>
             ))}
             <div className="inline-actions mt-3"><Button type="submit" variant="dark" disabled={saving || !pipelineForm.code || !pipelineForm.name || pipelineForm.steps.some((step) => !step.procedure)}>{pipelineEditingId ? "Update pipeline" : "Create pipeline"}</Button>{pipelineEditingId && <Button type="button" variant="outline-secondary" onClick={resetPipeline}>Cancel edit</Button>}</div>
           </Form>
@@ -395,7 +443,7 @@ export default function WorkflowDesigner() {
             {templates.map((template) => (
               <div className="feed-item" key={template.id}>
                 <div className="toolbar-row"><div><strong>{template.code} — {template.name}</strong><div className="feed-meta">{template.default_project_code || "All projects"} · {template.default_sample_type || "All sample types"} · {template.steps.length} steps</div></div><div className="inline-actions">{template.is_default && <Badge bg="info">Default</Badge>}<Badge bg={template.active ? "success" : "secondary"}>{template.active ? "Active" : "Inactive"}</Badge><Button size="sm" variant="outline-dark" onClick={() => editPipeline(template)}>Edit</Button></div></div>
-                <div className="d-flex flex-wrap gap-2 mt-3">{template.steps.map((step) => <Badge bg="light" text="dark" key={step.id}>{step.position}. {step.display_name} ({step.analysis_code}){step.requires_qc ? " · QC" : ""}</Badge>)}</div>
+                <div className="d-flex flex-wrap gap-2 mt-3">{template.steps.map((step) => <Badge bg="light" text="dark" key={step.id}>{step.position}. {step.display_name} ({step.analysis_code}) · after {step.dependency_positions?.length ? step.dependency_positions.join(",") : "start"}{step.requires_qc ? " · QC" : ""}{step.optional ? " · optional" : ""}{step.max_retries ? ` · ${step.max_retries} retries` : ""}</Badge>)}</div>
               </div>
             ))}
           </div>

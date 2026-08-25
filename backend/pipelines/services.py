@@ -121,6 +121,94 @@ def _activate_step(step, actor):
     _event("Sample", step.pipeline_run.sample_id, "PIPELINE_STEP_ACTIVATED", actor, payload)
 
 
+def _result_value(result):
+    if result is None:
+        return None
+    return result.value
+
+
+def _condition_matches(step):
+    condition = step.activation_condition or {}
+    if not condition:
+        return True
+    source = step.pipeline_run.steps.filter(
+        position=condition.get("source_position")
+    ).select_related("work_item").first()
+    if not source or not source.work_item_id:
+        return False
+    result = source.work_item.results.filter(
+        key__iexact=str(condition.get("result_key") or "").strip()
+    ).first()
+    actual = _result_value(result)
+    expected = condition.get("value")
+    operator = str(condition.get("operator") or "EQ").upper()
+
+    if operator == "IN":
+        options = (
+            expected
+            if isinstance(expected, list)
+            else [item.strip() for item in str(expected).split(",")]
+        )
+        return actual in options or str(actual) in [str(item) for item in options]
+    if operator in {"GT", "GTE", "LT", "LTE"}:
+        try:
+            actual_value = float(actual)
+            expected_value = float(expected)
+        except (TypeError, ValueError):
+            return False
+        return {
+            "GT": actual_value > expected_value,
+            "GTE": actual_value >= expected_value,
+            "LT": actual_value < expected_value,
+            "LTE": actual_value <= expected_value,
+        }[operator]
+    equal = actual == expected or str(actual).lower() == str(expected).lower()
+    return not equal if operator == "NE" else equal
+
+
+def _advance_run(run, actor):
+    terminal = {PipelineStepRun.STATUS_COMPLETED, PipelineStepRun.STATUS_SKIPPED}
+    made_progress = True
+    while made_progress:
+        made_progress = False
+        steps = list(run.steps.select_related("work_item").order_by("position"))
+        by_position = {step.position: step for step in steps}
+        for step in steps:
+            if step.status != PipelineStepRun.STATUS_BLOCKED:
+                continue
+            dependencies = [by_position.get(position) for position in step.dependency_positions]
+            if any(dependency is None or dependency.status not in terminal for dependency in dependencies):
+                continue
+            if not _condition_matches(step):
+                step.status = PipelineStepRun.STATUS_SKIPPED
+                step.completed_at = timezone.now()
+                step.failure_reason = "Activation condition was not met."
+                step.save(update_fields=["status", "completed_at", "failure_reason", "updated_at"])
+                payload = _step_payload(step)
+                payload["condition"] = step.activation_condition
+                _event("PipelineRun", run.id, "PIPELINE_STEP_SKIPPED", actor, payload)
+                made_progress = True
+                continue
+            _activate_step(step, actor)
+            made_progress = True
+
+    steps = list(run.steps.all())
+    if steps and all(step.status in terminal for step in steps):
+        now = timezone.now()
+        run.status = PipelineRun.STATUS_COMPLETED
+        run.completed_at = now
+        run.save(update_fields=["status", "completed_at", "updated_at"])
+        payload = {
+            "pipeline_run_id": run.id,
+            "sample_id": run.sample_id,
+            "sample_code": run.sample.sample_id,
+            "template_code": run.template_code,
+            "completed_at": now.isoformat(),
+        }
+        _event("PipelineRun", run.id, "PIPELINE_RUN_COMPLETED", actor, payload)
+        _event("Sample", run.sample_id, "PIPELINE_RUN_COMPLETED", actor, payload)
+
+
 @transaction.atomic
 def start_pipeline(*, sample, template, actor):
     from samples.models import Sample
@@ -157,6 +245,7 @@ def start_pipeline(*, sample, template, actor):
     )
 
     step_runs = []
+    previous_position = None
     for template_step in template_steps:
         procedure = template_step.procedure
         analysis = procedure.analysis
@@ -172,10 +261,19 @@ def start_pipeline(*, sample, template, actor):
                 work_type=analysis.code,
                 required_fields=analysis.required_fields,
                 requires_qc=template_step.requires_qc,
+                dependency_positions=(
+                    template_step.dependency_positions
+                    if template_step.dependency_positions is not None
+                    else ([] if previous_position is None else [previous_position])
+                ),
+                activation_condition=template_step.activation_condition,
+                optional=template_step.optional,
+                max_retries=template_step.max_retries,
                 estimated_duration_minutes=procedure.estimated_duration_minutes,
                 status=PipelineStepRun.STATUS_BLOCKED,
             )
         )
+        previous_position = template_step.position
 
     payload = {
         "pipeline_run_id": run.id,
@@ -188,7 +286,7 @@ def start_pipeline(*, sample, template, actor):
     }
     _event("PipelineRun", run.id, "PIPELINE_RUN_STARTED", actor, payload)
     _event("Sample", sample.id, "PIPELINE_RUN_STARTED", actor, payload)
-    _activate_step(step_runs[0], actor)
+    _advance_run(run, actor)
     return run
 
 
@@ -298,28 +396,7 @@ def _complete_step(step, actor):
     step.save(update_fields=["status", "completed_at", "failure_reason", "updated_at"])
     _event("PipelineRun", step.pipeline_run_id, "PIPELINE_STEP_COMPLETED", actor, _step_payload(step))
 
-    next_step = (
-        step.pipeline_run.steps.filter(position__gt=step.position)
-        .order_by("position")
-        .first()
-    )
-    if next_step:
-        _activate_step(next_step, actor)
-        return
-
-    run = step.pipeline_run
-    run.status = PipelineRun.STATUS_COMPLETED
-    run.completed_at = now
-    run.save(update_fields=["status", "completed_at", "updated_at"])
-    payload = {
-        "pipeline_run_id": run.id,
-        "sample_id": run.sample_id,
-        "sample_code": run.sample.sample_id,
-        "template_code": run.template_code,
-        "completed_at": now.isoformat(),
-    }
-    _event("PipelineRun", run.id, "PIPELINE_RUN_COMPLETED", actor, payload)
-    _event("Sample", run.sample_id, "PIPELINE_RUN_COMPLETED", actor, payload)
+    _advance_run(step.pipeline_run, actor)
 
 
 @transaction.atomic
@@ -334,7 +411,10 @@ def sync_pipeline_step_from_work_item(work_item, actor=None):
         return None
 
     work_item = WorkItem.objects.select_for_update().get(pk=work_item.pk)
-    run = step.pipeline_run
+    run = PipelineRun.objects.select_for_update().select_related("sample").get(
+        pk=step.pipeline_run_id
+    )
+    step.pipeline_run = run
     if run.status not in [PipelineRun.STATUS_ACTIVE, PipelineRun.STATUS_BLOCKED]:
         return step
 
@@ -360,6 +440,16 @@ def sync_pipeline_step_from_work_item(work_item, actor=None):
             if work_item.status == WorkItem.STATUS_FAILED
             else PipelineRun.STATUS_CANCELLED
         )
+        if step.optional:
+            step.status = PipelineStepRun.STATUS_SKIPPED
+            step.failure_reason = work_item.notes or "Optional step did not complete."
+            step.completed_at = timezone.now()
+            step.save(update_fields=["status", "failure_reason", "completed_at", "updated_at"])
+            payload = _step_payload(step)
+            payload["failure_reason"] = step.failure_reason
+            _event("PipelineRun", run.id, "PIPELINE_OPTIONAL_STEP_SKIPPED", actor, payload)
+            _advance_run(run, actor)
+            return step
         already_synchronized = (
             step.status == target_step_status and run.status == target_run_status
         )
@@ -417,6 +507,36 @@ def sync_pipeline_step_from_work_item(work_item, actor=None):
 
 
 @transaction.atomic
+def retry_pipeline_step(*, run, step, actor, reason):
+    run = PipelineRun.objects.select_for_update().select_related("sample").get(pk=run.pk)
+    step = PipelineStepRun.objects.select_for_update().get(pk=step.pk, pipeline_run=run)
+    if step.status != PipelineStepRun.STATUS_FAILED:
+        raise ValidationError({"detail": "Only failed pipeline steps can be retried."})
+    if step.retry_count >= step.max_retries:
+        raise ValidationError({"detail": "This step has no retries remaining."})
+
+    step.retry_count += 1
+    step.status = PipelineStepRun.STATUS_BLOCKED
+    step.work_item = None
+    step.started_at = None
+    step.completed_at = None
+    step.failure_reason = ""
+    step.save(update_fields=[
+        "retry_count", "status", "work_item", "started_at", "completed_at",
+        "failure_reason", "updated_at",
+    ])
+    run.status = PipelineRun.STATUS_ACTIVE
+    run.completed_at = None
+    run.save(update_fields=["status", "completed_at", "updated_at"])
+    _activate_step(step, actor)
+    payload = _step_payload(step)
+    payload.update({"retry_count": step.retry_count, "reason": reason})
+    _event("PipelineRun", run.id, "PIPELINE_STEP_RETRIED", actor, payload)
+    _event("Sample", run.sample_id, "PIPELINE_STEP_RETRIED", actor, payload)
+    return step
+
+
+@transaction.atomic
 def cancel_pipeline(*, run, actor, reason):
     run = (
         PipelineRun.objects.select_for_update()
@@ -428,25 +548,34 @@ def cancel_pipeline(*, run, actor, reason):
         raise ValidationError({"detail": f"Pipeline run is already {run.status.lower()}."})
 
     now = timezone.now()
-    current_step = run.steps.exclude(
-        status__in=[PipelineStepRun.STATUS_COMPLETED, PipelineStepRun.STATUS_CANCELLED]
-    ).order_by("position").first()
-    run.steps.exclude(status=PipelineStepRun.STATUS_COMPLETED).update(
+    active_steps = list(
+        run.steps.select_related("work_item").exclude(
+            status__in=[
+                PipelineStepRun.STATUS_COMPLETED,
+                PipelineStepRun.STATUS_CANCELLED,
+                PipelineStepRun.STATUS_SKIPPED,
+            ]
+        )
+    )
+    run.steps.exclude(
+        status__in=[PipelineStepRun.STATUS_COMPLETED, PipelineStepRun.STATUS_SKIPPED]
+    ).update(
         status=PipelineStepRun.STATUS_CANCELLED,
         completed_at=now,
         failure_reason=reason,
     )
-    if current_step and current_step.work_item_id and current_step.work_item.status not in [
-        WorkItem.STATUS_COMPLETED,
-        WorkItem.STATUS_FAILED,
-        WorkItem.STATUS_CANCELLED,
-    ]:
-        notes = f"{current_step.work_item.notes}\nCancelled: {reason}".strip()
-        WorkItem.objects.filter(pk=current_step.work_item_id).update(
-            status=WorkItem.STATUS_CANCELLED,
-            notes=notes,
-            updated_at=now,
-        )
+    for active_step in active_steps:
+        if active_step.work_item_id and active_step.work_item.status not in [
+            WorkItem.STATUS_COMPLETED,
+            WorkItem.STATUS_FAILED,
+            WorkItem.STATUS_CANCELLED,
+        ]:
+            notes = f"{active_step.work_item.notes}\nCancelled: {reason}".strip()
+            WorkItem.objects.filter(pk=active_step.work_item_id).update(
+                status=WorkItem.STATUS_CANCELLED,
+                notes=notes,
+                updated_at=now,
+            )
 
     run.status = PipelineRun.STATUS_CANCELLED
     run.completed_at = now

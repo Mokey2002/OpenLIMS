@@ -153,6 +153,10 @@ class PipelineTemplateStepSerializer(serializers.ModelSerializer):
             "name",
             "display_name",
             "requires_qc",
+            "dependency_positions",
+            "activation_condition",
+            "optional",
+            "max_retries",
         ]
         read_only_fields = [
             "id",
@@ -169,6 +173,48 @@ class PipelineTemplateStepSerializer(serializers.ModelSerializer):
                 "Pipeline steps must use an active procedure and analysis."
             )
         return procedure
+
+    def validate_dependency_positions(self, value):
+        if value is None:
+            return None
+        if not isinstance(value, list) or any(not isinstance(item, int) for item in value):
+            raise serializers.ValidationError("Dependencies must be a list of step positions.")
+        if len(value) != len(set(value)):
+            raise serializers.ValidationError("Dependency positions must be unique.")
+        return sorted(value)
+
+    def validate_activation_condition(self, value):
+        if not value:
+            return {}
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Activation condition must be an object.")
+        required = {"source_position", "result_key", "operator", "value"}
+        missing = required - set(value)
+        if missing:
+            raise serializers.ValidationError(
+                f"Activation condition is missing: {', '.join(sorted(missing))}."
+            )
+        operator = str(value.get("operator") or "").upper()
+        if operator not in {"EQ", "NE", "GT", "GTE", "LT", "LTE", "IN"}:
+            raise serializers.ValidationError("Unsupported activation condition operator.")
+        try:
+            source_position = int(value["source_position"])
+        except (TypeError, ValueError) as exc:
+            raise serializers.ValidationError("Condition source position must be an integer.") from exc
+        result_key = str(value["result_key"]).strip()
+        if not result_key:
+            raise serializers.ValidationError("Condition result key is required.")
+        return {
+            "source_position": source_position,
+            "result_key": result_key,
+            "operator": operator,
+            "value": value["value"],
+        }
+
+    def validate_max_retries(self, value):
+        if value > 10:
+            raise serializers.ValidationError("Maximum retries cannot exceed 10.")
+        return value
 
 
 class PipelineTemplateSerializer(serializers.ModelSerializer):
@@ -228,7 +274,29 @@ class PipelineTemplateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Step positions must start at 1 or greater.")
         if len(positions) != len(set(positions)):
             raise serializers.ValidationError("Step positions must be unique.")
-        return sorted(value, key=lambda item: item["position"])
+        ordered = sorted(value, key=lambda item: item["position"])
+        known_positions = set(positions)
+        for index, item in enumerate(ordered):
+            position = item["position"]
+            # Omitted dependencies retain the historical sequential behavior.
+            if "dependency_positions" not in item or item["dependency_positions"] is None:
+                item["dependency_positions"] = [] if index == 0 else [ordered[index - 1]["position"]]
+            dependencies = item["dependency_positions"]
+            unknown = set(dependencies) - known_positions
+            if unknown:
+                raise serializers.ValidationError(
+                    f"Step {position} depends on unknown positions: {sorted(unknown)}."
+                )
+            if any(dependency >= position for dependency in dependencies):
+                raise serializers.ValidationError(
+                    f"Step {position} may depend only on earlier positions."
+                )
+            condition = item.get("activation_condition") or {}
+            if condition and condition["source_position"] not in dependencies:
+                raise serializers.ValidationError(
+                    f"Step {position}'s condition source must be one of its dependencies."
+                )
+        return ordered
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -302,6 +370,11 @@ class PipelineStepRunSerializer(serializers.ModelSerializer):
             "work_type",
             "required_fields",
             "requires_qc",
+            "dependency_positions",
+            "activation_condition",
+            "optional",
+            "max_retries",
+            "retry_count",
             "estimated_duration_minutes",
             "status",
             "work_item",
@@ -329,6 +402,7 @@ class PipelineRunSerializer(serializers.ModelSerializer):
     started_by_username = serializers.CharField(source="started_by.username", read_only=True)
     steps = PipelineStepRunSerializer(many=True, read_only=True)
     current_step = serializers.SerializerMethodField()
+    current_steps = serializers.SerializerMethodField()
 
     class Meta:
         model = PipelineRun
@@ -343,6 +417,7 @@ class PipelineRunSerializer(serializers.ModelSerializer):
             "template_name",
             "status",
             "current_step",
+            "current_steps",
             "steps",
             "started_by",
             "started_by_username",
@@ -359,6 +434,16 @@ class PipelineRunSerializer(serializers.ModelSerializer):
         }
         step = next((item for item in obj.steps.all() if item.status not in terminal), None)
         return PipelineStepRunSerializer(step).data if step else None
+
+    def get_current_steps(self, obj):
+        active = {
+            PipelineStepRun.STATUS_READY,
+            PipelineStepRun.STATUS_IN_PROGRESS,
+            PipelineStepRun.STATUS_AWAITING_QC,
+            PipelineStepRun.STATUS_FAILED,
+        }
+        steps = [item for item in obj.steps.all() if item.status in active]
+        return PipelineStepRunSerializer(steps, many=True).data
 
 
 class PipelineRunStartSerializer(serializers.Serializer):
@@ -426,4 +511,8 @@ class WorkflowAssignmentSerializer(serializers.Serializer):
 
 
 class PipelineRunCancelSerializer(serializers.Serializer):
+    reason = serializers.CharField(min_length=10, max_length=2000)
+
+
+class PipelineStepRetrySerializer(serializers.Serializer):
     reason = serializers.CharField(min_length=10, max_length=2000)

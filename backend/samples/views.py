@@ -3,6 +3,7 @@ import csv
 from django.utils import timezone
 from django.http import HttpResponse
 from django.db import transaction
+from django.contrib.auth import get_user_model
 from django.db.models import Q
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from rest_framework.decorators import action
@@ -10,9 +11,19 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 
-from .models import Sample, SampleBatch, SingleSampleAttachment
+from .models import (
+    Sample,
+    SampleBatch,
+    SampleCustodyEvent,
+    SampleRelationship,
+    SingleSampleAttachment,
+)
 from .serializers import (
+    CustodyScanSerializer,
+    DerivedSampleCreateSerializer,
     SampleBatchSerializer,
+    SampleCustodyEventSerializer,
+    SampleRelationshipSerializer,
     SampleSerializer,
     SingleSampleAttachmentSerializer,
 )
@@ -122,6 +133,7 @@ class SampleViewSet(ModelViewSet):
                 "created_by",
                 "batch",
                 "assigned_to",
+                "custodian",
             )
             .prefetch_related("linked_projects")
             .all()
@@ -160,6 +172,77 @@ class SampleViewSet(ModelViewSet):
                 queryset = queryset.filter(assigned_to_id=assigned_to)
 
         return get_sample_access_queryset(queryset, self.request.user)
+
+    @action(detail=True, methods=["post"], url_path="derive")
+    def derive(self, request, pk=None):
+        source = self.get_object()
+        require_sample_modify_access(request.user, source)
+        input_serializer = DerivedSampleCreateSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        data = input_serializer.validated_data
+
+        with transaction.atomic():
+            child = Sample.objects.create(
+                sample_id=data["sample_id"],
+                sample_type=str(data.get("sample_type") or source.sample_type or "GENERAL").upper(),
+                status=Sample.STATUS_RECEIVED,
+                project=source.project,
+                batch=source.batch,
+                created_by=request.user,
+            )
+            child.linked_projects.set(source.linked_projects.all())
+            relationship = SampleRelationship(
+                source_sample=source,
+                derived_sample=child,
+                relationship_type=data["relationship_type"],
+                quantity=data.get("quantity"),
+                unit=str(data.get("unit") or "").strip(),
+                reason=data["reason"],
+                created_by=request.user,
+            )
+            relationship.full_clean()
+            relationship.save()
+
+            create_sample_event(
+                sample=source,
+                action="SAMPLE_DERIVED",
+                actor=request.user,
+                before={},
+                after={"derived_sample_id": child.id},
+                changed_fields=["lineage"],
+                extra_payload={
+                    "derived_sample_code": child.sample_id,
+                    "relationship_type": relationship.relationship_type,
+                    "quantity": str(relationship.quantity) if relationship.quantity is not None else None,
+                    "unit": relationship.unit,
+                    "reason": relationship.reason,
+                },
+            )
+            create_sample_event(
+                sample=child,
+                action="SAMPLE_CREATED_FROM_SOURCE",
+                actor=request.user,
+                before={},
+                after={"source_sample_id": source.id},
+                changed_fields=["lineage"],
+                extra_payload={
+                    "source_sample_code": source.sample_id,
+                    "relationship_type": relationship.relationship_type,
+                    "reason": relationship.reason,
+                },
+            )
+
+            from pipelines.services import start_default_pipeline_for_sample
+
+            start_default_pipeline_for_sample(child, request.user)
+
+        return Response(
+            {
+                "sample": SampleSerializer(child, context={"request": request}).data,
+                "relationship": SampleRelationshipSerializer(relationship).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     def perform_create(self, serializer):
         project = serializer.validated_data.get("project")
@@ -821,3 +904,184 @@ class SingleSampleAttachmentViewSet(ModelViewSet):
                 "filename": attachment.file.name.split("/")[-1],
             },
         )
+
+
+class SampleRelationshipViewSet(ModelViewSet):
+    permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
+    serializer_class = SampleRelationshipSerializer
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        allowed = get_sample_access_queryset(Sample.objects.all(), self.request.user)
+        queryset = (
+            SampleRelationship.objects.select_related(
+                "source_sample", "derived_sample", "created_by"
+            )
+            .filter(source_sample__in=allowed, derived_sample__in=allowed)
+            .distinct()
+        )
+        sample_id = self.request.query_params.get("sample")
+        if sample_id:
+            queryset = queryset.filter(
+                Q(source_sample_id=sample_id) | Q(derived_sample_id=sample_id)
+            )
+        return queryset
+
+    def perform_create(self, serializer):
+        source = serializer.validated_data["source_sample"]
+        derived = serializer.validated_data["derived_sample"]
+        require_sample_modify_access(self.request.user, source)
+        require_sample_modify_access(self.request.user, derived)
+        relationship = serializer.save(created_by=self.request.user)
+        payload = {
+            "source_sample_id": source.id,
+            "source_sample_code": source.sample_id,
+            "derived_sample_id": derived.id,
+            "derived_sample_code": derived.sample_id,
+            "relationship_type": relationship.relationship_type,
+            "quantity": str(relationship.quantity) if relationship.quantity is not None else None,
+            "unit": relationship.unit,
+            "reason": relationship.reason,
+        }
+        for sample in [source, derived]:
+            Event.objects.create(
+                entity_type="Sample",
+                entity_id=str(sample.id),
+                action="SAMPLE_LINEAGE_LINKED",
+                actor=self.request.user,
+                payload={"sample_id": sample.id, "sample_code": sample.sample_id, **payload},
+            )
+
+
+class SampleCustodyEventViewSet(ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
+    serializer_class = SampleCustodyEventSerializer
+
+    def get_queryset(self):
+        allowed = get_sample_access_queryset(Sample.objects.all(), self.request.user)
+        queryset = SampleCustodyEvent.objects.select_related(
+            "sample",
+            "from_container",
+            "to_container",
+            "from_custodian",
+            "to_custodian",
+            "performed_by",
+        ).filter(sample__in=allowed)
+        sample_id = self.request.query_params.get("sample")
+        if sample_id:
+            queryset = queryset.filter(sample_id=sample_id)
+        return queryset
+
+    @action(detail=False, methods=["post"], url_path="scan")
+    def scan(self, request):
+        input_serializer = CustodyScanSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        data = input_serializer.validated_data
+        scanned_code = data["barcode"].strip()
+
+        from assistant.models import BarcodeLabel
+        from inventory.models import Container
+
+        label = BarcodeLabel.objects.select_related("sample").filter(
+            barcode__iexact=scanned_code
+        ).first()
+        candidate = label.sample if label else Sample.objects.filter(
+            sample_id__iexact=scanned_code
+        ).first()
+        if not candidate or not user_can_access_sample(request.user, candidate):
+            return Response(
+                {"barcode": "No accessible sample matches this barcode."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        require_sample_modify_access(request.user, candidate)
+
+        container = None
+        if data.get("container") is not None:
+            container = Container.objects.filter(pk=data["container"]).first()
+            if not container:
+                raise ValidationError({"container": "Container not found."})
+
+        custodian = None
+        if data.get("custodian") is not None:
+            custodian = get_user_model().objects.filter(
+                pk=data["custodian"], is_active=True
+            ).first()
+            if not custodian:
+                raise ValidationError({"custodian": "Active custodian not found."})
+
+        action_name = data["action"]
+        if action_name == SampleCustodyEvent.ACTION_MOVE and not container:
+            raise ValidationError({"container": "A destination container is required for a move."})
+        if action_name == SampleCustodyEvent.ACTION_TRANSFER and not custodian:
+            raise ValidationError({"custodian": "A destination custodian is required for a transfer."})
+
+        with transaction.atomic():
+            sample = Sample.objects.select_for_update().select_related(
+                "container", "custodian"
+            ).get(pk=candidate.pk)
+            from_container = sample.container
+            from_custodian = sample.custodian
+            to_container = sample.container
+            to_custodian = sample.custodian
+
+            if action_name in [SampleCustodyEvent.ACTION_RECEIVE, SampleCustodyEvent.ACTION_MOVE]:
+                if container:
+                    to_container = container
+                if action_name == SampleCustodyEvent.ACTION_RECEIVE:
+                    to_custodian = None
+            elif action_name == SampleCustodyEvent.ACTION_CHECK_OUT:
+                if sample.custodian_id and sample.custodian_id != request.user.id:
+                    raise ValidationError({
+                        "detail": (
+                            f"Sample is already checked out to {sample.custodian.username}; "
+                            "use transfer custody instead."
+                        )
+                    })
+                to_custodian = request.user
+            elif action_name == SampleCustodyEvent.ACTION_CHECK_IN:
+                to_custodian = None
+            elif action_name == SampleCustodyEvent.ACTION_TRANSFER:
+                to_custodian = custodian
+            elif action_name == SampleCustodyEvent.ACTION_PROCESS:
+                to_custodian = sample.custodian or request.user
+            elif action_name == SampleCustodyEvent.ACTION_DISPOSE:
+                to_container = None
+                to_custodian = None
+                sample.status = Sample.STATUS_ARCHIVED
+                sample.status_changed_at = timezone.now()
+
+            sample.container = to_container
+            sample.custodian = to_custodian
+            sample.save(update_fields=[
+                "container", "custodian", "status", "status_changed_at", "updated_at"
+            ])
+            custody_event = SampleCustodyEvent.objects.create(
+                sample=sample,
+                action=action_name,
+                scanned_code=scanned_code,
+                from_container=from_container,
+                to_container=to_container,
+                from_custodian=from_custodian,
+                to_custodian=to_custodian,
+                reason=data["reason"].strip(),
+                performed_by=request.user,
+            )
+            Event.objects.create(
+                entity_type="Sample",
+                entity_id=str(sample.id),
+                action=f"CUSTODY_{action_name}",
+                actor=request.user,
+                payload={
+                    "sample_id": sample.id,
+                    "sample_code": sample.sample_id,
+                    "custody_event_id": custody_event.id,
+                    "scanned_code": scanned_code,
+                    "from_container_code": from_container.container_id if from_container else None,
+                    "to_container_code": to_container.container_id if to_container else None,
+                    "from_custodian": from_custodian.username if from_custodian else None,
+                    "to_custodian": to_custodian.username if to_custodian else None,
+                    "reason": custody_event.reason,
+                },
+            )
+
+        return Response(self.get_serializer(custody_event).data, status=status.HTTP_201_CREATED)

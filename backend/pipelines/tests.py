@@ -359,6 +359,165 @@ class PipelineWorkflowTests(APITestCase):
             ).exists()
         )
 
+    def test_dependency_graph_activates_parallel_root_steps(self):
+        extraction, pcr = self.create_definitions()
+        template = PipelineTemplate.objects.create(
+            code="PARALLEL", name="Parallel preparation", created_by=self.admin
+        )
+        PipelineTemplateStep.objects.create(
+            template=template,
+            position=1,
+            procedure=extraction,
+            dependency_positions=[],
+        )
+        PipelineTemplateStep.objects.create(
+            template=template,
+            position=2,
+            procedure=pcr,
+            dependency_positions=[],
+        )
+        sample = Sample.objects.create(
+            sample_id="PARALLEL-001", project=self.project, created_by=self.tech
+        )
+        self.client.force_authenticate(self.tech)
+        response = self.client.post(
+            "/api/pipeline-runs/", {"sample": sample.id, "template": template.id}, format="json"
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        statuses = {step["position"]: step["status"] for step in response.data["steps"]}
+        self.assertEqual(statuses, {1: "READY", 2: "READY"})
+        self.assertEqual(WorkItem.objects.filter(sample=sample).count(), 2)
+
+    def test_result_condition_skips_branch_and_completes_run(self):
+        extraction, pcr = self.create_definitions()
+        template = PipelineTemplate.objects.create(
+            code="CONDITIONAL", name="Conditional amplification", created_by=self.admin
+        )
+        PipelineTemplateStep.objects.create(
+            template=template,
+            position=1,
+            procedure=extraction,
+            dependency_positions=[],
+        )
+        PipelineTemplateStep.objects.create(
+            template=template,
+            position=2,
+            procedure=pcr,
+            dependency_positions=[1],
+            activation_condition={
+                "source_position": 1,
+                "result_key": "concentration",
+                "operator": "GTE",
+                "value": 10,
+            },
+        )
+        sample = Sample.objects.create(
+            sample_id="CONDITIONAL-001", project=self.project, created_by=self.tech
+        )
+        self.client.force_authenticate(self.tech)
+        start = self.client.post(
+            "/api/pipeline-runs/", {"sample": sample.id, "template": template.id}, format="json"
+        )
+        run = PipelineRun.objects.get(pk=start.data["id"])
+        first = run.steps.get(position=1)
+        Result.objects.create(
+            work_item=first.work_item,
+            key="concentration",
+            value_type=Result.VALUE_TYPE_NUMBER,
+            value_number=4.5,
+            entered_by=self.tech,
+        )
+        completed = self.client.patch(
+            f"/api/work-items/{first.work_item_id}/",
+            {"status": WorkItem.STATUS_COMPLETED},
+            format="json",
+        )
+        self.assertEqual(completed.status_code, 200, completed.data)
+        run.refresh_from_db()
+        second = run.steps.get(position=2)
+        self.assertEqual(second.status, PipelineStepRun.STATUS_SKIPPED)
+        self.assertEqual(run.status, PipelineRun.STATUS_COMPLETED)
+
+    def test_failed_step_can_be_retried_within_configured_limit(self):
+        extraction, _ = self.create_definitions()
+        template = PipelineTemplate.objects.create(
+            code="RETRYABLE", name="Retryable extraction", created_by=self.admin
+        )
+        PipelineTemplateStep.objects.create(
+            template=template,
+            position=1,
+            procedure=extraction,
+            dependency_positions=[],
+            max_retries=1,
+        )
+        sample = Sample.objects.create(
+            sample_id="RETRY-001", project=self.project, created_by=self.tech
+        )
+        self.client.force_authenticate(self.tech)
+        start = self.client.post(
+            "/api/pipeline-runs/", {"sample": sample.id, "template": template.id}, format="json"
+        )
+        run = PipelineRun.objects.get(pk=start.data["id"])
+        step = run.steps.get(position=1)
+        old_work_item_id = step.work_item_id
+        self.client.patch(
+            f"/api/work-items/{old_work_item_id}/",
+            {"status": WorkItem.STATUS_FAILED, "notes": "Instrument stopped during extraction."},
+            format="json",
+        )
+        retry = self.client.post(
+            f"/api/pipeline-runs/{run.id}/steps/{step.id}/retry/",
+            {"reason": "Instrument recovered; repeat the extraction."},
+            format="json",
+        )
+        self.assertEqual(retry.status_code, 200, retry.data)
+        step.refresh_from_db()
+        run.refresh_from_db()
+        self.assertEqual(step.retry_count, 1)
+        self.assertEqual(step.status, PipelineStepRun.STATUS_READY)
+        self.assertNotEqual(step.work_item_id, old_work_item_id)
+        self.assertEqual(run.status, PipelineRun.STATUS_ACTIVE)
+
+    def test_optional_failure_skips_step_and_releases_dependents(self):
+        extraction, pcr = self.create_definitions()
+        template = PipelineTemplate.objects.create(
+            code="OPTIONAL", name="Optional preparation", created_by=self.admin
+        )
+        PipelineTemplateStep.objects.create(
+            template=template,
+            position=1,
+            procedure=extraction,
+            dependency_positions=[],
+            optional=True,
+        )
+        PipelineTemplateStep.objects.create(
+            template=template,
+            position=2,
+            procedure=pcr,
+            dependency_positions=[1],
+        )
+        sample = Sample.objects.create(
+            sample_id="OPTIONAL-001", project=self.project, created_by=self.tech
+        )
+        self.client.force_authenticate(self.tech)
+        start = self.client.post(
+            "/api/pipeline-runs/", {"sample": sample.id, "template": template.id}, format="json"
+        )
+        run = PipelineRun.objects.get(pk=start.data["id"])
+        first = run.steps.get(position=1)
+        failed = self.client.patch(
+            f"/api/work-items/{first.work_item_id}/",
+            {"status": WorkItem.STATUS_FAILED, "notes": "Optional preparation unavailable."},
+            format="json",
+        )
+        self.assertEqual(failed.status_code, 200, failed.data)
+        first.refresh_from_db()
+        second = run.steps.get(position=2)
+        run.refresh_from_db()
+        self.assertEqual(first.status, PipelineStepRun.STATUS_SKIPPED)
+        self.assertEqual(second.status, PipelineStepRun.STATUS_READY)
+        self.assertEqual(run.status, PipelineRun.STATUS_ACTIVE)
+
     def test_analysis_can_be_assigned_to_one_sample_with_required_results(self):
         analysis = AnalysisDefinition.objects.create(
             code="PH",

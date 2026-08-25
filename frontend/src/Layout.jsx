@@ -267,6 +267,7 @@ export default function Layout() {
               <NavDropdown title="Core" id="core-nav">
                 <DropdownItemLink to="/projects">Projects</DropdownItemLink>
                 <DropdownItemLink to="/samples">Samples</DropdownItemLink>
+                <DropdownItemLink to="/traceability">Sample Traceability</DropdownItemLink>
                 <DropdownItemLink to="/inventory">Inventory</DropdownItemLink>
               </NavDropdown>
 
