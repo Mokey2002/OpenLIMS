@@ -55,6 +55,33 @@ class MigrationProfile(models.Model):
         return self.name
 
 
+class MigrationMappingTemplate(models.Model):
+    name = models.CharField(max_length=128, unique=True)
+    source_system = models.CharField(max_length=128, default="Legacy DB")
+    source_type = models.CharField(
+        max_length=32,
+        choices=MigrationProfile.SOURCE_TYPE_CHOICES,
+        default=MigrationProfile.SOURCE_TYPE_CSV,
+    )
+    description = models.TextField(blank=True)
+    configuration = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="migration_mapping_templates",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class MigrationDatabaseConnection(models.Model):
     ENGINE_POSTGRESQL = "POSTGRESQL"
     ENGINE_MYSQL = "MYSQL"
@@ -254,6 +281,7 @@ class MigrationJob(models.Model):
     STATUS_COMPLETED = "COMPLETED"
     STATUS_PARTIAL_FAILED = "PARTIAL_FAILED"
     STATUS_FAILED = "FAILED"
+    STATUS_ROLLED_BACK = "ROLLED_BACK"
 
     STATUS_CHOICES = [
         (STATUS_PENDING, "Pending"),
@@ -262,6 +290,19 @@ class MigrationJob(models.Model):
         (STATUS_COMPLETED, "Completed"),
         (STATUS_PARTIAL_FAILED, "Partial Failed"),
         (STATUS_FAILED, "Failed"),
+        (STATUS_ROLLED_BACK, "Rolled Back"),
+    ]
+
+    CONFLICT_SKIP = "SKIP"
+    CONFLICT_MERGE = "MERGE"
+    CONFLICT_OVERWRITE = "OVERWRITE"
+    CONFLICT_CREATE_NEW = "CREATE_NEW"
+
+    CONFLICT_POLICY_CHOICES = [
+        (CONFLICT_SKIP, "Skip existing records"),
+        (CONFLICT_MERGE, "Fill blank fields on existing records"),
+        (CONFLICT_OVERWRITE, "Overwrite mapped fields"),
+        (CONFLICT_CREATE_NEW, "Create a new record with a unique identifier"),
     ]
 
     profile = models.ForeignKey(
@@ -299,6 +340,11 @@ class MigrationJob(models.Model):
     summary = models.JSONField(default=dict, blank=True)
     source_snapshot = models.JSONField(default=dict, blank=True)
     preview_fingerprint = models.CharField(max_length=64, blank=True)
+    conflict_policy = models.CharField(
+        max_length=32,
+        choices=CONFLICT_POLICY_CHOICES,
+        default=CONFLICT_SKIP,
+    )
     committed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -307,6 +353,15 @@ class MigrationJob(models.Model):
         related_name="committed_migration_jobs",
     )
     confirmed_at = models.DateTimeField(null=True, blank=True)
+    rolled_back_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rolled_back_migration_jobs",
+    )
+    rolled_back_at = models.DateTimeField(null=True, blank=True)
+    rollback_summary = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -322,6 +377,24 @@ class MigrationRowRecord(models.Model):
         (STATUS_IMPORTED, "Imported"),
         (STATUS_SKIPPED, "Skipped"),
         (STATUS_ERROR, "Error"),
+    ]
+
+    ACTION_CREATE = "CREATE"
+    ACTION_MATCH = "MATCH"
+    ACTION_SKIP = "SKIP"
+    ACTION_MERGE = "MERGE"
+    ACTION_OVERWRITE = "OVERWRITE"
+    ACTION_CREATE_NEW = "CREATE_NEW"
+    ACTION_ERROR = "ERROR"
+
+    ACTION_CHOICES = [
+        (ACTION_CREATE, "Created"),
+        (ACTION_MATCH, "Matched"),
+        (ACTION_SKIP, "Skipped"),
+        (ACTION_MERGE, "Merged"),
+        (ACTION_OVERWRITE, "Overwritten"),
+        (ACTION_CREATE_NEW, "Created with a new identifier"),
+        (ACTION_ERROR, "Error"),
     ]
 
     migration_job = models.ForeignKey(
@@ -364,6 +437,13 @@ class MigrationRowRecord(models.Model):
         choices=STATUS_CHOICES,
         default=STATUS_IMPORTED,
     )
+    action = models.CharField(
+        max_length=32,
+        choices=ACTION_CHOICES,
+        default=ACTION_CREATE,
+    )
+    target_object_type = models.CharField(max_length=32, blank=True)
+    target_object_id = models.CharField(max_length=64, blank=True)
     errors = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -390,3 +470,42 @@ class MigrationRowRecord(models.Model):
 
     def __str__(self):
         return f"Migration row {self.row_number} for job {self.migration_job_id}"
+
+
+class MigrationObjectChange(models.Model):
+    ACTION_CREATED = "CREATED"
+    ACTION_UPDATED = "UPDATED"
+
+    ACTION_CHOICES = [
+        (ACTION_CREATED, "Created"),
+        (ACTION_UPDATED, "Updated"),
+    ]
+
+    migration_job = models.ForeignKey(
+        MigrationJob,
+        on_delete=models.CASCADE,
+        related_name="object_changes",
+    )
+    action = models.CharField(max_length=16, choices=ACTION_CHOICES)
+    object_type = models.CharField(max_length=32)
+    object_id = models.CharField(max_length=64)
+    identifier = models.CharField(max_length=255, blank=True)
+    previous_values = models.JSONField(default=dict, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["migration_job", "object_type", "object_id", "action"],
+                name="migration_object_change_unique",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["migration_job", "action"]),
+            models.Index(fields=["object_type", "object_id"]),
+        ]
+
+    def __str__(self):
+        return f"{self.migration_job_id}: {self.action} {self.object_type} {self.object_id}"

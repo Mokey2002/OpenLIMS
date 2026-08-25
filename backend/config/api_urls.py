@@ -44,6 +44,7 @@ from migration_toolkit.views import (
     MigrationDatasetViewSet,
     MigrationFieldMappingViewSet,
     MigrationJobViewSet,
+    MigrationMappingTemplateViewSet,
     MigrationProfileViewSet,
     MigrationRowRecordViewSet,
     SampleExternalIDViewSet,
@@ -99,6 +100,11 @@ router.register(
 )
 router.register(r"migration-datasets", MigrationDatasetViewSet, basename="migration-dataset")
 router.register(r"migration-profiles", MigrationProfileViewSet, basename="migration-profile")
+router.register(
+    r"migration-mapping-templates",
+    MigrationMappingTemplateViewSet,
+    basename="migration-mapping-template",
+)
 router.register(r"migration-field-mappings", MigrationFieldMappingViewSet, basename="migration-field-mapping")
 router.register(r"migration-jobs", MigrationJobViewSet, basename="migration-job")
 router.register(r"migration-row-records", MigrationRowRecordViewSet, basename="migration-row-record")

@@ -15,9 +15,16 @@ from results.models import Result, WorkItem
 from samples.models import Sample
 
 from .database_sources import fetch_dataset_rows, rows_fingerprint
+from .change_services import (
+    action_for_conflict,
+    record_created,
+    record_updated,
+    unique_value,
+)
 from .models import (
     MigrationDataset,
     MigrationFieldMapping,
+    MigrationJob,
     MigrationProfile,
     MigrationRowRecord,
     SampleExternalID,
@@ -174,7 +181,12 @@ def _validate_row_types(row, mappings):
     return errors
 
 
-def prepare_database_preview(profile, preview_limit=100, include_rows=False):
+def prepare_database_preview(
+    profile,
+    preview_limit=100,
+    include_rows=False,
+    conflict_policy=MigrationJob.CONFLICT_SKIP,
+):
     if profile.source_type != MigrationProfile.SOURCE_TYPE_DATABASE:
         raise ValidationError("This profile is not configured for a database source.")
 
@@ -187,7 +199,10 @@ def prepare_database_preview(profile, preview_limit=100, include_rows=False):
     if not datasets:
         raise ValidationError("Add at least one active database dataset before previewing.")
 
-    configuration = _mapping_configuration(profile, datasets)
+    configuration = {
+        **_mapping_configuration(profile, datasets),
+        "conflict_policy": conflict_policy,
+    }
     mapping_fingerprint = _fingerprint(configuration)
     payloads = []
     snapshots = []
@@ -222,6 +237,7 @@ def prepare_database_preview(profile, preview_limit=100, include_rows=False):
     planned_projects = set(Project.objects.values_list("code", flat=True))
     planned_users = set(User.objects.values_list("username", flat=True))
     planned_samples = set(Sample.objects.values_list("sample_id", flat=True))
+    create_new_sample_identifiers = set()
 
     for payload in payloads:
         mappings = payload["mappings"]
@@ -238,9 +254,23 @@ def prepare_database_preview(profile, preview_limit=100, include_rows=False):
                 value, _ = _first(row, mappings, MigrationFieldMapping.TARGET_SAMPLE_ID)
                 if value:
                     planned_samples.add(value)
+                    if (
+                        conflict_policy == MigrationJob.CONFLICT_CREATE_NEW
+                        and Sample.objects.filter(sample_id=value).exists()
+                    ):
+                        create_new_sample_identifiers.add(value)
 
     counts = {
-        entity: {"rows": 0, "to_create": 0, "matched": 0}
+        entity: {
+            "rows": 0,
+            "to_create": 0,
+            "matched": 0,
+            "conflicts": 0,
+            "to_skip": 0,
+            "to_merge": 0,
+            "to_overwrite": 0,
+            "to_create_new": 0,
+        }
         for entity in ENTITY_ORDER
     }
     preview_rows = []
@@ -279,7 +309,10 @@ def prepare_database_preview(profile, preview_limit=100, include_rows=False):
                     row_errors.append("Missing project code.")
                 if not name:
                     row_errors.append("Missing project name.")
-                elif Project.objects.filter(name=name).exclude(code=identifier).exists():
+                elif (
+                    conflict_policy != MigrationJob.CONFLICT_CREATE_NEW
+                    and Project.objects.filter(name=name).exclude(code=identifier).exists()
+                ):
                     row_errors.append(f"Project name {name} already belongs to another code.")
                 exists = bool(identifier and Project.objects.filter(code=identifier).exists())
             elif dataset.entity_type == MigrationDataset.ENTITY_SAMPLE:
@@ -331,7 +364,26 @@ def prepare_database_preview(profile, preview_limit=100, include_rows=False):
                             float(reference)
                         except (TypeError, ValueError):
                             row_errors.append(f"Reference value {reference} is not numeric.")
-                exists = False
+                work_name, _ = _first(
+                    row, mappings, MigrationFieldMapping.TARGET_WORK_ITEM_NAME
+                )
+                work_name = work_name or "Migrated Results"
+                result_keys = [
+                    mapping.target_field or result_key
+                    for mapping in value_mappings
+                    if row.get(mapping.source_column) not in [None, ""]
+                    and (mapping.target_field or result_key)
+                ]
+                exists = bool(
+                    identifier
+                    and identifier not in create_new_sample_identifiers
+                    and result_keys
+                    and Result.objects.filter(
+                        work_item__sample__sample_id=identifier,
+                        work_item__name=work_name,
+                        key__in=result_keys,
+                    ).exists()
+                )
 
             if dataset.entity_type != MigrationDataset.ENTITY_RESULT and identifier:
                 if identifier.lower() in seen_identifiers:
@@ -341,6 +393,13 @@ def prepare_database_preview(profile, preview_limit=100, include_rows=False):
             counts[dataset.entity_type]["rows"] += 1
             if exists:
                 counts[dataset.entity_type]["matched"] += 1
+                counts[dataset.entity_type]["conflicts"] += 1
+                counts[dataset.entity_type][{
+                    MigrationJob.CONFLICT_SKIP: "to_skip",
+                    MigrationJob.CONFLICT_MERGE: "to_merge",
+                    MigrationJob.CONFLICT_OVERWRITE: "to_overwrite",
+                    MigrationJob.CONFLICT_CREATE_NEW: "to_create_new",
+                }[conflict_policy]] += 1
             else:
                 counts[dataset.entity_type]["to_create"] += 1
 
@@ -361,7 +420,11 @@ def prepare_database_preview(profile, preview_limit=100, include_rows=False):
                         "entity_type": dataset.entity_type,
                         "source_key": source_key,
                         "identifier": identifier,
-                        "action": "MATCH" if exists else "CREATE",
+                        "action": (
+                            action_for_conflict(conflict_policy)
+                            if exists
+                            else MigrationRowRecord.ACTION_CREATE
+                        ),
                         "will_skip": bool(row_errors),
                         "errors": row_errors,
                         "warnings": row_warnings,
@@ -377,6 +440,8 @@ def prepare_database_preview(profile, preview_limit=100, include_rows=False):
     summary = {
         "source_type": MigrationProfile.SOURCE_TYPE_DATABASE,
         "source_system": profile.source_system,
+        "conflict_policy": conflict_policy,
+        "conflict_count": sum(item["conflicts"] for item in counts.values()),
         "rows_processed": rows_processed,
         "entity_counts": counts,
         "datasets": snapshots,
@@ -398,7 +463,20 @@ def _set_created_at(model_class, object_id, timestamp):
         model_class.objects.filter(id=object_id).update(created_at=timestamp)
 
 
-def _record_row(job, dataset, row_number, row, entity, source_key, project=None, sample=None):
+def _record_row(
+    job,
+    dataset,
+    row_number,
+    row,
+    entity,
+    source_key,
+    project=None,
+    sample=None,
+    action=MigrationRowRecord.ACTION_CREATE,
+    status=MigrationRowRecord.STATUS_IMPORTED,
+    target_object=None,
+    errors=None,
+):
     MigrationRowRecord.objects.create(
         migration_job=job,
         source_dataset=dataset,
@@ -412,7 +490,11 @@ def _record_row(job, dataset, row_number, row, entity, source_key, project=None,
         sample_code=sample.sample_id if sample else "",
         raw_row=row,
         raw_row_text=json.dumps(row, sort_keys=True),
-        status=MigrationRowRecord.STATUS_IMPORTED,
+        status=status,
+        action=action,
+        target_object_type=entity if target_object else "",
+        target_object_id=str(target_object.pk) if target_object else "",
+        errors=errors or [],
     )
 
 
@@ -421,11 +503,41 @@ def _safe_role(value):
     return value if value in ["viewer", "tech"] else "viewer"
 
 
+def _apply_values(job, instance, object_type, values, policy, identifier="", metadata=None):
+    changes = {}
+    for field, value in values.items():
+        if value is None:
+            continue
+        current = getattr(instance, field)
+        if policy == MigrationJob.CONFLICT_MERGE:
+            if current in [None, ""] and value not in [None, ""]:
+                changes[field] = value
+        elif policy == MigrationJob.CONFLICT_OVERWRITE and current != value:
+            changes[field] = value
+    if not changes:
+        return False
+    record_updated(
+        job,
+        instance,
+        object_type,
+        list(changes),
+        identifier,
+        metadata=metadata,
+    )
+    for field, value in changes.items():
+        setattr(instance, field, value)
+    instance.save(
+        update_fields=[field[:-3] if field.endswith("_id") else field for field in changes]
+    )
+    return True
+
+
 @transaction.atomic
 def apply_database_migration(job, actor):
     summary, source_snapshot, payloads = prepare_database_preview(
         job.profile,
         include_rows=True,
+        conflict_policy=job.conflict_policy,
     )
     if not job.preview_fingerprint or summary["preview_fingerprint"] != job.preview_fingerprint:
         raise ValidationError(
@@ -434,8 +546,23 @@ def apply_database_migration(job, actor):
     if not summary["ready_to_commit"]:
         raise ValidationError("Migration validation failed. Correct the mappings and preview again.")
 
-    imported = {"users": 0, "projects": 0, "samples": 0, "results": 0, "matched": 0}
+    imported = {
+        "users": 0,
+        "projects": 0,
+        "samples": 0,
+        "results": 0,
+        "matched": 0,
+        "skipped": 0,
+        "merged": 0,
+        "overwritten": 0,
+        "created_new": 0,
+    }
+    policy = job.conflict_policy
+    user_targets = {}
+    project_targets = {}
+    sample_targets = {}
     MigrationRowRecord.objects.filter(migration_job=job).delete()
+    job.object_changes.all().delete()
 
     for payload in payloads:
         dataset = payload["dataset"]
@@ -449,16 +576,30 @@ def apply_database_migration(job, actor):
             source_key = str(row.get(dataset.source_key_column, "")).strip()
             project = None
             sample = None
+            target_object = None
+            row_action = MigrationRowRecord.ACTION_CREATE
+            row_status = MigrationRowRecord.STATUS_IMPORTED
+            row_errors = []
 
             if dataset.entity_type == MigrationDataset.ENTITY_USER:
                 username, _ = _first(row, mappings, MigrationFieldMapping.TARGET_USER_USERNAME)
                 user = User.objects.filter(username=username).first()
                 if user:
                     imported["matched"] += 1
-                else:
-                    email, _ = _first(row, mappings, MigrationFieldMapping.TARGET_USER_EMAIL)
-                    first_name, _ = _first(row, mappings, MigrationFieldMapping.TARGET_USER_FIRST_NAME)
-                    last_name, _ = _first(row, mappings, MigrationFieldMapping.TARGET_USER_LAST_NAME)
+                    row_action = action_for_conflict(policy)
+                    if policy == MigrationJob.CONFLICT_SKIP:
+                        imported["skipped"] += 1
+                        row_status = MigrationRowRecord.STATUS_SKIPPED
+                        row_errors = ["Existing user skipped by conflict policy."]
+                    elif policy == MigrationJob.CONFLICT_CREATE_NEW:
+                        username = unique_value(User, "username", username, 150)
+                        user = None
+                        imported["created_new"] += 1
+                email, _ = _first(row, mappings, MigrationFieldMapping.TARGET_USER_EMAIL)
+                first_name, _ = _first(row, mappings, MigrationFieldMapping.TARGET_USER_FIRST_NAME)
+                last_name, _ = _first(row, mappings, MigrationFieldMapping.TARGET_USER_LAST_NAME)
+                role, _ = _first(row, mappings, MigrationFieldMapping.TARGET_USER_ROLE)
+                if user is None:
                     user = User(
                         username=username,
                         email=email or "",
@@ -468,10 +609,46 @@ def apply_database_migration(job, actor):
                     )
                     user.set_unusable_password()
                     user.save()
-                    role, _ = _first(row, mappings, MigrationFieldMapping.TARGET_USER_ROLE)
                     group, _ = Group.objects.get_or_create(name=_safe_role(role))
                     user.groups.add(group)
                     imported["users"] += 1
+                    record_created(job, user, "USER", username)
+                    if row_action != MigrationRowRecord.ACTION_CREATE_NEW:
+                        row_action = MigrationRowRecord.ACTION_CREATE
+                elif policy in [MigrationJob.CONFLICT_MERGE, MigrationJob.CONFLICT_OVERWRITE]:
+                    current_groups = list(user.groups.values_list("name", flat=True))
+                    changed = _apply_values(
+                        job,
+                        user,
+                        "USER",
+                        {
+                            "email": email,
+                            "first_name": first_name,
+                            "last_name": last_name,
+                        },
+                        policy,
+                        username,
+                        metadata={"groups": current_groups},
+                    )
+                    if role:
+                        safe_role = _safe_role(role)
+                        if safe_role not in current_groups:
+                            record_updated(
+                                job,
+                                user,
+                                "USER",
+                                [],
+                                username,
+                                metadata={"groups": current_groups},
+                            )
+                            group, _ = Group.objects.get_or_create(name=safe_role)
+                            user.groups.add(group)
+                            changed = True
+                    imported[
+                        "merged" if policy == MigrationJob.CONFLICT_MERGE else "overwritten"
+                    ] += int(changed)
+                user_targets[str(_first(row, mappings, MigrationFieldMapping.TARGET_USER_USERNAME)[0])] = user
+                target_object = user
 
             elif dataset.entity_type == MigrationDataset.ENTITY_PROJECT:
                 code, _ = _first(row, mappings, MigrationFieldMapping.TARGET_PROJECT_CODE)
@@ -482,24 +659,63 @@ def apply_database_migration(job, actor):
                 project = Project.objects.filter(code=code).first()
                 if project:
                     imported["matched"] += 1
-                else:
+                    row_action = action_for_conflict(policy)
+                    if policy == MigrationJob.CONFLICT_SKIP:
+                        imported["skipped"] += 1
+                        row_status = MigrationRowRecord.STATUS_SKIPPED
+                        row_errors = ["Existing project skipped by conflict policy."]
+                    elif policy == MigrationJob.CONFLICT_CREATE_NEW:
+                        code = unique_value(Project, "code", code, 64)
+                        name = unique_value(Project, "name", name, 128)
+                        project = None
+                        imported["created_new"] += 1
+                if project is None:
                     project = Project.objects.create(
                         code=code,
                         name=name,
                         description=description or f"Migrated from {job.profile.source_system}.",
                     )
                     imported["projects"] += 1
+                    record_created(job, project, "PROJECT", code)
+                    if row_action != MigrationRowRecord.ACTION_CREATE_NEW:
+                        row_action = MigrationRowRecord.ACTION_CREATE
+                elif policy in [MigrationJob.CONFLICT_MERGE, MigrationJob.CONFLICT_OVERWRITE]:
+                    changed = _apply_values(
+                        job,
+                        project,
+                        "PROJECT",
+                        {"name": name, "description": description},
+                        policy,
+                        code,
+                    )
+                    imported[
+                        "merged" if policy == MigrationJob.CONFLICT_MERGE else "overwritten"
+                    ] += int(changed)
+                original_code, _ = _first(row, mappings, MigrationFieldMapping.TARGET_PROJECT_CODE)
+                project_targets[str(original_code)] = project
+                target_object = project
 
             elif dataset.entity_type == MigrationDataset.ENTITY_SAMPLE:
                 sample_id, _ = _first(row, mappings, MigrationFieldMapping.TARGET_SAMPLE_ID)
                 project_code, _ = _first(row, mappings, MigrationFieldMapping.TARGET_PROJECT_CODE)
-                project = Project.objects.get(code=project_code)
+                project = project_targets.get(str(project_code)) or Project.objects.get(
+                    code=project_code
+                )
                 sample = Sample.objects.filter(sample_id=sample_id).first()
                 if sample:
                     imported["matched"] += 1
-                else:
-                    sample_type, _ = _first(row, mappings, MigrationFieldMapping.TARGET_SAMPLE_TYPE)
-                    sample_status, _ = _first(row, mappings, MigrationFieldMapping.TARGET_SAMPLE_STATUS)
+                    row_action = action_for_conflict(policy)
+                    if policy == MigrationJob.CONFLICT_SKIP:
+                        imported["skipped"] += 1
+                        row_status = MigrationRowRecord.STATUS_SKIPPED
+                        row_errors = ["Existing sample skipped by conflict policy."]
+                    elif policy == MigrationJob.CONFLICT_CREATE_NEW:
+                        sample_id = unique_value(Sample, "sample_id", sample_id, 64)
+                        sample = None
+                        imported["created_new"] += 1
+                sample_type, _ = _first(row, mappings, MigrationFieldMapping.TARGET_SAMPLE_TYPE)
+                sample_status, _ = _first(row, mappings, MigrationFieldMapping.TARGET_SAMPLE_STATUS)
+                if sample is None:
                     sample = Sample.objects.create(
                         sample_id=sample_id,
                         sample_type=sample_type or "GENERAL",
@@ -512,16 +728,69 @@ def apply_database_migration(job, actor):
                     )
                     _set_created_at(Sample, sample.id, _parse_timestamp(created_at))
                     imported["samples"] += 1
+                    record_created(job, sample, "SAMPLE", sample_id)
+                    if row_action != MigrationRowRecord.ACTION_CREATE_NEW:
+                        row_action = MigrationRowRecord.ACTION_CREATE
+                elif policy in [MigrationJob.CONFLICT_MERGE, MigrationJob.CONFLICT_OVERWRITE]:
+                    changed = _apply_values(
+                        job,
+                        sample,
+                        "SAMPLE",
+                        {
+                            "sample_type": sample_type,
+                            "status": sample_status.upper() if sample_status else None,
+                            "project_id": project.id,
+                        },
+                        policy,
+                        sample_id,
+                    )
+                    imported[
+                        "merged" if policy == MigrationJob.CONFLICT_MERGE else "overwritten"
+                    ] += int(changed)
+
+                original_sample_id, _ = _first(
+                    row, mappings, MigrationFieldMapping.TARGET_SAMPLE_ID
+                )
+                sample_targets[str(original_sample_id)] = sample
+                target_object = sample
+
+                if row_status == MigrationRowRecord.STATUS_SKIPPED:
+                    _record_row(
+                        job, dataset, row_number, row, dataset.entity_type, source_key,
+                        project=project, sample=sample, action=row_action, status=row_status,
+                        target_object=sample, errors=row_errors,
+                    )
+                    continue
 
                 for mapping in mappings.get(MigrationFieldMapping.TARGET_EXTERNAL_ID, []):
                     value = row.get(mapping.source_column)
                     if value not in [None, ""]:
-                        SampleExternalID.objects.get_or_create(
+                        external_value = str(value)
+                        external = SampleExternalID.objects.filter(
                             source_system=job.profile.source_system,
-                            external_id=str(value),
+                            external_id=external_value,
                             label=mapping.target_field or mapping.source_column,
-                            defaults={"sample": sample, "metadata": {"dataset_id": dataset.id}},
-                        )
+                        ).first()
+                        if external and policy == MigrationJob.CONFLICT_CREATE_NEW:
+                            external_value = unique_value(
+                                SampleExternalID, "external_id", external_value, 255
+                            )
+                            external = None
+                        if external is None:
+                            external = SampleExternalID.objects.create(
+                                source_system=job.profile.source_system,
+                                external_id=external_value,
+                                label=mapping.target_field or mapping.source_column,
+                                sample=sample,
+                                metadata={"dataset_id": dataset.id},
+                            )
+                            record_created(job, external, "EXTERNAL_ID", external_value)
+                        elif policy == MigrationJob.CONFLICT_OVERWRITE and external.sample_id != sample.id:
+                            record_updated(
+                                job, external, "EXTERNAL_ID", ["sample_id"], external_value
+                            )
+                            external.sample = sample
+                            external.save(update_fields=["sample"])
                 for mapping in mappings.get(MigrationFieldMapping.TARGET_CUSTOM_FIELD, []):
                     create_sample_custom_field_value(
                         sample,
@@ -529,6 +798,8 @@ def apply_database_migration(job, actor):
                         row.get(mapping.source_column),
                         mapping.value_type,
                         job.profile,
+                        job=job,
+                        conflict_policy=policy,
                     )
                 for column, value in row.items():
                     if column not in mapped_columns and column != dataset.source_key_column:
@@ -538,16 +809,20 @@ def apply_database_migration(job, actor):
                             value,
                             MigrationFieldMapping.VALUE_TYPE_STRING,
                             job.profile,
+                            job=job,
+                            conflict_policy=policy,
                         )
 
             else:
                 sample_id, _ = _first(row, mappings, MigrationFieldMapping.TARGET_SAMPLE_ID)
-                sample = Sample.objects.select_related("project").get(sample_id=sample_id)
+                sample = sample_targets.get(str(sample_id)) or Sample.objects.select_related(
+                    "project"
+                ).get(sample_id=sample_id)
                 project = sample.project
                 work_name, _ = _first(row, mappings, MigrationFieldMapping.TARGET_WORK_ITEM_NAME)
                 work_type, _ = _first(row, mappings, MigrationFieldMapping.TARGET_WORK_ITEM_TYPE)
                 work_status, _ = _first(row, mappings, MigrationFieldMapping.TARGET_WORK_ITEM_STATUS)
-                work_item, _ = WorkItem.objects.get_or_create(
+                work_item, work_item_was_created = WorkItem.objects.get_or_create(
                     sample=sample,
                     name=work_name or "Migrated Results",
                     defaults={
@@ -557,17 +832,38 @@ def apply_database_migration(job, actor):
                         "created_by": actor,
                     },
                 )
-                work_created, _ = _first(
+                if work_item_was_created:
+                    record_created(job, work_item, "WORK_ITEM", work_item.name)
+                elif policy in [MigrationJob.CONFLICT_MERGE, MigrationJob.CONFLICT_OVERWRITE]:
+                    _apply_values(
+                        job,
+                        work_item,
+                        "WORK_ITEM",
+                        {
+                            "work_type": work_type,
+                            "status": work_status.upper() if work_status else None,
+                        },
+                        policy,
+                        work_item.name,
+                    )
+                work_created_at, _ = _first(
                     row, mappings, MigrationFieldMapping.TARGET_WORK_ITEM_CREATED_AT
                 )
-                _set_created_at(WorkItem, work_item.id, _parse_timestamp(work_created))
+                if work_item_was_created:
+                    _set_created_at(
+                        WorkItem,
+                        work_item.id,
+                        _parse_timestamp(work_created_at),
+                    )
                 row_result_key, _ = _first(row, mappings, MigrationFieldMapping.TARGET_RESULT_KEY)
                 unit, _ = _first(row, mappings, MigrationFieldMapping.TARGET_RESULT_UNIT)
                 qc_status, _ = _first(row, mappings, MigrationFieldMapping.TARGET_RESULT_QC_STATUS)
                 entered_username, _ = _first(
                     row, mappings, MigrationFieldMapping.TARGET_RESULT_ENTERED_BY
                 )
-                entered_by = User.objects.filter(username=entered_username).first() or actor
+                entered_by = user_targets.get(str(entered_username)) or User.objects.filter(
+                    username=entered_username
+                ).first() or actor
                 reference_min, _ = _first(
                     row, mappings, MigrationFieldMapping.TARGET_RESULT_REFERENCE_MIN
                 )
@@ -600,16 +896,42 @@ def apply_database_migration(job, actor):
                         defaults["value_boolean"] = value
                     else:
                         defaults["value_string"] = str(value)
-                    result, created = Result.objects.update_or_create(
-                        work_item=work_item,
-                        key=key,
-                        defaults=defaults,
-                    )
-                    _set_created_at(Result, result.id, _parse_timestamp(result_created))
-                    if created:
-                        imported["results"] += 1
-                    else:
+                    result = Result.objects.filter(work_item=work_item, key=key).first()
+                    result_action = MigrationRowRecord.ACTION_CREATE
+                    if result:
                         imported["matched"] += 1
+                        result_action = action_for_conflict(policy)
+                        if policy == MigrationJob.CONFLICT_SKIP:
+                            imported["skipped"] += 1
+                        elif policy == MigrationJob.CONFLICT_CREATE_NEW:
+                            key = unique_value(Result, "key", key, 64)
+                            result = None
+                            imported["created_new"] += 1
+                        else:
+                            update_defaults = {
+                                field: value
+                                for field, value in defaults.items()
+                                if field != "entered_by"
+                            }
+                            update_defaults["entered_by_id"] = (
+                                entered_by.id if entered_by else None
+                            )
+                            changed = _apply_values(
+                                job, result, "RESULT", update_defaults, policy, key
+                            )
+                            imported[
+                                "merged" if policy == MigrationJob.CONFLICT_MERGE else "overwritten"
+                            ] += int(changed)
+                    if result is None:
+                        result = Result.objects.create(work_item=work_item, key=key, **defaults)
+                        record_created(job, result, "RESULT", key)
+                        _set_created_at(Result, result.id, _parse_timestamp(result_created))
+                        imported["results"] += 1
+                    row_action = result_action
+                    if result_action == MigrationRowRecord.ACTION_SKIP:
+                        row_status = MigrationRowRecord.STATUS_SKIPPED
+                        row_errors.append(f"Existing result {key} skipped by conflict policy.")
+                target_object = sample
 
             _record_row(
                 job,
@@ -620,6 +942,10 @@ def apply_database_migration(job, actor):
                 source_key,
                 project=project,
                 sample=sample,
+                action=row_action,
+                status=row_status,
+                target_object=target_object,
+                errors=row_errors,
             )
 
     final_summary = {
@@ -630,6 +956,10 @@ def apply_database_migration(job, actor):
         "samples_created": imported["samples"],
         "results_created": imported["results"],
         "records_matched": imported["matched"],
+        "records_skipped": imported["skipped"],
+        "records_merged": imported["merged"],
+        "records_overwritten": imported["overwritten"],
+        "records_created_new": imported["created_new"],
         "row_records_created": sum(len(payload["rows"]) for payload in payloads),
         "source_snapshot": source_snapshot,
         "progress": {

@@ -217,6 +217,7 @@ The migration toolkit supports:
 
 - Migration profiles
 - Reusable field mappings
+- Saved mapping templates that can be applied to another compatible profile
 - CSV upload
 - Director-managed read-only PostgreSQL, MySQL/MariaDB, and SQLite sources
 - Schema/table inspection without arbitrary SQL
@@ -224,6 +225,7 @@ The migration toolkit supports:
 - Preview / dry-run before import
 - Required-field, data-type, relationship, status, and timestamp validation
 - A source-and-mapping fingerprint that blocks a changed source after preview
+- Per-job conflict policies: skip, merge blank fields, overwrite mapped fields, or create unique copies
 - Project creation or matching
 - Inactive user creation with unusable passwords and safe non-admin roles
 - Sample creation or matching
@@ -234,12 +236,18 @@ The migration toolkit supports:
 - Paginated migration row review
 - Skipped/error row filtering
 - CSV export for migration review
+- Reconciliation reports with source, action, status, and entity totals
+- Director-controlled rollback of tracked creations and updates
 
 Database passwords are never stored in OpenLIMS. Configure the password in an
 environment variable, enter only that variable's name in the connection, and
 use a source account that has `SELECT` permission only. Remote hosts must also
 be listed in `MIGRATION_DB_ALLOWED_HOSTS`. Each dataset has a row safety limit;
 the final commit re-reads and fingerprints the source before writing anything.
+Conflict policy is part of that fingerprint. Each committed job records the
+objects it created and the original values it changed, allowing a director to
+perform a guarded rollback. Rollback is blocked if later related data would be
+put at risk.
 
 ### External Sample IDs and Aliases
 
