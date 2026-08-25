@@ -1016,9 +1016,10 @@ class SampleCustodyEventViewSet(ReadOnlyModelViewSet):
             raise ValidationError({"custodian": "A destination custodian is required for a transfer."})
 
         with transaction.atomic():
-            sample = Sample.objects.select_for_update().select_related(
-                "container", "custodian"
-            ).get(pk=candidate.pk)
+            # Lock only the sample row. Joining the nullable container and
+            # custodian relations here makes PostgreSQL reject FOR UPDATE on
+            # the nullable side of the outer join.
+            sample = Sample.objects.select_for_update().get(pk=candidate.pk)
             from_container = sample.container
             from_custodian = sample.custodian
             to_container = sample.container
