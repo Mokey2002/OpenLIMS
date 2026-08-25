@@ -10,7 +10,9 @@ import {
   Table,
 } from "react-bootstrap";
 import { Link, useParams } from "react-router-dom";
-import { apiGet } from "../api";
+import { apiGet, apiPost } from "../api";
+import { isAdmin } from "../authz";
+import { useLanguage } from "../i18n";
 
 function statusVariant(status) {
   switch (status) {
@@ -26,6 +28,8 @@ function statusVariant(status) {
       return "secondary";
     case "PREVIEWED":
       return "info";
+    case "ROLLED_BACK":
+      return "dark";
     default:
       return "secondary";
   }
@@ -53,14 +57,18 @@ function asText(value) {
 
 export default function MigrationJobDetail() {
   const { id } = useParams();
+  const { t } = useLanguage();
 
   const [job, setJob] = useState(null);
+  const [me, setMe] = useState(null);
+  const [reconciliation, setReconciliation] = useState(null);
   const [rowsData, setRowsData] = useState(null);
   const [err, setErr] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [downloading, setDownloading] = useState(false);
+  const [rollingBack, setRollingBack] = useState(false);
 
   async function load(targetPage = page) {
     setErr("");
@@ -74,13 +82,17 @@ export default function MigrationJobDetail() {
       if (statusFilter) params.set("status", statusFilter);
       if (search.trim()) params.set("search", search.trim());
 
-      const [jobData, rowData] = await Promise.all([
+      const [meData, jobData, rowData, reconciliationData] = await Promise.all([
+        apiGet("/api/me/"),
         apiGet(`/api/migration-jobs/${id}/`),
         apiGet(`/api/migration-row-records/?${params.toString()}`),
+        apiGet(`/api/migration-jobs/${id}/reconciliation/`),
       ]);
 
+      setMe(meData);
       setJob(jobData);
       setRowsData(rowData);
+      setReconciliation(reconciliationData);
       setPage(targetPage);
     } catch (e) {
       setErr(e.message || String(e));
@@ -131,6 +143,45 @@ export default function MigrationJobDetail() {
     }
   }
 
+  async function downloadReconciliation() {
+    setDownloading(true);
+    setErr("");
+    try {
+      const token = localStorage.getItem("access");
+      const response = await fetch(`/api/migration-jobs/${id}/export-reconciliation/`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new Error(`Export failed with status ${response.status}`);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `migration_job_${id}_reconciliation.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  async function rollbackJob() {
+    if (!window.confirm(t("Roll back every creation and update recorded by this migration?"))) return;
+    setRollingBack(true);
+    setErr("");
+    try {
+      await apiPost(`/api/migration-jobs/${id}/rollback/`, {});
+      await load(page);
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setRollingBack(false);
+    }
+  }
+
   useEffect(() => {
     const timer = window.setTimeout(() => load(1), 0);
     return () => window.clearTimeout(timer);
@@ -178,6 +229,11 @@ export default function MigrationJobDetail() {
 
         <div className="inline-actions">
           <Badge bg={statusVariant(job.status)}>{job.status}</Badge>
+          {isAdmin(me) && ["COMPLETED", "PARTIAL_FAILED"].includes(job.status) && (
+            <Button variant="outline-danger" size="sm" onClick={rollbackJob} disabled={rollingBack}>
+              {rollingBack ? "Rolling Back..." : "Rollback Migration"}
+            </Button>
+          )}
           <Button variant="outline-dark" size="sm" onClick={() => load(page)}>
             Refresh
           </Button>
@@ -275,6 +331,27 @@ export default function MigrationJobDetail() {
         </Card.Body>
       </Card>
 
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <div className="toolbar-row mb-3">
+            <div>
+              <h5 className="section-title mb-0">Reconciliation Report</h5>
+              <div className="feed-meta">Compare source rows with created, merged, overwritten, skipped, and failed records.</div>
+            </div>
+            <Button size="sm" variant="outline-dark" onClick={downloadReconciliation} disabled={downloading}>
+              Export Reconciliation
+            </Button>
+          </div>
+          <Row className="g-3">
+            <Col md={3}><div className="soft-card"><div className="feed-meta">Conflict Policy</div><div className="fw-semibold">{reconciliation?.conflict_policy || job.conflict_policy}</div></div></Col>
+            <Col md={3}><div className="soft-card"><div className="feed-meta">Created</div><div className="fw-semibold">{(reconciliation?.action_counts?.CREATE || 0) + (reconciliation?.action_counts?.CREATE_NEW || 0)}</div></div></Col>
+            <Col md={3}><div className="soft-card"><div className="feed-meta">Merged / Overwritten</div><div className="fw-semibold">{(reconciliation?.action_counts?.MERGE || 0) + (reconciliation?.action_counts?.OVERWRITE || 0)}</div></div></Col>
+            <Col md={3}><div className="soft-card"><div className="feed-meta">Skipped / Errors</div><div className="fw-semibold">{(reconciliation?.status_counts?.SKIPPED || 0) + (reconciliation?.status_counts?.ERROR || 0)}</div></div></Col>
+          </Row>
+          {job.rollback_summary?.rolled_back_at && <Alert variant="secondary" className="mt-3 mb-0">Rolled back by {job.rollback_summary.rolled_back_by} on {formatTimestamp(job.rollback_summary.rolled_back_at)}. Deleted {job.rollback_summary.deleted_objects} created objects and restored {job.rollback_summary.restored_objects} existing objects.</Alert>}
+        </Card.Body>
+      </Card>
+
       <Card className="app-card">
         <Card.Body>
           <div className="toolbar-row mb-3">
@@ -354,6 +431,7 @@ export default function MigrationJobDetail() {
                   <tr>
                     <th>Row</th>
                     <th>Status</th>
+                    <th>Action</th>
                     <th>Dataset / Entity</th>
                     <th>Source Key</th>
                     <th>Project</th>
@@ -372,6 +450,7 @@ export default function MigrationJobDetail() {
                           {row.status}
                         </Badge>
                       </td>
+                      <td><Badge bg="secondary">{row.action || "CREATE"}</Badge></td>
                       <td>
                         {row.source_dataset ? `#${row.source_dataset} / ` : ""}
                         {row.entity_type || "CSV"}

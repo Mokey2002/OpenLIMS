@@ -50,6 +50,7 @@ def run_migration_job(self, job_id):
                 job.profile,
                 job.uploaded_file,
                 job.project,
+                job.conflict_policy,
             )
             if fingerprint != job.preview_fingerprint:
                 raise ValueError(
@@ -62,12 +63,13 @@ def run_migration_job(self, job_id):
                 default_project=job.project,
                 job=job,
                 progress_callback=update_progress,
+                conflict_policy=job.conflict_policy,
             )
 
         summary["started_at"] = job.summary.get("started_at")
         summary["finished_at"] = timezone.now().isoformat()
 
-        if summary.get("skipped_rows"):
+        if summary.get("skipped_rows") or summary.get("records_skipped"):
             job.status = MigrationJob.STATUS_PARTIAL_FAILED
         else:
             job.status = MigrationJob.STATUS_COMPLETED

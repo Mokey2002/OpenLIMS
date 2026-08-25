@@ -5,10 +5,31 @@ from .models import (
     MigrationDataset,
     MigrationFieldMapping,
     MigrationJob,
+    MigrationMappingTemplate,
     MigrationProfile,
     MigrationRowRecord,
     SampleExternalID,
 )
+
+
+class MigrationMappingTemplateSerializer(serializers.ModelSerializer):
+    created_by_username = serializers.CharField(source="created_by.username", read_only=True)
+
+    class Meta:
+        model = MigrationMappingTemplate
+        fields = [
+            "id",
+            "name",
+            "source_system",
+            "source_type",
+            "description",
+            "configuration",
+            "created_by",
+            "created_by_username",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
 
 
 class MigrationDatabaseConnectionSerializer(serializers.ModelSerializer):
@@ -245,8 +266,12 @@ class MigrationJobSerializer(serializers.ModelSerializer):
             "summary",
             "source_snapshot",
             "preview_fingerprint",
+            "conflict_policy",
             "committed_by",
             "confirmed_at",
+            "rolled_back_by",
+            "rolled_back_at",
+            "rollback_summary",
             "created_at",
             "row_record_count",
         ]
@@ -260,8 +285,12 @@ class MigrationJobSerializer(serializers.ModelSerializer):
             "summary",
             "source_snapshot",
             "preview_fingerprint",
+            "conflict_policy",
             "committed_by",
             "confirmed_at",
+            "rolled_back_by",
+            "rolled_back_at",
+            "rollback_summary",
             "created_at",
             "row_record_count",
         ]
@@ -295,6 +324,9 @@ class MigrationRowRecordSerializer(serializers.ModelSerializer):
             "raw_row_text",
             "unmapped_data",
             "status",
+            "action",
+            "target_object_type",
+            "target_object_id",
             "errors",
             "created_at",
         ]

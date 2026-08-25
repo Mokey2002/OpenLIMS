@@ -22,6 +22,7 @@ from .models import (
     MigrationDataset,
     MigrationFieldMapping,
     MigrationJob,
+    MigrationMappingTemplate,
     MigrationProfile,
     MigrationRowRecord,
     SampleExternalID,
@@ -31,14 +32,17 @@ from .serializers import (
     MigrationDatasetSerializer,
     MigrationFieldMappingSerializer,
     MigrationJobSerializer,
+    MigrationMappingTemplateSerializer,
     MigrationProfileSerializer,
     MigrationRowRecordSerializer,
     SampleExternalIDSerializer,
 )
 from .database_services import prepare_database_preview
 from .database_sources import inspect_source
+from .change_services import build_reconciliation_report, rollback_migration
 from .services import build_csv_source_snapshot, build_preview, suggest_field_mappings
 from .tasks import run_migration_job
+from .template_services import apply_mapping_template, save_mapping_template
 
 
 class SampleExternalIDViewSet(viewsets.ModelViewSet):
@@ -126,6 +130,54 @@ class MigrationProfileViewSet(viewsets.ModelViewSet):
         if source_type == MigrationProfile.SOURCE_TYPE_DATABASE and not is_admin(self.request.user):
             raise PermissionDenied("Only a director can update database migration profiles.")
         serializer.save()
+
+    @action(detail=True, methods=["post"], url_path="save-template")
+    def save_template(self, request, pk=None):
+        profile = self.get_object()
+        if profile.source_type == MigrationProfile.SOURCE_TYPE_DATABASE and not is_admin(
+            request.user
+        ):
+            raise PermissionDenied("Only a director can save database mapping templates.")
+        try:
+            template = save_mapping_template(
+                profile=profile,
+                name=request.data.get("name"),
+                description=request.data.get("description", ""),
+                actor=request.user,
+            )
+        except DjangoValidationError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            MigrationMappingTemplateSerializer(template).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MigrationMappingTemplateViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
+    serializer_class = MigrationMappingTemplateSerializer
+
+    def get_queryset(self):
+        queryset = MigrationMappingTemplate.objects.select_related("created_by").all()
+        if not is_admin(self.request.user):
+            queryset = queryset.exclude(source_type=MigrationProfile.SOURCE_TYPE_DATABASE)
+        return queryset.order_by("name")
+
+    @action(detail=True, methods=["post"], url_path="apply")
+    def apply(self, request, pk=None):
+        template = self.get_object()
+        profile = MigrationProfile.objects.filter(id=request.data.get("profile")).first()
+        if not profile:
+            return Response({"detail": "Migration profile not found."}, status=404)
+        if profile.source_type == MigrationProfile.SOURCE_TYPE_DATABASE and not is_admin(
+            request.user
+        ):
+            raise PermissionDenied("Only a director can apply database mapping templates.")
+        try:
+            result = apply_mapping_template(template, profile)
+        except DjangoValidationError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result)
 
 
 class MigrationFieldMappingViewSet(viewsets.ModelViewSet):
@@ -356,11 +408,21 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
         if error_response:
             return error_response
 
+        conflict_policy = request.data.get("conflict_policy", MigrationJob.CONFLICT_SKIP)
+        if conflict_policy not in dict(MigrationJob.CONFLICT_POLICY_CHOICES):
+            return Response(
+                {"conflict_policy": "Choose a supported conflict policy."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         if profile.source_type == MigrationProfile.SOURCE_TYPE_DATABASE:
             if not is_admin(request.user):
                 raise PermissionDenied("Only a director can preview database migrations.")
             try:
-                summary, source_snapshot, _ = prepare_database_preview(profile)
+                summary, source_snapshot, _ = prepare_database_preview(
+                    profile,
+                    conflict_policy=conflict_policy,
+                )
             except Exception as exc:
                 return Response(
                     {"detail": str(exc)},
@@ -379,6 +441,7 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
                 summary=summary,
                 source_snapshot=source_snapshot,
                 preview_fingerprint=summary["preview_fingerprint"],
+                conflict_policy=conflict_policy,
             )
         else:
             project, error_response = self._get_project(request)
@@ -398,6 +461,7 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
                     profile=profile,
                     uploaded_file=uploaded_file,
                     default_project=project,
+                    conflict_policy=conflict_policy,
                 )
             except Exception as exc:
                 return Response(
@@ -413,6 +477,7 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
                 summary=summary,
                 source_snapshot=summary["source_snapshot"],
                 preview_fingerprint=summary["preview_fingerprint"],
+                conflict_policy=conflict_policy,
             )
 
         serializer = self.get_serializer(job)
@@ -449,7 +514,10 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
 
         try:
             if job.profile.source_type == MigrationProfile.SOURCE_TYPE_DATABASE:
-                fresh_summary, _, _ = prepare_database_preview(job.profile)
+                fresh_summary, _, _ = prepare_database_preview(
+                    job.profile,
+                    conflict_policy=job.conflict_policy,
+                )
                 fresh_fingerprint = fresh_summary["preview_fingerprint"]
             else:
                 job.uploaded_file.open("rb")
@@ -457,6 +525,7 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
                     job.profile,
                     job.uploaded_file,
                     job.project,
+                    job.conflict_policy,
                 )
                 job.uploaded_file.close()
         except Exception as exc:
@@ -505,6 +574,54 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
     def commit(self, request, pk=None):
         return self._commit_job(request, pk)
 
+    @action(detail=True, methods=["get"], url_path="reconciliation")
+    def reconciliation(self, request, pk=None):
+        return Response(build_reconciliation_report(self.get_object()))
+
+    @action(detail=True, methods=["get"], url_path="export-reconciliation")
+    def export_reconciliation(self, request, pk=None):
+        job = self.get_object()
+        report = build_reconciliation_report(job)
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = (
+            f'attachment; filename="migration_job_{job.id}_reconciliation.csv"'
+        )
+        writer = csv.writer(response)
+        writer.writerow(["migration_job", job.id])
+        writer.writerow(["source_system", report["source_system"]])
+        writer.writerow(["source_type", report["source_type"]])
+        writer.writerow(["status", report["status"]])
+        writer.writerow(["conflict_policy", report["conflict_policy"]])
+        writer.writerow(["source_rows", report["source_rows"]])
+        writer.writerow(["recorded_rows", report["recorded_rows"]])
+        writer.writerow([])
+        writer.writerow(["entity", "rows", "imported", "skipped", "errors", "created", "merged", "overwritten", "created_new"])
+        for entity, counts in sorted(report["entity_counts"].items()):
+            writer.writerow([
+                entity,
+                counts["rows"],
+                counts["statuses"].get(MigrationRowRecord.STATUS_IMPORTED, 0),
+                counts["statuses"].get(MigrationRowRecord.STATUS_SKIPPED, 0),
+                counts["statuses"].get(MigrationRowRecord.STATUS_ERROR, 0),
+                counts["actions"].get(MigrationRowRecord.ACTION_CREATE, 0),
+                counts["actions"].get(MigrationRowRecord.ACTION_MERGE, 0),
+                counts["actions"].get(MigrationRowRecord.ACTION_OVERWRITE, 0),
+                counts["actions"].get(MigrationRowRecord.ACTION_CREATE_NEW, 0),
+            ])
+        return response
+
+    @action(detail=True, methods=["post"], url_path="rollback")
+    def rollback(self, request, pk=None):
+        if not is_admin(request.user):
+            raise PermissionDenied("Only a director can roll back a migration.")
+        job = self.get_object()
+        try:
+            summary = rollback_migration(job, request.user)
+        except DjangoValidationError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        job.refresh_from_db()
+        return Response({"job": self.get_serializer(job).data, "rollback": summary})
+
     @action(detail=True, methods=["get"], url_path="export-rows")
     def export_rows(self, request, pk=None):
         job = self.get_object()
@@ -536,12 +653,15 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
         writer.writerow([
             "row_number",
             "status",
+            "action",
             "dataset",
             "entity_type",
             "source_key",
             "project_code",
             "project_name",
             "sample_code",
+            "target_object_type",
+            "target_object_id",
             "errors",
             "unmapped_data",
             "raw_row",
@@ -551,12 +671,15 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
             writer.writerow([
                 row.row_number,
                 row.status,
+                row.action,
                 row.source_dataset.name if row.source_dataset else "CSV",
                 row.entity_type,
                 row.source_key,
                 row.project_code,
                 row.project_name,
                 row.sample_code,
+                row.target_object_type,
+                row.target_object_id,
                 json.dumps(row.errors),
                 json.dumps(row.unmapped_data),
                 json.dumps(row.raw_row),

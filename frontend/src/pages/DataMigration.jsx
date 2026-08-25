@@ -53,6 +53,7 @@ export default function DataMigration() {
   const [jobs, setJobs] = useState([]);
   const [connections, setConnections] = useState([]);
   const [datasets, setDatasets] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [inspection, setInspection] = useState(null);
   const [err, setErr] = useState("");
   const [success, setSuccess] = useState("");
@@ -82,14 +83,18 @@ export default function DataMigration() {
   const [migrationProject, setMigrationProject] = useState("");
   const [uploadFile, setUploadFile] = useState(null);
   const [previewJob, setPreviewJob] = useState(null);
+  const [conflictPolicy, setConflictPolicy] = useState("SKIP");
+  const [templateName, setTemplateName] = useState("SISBI Mapping");
+  const [selectedTemplate, setSelectedTemplate] = useState("");
 
   async function load() {
     setErr("");
     try {
       const meData = await apiGet("/api/me/");
-      const [profileList, projectList, jobList] = await Promise.all([
+      const [profileList, projectList, jobList, templateList] = await Promise.all([
         getAll("/api/migration-profiles/"), getAll("/api/projects/"),
         getAll("/api/migration-jobs/"),
+        getAll("/api/migration-mapping-templates/"),
       ]);
       let connectionList = [];
       let datasetList = [];
@@ -100,7 +105,7 @@ export default function DataMigration() {
         ]);
       }
       setMe(meData); setProfiles(profileList); setProjects(projectList); setJobs(jobList);
-      setConnections(connectionList); setDatasets(datasetList);
+      setConnections(connectionList); setDatasets(datasetList); setTemplates(templateList);
       if (!selectedProfile && profileList[0]) setSelectedProfile(String(profileList[0].id));
       if (!selectedConnection && connectionList[0]) setSelectedConnection(String(connectionList[0].id));
     } catch (e) {
@@ -217,8 +222,34 @@ export default function DataMigration() {
     catch (e) { showError(e); }
   }
 
+  async function saveTemplate() {
+    setBusy("save-template");
+    try {
+      const data = await apiPost(`/api/migration-profiles/${selectedProfile}/save-template/`, {
+        name: templateName,
+      });
+      setSelectedTemplate(String(data.id));
+      setSuccess(`Mapping template ${data.name} saved.`);
+      await load();
+    } catch (e) { showError(e); } finally { setBusy(""); }
+  }
+
+  async function applyTemplate() {
+    setBusy("apply-template");
+    try {
+      const data = await apiPost(`/api/migration-mapping-templates/${selectedTemplate}/apply/`, {
+        profile: Number(selectedProfile),
+      });
+      const unmatched = data.unmatched_datasets?.length || 0;
+      setSuccess(`Template applied: ${data.created} mapping(s) added and ${data.updated} updated.${unmatched ? ` ${unmatched} dataset(s) need manual matching.` : ""}`);
+      setPreviewJob(null);
+      await load();
+    } catch (e) { showError(e); } finally { setBusy(""); }
+  }
+
   function csvForm() {
     const form = new FormData(); form.append("profile", selectedProfile);
+    form.append("conflict_policy", conflictPolicy);
     if (migrationProject) form.append("project", migrationProject);
     if (uploadFile) form.append("uploaded_file", uploadFile);
     return form;
@@ -236,7 +267,9 @@ export default function DataMigration() {
     setBusy("preview"); setPreviewJob(null);
     try {
       const data = databaseProfile
-        ? await apiPost("/api/migration-jobs/preview/", { profile: Number(selectedProfile) })
+        ? await apiPost("/api/migration-jobs/preview/", {
+          profile: Number(selectedProfile), conflict_policy: conflictPolicy,
+        })
         : await apiPostForm("/api/migration-jobs/preview/", csvForm());
       setPreviewJob(data); setSuccess("Migration preview completed. Review validation before committing."); await load();
     } catch (e) { showError(e); } finally { setBusy(""); }
@@ -312,10 +345,18 @@ export default function DataMigration() {
         <Col md={2}><Button type="submit" variant="dark" className="w-100" disabled={!selectedProfile || !sourceColumn || (databaseProfile && !selectedDataset) || busy === "mapping"}>Add Mapping</Button></Col>
       </Row></Form>
       {mappings.length === 0 ? <div className="empty-state mt-3">No mappings yet.</div> : <Table responsive hover className="app-table mt-3"><thead><tr><th>Source</th><th>Target</th><th>Field</th><th>Type</th><th>Required</th><th>Actions</th></tr></thead><tbody>{mappings.map((mapping) => <tr key={mapping.id}><td>{mapping.source_column}</td><td>{mapping.target_type}</td><td>{mapping.target_field || "-"}</td><td>{mapping.value_type}</td><td>{mapping.required ? "Yes" : "No"}</td><td><Button size="sm" variant="outline-danger" onClick={() => deleteMapping(mapping.id)}>Delete</Button></td></tr>)}</tbody></Table>}
+      <hr />
+      <Row className="g-2">
+        <Col md={4}><Form.Control value={templateName} placeholder="Template name" onChange={(e) => setTemplateName(e.target.value)} /></Col>
+        <Col md={2}><Button className="w-100" variant="outline-dark" onClick={saveTemplate} disabled={!selectedProfile || !templateName || busy === "save-template"}>Save Template</Button></Col>
+        <Col md={4}><Form.Select value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)}><option value="">Select saved mapping template</option>{templates.filter((item) => item.source_type === activeProfile?.source_type).map((item) => <option key={item.id} value={item.id}>{item.name} — {item.source_system}</option>)}</Form.Select></Col>
+        <Col md={2}><Button className="w-100" variant="outline-secondary" onClick={applyTemplate} disabled={!selectedProfile || !selectedTemplate || busy === "apply-template"}>Apply Template</Button></Col>
+      </Row>
     </Card.Body></Card>
 
     <Card className="app-card mb-4"><Card.Body><h5 className="section-title">Preview, Validate, and Commit</h5>
       {!databaseProfile && <Row className="g-2 mb-3"><Col md={5}><Form.Select value={migrationProject} onChange={(e) => setMigrationProject(e.target.value)}><option value="">Use project from CSV mapping</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</Form.Select></Col><Col md={5}><Form.Control type="file" accept=".csv,text/csv" onChange={(e) => setUploadFile(e.target.files?.[0] || null)} /></Col><Col md={2}><Button variant="outline-secondary" className="w-100" onClick={suggestMappings} disabled={!uploadFile || busy === "suggest"}>Suggest</Button></Col></Row>}
+      <Row className="g-2 mb-3"><Col md={12}><Form.Select value={conflictPolicy} onChange={(e) => { setConflictPolicy(e.target.value); setPreviewJob(null); }}><option value="SKIP">Skip existing records</option><option value="MERGE">Merge into blank fields</option><option value="OVERWRITE">Overwrite mapped fields</option><option value="CREATE_NEW">Create new records with unique identifiers</option></Form.Select><Form.Text>Conflict handling is included in the reviewed preview fingerprint.</Form.Text></Col></Row>
       <Row className="g-2"><Col md={6}><Button variant="outline-dark" className="w-100" onClick={previewMigration} disabled={!selectedProfile || (!databaseProfile && !uploadFile) || (databaseProfile && !director) || busy === "preview"}>{busy === "preview" ? "Validating..." : "Preview and Validate"}</Button></Col><Col md={6}><Button variant="dark" className="w-100" onClick={commitMigration} disabled={!previewJob?.summary?.ready_to_commit || previewJob?.status !== "PREVIEWED" || busy === "commit"}>{busy === "commit" ? "Queuing..." : "Commit Reviewed Preview"}</Button></Col></Row>
       {previewJob && <div className="mt-4"><Row className="g-3 mb-3">
         <Col md={3}><div className="soft-card"><div className="feed-meta">Rows</div><div className="fw-semibold">{previewJob.summary?.rows_processed || 0}</div></div></Col>
@@ -329,7 +370,7 @@ export default function DataMigration() {
     </Card.Body></Card>
 
     <Card className="app-card"><Card.Body><h5 className="section-title">Migration History</h5>
-      {jobs.length === 0 ? <div className="empty-state">No migration jobs yet.</div> : <Table responsive hover className="app-table"><thead><tr><th>ID</th><th>Profile</th><th>Source</th><th>Status</th><th>Rows</th><th>Created</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td><Link to={`/data-migration/jobs/${job.id}`}>#{job.id}</Link></td><td>{job.profile_name}</td><td>{job.source_connection_name || job.project_code || "CSV mapping"}</td><td><Badge bg={job.status === "COMPLETED" ? "success" : job.status === "FAILED" ? "danger" : job.status === "PREVIEWED" ? "info" : "secondary"}>{job.status}</Badge></td><td>{job.summary?.rows_processed || job.summary?.progress?.processed_rows || 0}</td><td>{new Date(job.created_at).toLocaleString()}</td></tr>)}</tbody></Table>}
+      {jobs.length === 0 ? <div className="empty-state">No migration jobs yet.</div> : <Table responsive hover className="app-table"><thead><tr><th>ID</th><th>Profile</th><th>Source</th><th>Status</th><th>Rows</th><th>Created</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td><Link to={`/data-migration/jobs/${job.id}`}>#{job.id}</Link></td><td>{job.profile_name}</td><td>{job.source_connection_name || job.project_code || "CSV mapping"}</td><td><Badge bg={job.status === "COMPLETED" ? "success" : job.status === "FAILED" ? "danger" : job.status === "PREVIEWED" ? "info" : job.status === "ROLLED_BACK" ? "dark" : "secondary"}>{job.status}</Badge></td><td>{job.summary?.rows_processed || job.summary?.progress?.processed_rows || 0}</td><td>{new Date(job.created_at).toLocaleString()}</td></tr>)}</tbody></Table>}
     </Card.Body></Card>
   </div>;
 }

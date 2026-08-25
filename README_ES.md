@@ -247,6 +247,10 @@ La herramienta puede crear o relacionar:
 - Trabajos.
 - Resultados.
 - Fechas históricas, unidades, referencias y estado de QC cuando estén mapeados.
+- Plantillas de mapeo guardadas que pueden aplicarse a otro perfil compatible.
+- Políticas por migración para omitir, combinar, sobrescribir o crear copias con identificadores únicos.
+- Informes de conciliación con totales por entidad, acción y estado.
+- Reversión controlada por Dirección de las creaciones y modificaciones registradas.
 
 Las columnas no reconocidas pueden conservarse como campos personalizados para reducir la pérdida de información.
 
@@ -265,6 +269,10 @@ debe tener solamente permiso `SELECT`.
 La vista previa valida campos obligatorios, tipos, relaciones, estados y fechas.
 También genera una huella de los datos y del mapeo. Si SISBI cambia después de
 la revisión, la confirmación se bloquea y se debe generar una vista previa nueva.
+La política de conflictos forma parte de esa huella. Cada migración confirmada
+registra los objetos creados y los valores anteriores de los objetos modificados.
+Dirección puede revertir el trabajo; OpenLIMS bloquea la reversión si existen
+datos relacionados posteriores que podrían ponerse en riesgo.
 
 ### Uso de modelos de lenguaje
 

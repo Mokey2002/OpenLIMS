@@ -13,7 +13,19 @@ from results.models import Result, WorkItem
 from samples.access import validate_sample_project_assignment
 from samples.models import Sample
 
-from .models import MigrationFieldMapping, MigrationRowRecord, SampleExternalID
+from .change_services import (
+    action_for_conflict,
+    record_created,
+    record_updated,
+    unique_value,
+)
+from .models import (
+    MigrationDataset,
+    MigrationFieldMapping,
+    MigrationJob,
+    MigrationRowRecord,
+    SampleExternalID,
+)
 
 
 def normalize_bool(value):
@@ -80,7 +92,12 @@ def mappings_by_type(profile):
     return grouped
 
 
-def build_csv_source_snapshot(profile, uploaded_file, default_project=None):
+def build_csv_source_snapshot(
+    profile,
+    uploaded_file,
+    default_project=None,
+    conflict_policy=MigrationJob.CONFLICT_SKIP,
+):
     uploaded_file.seek(0)
     content = uploaded_file.read()
     uploaded_file.seek(0)
@@ -100,6 +117,7 @@ def build_csv_source_snapshot(profile, uploaded_file, default_project=None):
             json.dumps(mapping_config, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest(),
         "default_project_id": default_project.id if default_project else None,
+        "conflict_policy": conflict_policy,
     }
     fingerprint = hashlib.sha256(
         json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -173,7 +191,13 @@ def resolve_project_for_migration(project_code, project_name, default_project=No
 
     return None, False, "missing"
 
-def build_preview(profile, uploaded_file, default_project=None, preview_limit=100):
+def build_preview(
+    profile,
+    uploaded_file,
+    default_project=None,
+    preview_limit=100,
+    conflict_policy=MigrationJob.CONFLICT_SKIP,
+):
     rows, fieldnames = read_csv(uploaded_file)
     total_rows = len(rows)
     mappings = mappings_by_type(profile)
@@ -193,6 +217,7 @@ def build_preview(profile, uploaded_file, default_project=None, preview_limit=10
     results_to_create = 0
     skipped_rows = []
     preview_rows = []
+    conflicts = 0
 
     for row_number, row in enumerate(rows, start=1):
         row_errors = []
@@ -270,6 +295,7 @@ def build_preview(profile, uploaded_file, default_project=None, preview_limit=10
 
             if existing_sample:
                 samples_matched.add(sample_code)
+                conflicts += 1
             else:
                 samples_to_create.add(sample_code)
 
@@ -316,6 +342,11 @@ def build_preview(profile, uploaded_file, default_project=None, preview_limit=10
                 default_project.code if default_project else None
             ),
             "unmapped_data": get_unmapped_data(row, mapped_columns),
+            "action": (
+                action_for_conflict(conflict_policy)
+                if sample_code and Sample.objects.filter(sample_id=sample_code).exists()
+                else MigrationRowRecord.ACTION_CREATE
+            ),
             "will_skip": bool(row_errors),
             "errors": row_errors,
         })
@@ -324,6 +355,7 @@ def build_preview(profile, uploaded_file, default_project=None, preview_limit=10
         profile,
         uploaded_file,
         default_project,
+        conflict_policy,
     )
     return {
         "source_type": "CSV",
@@ -342,13 +374,23 @@ def build_preview(profile, uploaded_file, default_project=None, preview_limit=10
         "preview_rows_returned": min(len(preview_rows), preview_limit),
         "fieldnames": fieldnames,
         "validation_error_count": sum(len(item["errors"]) for item in skipped_rows),
+        "conflict_policy": conflict_policy,
+        "conflict_count": conflicts,
         "ready_to_commit": not skipped_rows,
         "source_snapshot": source_snapshot,
         "preview_fingerprint": preview_fingerprint,
     }
 
 
-def set_result_value(work_item, key, raw_value, value_type, entered_by=None):
+def set_result_value(
+    work_item,
+    key,
+    raw_value,
+    value_type,
+    entered_by=None,
+    job=None,
+    conflict_policy=MigrationJob.CONFLICT_OVERWRITE,
+):
     normalized = normalize_value(raw_value, value_type)
 
     defaults = {
@@ -366,11 +408,31 @@ def set_result_value(work_item, key, raw_value, value_type, entered_by=None):
     else:
         defaults["value_string"] = "" if normalized is None else str(normalized)
 
-    Result.objects.update_or_create(
-        work_item=work_item,
-        key=key,
-        defaults=defaults,
-    )
+    result = Result.objects.filter(work_item=work_item, key=key).first()
+    if result:
+        if conflict_policy == MigrationJob.CONFLICT_SKIP:
+            return result, MigrationRowRecord.ACTION_SKIP
+        update_defaults = {
+            field: value for field, value in defaults.items() if field != "entered_by"
+        }
+        update_defaults["entered_by_id"] = entered_by.id if entered_by else None
+        fields = list(update_defaults)
+        record_updated(job, result, "RESULT", fields, key)
+        if conflict_policy == MigrationJob.CONFLICT_MERGE:
+            for field, value in update_defaults.items():
+                if getattr(result, field) in [None, ""] and value not in [None, ""]:
+                    setattr(result, field, value)
+        else:
+            for field, value in update_defaults.items():
+                setattr(result, field, value)
+        result.save(
+            update_fields=[field[:-3] if field.endswith("_id") else field for field in fields]
+        )
+        return result, action_for_conflict(conflict_policy)
+
+    result = Result.objects.create(work_item=work_item, key=key, **defaults)
+    record_created(job, result, "RESULT", key)
+    return result, MigrationRowRecord.ACTION_CREATE
 
 
 
@@ -590,13 +652,21 @@ def suggest_field_mappings(profile, uploaded_file):
 
 
 
-def create_sample_custom_field_value(sample, field_name, raw_value, value_type, profile):
+def create_sample_custom_field_value(
+    sample,
+    field_name,
+    raw_value,
+    value_type,
+    profile,
+    job=None,
+    conflict_policy=MigrationJob.CONFLICT_OVERWRITE,
+):
     field_name = normalize_column_name(field_name)
 
     if not field_name or raw_value in [None, ""]:
         return 0
 
-    field_definition, _ = FieldDefinition.objects.get_or_create(
+    field_definition, definition_created = FieldDefinition.objects.get_or_create(
         entity_type="Sample",
         name=field_name,
         defaults={
@@ -608,20 +678,42 @@ def create_sample_custom_field_value(sample, field_name, raw_value, value_type, 
             },
         },
     )
+    if definition_created:
+        record_created(job, field_definition, "FIELD_DEFINITION", field_name)
 
-    FieldValue.objects.update_or_create(
+    normalized = normalize_value(raw_value, value_type)
+    field_value = FieldValue.objects.filter(
         field_definition=field_definition,
         entity_type="Sample",
         entity_id=str(sample.id),
-        defaults={
-            "value": normalize_value(raw_value, value_type),
-        },
-    )
+    ).first()
+    if field_value:
+        if conflict_policy == MigrationJob.CONFLICT_SKIP:
+            return 0
+        if conflict_policy == MigrationJob.CONFLICT_MERGE and field_value.value not in [None, "", {}]:
+            return 0
+        record_updated(job, field_value, "FIELD_VALUE", ["value"], field_name)
+        field_value.value = normalized
+        field_value.save(update_fields=["value"])
+    else:
+        field_value = FieldValue.objects.create(
+            field_definition=field_definition,
+            entity_type="Sample",
+            entity_id=str(sample.id),
+            value=normalized,
+        )
+        record_created(job, field_value, "FIELD_VALUE", field_name)
 
     return 1
 
 
-def create_unmapped_data_as_custom_fields(sample, unmapped_data, profile):
+def create_unmapped_data_as_custom_fields(
+    sample,
+    unmapped_data,
+    profile,
+    job=None,
+    conflict_policy=MigrationJob.CONFLICT_OVERWRITE,
+):
     created_count = 0
 
     for key, value in (unmapped_data or {}).items():
@@ -631,11 +723,14 @@ def create_unmapped_data_as_custom_fields(sample, unmapped_data, profile):
             raw_value=value,
             value_type=MigrationFieldMapping.VALUE_TYPE_STRING,
             profile=profile,
+            job=job,
+            conflict_policy=conflict_policy,
         )
 
     return created_count
 
 
+@transaction.atomic
 def apply_migration(
     profile,
     uploaded_file,
@@ -643,6 +738,7 @@ def apply_migration(
     default_project=None,
     job=None,
     progress_callback=None,
+    conflict_policy=MigrationJob.CONFLICT_SKIP,
 ):
     rows, fieldnames = read_csv(uploaded_file)
     total_rows = len(rows)
@@ -658,6 +754,7 @@ def apply_migration(
     skipped_rows = []
     row_records_created = 0
     unmapped_rows_preserved = 0
+    conflict_count = 0
 
     def report_progress(row_number=0):
         if not progress_callback:
@@ -702,6 +799,8 @@ def apply_migration(
                     raw_row_text=json.dumps(row, sort_keys=True),
                     unmapped_data=unmapped_data,
                     status=MigrationRowRecord.STATUS_SKIPPED,
+                    action=MigrationRowRecord.ACTION_ERROR,
+                    entity_type=MigrationDataset.ENTITY_SAMPLE,
                     errors=["Missing mapped sample ID."],
                 )
                 row_records_created += 1
@@ -709,6 +808,41 @@ def apply_migration(
                     unmapped_rows_preserved += 1
 
             continue
+
+        original_sample_code = sample_code
+        existing_sample = Sample.objects.filter(sample_id=sample_code).first()
+        row_action = MigrationRowRecord.ACTION_CREATE
+        if existing_sample:
+            conflict_count += 1
+            row_action = action_for_conflict(conflict_policy)
+            if conflict_policy == MigrationJob.CONFLICT_SKIP:
+                samples_matched.append(existing_sample.sample_id)
+                skipped_rows.append({
+                    "row": row_number,
+                    "sample_id": sample_code,
+                    "reason": "Existing sample skipped by conflict policy.",
+                })
+                if job:
+                    MigrationRowRecord.objects.create(
+                        migration_job=job,
+                        entity_type=MigrationDataset.ENTITY_SAMPLE,
+                        sample=existing_sample,
+                        row_number=row_number,
+                        sample_code=existing_sample.sample_id,
+                        raw_row=row,
+                        raw_row_text=json.dumps(row, sort_keys=True),
+                        unmapped_data=unmapped_data,
+                        status=MigrationRowRecord.STATUS_SKIPPED,
+                        action=MigrationRowRecord.ACTION_SKIP,
+                        target_object_type="SAMPLE",
+                        target_object_id=str(existing_sample.id),
+                        errors=["Existing sample skipped by conflict policy."],
+                    )
+                    row_records_created += 1
+                report_progress(row_number)
+                continue
+            if conflict_policy == MigrationJob.CONFLICT_CREATE_NEW:
+                sample_code = unique_value(Sample, "sample_id", sample_code, 64)
 
         project_code, _ = get_first_value(
             row,
@@ -730,6 +864,7 @@ def apply_migration(
 
         if created and project:
             projects_created.append(project.code)
+            record_created(job, project, "PROJECT", project.code)
 
         if project is None:
             skipped_rows.append({
@@ -749,6 +884,8 @@ def apply_migration(
                     raw_row_text=json.dumps(row, sort_keys=True),
                     unmapped_data=unmapped_data,
                     status=MigrationRowRecord.STATUS_SKIPPED,
+                    action=MigrationRowRecord.ACTION_ERROR,
+                    entity_type=MigrationDataset.ENTITY_SAMPLE,
                     errors=["Missing project mapping or default project."],
                 )
                 row_records_created += 1
@@ -759,14 +896,24 @@ def apply_migration(
 
         validate_sample_project_assignment(actor, project)
 
-        sample, sample_created = Sample.objects.get_or_create(
-            sample_id=sample_code,
-            defaults={
-                "status": Sample.STATUS_RECEIVED,
-                "project": project,
-                "created_by": actor,
-            },
-        )
+        if existing_sample and conflict_policy != MigrationJob.CONFLICT_CREATE_NEW:
+            sample = existing_sample
+            sample_created = False
+            if conflict_policy == MigrationJob.CONFLICT_OVERWRITE or (
+                conflict_policy == MigrationJob.CONFLICT_MERGE and sample.project_id is None
+            ):
+                record_updated(job, sample, "SAMPLE", ["project_id"], sample.sample_id)
+                sample.project = project
+                sample.save(update_fields=["project"])
+        else:
+            sample = Sample.objects.create(
+                sample_id=sample_code,
+                status=Sample.STATUS_RECEIVED,
+                project=project,
+                created_by=actor,
+            )
+            sample_created = True
+            record_created(job, sample, "SAMPLE", sample.sample_id)
 
         if sample_created:
             samples_created.append(sample.sample_id)
@@ -779,21 +926,50 @@ def apply_migration(
             if not external_value:
                 continue
 
-            external_id, created = SampleExternalID.objects.get_or_create(
+            external_value = str(external_value).strip()
+            external_id = SampleExternalID.objects.filter(
                 source_system=profile.source_system,
-                external_id=str(external_value).strip(),
+                external_id=external_value,
                 label=mapping.target_field or mapping.source_column,
-                defaults={
-                    "sample": sample,
-                    "metadata": {
+            ).first()
+            if external_id and conflict_policy == MigrationJob.CONFLICT_CREATE_NEW:
+                external_value = unique_value(
+                    SampleExternalID, "external_id", external_value, 255
+                )
+                external_id = None
+            created = external_id is None
+            if created:
+                external_id = SampleExternalID.objects.create(
+                    source_system=profile.source_system,
+                    external_id=external_value,
+                    label=mapping.target_field or mapping.source_column,
+                    sample=sample,
+                    metadata={
                         "migration_profile_id": profile.id,
                         "source_column": mapping.source_column,
                     },
-                },
-            )
+                )
+            elif (
+                conflict_policy == MigrationJob.CONFLICT_OVERWRITE
+                and external_id.sample_id != sample.id
+            ):
+                record_updated(
+                    job,
+                    external_id,
+                    "EXTERNAL_ID",
+                    ["sample_id", "metadata"],
+                    external_value,
+                )
+                external_id.sample = sample
+                external_id.metadata = {
+                    "migration_profile_id": profile.id,
+                    "source_column": mapping.source_column,
+                }
+                external_id.save(update_fields=["sample", "metadata"])
 
             if created:
                 external_ids_created.append(external_id.external_id)
+                record_created(job, external_id, "EXTERNAL_ID", external_id.external_id)
 
         for mapping in mappings.get(MigrationFieldMapping.TARGET_CUSTOM_FIELD, []):
             raw_value = row.get(mapping.source_column)
@@ -801,36 +977,23 @@ def apply_migration(
             if raw_value in [None, ""]:
                 continue
 
-            field_name = mapping.target_field or mapping.source_column
-
-            field_definition, _ = FieldDefinition.objects.get_or_create(
-                entity_type="Sample",
-                name=field_name,
-                defaults={
-                    "label": field_name.replace("_", " ").title(),
-                    "data_type": "string",
-                    "rules": {
-                        "source_system": profile.source_system,
-                    },
-                },
+            custom_values_created += create_sample_custom_field_value(
+                sample=sample,
+                field_name=mapping.target_field or mapping.source_column,
+                raw_value=raw_value,
+                value_type=mapping.value_type,
+                profile=profile,
+                job=job,
+                conflict_policy=conflict_policy,
             )
-
-            FieldValue.objects.update_or_create(
-                field_definition=field_definition,
-                entity_type="Sample",
-                entity_id=str(sample.id),
-                defaults={
-                    "value": normalize_value(raw_value, mapping.value_type),
-                },
-            )
-
-            custom_values_created += 1
 
         # Any columns still unmapped are preserved as string custom fields.
         custom_values_created += create_unmapped_data_as_custom_fields(
             sample=sample,
             unmapped_data=unmapped_data,
             profile=profile,
+            job=job,
+            conflict_policy=conflict_policy,
         )
 
         work_item_name, _ = get_first_value(
@@ -843,7 +1006,7 @@ def apply_migration(
         result_mappings = mappings.get(MigrationFieldMapping.TARGET_RESULT_VALUE, [])
 
         if result_mappings:
-            work_item, _ = WorkItem.objects.get_or_create(
+            work_item, work_item_created = WorkItem.objects.get_or_create(
                 sample=sample,
                 name=work_item_name,
                 defaults={
@@ -851,6 +1014,8 @@ def apply_migration(
                     "notes": f"Migrated from {profile.source_system}.",
                 },
             )
+            if work_item_created:
+                record_created(job, work_item, "WORK_ITEM", work_item.name)
 
             for mapping in result_mappings:
                 raw_value = row.get(mapping.source_column)
@@ -861,15 +1026,18 @@ def apply_migration(
                 result_key = mapping.target_field or mapping.source_column
 
                 try:
-                    set_result_value(
+                    _, result_action = set_result_value(
                         work_item=work_item,
                         key=result_key,
                         raw_value=raw_value,
                         value_type=mapping.value_type,
                         entered_by=actor,
+                        job=job,
+                        conflict_policy=conflict_policy,
                     )
 
-                    results_created += 1
+                    if result_action == MigrationRowRecord.ACTION_CREATE:
+                        results_created += 1
                 except (TypeError, ValueError):
                     custom_values_created += create_sample_custom_field_value(
                         sample=sample,
@@ -877,6 +1045,8 @@ def apply_migration(
                         raw_value=raw_value,
                         value_type=MigrationFieldMapping.VALUE_TYPE_STRING,
                         profile=profile,
+                        job=job,
+                        conflict_policy=conflict_policy,
                     )
 
                     skipped_rows.append({
@@ -902,6 +1072,11 @@ def apply_migration(
                 raw_row_text=json.dumps(row, sort_keys=True),
                 unmapped_data=unmapped_data,
                 status=MigrationRowRecord.STATUS_IMPORTED,
+                action=row_action,
+                entity_type=MigrationDataset.ENTITY_SAMPLE,
+                source_key=original_sample_code,
+                target_object_type="SAMPLE",
+                target_object_id=str(sample.id),
                 errors=[],
             )
             row_records_created += 1
@@ -923,6 +1098,8 @@ def apply_migration(
         "row_records_created": row_records_created,
         "unmapped_rows_preserved": unmapped_rows_preserved,
         "source_system": profile.source_system,
+        "conflict_policy": conflict_policy,
+        "conflict_count": conflict_count,
         "progress": {
             "processed_rows": total_rows,
             "total_rows": total_rows,

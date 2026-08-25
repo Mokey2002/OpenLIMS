@@ -3,6 +3,7 @@ from datetime import datetime, timezone as datetime_timezone
 from unittest.mock import patch
 
 import pytest
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
@@ -12,13 +13,16 @@ from migration_toolkit.database_services import (
     prepare_database_preview,
 )
 from migration_toolkit.database_sources import inspect_source
+from migration_toolkit.change_services import build_reconciliation_report, rollback_migration
 from migration_toolkit.models import (
     MigrationDatabaseConnection,
     MigrationDataset,
     MigrationFieldMapping,
     MigrationJob,
     MigrationProfile,
+    MigrationRowRecord,
 )
+from migration_toolkit.template_services import apply_mapping_template, save_mapping_template
 from projects.models import Project
 from results.models import Result, WorkItem
 from samples.models import Sample
@@ -294,3 +298,222 @@ def test_csv_commit_is_bound_to_the_reviewed_file_and_mappings(
     assert commit.status_code == 409
     assert "changed after preview" in commit.data["detail"]
     assert MigrationJob.objects.get(id=preview.data["id"]).status == MigrationJob.STATUS_PREVIEWED
+
+
+def test_overwrite_conflicts_are_tracked_and_can_be_rolled_back(tmp_path, admin_user):
+    _, source, profile = _configure_profile(tmp_path, admin_user)
+    legacy_user = admin_user.__class__.objects.create_user(
+        username="legacytech",
+        email="before@example.org",
+        first_name="Before",
+        is_active=False,
+    )
+    viewer, _ = Group.objects.get_or_create(name="viewer")
+    legacy_user.groups.add(viewer)
+    project = Project.objects.create(
+        code="SISBI-001",
+        name="SISBI Study",
+        description="Original description",
+    )
+    sample = Sample.objects.create(
+        sample_id="OLD-S-001",
+        sample_type="GENERAL",
+        status=Sample.STATUS_RECEIVED,
+        project=project,
+        created_by=admin_user,
+    )
+    work_item = WorkItem.objects.create(
+        sample=sample,
+        name="Legacy Chemistry",
+        status=WorkItem.STATUS_COMPLETED,
+        created_by=admin_user,
+    )
+    result = Result.objects.create(
+        work_item=work_item,
+        key="glucose",
+        value_type=Result.VALUE_TYPE_NUMBER,
+        value_number=10,
+        entered_by=admin_user,
+    )
+
+    with override_settings(MIGRATION_SQLITE_ROOT=tmp_path):
+        preview, snapshot, _ = prepare_database_preview(
+            profile,
+            conflict_policy=MigrationJob.CONFLICT_OVERWRITE,
+        )
+        assert preview["conflict_count"] == 4
+        assert preview["entity_counts"]["SAMPLE"]["to_overwrite"] == 1
+        job = MigrationJob.objects.create(
+            profile=profile,
+            source_connection=source,
+            uploaded_by=admin_user,
+            conflict_policy=MigrationJob.CONFLICT_OVERWRITE,
+            status=MigrationJob.STATUS_PREVIEWED,
+            summary=preview,
+            source_snapshot=snapshot,
+            preview_fingerprint=preview["preview_fingerprint"],
+        )
+        apply_database_migration(job, admin_user)
+
+    project.refresh_from_db()
+    sample.refresh_from_db()
+    result.refresh_from_db()
+    legacy_user.refresh_from_db()
+    assert project.description == "Imported historical study"
+    assert sample.sample_type == "SERUM"
+    assert sample.status == Sample.STATUS_REPORTED
+    assert result.value_number == 91.5
+    assert legacy_user.email == "legacy@example.org"
+    assert job.object_changes.filter(action="UPDATED").count() >= 4
+
+    job.status = MigrationJob.STATUS_COMPLETED
+    job.save(update_fields=["status"])
+    rollback = rollback_migration(job, admin_user)
+
+    project.refresh_from_db()
+    sample.refresh_from_db()
+    result.refresh_from_db()
+    legacy_user.refresh_from_db()
+    assert project.description == "Original description"
+    assert sample.sample_type == "GENERAL"
+    assert sample.status == Sample.STATUS_RECEIVED
+    assert result.value_number == 10
+    assert result.entered_by == admin_user
+    assert legacy_user.email == "before@example.org"
+    assert list(legacy_user.groups.values_list("name", flat=True)) == ["viewer"]
+    assert rollback["restored_objects"] >= 4
+    assert MigrationJob.objects.get(id=job.id).status == MigrationJob.STATUS_ROLLED_BACK
+
+
+def test_create_new_policy_preserves_legacy_relationships(tmp_path, admin_user):
+    _, source, profile = _configure_profile(tmp_path, admin_user)
+    existing_user = admin_user.__class__.objects.create_user(username="legacytech")
+    existing_project = Project.objects.create(code="SISBI-001", name="SISBI Study")
+    existing_sample = Sample.objects.create(
+        sample_id="OLD-S-001",
+        project=existing_project,
+        created_by=admin_user,
+    )
+
+    with override_settings(MIGRATION_SQLITE_ROOT=tmp_path):
+        preview, snapshot, _ = prepare_database_preview(
+            profile,
+            conflict_policy=MigrationJob.CONFLICT_CREATE_NEW,
+        )
+        job = MigrationJob.objects.create(
+            profile=profile,
+            source_connection=source,
+            uploaded_by=admin_user,
+            conflict_policy=MigrationJob.CONFLICT_CREATE_NEW,
+            status=MigrationJob.STATUS_PREVIEWED,
+            summary=preview,
+            source_snapshot=snapshot,
+            preview_fingerprint=preview["preview_fingerprint"],
+        )
+        summary = apply_database_migration(job, admin_user)
+
+    migrated_project = Project.objects.get(code="SISBI-001-MIG")
+    migrated_sample = Sample.objects.get(sample_id="OLD-S-001-MIG")
+    migrated_user = admin_user.__class__.objects.get(username="legacytech-MIG")
+    migrated_result = Result.objects.get(work_item__sample=migrated_sample, key="glucose")
+    assert migrated_sample.project == migrated_project
+    assert migrated_result.entered_by == migrated_user
+    assert existing_sample.project == existing_project
+    assert existing_user.username == "legacytech"
+    assert summary["records_created_new"] == 3
+
+
+def test_rollback_deletes_objects_created_by_migration(tmp_path, admin_user):
+    _, source, profile = _configure_profile(tmp_path, admin_user)
+    with override_settings(MIGRATION_SQLITE_ROOT=tmp_path):
+        preview, snapshot, _ = prepare_database_preview(profile)
+        job = MigrationJob.objects.create(
+            profile=profile,
+            source_connection=source,
+            uploaded_by=admin_user,
+            status=MigrationJob.STATUS_PREVIEWED,
+            summary=preview,
+            source_snapshot=snapshot,
+            preview_fingerprint=preview["preview_fingerprint"],
+        )
+        apply_database_migration(job, admin_user)
+
+    job.status = MigrationJob.STATUS_COMPLETED
+    job.save(update_fields=["status"])
+    summary = rollback_migration(job, admin_user)
+
+    assert Project.objects.filter(code="SISBI-001").exists() is False
+    assert Sample.objects.filter(sample_id="OLD-S-001").exists() is False
+    assert Result.objects.filter(key="glucose").exists() is False
+    assert admin_user.__class__.objects.filter(username="legacytech").exists() is False
+    assert summary["deleted_by_type"]["PROJECT"] == 1
+    assert summary["deleted_by_type"]["SAMPLE"] == 1
+
+
+def test_mapping_templates_can_be_reused(admin_user):
+    source = MigrationProfile.objects.create(
+        name="Source CSV profile",
+        source_system="SISBI",
+        source_type=MigrationProfile.SOURCE_TYPE_CSV,
+        created_by=admin_user,
+    )
+    MigrationFieldMapping.objects.create(
+        profile=source,
+        source_column="sample_code",
+        target_type=MigrationFieldMapping.TARGET_SAMPLE_ID,
+        required=True,
+    )
+    target = MigrationProfile.objects.create(
+        name="Target CSV profile",
+        source_system="SISBI",
+        source_type=MigrationProfile.SOURCE_TYPE_CSV,
+        created_by=admin_user,
+    )
+
+    template = save_mapping_template(source, "Reusable SISBI", admin_user)
+    result = apply_mapping_template(template, target)
+
+    mapping = target.field_mappings.get()
+    assert result == {"created": 1, "updated": 0, "unmatched_datasets": []}
+    assert mapping.source_column == "sample_code"
+    assert mapping.target_type == MigrationFieldMapping.TARGET_SAMPLE_ID
+    assert mapping.required is True
+
+
+def test_reconciliation_api_reports_actions_and_exports_csv(admin_client, admin_user):
+    profile = MigrationProfile.objects.create(
+        name="Reconciliation profile",
+        source_system="SISBI",
+        created_by=admin_user,
+    )
+    job = MigrationJob.objects.create(
+        profile=profile,
+        uploaded_by=admin_user,
+        conflict_policy=MigrationJob.CONFLICT_MERGE,
+        status=MigrationJob.STATUS_COMPLETED,
+        summary={"rows_processed": 2},
+    )
+    MigrationRowRecord.objects.create(
+        migration_job=job,
+        row_number=1,
+        entity_type=MigrationDataset.ENTITY_SAMPLE,
+        status=MigrationRowRecord.STATUS_IMPORTED,
+        action=MigrationRowRecord.ACTION_CREATE,
+    )
+    MigrationRowRecord.objects.create(
+        migration_job=job,
+        row_number=2,
+        entity_type=MigrationDataset.ENTITY_SAMPLE,
+        status=MigrationRowRecord.STATUS_IMPORTED,
+        action=MigrationRowRecord.ACTION_MERGE,
+    )
+
+    report = build_reconciliation_report(job)
+    assert report["recorded_rows"] == 2
+    assert report["action_counts"] == {"CREATE": 1, "MERGE": 1}
+    response = admin_client.get(f"/api/migration-jobs/{job.id}/reconciliation/")
+    export = admin_client.get(f"/api/migration-jobs/{job.id}/export-reconciliation/")
+    assert response.status_code == 200
+    assert response.data["conflict_policy"] == MigrationJob.CONFLICT_MERGE
+    assert export.status_code == 200
+    assert b"source_rows,2" in export.content
