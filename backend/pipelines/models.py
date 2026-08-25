@@ -144,6 +144,22 @@ class PipelineTemplateStep(models.Model):
         help_text="Optional display name. The procedure name is used when blank.",
     )
     requires_qc = models.BooleanField(default=False)
+    dependency_positions = models.JSONField(
+        default=None,
+        null=True,
+        blank=True,
+        help_text="Positions that must complete before this step can start.",
+    )
+    activation_condition = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Optional result-based condition evaluated after dependencies complete.",
+    )
+    optional = models.BooleanField(
+        default=False,
+        help_text="Allow the workflow to continue when this step fails or is cancelled.",
+    )
+    max_retries = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ["position"]
@@ -224,6 +240,7 @@ class PipelineStepRun(models.Model):
     STATUS_COMPLETED = "COMPLETED"
     STATUS_FAILED = "FAILED"
     STATUS_CANCELLED = "CANCELLED"
+    STATUS_SKIPPED = "SKIPPED"
     STATUS_CHOICES = [
         (STATUS_BLOCKED, "Blocked"),
         (STATUS_READY, "Ready"),
@@ -232,6 +249,7 @@ class PipelineStepRun(models.Model):
         (STATUS_COMPLETED, "Completed"),
         (STATUS_FAILED, "Failed"),
         (STATUS_CANCELLED, "Cancelled"),
+        (STATUS_SKIPPED, "Skipped"),
     ]
 
     pipeline_run = models.ForeignKey(
@@ -254,6 +272,11 @@ class PipelineStepRun(models.Model):
     work_type = models.CharField(max_length=64)
     required_fields = models.JSONField(default=list, blank=True)
     requires_qc = models.BooleanField(default=False)
+    dependency_positions = models.JSONField(default=list, blank=True)
+    activation_condition = models.JSONField(default=dict, blank=True)
+    optional = models.BooleanField(default=False)
+    max_retries = models.PositiveIntegerField(default=0)
+    retry_count = models.PositiveIntegerField(default=0)
     estimated_duration_minutes = models.PositiveIntegerField(default=60)
     status = models.CharField(
         max_length=16,

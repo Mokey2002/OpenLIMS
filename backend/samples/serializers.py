@@ -1,5 +1,11 @@
 from rest_framework import serializers
-from .models import Sample, SampleBatch, SingleSampleAttachment
+from .models import (
+    Sample,
+    SampleBatch,
+    SampleCustodyEvent,
+    SampleRelationship,
+    SingleSampleAttachment,
+)
 from .access import user_can_modify_sample
 
 
@@ -17,6 +23,9 @@ class SampleSerializer(serializers.ModelSerializer):
     can_modify = serializers.SerializerMethodField()
     batch_code = serializers.SerializerMethodField()
     assigned_to_username = serializers.SerializerMethodField()
+    custodian_username = serializers.CharField(
+        source="custodian.username", read_only=True, allow_null=True, default=None
+    )
 
     class Meta:
         model = Sample
@@ -38,6 +47,8 @@ class SampleSerializer(serializers.ModelSerializer):
             "batch_code",
             "assigned_to",
             "assigned_to_username",
+            "custodian",
+            "custodian_username",
             "location_id",
             "location_name",
             "created_by",
@@ -46,6 +57,14 @@ class SampleSerializer(serializers.ModelSerializer):
             "created_at",
             "status_changed_at",
             "updated_at",
+        ]
+        read_only_fields = [
+            "id", "project_id", "project_name", "project_code",
+            "linked_project_summaries", "container_id", "container_code",
+            "batch", "batch_code", "assigned_to", "assigned_to_username",
+            "custodian", "custodian_username", "location_id", "location_name",
+            "created_by", "created_by_username", "can_modify", "created_at",
+            "status_changed_at", "updated_at",
         ]
 
     def validate_sample_type(self, value):
@@ -53,27 +72,6 @@ class SampleSerializer(serializers.ModelSerializer):
         if not normalized:
             return "GENERAL"
         return normalized
-        read_only_fields = [
-            "id",
-            "project_id",
-            "project_name",
-            "project_code",
-            "linked_project_summaries",
-            "container_id",
-            "container_code",
-            "batch",
-            "batch_code",
-            "assigned_to",
-            "assigned_to_username",
-            "location_id",
-            "location_name",
-            "created_by",
-            "created_by_username",
-            "can_modify",
-            "created_at",
-            "status_changed_at",
-            "updated_at",
-        ]
 
     def get_linked_project_summaries(self, obj):
         return [
@@ -119,6 +117,113 @@ class SampleSerializer(serializers.ModelSerializer):
 
     def get_location_name(self, obj):
         return obj.container.location.name if obj.container and obj.container.location else None
+
+
+class SampleRelationshipSerializer(serializers.ModelSerializer):
+    source_sample_code = serializers.CharField(source="source_sample.sample_id", read_only=True)
+    derived_sample_code = serializers.CharField(source="derived_sample.sample_id", read_only=True)
+    created_by_username = serializers.CharField(
+        source="created_by.username", read_only=True, allow_null=True, default=None
+    )
+
+    class Meta:
+        model = SampleRelationship
+        fields = [
+            "id",
+            "source_sample",
+            "source_sample_code",
+            "derived_sample",
+            "derived_sample_code",
+            "relationship_type",
+            "quantity",
+            "unit",
+            "reason",
+            "created_by",
+            "created_by_username",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_by", "created_by_username", "created_at"]
+
+    def validate_reason(self, value):
+        value = str(value or "").strip()
+        if len(value) < 10:
+            raise serializers.ValidationError("A reason of at least 10 characters is required.")
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        relationship = SampleRelationship(**attrs)
+        try:
+            relationship.clean()
+        except Exception as exc:
+            detail = getattr(exc, "message_dict", None) or getattr(exc, "messages", None)
+            raise serializers.ValidationError(detail or str(exc)) from exc
+        if attrs.get("quantity") is not None and not str(attrs.get("unit") or "").strip():
+            raise serializers.ValidationError({"unit": "Unit is required when quantity is provided."})
+        return attrs
+
+
+class SampleCustodyEventSerializer(serializers.ModelSerializer):
+    sample_code = serializers.CharField(source="sample.sample_id", read_only=True)
+    from_container_code = serializers.CharField(
+        source="from_container.container_id", read_only=True, allow_null=True, default=None
+    )
+    to_container_code = serializers.CharField(
+        source="to_container.container_id", read_only=True, allow_null=True, default=None
+    )
+    from_custodian_username = serializers.CharField(
+        source="from_custodian.username", read_only=True, allow_null=True, default=None
+    )
+    to_custodian_username = serializers.CharField(
+        source="to_custodian.username", read_only=True, allow_null=True, default=None
+    )
+    performed_by_username = serializers.CharField(source="performed_by.username", read_only=True)
+
+    class Meta:
+        model = SampleCustodyEvent
+        fields = [
+            "id", "sample", "sample_code", "action", "scanned_code",
+            "from_container", "from_container_code", "to_container", "to_container_code",
+            "from_custodian", "from_custodian_username", "to_custodian",
+            "to_custodian_username", "reason", "performed_by",
+            "performed_by_username", "occurred_at",
+        ]
+        read_only_fields = fields
+
+
+class CustodyScanSerializer(serializers.Serializer):
+    barcode = serializers.CharField(max_length=128)
+    action = serializers.ChoiceField(choices=SampleCustodyEvent.ACTION_CHOICES)
+    container = serializers.IntegerField(required=False, allow_null=True)
+    custodian = serializers.IntegerField(required=False, allow_null=True)
+    reason = serializers.CharField(min_length=10, max_length=2000)
+
+
+class DerivedSampleCreateSerializer(serializers.Serializer):
+    sample_id = serializers.CharField(max_length=64)
+    sample_type = serializers.CharField(max_length=64, required=False, allow_blank=True)
+    relationship_type = serializers.ChoiceField(choices=SampleRelationship.TYPE_CHOICES)
+    quantity = serializers.DecimalField(
+        max_digits=14, decimal_places=4, required=False, allow_null=True
+    )
+    unit = serializers.CharField(max_length=32, required=False, allow_blank=True)
+    reason = serializers.CharField(min_length=10, max_length=2000)
+
+    def validate_sample_id(self, value):
+        value = str(value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Sample ID is required.")
+        if Sample.objects.filter(sample_id__iexact=value).exists():
+            raise serializers.ValidationError("A sample with this ID already exists.")
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if attrs.get("quantity") is not None and attrs["quantity"] <= 0:
+            raise serializers.ValidationError({"quantity": "Quantity must be greater than zero."})
+        if attrs.get("quantity") is not None and not str(attrs.get("unit") or "").strip():
+            raise serializers.ValidationError({"unit": "Unit is required when quantity is provided."})
+        return attrs
 
 
 class SampleBatchSerializer(serializers.ModelSerializer):

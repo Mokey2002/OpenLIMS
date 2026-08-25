@@ -458,6 +458,7 @@ export default function SampleDetail() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -793,7 +794,24 @@ export default function SampleDetail() {
       }
       const run = await apiPost("/api/pipeline-runs/", payload);
       setSelectedPipelineTemplate("");
-      setSuccess(`Pipeline ${run.template_code} started. Step 1 is ready in the work queue.`);
+      const readyCount = (run.steps || []).filter((step) => step.status === "READY").length;
+      setSuccess(`Pipeline ${run.template_code} started with ${readyCount} ready step${readyCount === 1 ? "" : "s"}.`);
+      await load();
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }
+
+  async function retryPipelineStep(run, step) {
+    const reason = window.prompt("Reason for retry (at least 10 characters):", "Repeat after resolving the recorded failure.");
+    if (!reason || reason.trim().length < 10) return;
+    setErr("");
+    setSuccess("");
+    try {
+      await apiPost(`/api/pipeline-runs/${run.id}/steps/${step.id}/retry/`, {
+        reason: reason.trim(),
+      });
+      setSuccess(`Step ${step.position} was queued for retry.`);
       await load();
     } catch (e) {
       setErr(e.message || String(e));
@@ -1162,9 +1180,11 @@ export default function SampleDetail() {
                               ? step.required_fields.filter((field) => field.required !== false).map((field) => field.label || field.key).join(", ")
                               : "None"}
                             {step.requires_qc && <div className="feed-meta">QC approval required</div>}
+                            <div className="feed-meta">After: {step.dependency_positions?.length ? step.dependency_positions.join(", ") : "workflow start"}</div>
+                            {step.optional && <div className="feed-meta">Optional step</div>}
                           </td>
                           <td>{step.work_item ? `#${step.work_item} · ${step.work_item_status}` : "Not created"}</td>
-                          <td><Badge bg={pipelineStatusVariant(step.status)}>{step.status}</Badge>{step.failure_reason && <div className="text-danger small mt-1">{step.failure_reason}</div>}</td>
+                          <td><Badge bg={pipelineStatusVariant(step.status)}>{step.status}</Badge>{step.failure_reason && <div className="text-danger small mt-1">{step.failure_reason}</div>}{userCanWrite && step.status === "FAILED" && step.retry_count < step.max_retries && <Button size="sm" variant="outline-dark" className="mt-2" onClick={() => retryPipelineStep(run, step)}>Retry ({step.max_retries - step.retry_count} left)</Button>}</td>
                         </tr>
                       ))}
                     </tbody>

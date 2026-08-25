@@ -27,6 +27,7 @@ from .models import (
 from .serializers import (
     AnalysisDefinitionSerializer,
     PipelineRunCancelSerializer,
+    PipelineStepRetrySerializer,
     PipelineRunSerializer,
     PipelineRunStartSerializer,
     PipelineTemplateSerializer,
@@ -37,6 +38,7 @@ from .services import (
     assign_analysis,
     cancel_pipeline,
     resolve_default_template,
+    retry_pipeline_step,
     start_pipeline,
 )
 
@@ -386,4 +388,26 @@ class PipelineRunViewSet(ModelViewSet):
 
         reason = input_serializer.validated_data["reason"]
         run = cancel_pipeline(run=run, actor=request.user, reason=reason)
+        return Response(self.get_serializer(run).data)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"steps/(?P<step_id>[^/.]+)/retry",
+    )
+    def retry_step(self, request, pk=None, step_id=None):
+        run = self.get_object()
+        require_sample_modify_access(request.user, run.sample)
+        input_serializer = PipelineStepRetrySerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        step = run.steps.filter(pk=step_id).first()
+        if not step:
+            raise NotFound("Pipeline step not found.")
+        retry_pipeline_step(
+            run=run,
+            step=step,
+            actor=request.user,
+            reason=input_serializer.validated_data["reason"],
+        )
+        run.refresh_from_db()
         return Response(self.get_serializer(run).data)

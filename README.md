@@ -75,8 +75,8 @@ directly from the repository owner.
 
 | Area | Capabilities |
 |---|---|
-| **Samples** | Sample lifecycle tracking, statuses, attachments, custom fields, reason-for-change logging |
-| **Pipelines** | Reusable ordered templates, project/sample-type defaults, assignment by sample/batch/project, automatic next-step work creation, failure blocking, QC gates |
+| **Samples** | Sample lifecycle tracking, aliquots and parent/child lineage, custody, statuses, attachments, custom fields, reason-for-change logging |
+| **Pipelines** | Dependency graphs, parallel and conditional steps, optional work, controlled retries, project/sample-type defaults, assignment by sample/batch/project, failure blocking, QC gates |
 | **Analyses & procedures** | Admin-configurable analysis types, required result schemas, versioned procedures, SOP links, expected duration |
 | **Projects** | Project workspaces, project-scoped visibility, membership, cross-project sample linking, unified sample-to-report workflow view |
 | **Inventory** | Locations, containers, sample placement |
@@ -87,7 +87,7 @@ directly from the repository owner.
 | **Alignments** | Clustal Omega alignment jobs with downloadable output |
 | **BLAST** | Local BLAST database building and blastn/blastp search |
 | **Mass Spec** | mzML, mzXML, mzData, featureXML, consensusXML, mzID/mzIdentML review using pyOpenMS |
-| **Audit** | Audit events, reason-for-change tracking, CSV exports |
+| **Audit** | Audit events, barcode-scanned custody transfers, reason-for-change tracking, CSV exports |
 | **Reports** | Project summaries, sample inventory, QC review, import summaries, audit activity, comparison and investigation CSV/PDF artifacts |
 | **Visual analytics** | Investigation workbench, multi-sample/project/batch comparisons, result trends, outlier review, workflow bottlenecks, automatic charts |
 | **Assistant** | OpenLIMS Rules, optional OpenAI or Ollama, clarification choices, visible removable context, investigation and comparison follow-ups, confirmed actions with expiring user-bound tokens and audit events |
@@ -147,6 +147,20 @@ Linked Projects: PRJ-BETA, PRJ-GAMMA
 ```
 
 Linked projects provide visibility, while primary project ownership controls modification and import permissions.
+
+### Sample Lineage and Chain of Custody
+
+OpenLIMS records directed relationships between source and derived samples for
+aliquots, splits, derived materials, and pooled components. Lineage links reject
+self-links and cycles, retain the amount and unit when supplied, and require an
+audited reason. A derived sample can be created directly from the Traceability
+workspace while inheriting the source project, linked-project visibility, batch,
+and applicable default workflow.
+
+Barcode or sample-ID scans can record receipt, check-out, check-in, transfer,
+storage movement, processing, and disposal. Each custody event preserves the
+previous and new container and custodian, the operator, scan value, timestamp,
+and handling reason. Disposal clears physical custody and archives the sample.
 
 ### Inventory
 
@@ -768,7 +782,7 @@ Remaining production-readiness work includes:
 Planned and future improvements include:
 
 - More advanced migration support for multi-file exports and system-specific API connectors
-- Expanded relationship tracking for derived samples
+- Plate layouts and multi-sample pooling calculations on top of lineage records
 - More advanced QC approval workflows
 - Better dashboards for lab operations
 - External file storage support

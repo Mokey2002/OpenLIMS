@@ -36,6 +36,7 @@ import Labels from "./pages/Labels";
 import Comparisons from "./pages/Comparisons";
 import Investigations from "./pages/Investigations";
 import WorkflowDesigner from "./pages/WorkflowDesigner";
+import Traceability from "./pages/Traceability";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="assistant" element={<Assistant />} />
           <Route path="samples" element={<SamplesList />} />
           <Route path="samples/:id" element={<SampleDetail />} />
+          <Route path="traceability" element={<Traceability />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="events" element={<Events />} />
           <Route path="analyze" element={<Analyze />} />

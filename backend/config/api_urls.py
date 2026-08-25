@@ -2,6 +2,8 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 from samples.views import (
     SampleBatchViewSet,
+    SampleCustodyEventViewSet,
+    SampleRelationshipViewSet,
     SampleViewSet,
     SingleSampleAttachmentViewSet,
 )
@@ -59,6 +61,8 @@ from pipelines.views import (
 router = DefaultRouter()
 router.register(r"samples", SampleViewSet, basename="sample")
 router.register(r"sample-batches", SampleBatchViewSet, basename="sample-batch")
+router.register(r"sample-relationships", SampleRelationshipViewSet, basename="sample-relationship")
+router.register(r"sample-custody-events", SampleCustodyEventViewSet, basename="sample-custody-event")
 router.register(r"locations", LocationViewSet, basename="location")
 router.register(r"containers", ContainerViewSet, basename="container")
 router.register(r"inventory-items", InventoryItemViewSet, basename="inventory-item")
