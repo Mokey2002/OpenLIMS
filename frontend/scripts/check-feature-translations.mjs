@@ -1,6 +1,7 @@
 import {
   featureDefinitions,
   featureFlagCopy,
+  v026ModuleCopy,
 } from "../src/featureFlags.js";
 
 const requiredLanguages = ["en", "es"];
@@ -28,6 +29,14 @@ for (const [key, translations] of Object.entries(featureFlagCopy)) {
   for (const language of requiredLanguages) {
     if (!String(translations?.[language] || "").trim()) {
       errors.push(`featureFlagCopy.${key}.${language} is required.`);
+    }
+  }
+}
+
+for (const [key, translations] of Object.entries(v026ModuleCopy)) {
+  for (const language of requiredLanguages) {
+    if (!String(translations?.[language] || "").trim()) {
+      errors.push(`v026ModuleCopy.${key}.${language} is required.`);
     }
   }
 }

@@ -165,6 +165,20 @@ class MigrationFieldMappingSerializer(serializers.ModelSerializer):
             MigrationFieldMapping.TARGET_RESULT_REFERENCE_MIN,
             MigrationFieldMapping.TARGET_RESULT_REFERENCE_MAX,
         },
+        MigrationDataset.ENTITY_REGISTRY: {
+            MigrationFieldMapping.TARGET_PROJECT_CODE,
+            MigrationFieldMapping.TARGET_EXTERNAL_ID,
+            MigrationFieldMapping.TARGET_REGISTRY_ID,
+            MigrationFieldMapping.TARGET_REGISTRY_SCHEMA,
+            MigrationFieldMapping.TARGET_REGISTRY_NAME,
+            MigrationFieldMapping.TARGET_REGISTRY_DESCRIPTION,
+            MigrationFieldMapping.TARGET_REGISTRY_CATALOG_NUMBER,
+            MigrationFieldMapping.TARGET_REGISTRY_ALIAS,
+            MigrationFieldMapping.TARGET_REGISTRY_TAGS,
+            MigrationFieldMapping.TARGET_REGISTRY_STATUS,
+            MigrationFieldMapping.TARGET_REGISTRY_DATA,
+            MigrationFieldMapping.TARGET_REGISTRY_SEQUENCE,
+        },
     }
 
     class Meta:

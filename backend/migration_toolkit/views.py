@@ -43,6 +43,7 @@ from .change_services import build_reconciliation_report, rollback_migration
 from .services import build_csv_source_snapshot, build_preview, suggest_field_mappings
 from .tasks import run_migration_job
 from .template_services import apply_mapping_template, save_mapping_template
+from registry.imports import is_registry_profile, prepare_registry_preview
 
 
 class SampleExternalIDViewSet(viewsets.ModelViewSet):
@@ -415,7 +416,45 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if profile.source_type == MigrationProfile.SOURCE_TYPE_DATABASE:
+        if is_registry_profile(profile):
+            if profile.source_type == MigrationProfile.SOURCE_TYPE_DATABASE and not is_admin(request.user):
+                raise PermissionDenied("Only a director can preview database migrations.")
+            project, error_response = self._get_project(request)
+            if error_response:
+                return error_response
+            uploaded_file = request.data.get("uploaded_file")
+            if profile.source_type == MigrationProfile.SOURCE_TYPE_CSV:
+                if not uploaded_file:
+                    return Response({"detail": "uploaded_file is required."}, status=400)
+                error_response = self._validate_file(uploaded_file)
+                if error_response:
+                    return error_response
+            try:
+                summary, _ = prepare_registry_preview(
+                    profile,
+                    uploaded_file=uploaded_file,
+                    default_project=project,
+                    conflict_policy=conflict_policy,
+                )
+            except Exception as exc:
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            connection_ids = list(
+                profile.datasets.filter(active=True, entity_type=MigrationDataset.ENTITY_REGISTRY)
+                .values_list("connection_id", flat=True).distinct()
+            )
+            job = MigrationJob.objects.create(
+                profile=profile,
+                project=project,
+                uploaded_file=uploaded_file,
+                source_connection_id=(connection_ids[0] if len(connection_ids) == 1 else None),
+                uploaded_by=request.user,
+                status=MigrationJob.STATUS_PREVIEWED,
+                summary=summary,
+                source_snapshot=summary["source_snapshot"],
+                preview_fingerprint=summary["preview_fingerprint"],
+                conflict_policy=conflict_policy,
+            )
+        elif profile.source_type == MigrationProfile.SOURCE_TYPE_DATABASE:
             if not is_admin(request.user):
                 raise PermissionDenied("Only a director can preview database migrations.")
             try:
@@ -513,7 +552,21 @@ class MigrationJobViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            if job.profile.source_type == MigrationProfile.SOURCE_TYPE_DATABASE:
+            if is_registry_profile(job.profile):
+                uploaded_file = None
+                if job.profile.source_type == MigrationProfile.SOURCE_TYPE_CSV:
+                    job.uploaded_file.open("rb")
+                    uploaded_file = job.uploaded_file
+                fresh_summary, _ = prepare_registry_preview(
+                    job.profile,
+                    uploaded_file=uploaded_file,
+                    default_project=job.project,
+                    conflict_policy=job.conflict_policy,
+                )
+                fresh_fingerprint = fresh_summary["preview_fingerprint"]
+                if uploaded_file:
+                    job.uploaded_file.close()
+            elif job.profile.source_type == MigrationProfile.SOURCE_TYPE_DATABASE:
                 fresh_summary, _, _ = prepare_database_preview(
                     job.profile,
                     conflict_policy=job.conflict_policy,

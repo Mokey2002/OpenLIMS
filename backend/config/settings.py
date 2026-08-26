@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     'migration_toolkit',
     'assistant',
     'pipelines',
+    'registry',
     'drf_spectacular',
 ]
 REST_FRAMEWORK = {

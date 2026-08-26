@@ -4,6 +4,7 @@ from django.utils import timezone
 from .models import MigrationJob
 from .database_services import apply_database_migration
 from .services import apply_migration, build_csv_source_snapshot
+from registry.imports import apply_registry_migration, is_registry_profile
 
 
 @shared_task(bind=True)
@@ -42,7 +43,12 @@ def run_migration_job(self, job_id):
         job.save(update_fields=["summary"])
 
     try:
-        if job.profile.source_type == job.profile.SOURCE_TYPE_DATABASE:
+        if is_registry_profile(job.profile):
+            summary = apply_registry_migration(
+                job=job,
+                actor=job.committed_by or job.uploaded_by,
+            )
+        elif job.profile.source_type == job.profile.SOURCE_TYPE_DATABASE:
             summary = apply_database_migration(job=job, actor=job.committed_by or job.uploaded_by)
         else:
             job.uploaded_file.open("rb")
