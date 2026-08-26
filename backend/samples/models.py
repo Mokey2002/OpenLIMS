@@ -5,6 +5,8 @@ from django.db.models import F, Q
 from django.db.models.functions import Lower
 from django.utils import timezone
 
+from core.models import PublicIDModel
+
 
 class SampleBatch(models.Model):
     code = models.CharField(max_length=64, unique=True)
@@ -30,7 +32,7 @@ class SampleBatch(models.Model):
         return self.code
 
 
-class Sample(models.Model):
+class Sample(PublicIDModel):
     STATUS_RECEIVED = "RECEIVED"
     STATUS_IN_PROGRESS = "IN_PROGRESS"
     STATUS_QC = "QC"

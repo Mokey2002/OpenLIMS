@@ -31,6 +31,7 @@ class SampleSerializer(serializers.ModelSerializer):
         model = Sample
         fields = [
             "id",
+            "public_id",
             "sample_id",
             "sample_type",
             "status",
@@ -59,7 +60,7 @@ class SampleSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = [
-            "id", "project_id", "project_name", "project_code",
+            "id", "public_id", "project_id", "project_name", "project_code",
             "linked_project_summaries", "container_id", "container_code",
             "batch", "batch_code", "assigned_to", "assigned_to_username",
             "custodian", "custodian_username", "location_id", "location_name",
@@ -77,6 +78,7 @@ class SampleSerializer(serializers.ModelSerializer):
         return [
             {
                 "id": project.id,
+                "public_id": str(project.public_id),
                 "code": project.code,
                 "name": project.name,
             }

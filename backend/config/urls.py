@@ -8,6 +8,8 @@ from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
 from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework.permissions import AllowAny
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from core.health import build_health_status
 from core.views import MeView, OpenLIMSTokenObtainPairView
@@ -40,6 +42,26 @@ urlpatterns = [
     path("health/", health),
     path("api/health/", health),
     path("api/", include("config.api_urls")),
+    path(
+        "api/v1/",
+        include(("config.api_v1_urls", "api-v1"), namespace="api-v1"),
+    ),
+    path(
+        "api/schema/",
+        SpectacularAPIView.as_view(
+            permission_classes=[AllowAny],
+            urlconf="config.schema_urls",
+        ),
+        name="openapi-schema",
+    ),
+    path(
+        "api/docs/",
+        SpectacularSwaggerView.as_view(
+            url_name="openapi-schema",
+            permission_classes=[AllowAny],
+        ),
+        name="openapi-docs",
+    ),
     path(
         "api/auth/token/",
         OpenLIMSTokenObtainPairView.as_view(),

@@ -5,7 +5,9 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import Lower
 
-class Location(models.Model):
+from core.models import PublicIDModel
+
+class Location(PublicIDModel):
     name = models.CharField(max_length=128)
     kind = models.CharField(max_length=64)  # freezer, rack, shelf, etc.
 
@@ -13,7 +15,7 @@ class Location(models.Model):
         return f"{self.name} ({self.kind})"
 
 
-class Container(models.Model):
+class Container(PublicIDModel):
     container_id = models.CharField(max_length=64, unique=True)
     kind = models.CharField(max_length=64)  # tube, plate, box
     location = models.ForeignKey(
@@ -60,7 +62,7 @@ class Container(models.Model):
         return " / ".join(parts + list(reversed(ancestors)))
 
 
-class InventoryItem(models.Model):
+class InventoryItem(PublicIDModel):
     CATEGORY_REAGENT = "REAGENT"
     CATEGORY_SUPPLY = "SUPPLY"
 
@@ -98,7 +100,7 @@ class InventoryItem(models.Model):
         return f"{self.code} - {self.name}"
 
 
-class InventoryLot(models.Model):
+class InventoryLot(PublicIDModel):
     STATUS_ACTIVE = "ACTIVE"
     STATUS_EXPIRED = "EXPIRED"
     STATUS_DEPLETED = "DEPLETED"
@@ -188,7 +190,7 @@ class InventoryLot(models.Model):
         return f"{self.item.code} / {self.lot_code}"
 
 
-class InventoryReservation(models.Model):
+class InventoryReservation(PublicIDModel):
     STATUS_ACTIVE = "ACTIVE"
     STATUS_RELEASED = "RELEASED"
     STATUS_CONSUMED = "CONSUMED"

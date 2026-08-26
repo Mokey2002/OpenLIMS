@@ -12,6 +12,7 @@ import {
 import { apiGet, apiPatch, apiPost } from "../api";
 import { isAdmin, readOnlyMessage } from "../authz";
 import { useLanguage } from "../i18n";
+import { featureDefinitions, featureFlagCopy } from "../featureFlags";
 
 function formatTimestamp(value, locale) {
   if (!value) return "-";
@@ -32,7 +33,7 @@ function parseExtensionText(value) {
 }
 
 export default function AdminSettings() {
-  const { locale, setLanguage } = useLanguage();
+  const { language, locale, setLanguage } = useLanguage();
   const [me, setMe] = useState(null);
   const [settings, setSettings] = useState(null);
   const [form, setForm] = useState(null);
@@ -70,7 +71,8 @@ export default function AdminSettings() {
   }
 
   useEffect(() => {
-    load();
+    const timeoutId = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   const userIsAdmin = isAdmin(me);
@@ -116,6 +118,10 @@ export default function AdminSettings() {
         viewer_read_only: Boolean(form.viewer_read_only),
         require_audit_reason: Boolean(form.require_audit_reason),
         qc_separation_of_duties: Boolean(form.qc_separation_of_duties),
+        notebook_enabled: Boolean(form.notebook_enabled),
+        registry_enabled: Boolean(form.registry_enabled),
+        studies_enabled: Boolean(form.studies_enabled),
+        insight_enabled: Boolean(form.insight_enabled),
       };
 
       const data = await apiPatch("/api/system-settings/1/", payload);
@@ -423,6 +429,42 @@ export default function AdminSettings() {
                     {settings?.updated_by_username || "-"}
                   </div>
                 </div>
+              </Card.Body>
+            </Card>
+          </Col>
+
+          <Col lg={12}>
+            <Card className="app-card h-100">
+              <Card.Body>
+                <h5 className="section-title">
+                  {featureFlagCopy.heading[language] || featureFlagCopy.heading.en}
+                </h5>
+                <p className="text-muted">
+                  {featureFlagCopy.developmentNotice[language] ||
+                    featureFlagCopy.developmentNotice.en}
+                </p>
+
+                <Row className="g-3">
+                  {featureDefinitions.map((feature) => (
+                    <Col md={6} key={feature.key}>
+                      <div className="soft-card h-100">
+                        <Form.Check
+                          type="switch"
+                          label={feature.labels[language] || feature.labels.en}
+                          checked={Boolean(form[feature.setting])}
+                          disabled={!userIsAdmin}
+                          onChange={(e) =>
+                            updateField(feature.setting, e.target.checked)
+                          }
+                        />
+                        <div className="form-text mt-2">
+                          {feature.descriptions[language] ||
+                            feature.descriptions.en}
+                        </div>
+                      </div>
+                    </Col>
+                  ))}
+                </Row>
               </Card.Body>
             </Card>
           </Col>

@@ -24,6 +24,12 @@ from notifications.views import NotificationViewSet
 from sequences.views import SequenceViewSet
 from alignments.views import AlignmentJobViewSet
 from settings_app.views import PublicUISettingsView, SystemSettingsViewSet
+from settings_app.views import FeatureFlagsView
+from core.entity_views import (
+    EntityLinkViewSet,
+    EntityReferenceView,
+    SharedAttachmentViewSet,
+)
 from blast.views import BlastDatabaseViewSet, BlastJobViewSet
 from mass_spec.views import MassSpecRunViewSet
 from assistant.views import (
@@ -116,9 +122,21 @@ router.register(r"analysis-definitions", AnalysisDefinitionViewSet, basename="an
 router.register(r"procedure-definitions", ProcedureDefinitionViewSet, basename="procedure-definition")
 router.register(r"pipeline-templates", PipelineTemplateViewSet, basename="pipeline-template")
 router.register(r"pipeline-runs", PipelineRunViewSet, basename="pipeline-run")
+router.register(r"entity-links", EntityLinkViewSet, basename="entity-link")
+router.register(
+    r"shared-attachments",
+    SharedAttachmentViewSet,
+    basename="shared-attachment",
+)
 
 urlpatterns = router.urls + [
     path("ui-settings/", PublicUISettingsView.as_view(), name="public-ui-settings"),
+    path("feature-flags/", FeatureFlagsView.as_view(), name="feature-flags"),
+    path(
+        "entity-references/<str:entity_type>/<uuid:public_id>/",
+        EntityReferenceView.as_view(),
+        name="entity-reference",
+    ),
     path("assistant/chat/", AssistantChatView.as_view(), name="assistant-chat"),
     path(
         "assistant/interactions/<uuid:interaction_id>/feedback/",

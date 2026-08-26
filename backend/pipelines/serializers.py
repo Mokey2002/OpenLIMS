@@ -408,6 +408,7 @@ class PipelineRunSerializer(serializers.ModelSerializer):
         model = PipelineRun
         fields = [
             "id",
+            "public_id",
             "sample",
             "sample_code",
             "sample_type",

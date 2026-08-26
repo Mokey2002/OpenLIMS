@@ -1,6 +1,7 @@
 from rest_framework import status, viewsets
+from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -8,15 +9,28 @@ from core.permissions import IsAuthenticatedReadOnlyAdminWrite
 from events.models import Event
 
 from .models import SystemSettings
-from .serializers import SystemSettingsSerializer
+from .serializers import (
+    FeatureFlagsSerializer,
+    PublicUISettingsSerializer,
+    SystemSettingsSerializer,
+)
 
 
 class PublicUISettingsView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(responses=PublicUISettingsSerializer)
     def get(self, request):
         settings_obj = SystemSettings.load()
         return Response({"ui_language": settings_obj.ui_language})
+
+
+class FeatureFlagsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses=FeatureFlagsSerializer)
+    def get(self, request):
+        return Response(SystemSettings.load().feature_flags)
 
 
 class SystemSettingsViewSet(viewsets.ModelViewSet):
@@ -96,6 +110,10 @@ class SystemSettingsViewSet(viewsets.ModelViewSet):
         settings_obj.viewer_read_only = True
         settings_obj.require_audit_reason = False
         settings_obj.qc_separation_of_duties = False
+        settings_obj.notebook_enabled = False
+        settings_obj.registry_enabled = False
+        settings_obj.studies_enabled = False
+        settings_obj.insight_enabled = False
         settings_obj.updated_by = request.user
         settings_obj.save()
 

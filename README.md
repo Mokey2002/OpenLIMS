@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.25.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.25.1-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -31,7 +31,17 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.25.0 — Assistant Clarification and Context`
+**Current release:** `v0.25.1 — Shared Foundation`
+
+### v0.25.1 highlights
+
+- Stable public UUIDs for projects, samples, sequences, inventory objects, and pipeline runs without replacing existing numeric API IDs
+- Versioned `/api/v1/` routes with an initial OpenAPI schema and interactive documentation
+- Reusable entity links and file attachments addressed by entity type and public ID
+- Shared project-scoped permission helpers and a versioned audit-event payload contract
+- Director-controlled, default-off feature flags for Notebook, Registry, Studies, and Insight
+- Build-time enforcement of English and Spanish metadata for new feature-flagged modules
+- Compatibility coverage keeping existing `/api/` routes available during the versioning transition
 
 ### v0.25.0 highlights
 
@@ -94,6 +104,7 @@ directly from the repository owner.
 | **Jobs** | Celery/Redis background jobs and real-time WebSocket updates |
 | **Security** | JWT authentication and role-based permissions |
 | **Localization** | Director-controlled, instance-wide English or Spanish UI, including the sign-in screen and workflow pages |
+| **Shared foundation** | Stable public IDs, reusable links and attachments, versioned APIs, OpenAPI documentation, common project permissions and audit payloads, and guarded module feature flags |
 
 ---
 

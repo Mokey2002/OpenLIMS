@@ -36,6 +36,11 @@ class SystemSettings(models.Model):
     require_audit_reason = models.BooleanField(default=False)
     qc_separation_of_duties = models.BooleanField(default=False)
 
+    notebook_enabled = models.BooleanField(default=False)
+    registry_enabled = models.BooleanField(default=False)
+    studies_enabled = models.BooleanField(default=False)
+    insight_enabled = models.BooleanField(default=False)
+
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -81,9 +86,22 @@ class SystemSettings(models.Model):
                 "viewer_read_only": True,
                 "require_audit_reason": False,
                 "qc_separation_of_duties": False,
+                "notebook_enabled": False,
+                "registry_enabled": False,
+                "studies_enabled": False,
+                "insight_enabled": False,
             },
         )
         return obj
+
+    @property
+    def feature_flags(self):
+        return {
+            "notebook": self.notebook_enabled,
+            "registry": self.registry_enabled,
+            "studies": self.studies_enabled,
+            "insight": self.insight_enabled,
+        }
 
     def __str__(self):
         return f"{self.organization_name} Settings"

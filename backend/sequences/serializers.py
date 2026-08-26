@@ -55,6 +55,7 @@ class SequenceSerializer(serializers.ModelSerializer):
         model = Sequence
         fields = [
             "id",
+            "public_id",
             "name",
             "description",
             "sequence_type",
@@ -81,6 +82,7 @@ class SequenceSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "public_id",
             "created_by",
             "created_by_username",
             "import_job",

@@ -85,6 +85,32 @@ class IsAuthenticatedReadOnlyOrTechAdminWrite(BasePermission):
         return is_admin(user) or is_tech(user)
 
 
+class ProjectScopedEntityPermission(BasePermission):
+    """Common permission boundary for public-ID based module entities.
+
+    Any authenticated project member may read an object. Only directors/admins
+    and technicians may write, and object access is always evaluated through
+    the shared entity registry so new modules do not invent their own rules.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        return is_admin(user) or is_tech(user)
+
+    def has_object_permission(self, request, view, obj):
+        from core.entities import user_can_access_entity
+
+        return user_can_access_entity(
+            request.user,
+            obj,
+            write=request.method not in SAFE_METHODS,
+        )
+
+
 class IsAuthenticatedReadOnlyAdminWrite(BasePermission):
     """
     Read:
