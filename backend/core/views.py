@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from drf_spectacular.utils import extend_schema
 from rest_framework.viewsets import ReadOnlyModelViewSet, ModelViewSet
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -141,5 +142,6 @@ class UserAdminViewSet(ModelViewSet):
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=MeSerializer)
     def get(self, request):
         return Response(MeSerializer(request.user).data)

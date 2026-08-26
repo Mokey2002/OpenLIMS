@@ -2,6 +2,8 @@ from django.conf import settings
 from django.db import models
 from django.db.models.functions import Lower
 
+from core.models import PublicIDModel
+
 
 class AnalysisDefinition(models.Model):
     VALUE_TYPE_STRING = "STRING"
@@ -178,7 +180,7 @@ class PipelineTemplateStep(models.Model):
         return f"{self.template.code} #{self.position} - {self.display_name}"
 
 
-class PipelineRun(models.Model):
+class PipelineRun(PublicIDModel):
     STATUS_ACTIVE = "ACTIVE"
     STATUS_COMPLETED = "COMPLETED"
     STATUS_BLOCKED = "BLOCKED"

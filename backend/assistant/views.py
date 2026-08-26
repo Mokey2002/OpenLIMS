@@ -2,6 +2,8 @@ import hashlib
 import time
 from datetime import timedelta
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status
 from django.db import transaction
 from django.db.models import Avg, Count, Q
@@ -116,6 +118,7 @@ class AssistantInvestigationSerializer(serializers.Serializer):
 class AssistantChatView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=AssistantChatSerializer, responses=OpenApiTypes.OBJECT)
     def post(self, request):
         started_at = time.monotonic()
         serializer = AssistantChatSerializer(data=request.data)
@@ -209,6 +212,7 @@ class AssistantChatView(APIView):
 class AssistantFeedbackView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=AssistantFeedbackSerializer, responses=OpenApiTypes.OBJECT)
     def post(self, request, interaction_id):
         serializer = AssistantFeedbackSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -241,6 +245,7 @@ class AssistantFeedbackView(APIView):
 class AssistantMetricsView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         if not is_admin(request.user):
             return Response(
@@ -285,6 +290,7 @@ class AssistantMetricsView(APIView):
 class AssistantComparisonView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=AssistantComparisonSerializer, responses=OpenApiTypes.OBJECT)
     def post(self, request):
         serializer = AssistantComparisonSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -298,6 +304,7 @@ class AssistantComparisonView(APIView):
 class AssistantInvestigationView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=AssistantInvestigationSerializer, responses=OpenApiTypes.OBJECT)
     def post(self, request):
         serializer = AssistantInvestigationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -308,6 +315,7 @@ class AssistantInvestigationView(APIView):
 class AssistantStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         return Response(
             {
@@ -326,6 +334,7 @@ class AssistantStatusView(APIView):
 class AssistantActionDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request, token):
         try:
             action = AssistantAction.objects.get(
@@ -344,6 +353,7 @@ class AssistantActionDetailView(APIView):
 class AssistantActionConfirmView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
     def post(self, request, token):
         if request.data.get("confirm") is not True:
             return Response(
@@ -379,6 +389,7 @@ class AssistantActionConfirmView(APIView):
 class AssistantActionCancelView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
     def post(self, request, token):
         try:
             action = cancel_action(token=token, user=request.user)
@@ -394,6 +405,7 @@ class AssistantActionCancelView(APIView):
 class AssistantArtifactDownloadView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=OpenApiTypes.BINARY)
     def get(self, request, artifact_id):
         artifact = GeneratedArtifact.objects.select_related("project", "created_by").filter(id=artifact_id).first()
         if not artifact:
@@ -549,5 +561,6 @@ class NotificationSubscriptionViewSet(ReadOnlyModelViewSet):
 class AssistantSystemMonitoringView(APIView):
     permission_classes = [IsAdminOnly]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         return Response(build_admin_monitoring_status(), status=status.HTTP_200_OK)

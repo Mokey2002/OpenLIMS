@@ -76,3 +76,65 @@ def test_reset_defaults_restores_english(admin_client):
     assert response.status_code == 200
     assert response.data["ui_language"] == "en"
     assert SystemSettings.load().ui_language == "en"
+
+
+@pytest.mark.django_db
+def test_feature_flags_default_off_and_require_authentication(api_client, admin_client):
+    unauthenticated = api_client.get("/api/v1/feature-flags/")
+    authenticated = admin_client.get("/api/v1/feature-flags/")
+
+    assert unauthenticated.status_code == 401
+    assert authenticated.status_code == 200
+    assert authenticated.data == {
+        "notebook": False,
+        "registry": False,
+        "studies": False,
+        "insight": False,
+    }
+
+
+@pytest.mark.django_db
+def test_director_can_enable_foundation_feature_flags(admin_client):
+    response = admin_client.patch(
+        "/api/v1/system-settings/1/",
+        {
+            "notebook_enabled": True,
+            "registry_enabled": True,
+            "studies_enabled": True,
+            "insight_enabled": True,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200
+    flags = admin_client.get("/api/v1/feature-flags/")
+    assert flags.data == {
+        "notebook": True,
+        "registry": True,
+        "studies": True,
+        "insight": True,
+    }
+
+
+@pytest.mark.django_db
+def test_reset_defaults_disables_foundation_feature_flags(admin_client):
+    settings_obj = SystemSettings.load()
+    settings_obj.notebook_enabled = True
+    settings_obj.registry_enabled = True
+    settings_obj.studies_enabled = True
+    settings_obj.insight_enabled = True
+    settings_obj.save()
+
+    response = admin_client.post(
+        "/api/v1/system-settings/reset-defaults/",
+        {},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert SystemSettings.load().feature_flags == {
+        "notebook": False,
+        "registry": False,
+        "studies": False,
+        "insight": False,
+    }

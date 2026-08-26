@@ -397,6 +397,8 @@ const spanishText = {
   "Import Settings": "Configuración de importación",
   "Sequence & Alignment Settings": "Configuración de secuencias y alineamientos",
   "Security Settings": "Configuración de seguridad",
+  "Feature Flags": "Funciones en desarrollo",
+  "Disabled by default while new modules are developed and validated.": "Deshabilitadas de forma predeterminada mientras se desarrollan y validan los módulos nuevos.",
   "Lab Name": "Nombre del laboratorio",
   "Organization Name": "Nombre de la organización",
   "UI Language": "Idioma de la interfaz",

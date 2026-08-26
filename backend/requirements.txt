@@ -3,6 +3,7 @@ djangorestframework>=3.15,<4.0
 psycopg[binary]>=3.1,<4.0
 django-environ>=0.11,<1.0
 djangorestframework-simplejwt
+drf-spectacular>=0.28,<1.0
 Pillow
 pytest
 pytest-django

@@ -13,7 +13,8 @@ from .units import UnitConversionError, convert_quantity, units_compatible
 class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
-        fields = ["id", "name", "kind"]
+        fields = ["id", "public_id", "name", "kind"]
+        read_only_fields = ["id", "public_id"]
 
 
 class ContainerSerializer(serializers.ModelSerializer):
@@ -26,6 +27,7 @@ class ContainerSerializer(serializers.ModelSerializer):
         model = Container
         fields = [
             "id",
+            "public_id",
             "container_id",
             "kind",
             "location",
@@ -35,6 +37,7 @@ class ContainerSerializer(serializers.ModelSerializer):
             "sample_count",
             "sample_ids",
         ]
+        read_only_fields = ["id", "public_id", "path", "sample_count", "sample_ids"]
 
     def get_sample_count(self, obj):
         return obj.samples.count()
@@ -71,6 +74,7 @@ class InventoryItemSerializer(serializers.ModelSerializer):
         model = InventoryItem
         fields = [
             "id",
+            "public_id",
             "code",
             "name",
             "category",
@@ -80,7 +84,9 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "available_quantity", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "public_id", "available_quantity", "created_at", "updated_at"
+        ]
 
     def get_available_quantity(self, obj):
         total = 0
@@ -106,6 +112,7 @@ class InventoryLotSerializer(serializers.ModelSerializer):
         model = InventoryLot
         fields = [
             "id",
+            "public_id",
             "item",
             "item_code",
             "lot_code",
@@ -121,7 +128,9 @@ class InventoryLotSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "available_quantity", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "public_id", "available_quantity", "created_at", "updated_at"
+        ]
 
     def get_available_quantity(self, obj):
         return str(obj.available_quantity)
@@ -160,6 +169,7 @@ class InventoryReservationSerializer(serializers.ModelSerializer):
         model = InventoryReservation
         fields = [
             "id",
+            "public_id",
             "lot",
             "lot_code",
             "item_code",
@@ -175,6 +185,7 @@ class InventoryReservationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "public_id",
             "created_by",
             "created_by_username",
             "created_at",

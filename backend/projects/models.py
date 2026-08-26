@@ -1,10 +1,12 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 
+from core.models import PublicIDModel
+
 User = get_user_model()
 
 
-class Project(models.Model):
+class Project(PublicIDModel):
     name = models.CharField(max_length=128, unique=True)
     code = models.CharField(max_length=64, unique=True)
     description = models.TextField(blank=True)

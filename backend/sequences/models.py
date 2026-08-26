@@ -1,8 +1,10 @@
 from django.conf import settings
 from django.db import models
 
+from core.models import PublicIDModel
 
-class Sequence(models.Model):
+
+class Sequence(PublicIDModel):
     SEQUENCE_TYPE_CHOICES = [
         ("DNA", "DNA"),
         ("RNA", "RNA"),

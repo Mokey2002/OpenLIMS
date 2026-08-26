@@ -35,6 +35,10 @@ OpenLIMS is a lightweight LIMS backend designed to run with minimal setup:
 
 ## Key APIs
 
+- `/api/v1/` — current versioned API surface
+- `/api/schema/` — OpenAPI schema for the versioned API
+- `/api/docs/` — interactive OpenAPI documentation
+- `/api/` — backward-compatible unversioned routes
 - `/health` — service + DB connectivity check
 - `/api/samples/` — CRUD samples
 - `/api/locations/` — CRUD locations
@@ -43,6 +47,14 @@ OpenLIMS is a lightweight LIMS backend designed to run with minimal setup:
 - `/api/field-definitions/` — CRUD custom field definitions
 - `/api/field-values/` — CRUD custom field values
 - `/api/samples/<id>/custom-fields/` — resolved view of a sample’s custom fields
+
+## Shared module contracts
+
+New modules reuse stable public UUIDs, `{type, public_id}` entity references,
+directed entity links, shared attachments, project-scoped access helpers, and
+versioned audit payloads from `core`. See
+[`shared_foundation_v0251.md`](shared_foundation_v0251.md) for the normative
+contract and module checklist.
 
 ## Audit trail (Events)
 

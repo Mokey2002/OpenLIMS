@@ -3,6 +3,17 @@ from rest_framework import serializers
 from .models import SystemSettings
 
 
+class PublicUISettingsSerializer(serializers.Serializer):
+    ui_language = serializers.ChoiceField(choices=SystemSettings.UI_LANGUAGE_CHOICES)
+
+
+class FeatureFlagsSerializer(serializers.Serializer):
+    notebook = serializers.BooleanField()
+    registry = serializers.BooleanField()
+    studies = serializers.BooleanField()
+    insight = serializers.BooleanField()
+
+
 class SystemSettingsSerializer(serializers.ModelSerializer):
     updated_by_username = serializers.CharField(
         source="updated_by.username",
@@ -27,6 +38,10 @@ class SystemSettingsSerializer(serializers.ModelSerializer):
             "viewer_read_only",
             "require_audit_reason",
             "qc_separation_of_duties",
+            "notebook_enabled",
+            "registry_enabled",
+            "studies_enabled",
+            "insight_enabled",
             "updated_by",
             "updated_by_username",
             "created_at",

@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "predev": "node scripts/write-version.mjs",
-    "prebuild": "node scripts/write-version.mjs"
+    "prebuild": "node scripts/check-feature-translations.mjs && node scripts/write-version.mjs",
+    "check:i18n": "node scripts/check-feature-translations.mjs"
   },
   "dependencies": {
     "bootstrap": "^5.3.8",
