@@ -605,6 +605,19 @@ docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.p
 docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py seed_demo
 ```
 
+The command is idempotent and seeds connected demonstrations for projects,
+samples, batches, custom metadata, lineage, barcode custody, inventory,
+reservations, workflows, results, QC, instrument imports, migration previews and
+rollback, Registry records, Molecular Biology revisions and assembly plans,
+BLAST, alignments, mass spectrometry, reports, notifications, audit history,
+shared links and attachments, and assistant confirmations. Set
+`OPENLIMS_DEMO_PASSWORD` before running it to enable sign-in for the demo users;
+otherwise newly created demo accounts have unusable passwords.
+
+The Registry feature flag is enabled for the comprehensive demo. Notebook,
+Studies, and Insight remain disabled because those modules are still under
+development.
+
 ### 6. Open the app
 
 | Service | URL |

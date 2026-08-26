@@ -11,10 +11,20 @@ from core.management.commands.seed_demo import (
     create_demo_user,
     link_demo_import_job,
 )
+from core.models import EntityLink, SharedAttachment
+from alignments.models import AlignmentJob
+from assistant.models import AssistantAction, GeneratedArtifact, NotificationSubscription
+from blast.models import BlastJob
 from imports.models import ImportJob, InstrumentProfile
+from inventory.models import InventoryReservation
+from migration_toolkit.models import MigrationJob, MigrationMappingTemplate, MigrationProfile
+from pipelines.models import PipelineRun, PipelineTemplate, PipelineTemplateStep
 from projects.models import Project
+from registry.models import RegistrationReview, RegistryRecord, RegistryRecordVersion, RegistrySchema
 from results.models import Result, WorkItem
-from samples.models import Sample, SampleBatch
+from samples.models import Sample, SampleBatch, SampleCustodyEvent, SampleRelationship
+from sequences.models import ConstructAssemblyPlan, SequenceRevision, SequenceFeatureLibrary
+from settings_app.models import SystemSettings
 
 
 User = get_user_model()
@@ -155,9 +165,30 @@ class DemoSeedProvenanceIntegrationTests(TestCase):
             with override_settings(MEDIA_ROOT=media_root):
                 call_command("seed_demo")
                 first_work_item_count = WorkItem.objects.count()
+                first_capability_counts = {
+                    "links": EntityLink.objects.count(),
+                    "attachments": SharedAttachment.objects.count(),
+                    "lineage": SampleRelationship.objects.count(),
+                    "custody": SampleCustodyEvent.objects.count(),
+                    "registry_versions": RegistryRecordVersion.objects.count(),
+                    "sequence_revisions": SequenceRevision.objects.count(),
+                    "migration_jobs": MigrationJob.objects.count(),
+                }
                 call_command("seed_demo")
 
         self.assertEqual(WorkItem.objects.count(), first_work_item_count)
+        self.assertEqual(
+            {
+                "links": EntityLink.objects.count(),
+                "attachments": SharedAttachment.objects.count(),
+                "lineage": SampleRelationship.objects.count(),
+                "custody": SampleCustodyEvent.objects.count(),
+                "registry_versions": RegistryRecordVersion.objects.count(),
+                "sequence_revisions": SequenceRevision.objects.count(),
+                "migration_jobs": MigrationJob.objects.count(),
+            },
+            first_capability_counts,
+        )
         self.assertEqual(
             set(SampleBatch.objects.values_list("code", flat=True)),
             {"B-ALPHA-01", "B-ALPHA-02", "B-BETA-01", "B-GAMMA-01"},
@@ -198,3 +229,45 @@ class DemoSeedProvenanceIntegrationTests(TestCase):
                 provenance["linked_work_item_count"],
                 job.work_items.count(),
             )
+
+        self.assertEqual(SampleRelationship.objects.count(), 4)
+        self.assertEqual(SampleCustodyEvent.objects.count(), 4)
+        self.assertEqual(InventoryReservation.objects.filter(lot__lot_code="GIBSON-DEMO-2026-01").count(), 2)
+
+        template = PipelineTemplate.objects.get(code="DEMO_PARALLEL_PLASMID")
+        self.assertEqual(PipelineTemplateStep.objects.filter(template=template).count(), 5)
+        self.assertTrue(PipelineRun.objects.filter(template=template, sample__sample_id="PIPE-DEMO-001").exists())
+
+        self.assertEqual(RegistrySchema.objects.count(), 12)
+        self.assertEqual(
+            RegistryRecord.objects.filter(
+                registry_id__in=[
+                    "PLS-DEMO-0001",
+                    "PRM-DEMO-0001",
+                    "PRO-DEMO-0001",
+                    "AB-DEMO-0001",
+                    "CL-DEMO-0001",
+                ]
+            ).count(),
+            5,
+        )
+        self.assertGreaterEqual(RegistryRecordVersion.objects.count(), 6)
+        self.assertTrue(RegistrationReview.objects.filter(decision=RegistrationReview.DECISION_APPROVED).exists())
+        self.assertTrue(RegistrationReview.objects.filter(decision=RegistrationReview.DECISION_PENDING).exists())
+        self.assertGreaterEqual(SequenceRevision.objects.count(), 7)
+        self.assertEqual(SequenceFeatureLibrary.objects.count(), 2)
+        self.assertEqual(ConstructAssemblyPlan.objects.count(), 1)
+
+        self.assertEqual(EntityLink.objects.count(), 4)
+        self.assertEqual(SharedAttachment.objects.count(), 1)
+        self.assertTrue(MigrationProfile.objects.filter(name="SISBI Comprehensive Migration Demo").exists())
+        self.assertTrue(MigrationMappingTemplate.objects.filter(name="SISBI Full Migration Template").exists())
+        self.assertEqual(MigrationJob.objects.filter(profile__name="SISBI Comprehensive Migration Demo").count(), 2)
+
+        self.assertTrue(AlignmentJob.objects.filter(status="COMPLETED").exists())
+        self.assertTrue(BlastJob.objects.filter(status=BlastJob.STATUS_COMPLETED).exists())
+        self.assertTrue(GeneratedArtifact.objects.filter(filename="openlims_comprehensive_demo_report.pdf").exists())
+        self.assertTrue(GeneratedArtifact.objects.filter(filename="openlims_demo_sample_labels.pdf").exists())
+        self.assertTrue(AssistantAction.objects.filter(status=AssistantAction.STATUS_PROPOSED).exists())
+        self.assertTrue(NotificationSubscription.objects.filter(active=True).exists())
+        self.assertTrue(SystemSettings.load().registry_enabled)
