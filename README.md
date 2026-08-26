@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.25.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.26.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -31,7 +31,20 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.25.1 — Shared Foundation`
+**Current release:** `v0.26.0 — Registry and Molecular Biology v2`
+
+### v0.26.0 highlights
+
+- Configurable biological registry types with versioned JSON schemas and stable registry IDs
+- Immutable registry versions, aliases, external identifiers, tags, typed relationships, and project visibility
+- Draft, review, registration, and retirement lifecycle with director approval and common audit payloads
+- Duplicate detection across IDs, aliases, sequence checksums, catalog numbers, and configured schema fields
+- Registry CSV and legacy-database migration through the existing preview/fingerprint/commit toolkit
+- Strict DNA, RNA, and protein validation with linear/circular topology and immutable sequence revisions
+- Revision diff/restore, reverse complement, transcription, translation, ORFs, GC, molecular weight, and primer calculations
+- Restriction-site analysis, virtual digests, simple construct assembly plans, and reusable feature libraries
+- Annotation-preserving FASTA and GenBank import/export and registry-linked sequence revisions
+- English and Spanish Registry and molecular-biology interfaces
 
 ### v0.25.1 highlights
 
@@ -94,6 +107,8 @@ directly from the repository owner.
 | **Migration** | Legacy CSV migration profiles, reusable field mappings, preview/dry-run, queued imports, row review |
 | **External IDs** | Preserve legacy sample IDs and aliases from older systems |
 | **Sequences** | FASTA import workflows, sequence workspaces, sequence metadata and features |
+| **Registry** | Configurable biological entity types, immutable versions, aliases, relationships, duplicate detection, review/registration, and physical-material links |
+| **Molecular Biology** | Strict DNA/RNA/protein validation, circular topology, revision diff/restore, biochemical tools, virtual digests, construct assembly, feature libraries, and FASTA/GenBank interchange |
 | **Alignments** | Clustal Omega alignment jobs with downloadable output |
 | **BLAST** | Local BLAST database building and blastn/blastp search |
 | **Mass Spec** | mzML, mzXML, mzData, featureXML, consensusXML, mzID/mzIdentML review using pyOpenMS |

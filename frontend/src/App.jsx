@@ -37,6 +37,7 @@ import Comparisons from "./pages/Comparisons";
 import Investigations from "./pages/Investigations";
 import WorkflowDesigner from "./pages/WorkflowDesigner";
 import Traceability from "./pages/Traceability";
+import Registry from "./pages/Registry";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="projects" element={<Projects />} />
           <Route path="projects/:id" element={<ProjectDetail />} />
           <Route path="sequences" element={<Sequences />} />
+          <Route path="registry" element={<Registry />} />
           <Route path="alignments" element={<Alignments />} />
           <Route path="reports" element={<Reports />} />
           <Route path="system-status" element={<SystemStatus />} />

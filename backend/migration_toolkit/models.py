@@ -128,12 +128,14 @@ class MigrationDataset(models.Model):
     ENTITY_USER = "USER"
     ENTITY_SAMPLE = "SAMPLE"
     ENTITY_RESULT = "RESULT"
+    ENTITY_REGISTRY = "REGISTRY"
 
     ENTITY_CHOICES = [
         (ENTITY_PROJECT, "Projects"),
         (ENTITY_USER, "Users"),
         (ENTITY_SAMPLE, "Samples"),
         (ENTITY_RESULT, "Historical results"),
+        (ENTITY_REGISTRY, "Registry records"),
     ]
 
     profile = models.ForeignKey(
@@ -189,6 +191,16 @@ class MigrationFieldMapping(models.Model):
     TARGET_RESULT_ENTERED_BY = "RESULT_ENTERED_BY"
     TARGET_RESULT_REFERENCE_MIN = "RESULT_REFERENCE_MIN"
     TARGET_RESULT_REFERENCE_MAX = "RESULT_REFERENCE_MAX"
+    TARGET_REGISTRY_ID = "REGISTRY_ID"
+    TARGET_REGISTRY_SCHEMA = "REGISTRY_SCHEMA"
+    TARGET_REGISTRY_NAME = "REGISTRY_NAME"
+    TARGET_REGISTRY_DESCRIPTION = "REGISTRY_DESCRIPTION"
+    TARGET_REGISTRY_CATALOG_NUMBER = "REGISTRY_CATALOG_NUMBER"
+    TARGET_REGISTRY_ALIAS = "REGISTRY_ALIAS"
+    TARGET_REGISTRY_TAGS = "REGISTRY_TAGS"
+    TARGET_REGISTRY_STATUS = "REGISTRY_STATUS"
+    TARGET_REGISTRY_DATA = "REGISTRY_DATA"
+    TARGET_REGISTRY_SEQUENCE = "REGISTRY_SEQUENCE"
 
     TARGET_TYPE_CHOICES = [
         (TARGET_PROJECT_CODE, "Project Code"),
@@ -217,6 +229,16 @@ class MigrationFieldMapping(models.Model):
         (TARGET_RESULT_ENTERED_BY, "Result Entered By"),
         (TARGET_RESULT_REFERENCE_MIN, "Result Reference Minimum"),
         (TARGET_RESULT_REFERENCE_MAX, "Result Reference Maximum"),
+        (TARGET_REGISTRY_ID, "Registry ID"),
+        (TARGET_REGISTRY_SCHEMA, "Registry Schema Code"),
+        (TARGET_REGISTRY_NAME, "Registry Record Name"),
+        (TARGET_REGISTRY_DESCRIPTION, "Registry Description"),
+        (TARGET_REGISTRY_CATALOG_NUMBER, "Registry Catalog Number"),
+        (TARGET_REGISTRY_ALIAS, "Registry Alias"),
+        (TARGET_REGISTRY_TAGS, "Registry Tags"),
+        (TARGET_REGISTRY_STATUS, "Registry Lifecycle Status"),
+        (TARGET_REGISTRY_DATA, "Registry Data Field"),
+        (TARGET_REGISTRY_SEQUENCE, "Registry Sequence"),
     ]
 
     VALUE_TYPE_STRING = "STRING"

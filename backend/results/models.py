@@ -1,8 +1,10 @@
 from django.conf import settings
 from django.db import models
 
+from core.models import PublicIDModel
 
-class WorkItem(models.Model):
+
+class WorkItem(PublicIDModel):
     STATUS_PENDING = "PENDING"
     STATUS_IN_PROGRESS = "IN_PROGRESS"
     STATUS_COMPLETED = "COMPLETED"
@@ -114,7 +116,7 @@ class WorkItem(models.Model):
         return f"{self.sample.sample_id} - {self.name}"
 
 
-class Result(models.Model):
+class Result(PublicIDModel):
     VALUE_TYPE_STRING = "STRING"
     VALUE_TYPE_NUMBER = "NUMBER"
     VALUE_TYPE_BOOLEAN = "BOOLEAN"

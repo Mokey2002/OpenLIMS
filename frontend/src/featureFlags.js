@@ -45,6 +45,29 @@ export const featureFlagCopy = {
   },
 };
 
+export const v026ModuleCopy = {
+  registry: {
+    en: "Configurable biological registry with immutable versions, duplicate detection, review, and physical links.",
+    es: "Registro biológico configurable con versiones inmutables, detección de duplicados, revisión y vínculos físicos.",
+  },
+  sequenceRevisions: {
+    en: "Immutable DNA, RNA, and protein sequence revisions with visual comparison and restore.",
+    es: "Revisiones inmutables de secuencias de ADN, ARN y proteínas con comparación visual y restauración.",
+  },
+  molecularTools: {
+    en: "Molecular calculations, ORFs, primer properties, restriction analysis, and virtual digests.",
+    es: "Cálculos moleculares, ORF, propiedades de cebadores, análisis de restricción y digestiones virtuales.",
+  },
+  interchange: {
+    en: "FASTA and GenBank import and export with preserved annotations.",
+    es: "Importación y exportación FASTA y GenBank con anotaciones conservadas.",
+  },
+  assembly: {
+    en: "Registered-part construct assembly and reusable feature libraries.",
+    es: "Ensamblaje de constructos con partes registradas y bibliotecas reutilizables de características.",
+  },
+};
+
 export function featureIsEnabled(flags, key) {
   return Boolean(flags?.[key]);
 }

@@ -21,7 +21,16 @@ from projects.views import ProjectViewSet, ProjectPostViewSet
 from core.views import UserLiteViewSet, UserAdminViewSet
 from imports.views import InstrumentProfileViewSet,InstrumentColumnMappingViewSet,ImportJobViewSet
 from notifications.views import NotificationViewSet
-from sequences.views import SequenceViewSet
+from sequences.views import (
+    ConstructAssemblyPlanViewSet,
+    SequenceFeatureLibraryViewSet,
+    SequenceViewSet,
+)
+from registry.views import (
+    RegistryRecordViewSet,
+    RegistryRelationshipViewSet,
+    RegistrySchemaViewSet,
+)
 from alignments.views import AlignmentJobViewSet
 from settings_app.views import PublicUISettingsView, SystemSettingsViewSet
 from settings_app.views import FeatureFlagsView
@@ -94,6 +103,23 @@ router.register(r"instrument-mappings", InstrumentColumnMappingViewSet, basename
 router.register(r"import-jobs", ImportJobViewSet, basename="import-job")
 router.register(r"notifications",NotificationViewSet, basename="notification")
 router.register(r"sequences", SequenceViewSet, basename="sequence")
+router.register(
+    r"sequence-feature-library",
+    SequenceFeatureLibraryViewSet,
+    basename="sequence-feature-library",
+)
+router.register(
+    r"construct-assembly-plans",
+    ConstructAssemblyPlanViewSet,
+    basename="construct-assembly-plan",
+)
+router.register(r"registry-schemas", RegistrySchemaViewSet, basename="registry-schema")
+router.register(r"registry-records", RegistryRecordViewSet, basename="registry-record")
+router.register(
+    r"registry-relationships",
+    RegistryRelationshipViewSet,
+    basename="registry-relationship",
+)
 router.register(r"alignment-jobs", AlignmentJobViewSet, basename="alignment-job")
 router.register(r"system-settings", SystemSettingsViewSet, basename="system-settings")
 router.register(r"blast-databases", BlastDatabaseViewSet, basename="blast-database")

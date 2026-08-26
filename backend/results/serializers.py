@@ -69,6 +69,7 @@ class ResultSerializer(serializers.ModelSerializer):
         model = Result
         fields = [
             "id",
+            "public_id",
             "work_item",
             "work_item_name",
             "sample_id",
@@ -107,6 +108,7 @@ class ResultSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "public_id",
             "value",
             "reference_comparison",
             "qc_status",
@@ -245,6 +247,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
         model = WorkItem
         fields = [
             "id",
+            "public_id",
             "sample",
             "sample_code",
             "project_id",
@@ -280,6 +283,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "public_id",
             "source_import_job",
             "analysis_code",
             "required_fields",

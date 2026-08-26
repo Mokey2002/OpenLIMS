@@ -11,7 +11,7 @@ import {
   Table,
 } from "react-bootstrap";
 import { SeqViz } from "seqviz";
-import { apiDelete, apiGet, apiPatch, apiPost } from "../api";
+import { apiDelete, apiDownload, apiGet, apiPatch, apiPost } from "../api";
 import { canWrite, readOnlyMessage } from "../authz";
 
 const demoSequence =
@@ -244,7 +244,11 @@ export default function Sequences() {
   const [name, setName] = useState("Demo GFP Construct");
   const [description, setDescription] = useState("Saved from SeqViz workspace");
   const [sequenceType, setSequenceType] = useState("DNA");
+  const [topology, setTopology] = useState("LINEAR");
   const [sequence, setSequence] = useState(demoSequence);
+  const [revisions, setRevisions] = useState([]);
+  const [changeSummary, setChangeSummary] = useState("");
+  const [molecularResult, setMolecularResult] = useState(null);
 
   const [projectId, setProjectId] = useState("");
   const [projects, setProjects] = useState([]);
@@ -335,6 +339,8 @@ export default function Sequences() {
   const readOnlyText = readOnlyMessage(me);
 
   useEffect(() => {
+    // The initial loader intentionally calls the stable function declaration once.
+    // eslint-disable-next-line react-hooks/immutability
     loadInitialData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -432,6 +438,7 @@ export default function Sequences() {
     setName("Demo GFP Construct");
     setDescription("Saved from SeqViz workspace");
     setSequenceType("DNA");
+    setTopology("LINEAR");
     setSequence(demoSequence);
     setProjectId("");
     setViewer("both");
@@ -448,6 +455,9 @@ export default function Sequences() {
     setSelection(null);
     setSearchResults([]);
     setBpColors(defaultBpColors);
+    setRevisions([]);
+    setChangeSummary("");
+    setMolecularResult(null);
   }
 
   function startNewWorkspace() {
@@ -513,7 +523,9 @@ export default function Sequences() {
       name,
       description,
       sequence_type: sequenceType,
+      topology,
       sequence: cleanSequence,
+      change_summary: changeSummary,
       project: projectId || null,
       viewer,
       show_complement: showComplement,
@@ -556,7 +568,9 @@ export default function Sequences() {
       name: `${name} Copy`,
       description,
       sequence_type: sequenceType,
+      topology,
       sequence: cleanSequence,
+      change_summary: `Duplicated from ${name}`,
       project: projectId || null,
       viewer,
       show_complement: showComplement,
@@ -598,7 +612,11 @@ export default function Sequences() {
       setName(data.name);
       setDescription(data.description || "");
       setSequenceType(data.sequence_type || "DNA");
+      setTopology(data.topology || "LINEAR");
       setSequence(data.sequence);
+      setRevisions(data.revisions || []);
+      setChangeSummary("");
+      setMolecularResult(null);
       setProjectId(data.project ? String(data.project) : "");
       setViewer(data.viewer || "both");
       setShowComplement(Boolean(data.show_complement));
@@ -878,6 +896,39 @@ export default function Sequences() {
     );
   }
 
+  async function analyzeMolecule() {
+    if (!selectedSequenceId) return;
+    setSaveError("");
+    try {
+      const data = await apiPost(
+        `/api/sequences/${selectedSequenceId}/molecular-tools/`,
+        { operation: "ANALYZE", minimum_codons: 10 }
+      );
+      setMolecularResult(data);
+    } catch (e) {
+      setSaveError(e.message || String(e));
+    }
+  }
+
+  async function restoreRevision(revision) {
+    if (!selectedSequenceId || !userCanWrite) return;
+    if (!window.confirm(`Restore revision ${revision}? A new revision will be created.`)) return;
+    setSaving(true);
+    try {
+      await apiPost(`/api/sequences/${selectedSequenceId}/restore-revision/`, {
+        revision,
+        change_summary: `Restored revision ${revision}`,
+      });
+      await loadSequenceWorkspace(selectedSequenceId);
+      await loadSavedSequences();
+      setSaveMessage(`Revision ${revision} restored as a new immutable revision.`);
+    } catch (e) {
+      setSaveError(e.message || String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="w-100">
       <div className="page-header">
@@ -1011,6 +1062,21 @@ export default function Sequences() {
                   Export FASTA
                 </Button>
 
+                {selectedSequenceId && (
+                  <Button
+                    variant="outline-primary"
+                    onClick={() => apiDownload(`/api/sequences/${selectedSequenceId}/export/?file_format=genbank`, `${name}.gb`)}
+                  >
+                    Export GenBank with Annotations
+                  </Button>
+                )}
+
+                {selectedSequenceId && (
+                  <Button variant="outline-info" onClick={analyzeMolecule}>
+                    Analyze Molecular Properties
+                  </Button>
+                )}
+
                 <Button
                   variant="outline-primary"
                   onClick={exportWorkspaceJson}
@@ -1084,6 +1150,23 @@ export default function Sequences() {
               </Form.Group>
 
               <Form.Group className="mb-3">
+                <Form.Label>Topology</Form.Label>
+                <Form.Select value={topology} onChange={(e) => setTopology(e.target.value)}>
+                  <option value="LINEAR">Linear</option>
+                  <option value="CIRCULAR">Circular</option>
+                </Form.Select>
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Revision Change Summary</Form.Label>
+                <Form.Control
+                  value={changeSummary}
+                  onChange={(e) => setChangeSummary(e.target.value)}
+                  placeholder="Describe the molecular change"
+                />
+              </Form.Group>
+
+              <Form.Group className="mb-3">
                 <Form.Label>Viewer Mode</Form.Label>
                 <Form.Select
                   value={viewer}
@@ -1131,6 +1214,35 @@ export default function Sequences() {
                   onChange={(e) => setSequence(e.target.value)}
                 />
               </Form.Group>
+
+              {molecularResult && (
+                <JsonPreview title="Molecular Analysis" data={molecularResult} />
+              )}
+
+              {revisions.length > 0 && (
+                <div className="mt-4">
+                  <h6>Immutable Revision History</h6>
+                  <Table size="sm" responsive>
+                    <thead><tr><th>Revision</th><th>Summary</th><th>Checksum</th><th></th></tr></thead>
+                    <tbody>
+                      {revisions.map((revision) => (
+                        <tr key={revision.public_id}>
+                          <td>{revision.revision}</td>
+                          <td>{revision.change_summary || "-"}</td>
+                          <td className="font-monospace small">{revision.checksum.slice(0, 10)}…</td>
+                          <td>
+                            {userCanWrite && (
+                              <Button size="sm" variant="outline-secondary" onClick={() => restoreRevision(revision.revision)}>
+                                Restore
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              )}
             </Card.Body>
           </Card>
 

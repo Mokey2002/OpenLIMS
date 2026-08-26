@@ -31,6 +31,8 @@ RESERVED_ENTITY_TYPES = frozenset(
         "inventory_lot",
         "inventory_reservation",
         "pipeline_run",
+        "work_item",
+        "result",
         "registry_record",
         "experiment",
         "study",
@@ -48,9 +50,11 @@ def _definitions():
         Location,
     )
     from pipelines.models import PipelineRun
+    from results.models import Result, WorkItem
     from projects.models import Project
     from samples.models import Sample
     from sequences.models import Sequence
+    from registry.models import RegistryRecord
 
     return {
         "project": EntityDefinition(
@@ -69,6 +73,12 @@ def _definitions():
             lambda obj: obj.name,
             lambda obj: obj.project,
             owner_field="created_by",
+        ),
+        "registry_record": EntityDefinition(
+            RegistryRecord,
+            lambda obj: f"{obj.registry_id} - {obj.name}",
+            lambda obj: obj.project,
+            owner_field="owner",
         ),
         "location": EntityDefinition(
             Location,
@@ -105,6 +115,18 @@ def _definitions():
             lambda obj: f"{obj.sample.sample_id} - {obj.template_code}",
             lambda obj: obj.sample.project,
             owner_field="started_by",
+        ),
+        "work_item": EntityDefinition(
+            WorkItem,
+            lambda obj: f"{obj.sample.sample_id} - {obj.name}",
+            lambda obj: obj.sample.project,
+            owner_field="created_by",
+        ),
+        "result": EntityDefinition(
+            Result,
+            lambda obj: f"{obj.work_item.name} - {obj.key}",
+            lambda obj: obj.work_item.sample.project,
+            owner_field="entered_by",
         ),
     }
 
@@ -159,12 +181,20 @@ def get_accessible_entity_queryset(entity_type, user, *, write=False):
         from samples.access import get_sample_access_queryset
 
         return get_sample_access_queryset(queryset, user)
-    if normalized == "pipeline_run":
+    if normalized in {"pipeline_run", "work_item", "result"}:
         from samples.access import get_sample_access_queryset
         from samples.models import Sample
 
         allowed_samples = get_sample_access_queryset(Sample.objects.all(), user)
-        return queryset.filter(sample__in=allowed_samples)
+        if normalized == "pipeline_run":
+            return queryset.filter(sample__in=allowed_samples)
+        if normalized == "work_item":
+            return queryset.filter(sample__in=allowed_samples)
+        return queryset.filter(work_item__sample__in=allowed_samples)
+    if normalized == "registry_record":
+        from registry.services import registry_records_for_user
+
+        return registry_records_for_user(user, write=write)
 
     return get_project_access_queryset(
         queryset,
@@ -191,6 +221,12 @@ def user_can_access_entity(user, obj, *, write=False):
 
         checker = user_can_modify_sample if write else user_can_access_sample
         return checker(user, obj)
+    if entity_type == "registry_record":
+        from registry.services import registry_records_for_user, user_can_write_record
+
+        if write:
+            return user_can_write_record(user, obj)
+        return registry_records_for_user(user).filter(pk=obj.pk).exists()
 
     project = definition.project(obj)
     if project is not None:

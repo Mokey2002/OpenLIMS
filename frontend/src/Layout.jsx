@@ -184,17 +184,20 @@ export default function Layout() {
   const [loadingMe, setLoadingMe] = useState(true);
   const [notifications, setNotifications] = useState([]);
   const [globalSearch, setGlobalSearch] = useState("");
+  const [featureFlags, setFeatureFlags] = useState({});
 
   useEffect(() => {
     (async () => {
       try {
-        const [meData, notificationData] = await Promise.all([
+        const [meData, notificationData, featureData] = await Promise.all([
           apiGet("/api/me/"),
           apiGet("/api/notifications/"),
+          apiGet("/api/feature-flags/"),
         ]);
 
         setMe(meData);
         setNotifications(notificationData.results || notificationData || []);
+        setFeatureFlags(featureData || {});
       } catch (e) {
         console.error("Failed to load layout data:", e);
         setNotifications([]);
@@ -269,6 +272,9 @@ export default function Layout() {
                 <DropdownItemLink to="/samples">Samples</DropdownItemLink>
                 <DropdownItemLink to="/traceability">Sample Traceability</DropdownItemLink>
                 <DropdownItemLink to="/inventory">Inventory</DropdownItemLink>
+                {featureFlags.registry && (
+                  <DropdownItemLink to="/registry">Biological Registry</DropdownItemLink>
+                )}
               </NavDropdown>
 
               <NavDropdown title="Analysis" id="analysis-nav">
