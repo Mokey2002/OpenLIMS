@@ -16,7 +16,13 @@ from alignments.models import AlignmentJob
 from assistant.models import AssistantAction, GeneratedArtifact, NotificationSubscription
 from blast.models import BlastJob
 from imports.models import ImportJob, InstrumentProfile
-from inventory.models import InventoryReservation
+from inventory.models import (
+    BarcodeIdentity,
+    InventoryCycleCount,
+    InventoryPlacement,
+    InventoryReservation,
+    InventoryTransaction,
+)
 from migration_toolkit.models import MigrationJob, MigrationMappingTemplate, MigrationProfile
 from pipelines.models import PipelineRun, PipelineTemplate, PipelineTemplateStep
 from projects.models import Project
@@ -25,6 +31,8 @@ from results.models import Result, WorkItem
 from samples.models import Sample, SampleBatch, SampleCustodyEvent, SampleRelationship
 from sequences.models import ConstructAssemblyPlan, SequenceRevision, SequenceFeatureLibrary
 from settings_app.models import SystemSettings
+from notebook.models import Experiment, ExperimentComment, ExperimentReview, Notebook
+from workflow_requests.models import WorkflowRequest, WorkflowRequestMessage, WorkflowRequestReport
 
 
 User = get_user_model()
@@ -34,14 +42,13 @@ class DemoUserCredentialTests(TestCase):
     def setUp(self):
         self.group = Group.objects.create(name="tech")
 
-    def create_demo_user(self, *, password=None):
+    def create_demo_user(self):
         return create_demo_user(
             "demo-tech",
             self.group,
             email="demo-tech@example.invalid",
             first_name="Demo",
             last_name="Technician",
-            password=password,
         )
 
     def test_new_demo_user_has_no_usable_default_password(self):
@@ -49,7 +56,7 @@ class DemoUserCredentialTests(TestCase):
 
         self.assertFalse(user.has_usable_password())
 
-    def test_existing_password_is_preserved_without_environment_password(self):
+    def test_existing_password_is_preserved(self):
         existing_password = secrets.token_urlsafe(24)
         user = User.objects.create_user(
             username="demo-tech",
@@ -60,21 +67,6 @@ class DemoUserCredentialTests(TestCase):
         updated_user = self.create_demo_user()
 
         self.assertTrue(updated_user.check_password(existing_password))
-
-    def test_environment_password_replaces_existing_password(self):
-        old_password = secrets.token_urlsafe(24)
-        new_password = secrets.token_urlsafe(24)
-        User.objects.create_user(
-            username="demo-tech",
-            email="old@example.invalid",
-            password=old_password,
-        )
-
-        updated_user = self.create_demo_user(password=new_password)
-
-        self.assertFalse(updated_user.check_password(old_password))
-        self.assertTrue(updated_user.check_password(new_password))
-
 
 class DemoInstrumentProvenanceTests(TestCase):
     def setUp(self):
@@ -173,6 +165,10 @@ class DemoSeedProvenanceIntegrationTests(TestCase):
                     "registry_versions": RegistryRecordVersion.objects.count(),
                     "sequence_revisions": SequenceRevision.objects.count(),
                     "migration_jobs": MigrationJob.objects.count(),
+                    "notebooks": Notebook.objects.count(),
+                    "experiment_revisions": Experiment.objects.get(title="pOpenLIMS-GFP verification — run 2026-08").revisions.count(),
+                    "inventory_transactions": InventoryTransaction.objects.count(),
+                    "workflow_requests": WorkflowRequest.objects.count(),
                 }
                 call_command("seed_demo")
 
@@ -186,6 +182,10 @@ class DemoSeedProvenanceIntegrationTests(TestCase):
                 "registry_versions": RegistryRecordVersion.objects.count(),
                 "sequence_revisions": SequenceRevision.objects.count(),
                 "migration_jobs": MigrationJob.objects.count(),
+                "notebooks": Notebook.objects.count(),
+                "experiment_revisions": Experiment.objects.get(title="pOpenLIMS-GFP verification — run 2026-08").revisions.count(),
+                "inventory_transactions": InventoryTransaction.objects.count(),
+                "workflow_requests": WorkflowRequest.objects.count(),
             },
             first_capability_counts,
         )
@@ -232,7 +232,7 @@ class DemoSeedProvenanceIntegrationTests(TestCase):
 
         self.assertEqual(SampleRelationship.objects.count(), 4)
         self.assertEqual(SampleCustodyEvent.objects.count(), 4)
-        self.assertEqual(InventoryReservation.objects.filter(lot__lot_code="GIBSON-DEMO-2026-01").count(), 2)
+        self.assertEqual(InventoryReservation.objects.filter(lot__lot_code="GIBSON-DEMO-2026-01").count(), 3)
 
         template = PipelineTemplate.objects.get(code="DEMO_PARALLEL_PLASMID")
         self.assertEqual(PipelineTemplateStep.objects.filter(template=template).count(), 5)
@@ -259,7 +259,7 @@ class DemoSeedProvenanceIntegrationTests(TestCase):
         self.assertEqual(ConstructAssemblyPlan.objects.count(), 1)
 
         self.assertEqual(EntityLink.objects.count(), 4)
-        self.assertEqual(SharedAttachment.objects.count(), 1)
+        self.assertEqual(SharedAttachment.objects.count(), 2)
         self.assertTrue(MigrationProfile.objects.filter(name="SISBI Comprehensive Migration Demo").exists())
         self.assertTrue(MigrationMappingTemplate.objects.filter(name="SISBI Full Migration Template").exists())
         self.assertEqual(MigrationJob.objects.filter(profile__name="SISBI Comprehensive Migration Demo").count(), 2)
@@ -271,3 +271,20 @@ class DemoSeedProvenanceIntegrationTests(TestCase):
         self.assertTrue(AssistantAction.objects.filter(status=AssistantAction.STATUS_PROPOSED).exists())
         self.assertTrue(NotificationSubscription.objects.filter(active=True).exists())
         self.assertTrue(SystemSettings.load().registry_enabled)
+        self.assertTrue(SystemSettings.load().notebook_enabled)
+        experiment = Experiment.objects.get(title="pOpenLIMS-GFP verification — run 2026-08")
+        self.assertEqual(experiment.status, Experiment.STATUS_LOCKED)
+        self.assertEqual(experiment.revisions.count(), 1)
+        self.assertEqual(experiment.current_revision.blocks.count(), 10)
+        self.assertGreaterEqual(experiment.current_revision.links.count(), 5)
+        self.assertTrue(ExperimentReview.objects.filter(experiment=experiment, decision="APPROVED").exists())
+        self.assertTrue(ExperimentComment.objects.filter(experiment=experiment, revision=experiment.current_revision).exists())
+        self.assertEqual(BarcodeIdentity.objects.filter(active=True).count(), 5)
+        self.assertEqual(InventoryPlacement.objects.filter(container__container_id="DEMO-REQUEST-PLATE-01").count(), 2)
+        self.assertTrue(InventoryTransaction.objects.filter(lot__lot_code="GIBSON-DEMO-2026-01").exists())
+        self.assertTrue(InventoryCycleCount.objects.filter(name="Monthly Molecular Biology Count").exists())
+        workflow_request = WorkflowRequest.objects.get(request_number="REQ-DEMO-0001")
+        self.assertEqual(workflow_request.status, WorkflowRequest.STATUS_APPROVED)
+        self.assertTrue(workflow_request.items.filter(pipeline_run__isnull=False).exists())
+        self.assertTrue(WorkflowRequestMessage.objects.filter(request=workflow_request).exists())
+        self.assertTrue(WorkflowRequestReport.objects.filter(request=workflow_request, approved=True).exists())

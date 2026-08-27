@@ -76,6 +76,25 @@ function requiredFieldSummary(fields) {
     : "None";
 }
 
+function DependencyGraph({ steps }) {
+  return (
+    <div className="d-flex flex-wrap gap-2 mt-3">
+      {steps.map((step) => (
+        <Card className="soft-card" style={{ minWidth: 170 }} key={`dag-${step.id}`}>
+          <Card.Body className="p-3">
+            <Badge bg="dark">{step.position}</Badge>
+            <strong className="ms-2">{step.display_name}</strong>
+            <div className="feed-meta mt-2">
+              Depends on {step.dependency_positions?.length ? step.dependency_positions.join(", ") : "start"}
+            </div>
+            {step.activation_condition?.result_key && <div className="feed-meta">If step {step.activation_condition.source_position} · {step.activation_condition.result_key} {step.activation_condition.operator} {String(step.activation_condition.value)}</div>}
+          </Card.Body>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 export default function WorkflowDesigner() {
   const [me, setMe] = useState(null);
   const [analyses, setAnalyses] = useState([]);
@@ -444,6 +463,7 @@ export default function WorkflowDesigner() {
               <div className="feed-item" key={template.id}>
                 <div className="toolbar-row"><div><strong>{template.code} — {template.name}</strong><div className="feed-meta">{template.default_project_code || "All projects"} · {template.default_sample_type || "All sample types"} · {template.steps.length} steps</div></div><div className="inline-actions">{template.is_default && <Badge bg="info">Default</Badge>}<Badge bg={template.active ? "success" : "secondary"}>{template.active ? "Active" : "Inactive"}</Badge><Button size="sm" variant="outline-dark" onClick={() => editPipeline(template)}>Edit</Button></div></div>
                 <div className="d-flex flex-wrap gap-2 mt-3">{template.steps.map((step) => <Badge bg="light" text="dark" key={step.id}>{step.position}. {step.display_name} ({step.analysis_code}) · after {step.dependency_positions?.length ? step.dependency_positions.join(",") : "start"}{step.requires_qc ? " · QC" : ""}{step.optional ? " · optional" : ""}{step.max_retries ? ` · ${step.max_retries} retries` : ""}</Badge>)}</div>
+                <DependencyGraph steps={template.steps} />
               </div>
             ))}
           </div>

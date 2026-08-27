@@ -28,6 +28,29 @@ def _project_visible_filter(user):
     return Q(project__members=user) | Q(project__isnull=True)
 
 
+class SharedAttachmentPermission(ProjectScopedEntityPermission):
+    """Let an authenticated target collaborator upload an attachment.
+
+    The serializer resolves the target through its module-specific write policy,
+    so requesters and explicitly assigned notebook collaborators are not forced
+    into a laboratory-wide technician role.
+    """
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        target = obj.target_object
+        return bool(
+            target
+            and user_can_access_entity(
+                request.user,
+                target,
+                write=request.method not in {"GET", "HEAD", "OPTIONS"},
+            )
+        )
+
+
 class EntityReferenceView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -126,7 +149,7 @@ class EntityLinkViewSet(viewsets.ModelViewSet):
 
 class SharedAttachmentViewSet(viewsets.ModelViewSet):
     queryset = SharedAttachment.objects.none()
-    permission_classes = [ProjectScopedEntityPermission]
+    permission_classes = [SharedAttachmentPermission]
     serializer_class = SharedAttachmentSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     http_method_names = ["get", "post", "delete", "head", "options"]

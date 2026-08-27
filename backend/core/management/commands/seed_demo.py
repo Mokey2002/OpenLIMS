@@ -1,5 +1,4 @@
 import hashlib
-import os
 from datetime import timedelta
 from decimal import Decimal
 
@@ -143,7 +142,6 @@ def create_demo_user(
     first_name,
     last_name,
     is_admin=False,
-    password=None,
 ):
     user, created = User.objects.get_or_create(
         username=username,
@@ -157,9 +155,7 @@ def create_demo_user(
     user.email = email
     user.first_name = first_name
     user.last_name = last_name
-    if password:
-        user.set_password(password)
-    elif created:
+    if created:
         user.set_unusable_password()
     user.is_staff = is_admin
     user.is_superuser = is_admin
@@ -664,21 +660,17 @@ def seed_traceability_inventory_demo(project, director, maria, rack_a, rack_b):
         lot=lot,
         project=project,
         status=InventoryReservation.STATUS_ACTIVE,
-        defaults={
-            "quantity": Decimal("75"),
-            "unit": "uL",
-            "created_by": maria,
-        },
+        quantity=Decimal("75"),
+        unit="uL",
+        defaults={"created_by": maria},
     )
     InventoryReservation.objects.get_or_create(
         lot=lot,
         project=project,
         status=InventoryReservation.STATUS_CONSUMED,
-        defaults={
-            "quantity": Decimal("25"),
-            "unit": "uL",
-            "created_by": maria,
-        },
+        quantity=Decimal("25"),
+        unit="uL",
+        defaults={"created_by": maria},
     )
 
     sample_specs = [
@@ -1632,6 +1624,334 @@ def seed_analysis_assistant_demo(project, director, maria, registry_demo):
     settings_obj.save()
     return {"alignment": alignment, "report": report, "subscription": subscription}
 
+
+def seed_notebook_inventory_requests_demo(
+    project,
+    director,
+    maria,
+    peter,
+    viewer,
+    traceability_demo,
+    registry_demo,
+    pipeline_run,
+):
+    """Seed the connected v0.27 Notebook and v0.28 operations experience."""
+    from assistant.models import SOPDocument
+    from core.models import SharedAttachment
+    from inventory.models import (
+        BarcodeIdentity,
+        InventoryAlert,
+        InventoryCycleCount,
+        InventoryCycleCountLine,
+        InventoryPlacement,
+        InventoryTransaction,
+    )
+    from inventory.services import assign_barcode, perform_inventory_operation, refresh_inventory_alerts
+    from notebook.models import (
+        Experiment,
+        ExperimentComment,
+        ExperimentReview,
+        ExperimentTemplate,
+        Notebook,
+    )
+    from notebook.services import create_revision, lock_experiment, review_experiment
+    from settings_app.models import SystemSettings
+    from workflow_requests.models import (
+        AssayRequestType,
+        RequestResourceRequirement,
+        WorkflowRequest,
+        WorkflowRequestItem,
+        WorkflowRequestMessage,
+        WorkflowRequestReport,
+    )
+    from workflow_requests.services import approve_request
+
+    site, _ = Location.objects.get_or_create(
+        code="DEMO-SITE",
+        defaults={"name": "OpenLIMS Research Campus", "kind": Location.KIND_SITE},
+    )
+    building, _ = Location.objects.get_or_create(
+        code="DEMO-BUILDING",
+        defaults={"name": "Life Sciences Building", "kind": Location.KIND_BUILDING, "parent": site},
+    )
+    laboratory, _ = Location.objects.get_or_create(
+        code="DEMO-LAB",
+        defaults={"name": "Molecular Biology Laboratory", "kind": Location.KIND_LABORATORY, "parent": building, "project": project},
+    )
+    room, _ = Location.objects.get_or_create(
+        code="DEMO-ROOM",
+        defaults={"name": "Room 210", "kind": Location.KIND_ROOM, "parent": laboratory, "project": project},
+    )
+    freezer, _ = Location.objects.get_or_create(
+        code="DEMO-FREEZER",
+        defaults={"name": "Freezer -20 C", "kind": Location.KIND_FREEZER, "parent": room, "project": project},
+    )
+    plate, _ = Container.objects.get_or_create(
+        container_id="DEMO-REQUEST-PLATE-01",
+        defaults={"kind": "plate", "location": freezer, "rows": 8, "columns": 12},
+    )
+
+    material_lot = traceability_demo["lot"]
+    physical_sample = traceability_demo["samples"]["LIN-ALIQUOT-001"]
+    request_sample = traceability_demo["samples"]["LIN-SPLIT-001"]
+    plasmid = registry_demo["records"]["plasmid"]
+    barcode_targets = [
+        (site, "LOC:DEMO-SITE"),
+        (plate, "CONTAINER:DEMO-REQUEST-PLATE-01"),
+        (physical_sample, "SAMPLE:LIN-ALIQUOT-001"),
+        (material_lot, "LOT:GIBSON-DEMO-2026-01"),
+        (plasmid, "REGISTRY:PLS-DEMO-0001"),
+    ]
+    for target, barcode in barcode_targets:
+        if not BarcodeIdentity.objects.filter(barcode=barcode).exists():
+            assign_barcode(obj=target, barcode=barcode, actor=director)
+
+    InventoryPlacement.objects.get_or_create(
+        container=plate,
+        position="A1",
+        defaults={"sample": physical_sample, "placed_by": maria},
+    )
+    InventoryPlacement.objects.get_or_create(
+        container=plate,
+        position="A2",
+        defaults={"lot": material_lot, "quantity": Decimal("25"), "unit": material_lot.unit, "placed_by": maria},
+    )
+    if not material_lot.transactions.exists():
+        perform_inventory_operation(
+            lot=material_lot,
+            operation=InventoryTransaction.OP_COUNT,
+            actor=maria,
+            reason="Seeded baseline count for the comprehensive demo",
+            amount=material_lot.quantity,
+            unit=material_lot.unit,
+            metadata={"demo": True},
+        )
+    refresh_inventory_alerts()
+    cycle_count, _ = InventoryCycleCount.objects.get_or_create(
+        name="Monthly Molecular Biology Count",
+        location=freezer,
+        defaults={"status": InventoryCycleCount.STATUS_IN_PROGRESS, "created_by": maria},
+    )
+    InventoryCycleCountLine.objects.get_or_create(
+        cycle_count=cycle_count,
+        lot=material_lot,
+        defaults={
+            "expected_quantity": material_lot.quantity,
+            "observed_quantity": material_lot.quantity,
+            "unit": material_lot.unit,
+            "note": "Seeded counted quantity awaiting director reconciliation.",
+            "counted_by": maria,
+            "counted_at": timezone.now(),
+        },
+    )
+
+    notebook, _ = Notebook.objects.get_or_create(
+        name="Alpha Molecular Biology Notebook",
+        project=project,
+        defaults={
+            "description": "Project notebook demonstrating immutable experimental provenance and review.",
+            "scope": Notebook.SCOPE_PROJECT,
+            "owner": director,
+        },
+    )
+    notebook.team_members.add(maria, peter, viewer)
+    notebook.editors.add(maria, peter)
+    notebook.commenters.add(viewer)
+    notebook.reviewers.add(director)
+    notebook.lockers.add(director)
+    template_blocks = [
+        {"block_type": "HEADING", "data": {"text": "Plasmid identity and digest verification"}},
+        {"block_type": "RICH_TEXT", "data": {"text": "Verify the registered plasmid using the approved SOP and exact reagent lot."}},
+        {"block_type": "TABLE", "data": {"rows": [["Material", "Version / lot"], ["pOpenLIMS-GFP", "Registry v2"], ["Gibson Mix", material_lot.lot_code]]}},
+        {"block_type": "CHECKLIST", "data": {"items": [{"text": "Identity confirmed", "checked": True}, {"text": "Controls passed", "checked": True}]}},
+        {"block_type": "PROTOCOL_STEP", "data": {"text": "Digest 1 ug plasmid DNA", "completed": True}},
+        {"block_type": "CALCULATION", "data": {"expression": "42.5 ng/uL * 24 uL", "result": "1020 ng"}},
+        {"block_type": "IMAGE", "data": {"caption": "Seeded gel image placeholder", "attachment": "shared attachment provenance"}},
+        {"block_type": "ATTACHMENT", "data": {"name": "instrument-output.csv", "description": "Raw instrument output represented by shared attachments"}},
+        {"block_type": "STRUCTURED_RESULT", "data": {"name": "Digest pattern", "value": "PASS", "unit": ""}},
+        {"block_type": "SEQUENCE_VIEW", "data": {"sequence_public_id": str(registry_demo["sequences"][0].public_id), "revision": registry_demo["sequences"][0].current_revision.revision}},
+    ]
+    template, _ = ExperimentTemplate.objects.get_or_create(
+        notebook=notebook,
+        name="Plasmid Verification and Sign-off",
+        defaults={
+            "description": "All Notebook v1 block types with exact linked-object provenance.",
+            "blocks": template_blocks,
+            "created_by": director,
+        },
+    )
+    experiment, _ = Experiment.objects.get_or_create(
+        notebook=notebook,
+        title="pOpenLIMS-GFP verification — run 2026-08",
+        defaults={"template": template, "created_by": maria},
+    )
+    experiment.assignees.add(maria, peter)
+    if not experiment.current_revision_id:
+        sop = SOPDocument.objects.filter(document_code="SOP-MOL-026").first()
+        sequence = registry_demo["sequences"][0]
+        links = [
+            {"entity_type": "registry_record", "public_id": str(plasmid.public_id), "relation_type": "plasmid"},
+            {"entity_type": "sample", "public_id": str(physical_sample.public_id), "relation_type": "physical_sample"},
+            {"entity_type": "inventory_lot", "public_id": str(material_lot.public_id), "relation_type": "reagent_lot"},
+            {"entity_type": "pipeline_run", "public_id": str(pipeline_run.public_id), "relation_type": "workflow_run"},
+            {"entity_type": "sequence", "public_id": str(sequence.public_id), "relation_type": "sequence_revision"},
+        ]
+        if sop:
+            links.append({"entity_type": "sop_document", "public_id": str(sop.public_id), "relation_type": "protocol"})
+        create_revision(
+            experiment=experiment,
+            actor=maria,
+            blocks=template_blocks,
+            links=links,
+            reason="Seeded completed experiment with exact provenance",
+        )
+        experiment.refresh_from_db()
+        experiment.status = Experiment.STATUS_COMPLETED
+        experiment.completed_at = timezone.now()
+        experiment.save(update_fields=["status", "completed_at", "updated_at"])
+    if experiment.status == Experiment.STATUS_COMPLETED and not experiment.reviews.filter(
+        revision=experiment.current_revision,
+        reviewer=director,
+    ).exists():
+        review_experiment(
+            experiment=experiment,
+            actor=director,
+            decision=ExperimentReview.DECISION_APPROVED,
+            comment="Reviewed against SOP-MOL-026 and linked material versions.",
+            signed_name="Dana Director",
+        )
+        experiment.refresh_from_db()
+    if experiment.status == Experiment.STATUS_REVIEWED:
+        lock_experiment(experiment=experiment, actor=director, reason="Seeded final project sign-off")
+        experiment.refresh_from_db()
+    comment, _ = ExperimentComment.objects.get_or_create(
+        experiment=experiment,
+        author=viewer,
+        body="Collaborator comment added after sign-off; the locked revision remains unchanged.",
+        defaults={"revision": experiment.current_revision, "assigned_to": maria},
+    )
+    comment.mentions.add(maria)
+
+    request_type, _ = AssayRequestType.objects.get_or_create(
+        code="DEMO_SEQUENCING",
+        defaults={
+            "name": "Plasmid sequencing",
+            "description": "Configurable internal submission form with a dependency-aware pipeline.",
+            "form_schema": {
+                "type": "object",
+                "required": ["read_length", "delivery_format"],
+                "properties": {
+                    "read_length": {"type": "integer"},
+                    "delivery_format": {"type": "string"},
+                },
+            },
+            "default_pipeline": pipeline_run.template,
+            "project": project,
+            "default_priority": WorkflowRequest.PRIORITY_HIGH,
+            "sla_hours": 72,
+            "created_by": director,
+        },
+    )
+    RequestResourceRequirement.objects.get_or_create(
+        request_type=request_type,
+        kind=RequestResourceRequirement.KIND_MATERIAL,
+        inventory_item=material_lot.item,
+        defaults={"quantity": Decimal("5"), "unit": material_lot.unit, "required": True},
+    )
+    RequestResourceRequirement.objects.get_or_create(
+        request_type=request_type,
+        kind=RequestResourceRequirement.KIND_INSTRUMENT,
+        instrument_name="MiSeq Demo Instrument",
+        defaults={"required": True},
+    )
+    RequestResourceRequirement.objects.get_or_create(
+        request_type=request_type,
+        kind=RequestResourceRequirement.KIND_PERSONNEL,
+        personnel_role="Sequencing technician",
+        defaults={"required": True},
+    )
+    workflow_request, created = WorkflowRequest.objects.get_or_create(
+        request_number="REQ-DEMO-0001",
+        defaults={
+            "request_type": request_type,
+            "project": project,
+            "requester": peter,
+            "title": "Sequence LIN-SPLIT-001 plasmid material",
+            "form_data": {"read_length": 250, "delivery_format": "FASTQ + approved PDF"},
+            "status": WorkflowRequest.STATUS_SUBMITTED,
+            "priority": WorkflowRequest.PRIORITY_HIGH,
+            "due_at": timezone.now() + timedelta(days=3),
+            "assigned_pipeline": pipeline_run.template,
+            "submitted_at": timezone.now(),
+        },
+    )
+    request_item, _ = WorkflowRequestItem.objects.get_or_create(
+        request=workflow_request,
+        sample=request_sample,
+        defaults={"notes": "Seeded selected-sample sequencing request."},
+    )
+    if created or workflow_request.status == WorkflowRequest.STATUS_SUBMITTED:
+        approve_request(
+            workflow_request=workflow_request,
+            actor=director,
+            pipeline=pipeline_run.template,
+            reason="Seeded director approval with automatic material reservation",
+            group_name="Demo sequencing plate",
+            plate=plate,
+        )
+        workflow_request.refresh_from_db()
+        request_item.refresh_from_db()
+    WorkflowRequestMessage.objects.get_or_create(
+        request=workflow_request,
+        author=maria,
+        body="Materials are reserved and the first work item is ready in the technician queue.",
+        defaults={"internal_only": False},
+    )
+    report_content = b"%PDF-1.4\n% OpenLIMS approved workflow request report\nREQ-DEMO-0001\n%%EOF\n"
+    report = WorkflowRequestReport.objects.filter(request=workflow_request, title="Approved sequencing report").first()
+    if not report:
+        report = WorkflowRequestReport.objects.create(
+            request=workflow_request,
+            title="Approved sequencing report",
+            checksum_sha256=hashlib.sha256(report_content).hexdigest(),
+            uploaded_by=maria,
+            approved=True,
+            approved_by=director,
+            approved_at=timezone.now(),
+        )
+        report.file.save("REQ-DEMO-0001-approved-report.pdf", ContentFile(report_content), save=True)
+    attachment = SharedAttachment.objects.filter(
+        target_content_type=ContentType.objects.get_for_model(workflow_request),
+        target_object_id=str(workflow_request.pk),
+        display_name="sequencing-request-brief.txt",
+    ).first()
+    if not attachment:
+        brief = b"Sequencing request brief with selected samples and requested deliverables."
+        attachment = SharedAttachment.objects.create(
+            target_content_type=ContentType.objects.get_for_model(workflow_request),
+            target_object_id=str(workflow_request.pk),
+            project=project,
+            display_name="sequencing-request-brief.txt",
+            media_type="text/plain",
+            size_bytes=len(brief),
+            sha256=hashlib.sha256(brief).hexdigest(),
+            uploaded_by=peter,
+        )
+        attachment.file.save("sequencing-request-brief.txt", ContentFile(brief), save=True)
+
+    settings_obj = SystemSettings.load()
+    settings_obj.notebook_enabled = True
+    settings_obj.updated_by = director
+    settings_obj.save(update_fields=["notebook_enabled", "updated_by", "updated_at"])
+    return {
+        "notebook": notebook,
+        "experiment": experiment,
+        "request": workflow_request,
+        "cycle_count": cycle_count,
+        "barcodes": BarcodeIdentity.objects.filter(barcode__in=[barcode for _target, barcode in barcode_targets]).count(),
+        "alerts": InventoryAlert.objects.filter(status=InventoryAlert.STATUS_OPEN).count(),
+    }
+
 class Command(BaseCommand):
     help = "Seed OpenLIMS with realistic demo data"
 
@@ -1649,7 +1969,6 @@ class Command(BaseCommand):
         # --------------------------------------------------
         # Users
         # --------------------------------------------------
-        configured_login_password = os.environ.get("OPENLIMS_DEMO_PASSWORD") or None
         director = create_demo_user(
             "director",
             admin_group,
@@ -1657,7 +1976,6 @@ class Command(BaseCommand):
             first_name="Dana",
             last_name="Director",
             is_admin=True,
-            password=configured_login_password,
         )
 
         peter = create_demo_user(
@@ -1666,7 +1984,6 @@ class Command(BaseCommand):
             email="peter.tech@example.com",
             first_name="Peter",
             last_name="Nguyen",
-            password=configured_login_password,
         )
 
         maria = create_demo_user(
@@ -1675,7 +1992,6 @@ class Command(BaseCommand):
             email="maria.tech@example.com",
             first_name="Maria",
             last_name="Chen",
-            password=configured_login_password,
         )
         maria.groups.add(qc_reviewer_group)
 
@@ -1685,7 +2001,6 @@ class Command(BaseCommand):
             email="michael.tech@example.com",
             first_name="Michael",
             last_name="Patel",
-            password=configured_login_password,
         )
 
         viewer = create_demo_user(
@@ -1694,7 +2009,6 @@ class Command(BaseCommand):
             email="viewer@example.com",
             first_name="Vivian",
             last_name="Reviewer",
-            password=configured_login_password,
         )
 
         # --------------------------------------------------
@@ -2893,6 +3207,16 @@ class Command(BaseCommand):
             maria=maria,
             registry_demo=registry_demo,
         )
+        seed_notebook_inventory_requests_demo(
+            project=project_alpha,
+            director=director,
+            maria=maria,
+            peter=peter,
+            viewer=viewer,
+            traceability_demo=traceability_demo,
+            registry_demo=registry_demo,
+            pipeline_run=pipeline_run,
+        )
 
         # --------------------------------------------------
         # Demo project feed posts
@@ -3087,6 +3411,17 @@ class Command(BaseCommand):
                 "link": "/registry",
             },
         )
+        Notification.objects.update_or_create(
+            user=director,
+            title="Notebook and workflow request demos ready",
+            defaults={
+                "message": (
+                    "A signed and locked Notebook experiment, Inventory v2 ledger, "
+                    "barcodes, cycle count, and approved sequencing request are ready."
+                ),
+                "link": "/notebook",
+            },
+        )
 
         self.stdout.write(self.style.SUCCESS("Demo data seeded successfully."))
         self.stdout.write("")
@@ -3104,12 +3439,10 @@ class Command(BaseCommand):
         self.stdout.write("  Inventory hierarchy, reservations, shared links, and attachments")
         self.stdout.write("  SISBI migration mapping, reconciliation, and rollback")
         self.stdout.write("  BLAST, alignment, reports, notifications, and assistant confirmation")
-        if configured_login_password:
-            self.stdout.write(
-                "Passwords were set from OPENLIMS_DEMO_PASSWORD; the value is not displayed."
-            )
-        else:
-            self.stdout.write(
-                "Existing passwords were preserved. New demo users cannot sign in until "
-                "OPENLIMS_DEMO_PASSWORD is set and seed_demo is run again."
-            )
+        self.stdout.write("  Notebook templates, autosave revisions, comments, review, lock, and PDF provenance")
+        self.stdout.write("  Inventory v2 barcodes, hierarchy, ledger, plate placement, alerts, and cycle counts")
+        self.stdout.write("  Workflow requests, triage, approval, material reservation, execution, and reports")
+        self.stdout.write(
+            "seed_demo does not create, require, display, or change passwords. "
+            "Existing credentials are preserved; new demo identities are non-login accounts."
+        )

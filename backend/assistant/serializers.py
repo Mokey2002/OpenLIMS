@@ -30,13 +30,13 @@ class SOPDocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = SOPDocument
         fields = [
-            "id", "document_code", "title", "version", "section", "content",
+            "id", "public_id", "document_code", "title", "version", "section", "content",
             "source_file", "status", "approved", "project", "project_code",
             "allowed_groups", "allowed_group_names",
             "effective_at", "archived_at", "uploaded_by", "uploaded_by_username",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "uploaded_by", "uploaded_by_username", "created_at", "updated_at"]
+        read_only_fields = ["id", "public_id", "uploaded_by", "uploaded_by_username", "created_at", "updated_at"]
 
 
 class NotificationSubscriptionSerializer(serializers.ModelSerializer):

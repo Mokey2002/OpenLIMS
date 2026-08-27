@@ -34,7 +34,10 @@ RESERVED_ENTITY_TYPES = frozenset(
         "work_item",
         "result",
         "registry_record",
+        "notebook",
         "experiment",
+        "sop_document",
+        "workflow_request",
         "study",
     }
 )
@@ -55,6 +58,9 @@ def _definitions():
     from samples.models import Sample
     from sequences.models import Sequence
     from registry.models import RegistryRecord
+    from notebook.models import Experiment, Notebook
+    from assistant.models import SOPDocument
+    from workflow_requests.models import WorkflowRequest
 
     return {
         "project": EntityDefinition(
@@ -79,6 +85,30 @@ def _definitions():
             lambda obj: f"{obj.registry_id} - {obj.name}",
             lambda obj: obj.project,
             owner_field="owner",
+        ),
+        "notebook": EntityDefinition(
+            Notebook,
+            lambda obj: obj.name,
+            lambda obj: obj.project,
+            owner_field="owner",
+        ),
+        "experiment": EntityDefinition(
+            Experiment,
+            lambda obj: obj.title,
+            lambda obj: obj.project,
+            owner_field="created_by",
+        ),
+        "sop_document": EntityDefinition(
+            SOPDocument,
+            lambda obj: f"{obj.document_code} v{obj.version} - {obj.title}",
+            lambda obj: obj.project,
+            owner_field="uploaded_by",
+        ),
+        "workflow_request": EntityDefinition(
+            WorkflowRequest,
+            lambda obj: f"{obj.request_number} - {obj.title}",
+            lambda obj: obj.project,
+            owner_field="requester",
         ),
         "location": EntityDefinition(
             Location,
@@ -171,6 +201,24 @@ def get_accessible_entity_queryset(entity_type, user, *, write=False):
         return queryset.none()
     if is_admin(user):
         return queryset
+    # Notebook collaborators and workflow requesters can have explicit write
+    # capabilities without holding a laboratory-wide technician role. Resolve
+    # those module policies before applying the common technician write gate.
+    if normalized in {"notebook", "experiment"}:
+        from notebook.permissions import notebooks_for_user
+
+        action = "write" if write else "read"
+        allowed_notebooks = notebooks_for_user(user, action)
+        if normalized == "notebook":
+            return queryset.filter(pk__in=allowed_notebooks)
+        return queryset.filter(notebook__in=allowed_notebooks)
+    if normalized == "workflow_request":
+        from workflow_requests.permissions import workflow_requests_for_user
+
+        allowed = workflow_requests_for_user(user)
+        if write:
+            allowed = allowed.filter(requester=user)
+        return queryset.filter(pk__in=allowed)
     if write and not is_tech(user):
         return queryset.none()
     if definition.global_scope:
@@ -195,6 +243,17 @@ def get_accessible_entity_queryset(entity_type, user, *, write=False):
         from registry.services import registry_records_for_user
 
         return registry_records_for_user(user, write=write)
+    if normalized == "sop_document":
+        from django.db.models import Q
+
+        if write:
+            return queryset.filter(Q(project__members=user) | Q(uploaded_by=user)).distinct()
+        return queryset.filter(
+            Q(project__isnull=True)
+            | Q(project__members=user)
+            | Q(allowed_groups__in=user.groups.all())
+            | Q(uploaded_by=user)
+        ).distinct()
 
     return get_project_access_queryset(
         queryset,
@@ -209,11 +268,22 @@ def user_can_access_entity(user, obj, *, write=False):
         return False
     if is_admin(user):
         return True
-    if write and not is_tech(user):
-        return False
 
     entity_type = get_entity_type_for_object(obj)
     definition = _definitions()[entity_type]
+    if entity_type in {"notebook", "experiment"}:
+        from notebook.permissions import user_can_notebook
+
+        notebook = obj if entity_type == "notebook" else obj.notebook
+        return user_can_notebook(user, notebook, "write" if write else "read")
+    if entity_type == "workflow_request":
+        from workflow_requests.permissions import workflow_requests_for_user, user_can_operate_request
+
+        if write:
+            return obj.requester_id == user.pk or user_can_operate_request(user, obj)
+        return workflow_requests_for_user(user).filter(pk=obj.pk).exists()
+    if write and not is_tech(user):
+        return False
     if definition.global_scope:
         return True
     if entity_type == "sample":
@@ -227,6 +297,8 @@ def user_can_access_entity(user, obj, *, write=False):
         if write:
             return user_can_write_record(user, obj)
         return registry_records_for_user(user).filter(pk=obj.pk).exists()
+    if entity_type == "sop_document":
+        return get_accessible_entity_queryset("sop_document", user, write=write).filter(pk=obj.pk).exists()
 
     project = definition.project(obj)
     if project is not None:

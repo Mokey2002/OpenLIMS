@@ -2,6 +2,7 @@ import csv
 import io
 
 from celery import shared_task
+from django.db import transaction
 
 from core.realtime import broadcast_job_update
 from events.models import Event
@@ -293,17 +294,19 @@ def process_rows(job, rows, actor=None):
 
 @shared_task
 def process_import_job(job_id):
-    job = ImportJob.objects.select_related(
-        "instrument",
-        "project",
-        "uploaded_by",
-    ).get(id=job_id)
-
-    try:
+    # Claim the job once. Celery redelivery, eager test execution, or a delayed
+    # duplicate message must not create a second work item/result set.
+    with transaction.atomic():
+        # Lock only the import job. Some related records are nullable, and
+        # PostgreSQL rejects SELECT FOR UPDATE across those outer joins.
+        job = ImportJob.objects.select_for_update().get(id=job_id)
+        if job.status in {"RUNNING", "COMPLETED"}:
+            return job.summary
         job.status = "RUNNING"
         job.progress_message = "Reading CSV file"
         job.save(update_fields=["status", "progress_message"])
 
+    try:
         broadcast_import_job_update(
             job,
             f"Import running: {job.instrument.code}",
@@ -377,6 +380,8 @@ def process_import_job(job_id):
                 message=f"{job.instrument.code} import finished. {summary['results_created']} results created.",
                 link="/imports",
             )
+
+        return summary
 
     except Exception as e:
         job.status = "FAILED"
