@@ -205,3 +205,44 @@ class NotebookV1Tests(TestCase):
         self.assertEqual(clone.status_code, 201, clone.data)
         self.assertNotEqual(clone.data["public_id"], experiment.data["public_id"])
         self.assertEqual(clone.data["current_revision_detail"]["blocks"][0]["data"]["text"], "Original")
+
+    def test_owner_can_list_and_edit_personal_notebook_and_load_collaborators(self):
+        scientist = self.client_for(self.scientist)
+        created = scientist.post(
+            "/api/notebooks/",
+            {"name": "Maria's notebook", "description": "Initial", "scope": "USER"},
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201, created.data)
+
+        notebooks = scientist.get("/api/notebooks/")
+        self.assertEqual(notebooks.status_code, 200, notebooks.data)
+        self.assertIn(created.data["public_id"], [row["public_id"] for row in notebooks.data["results"]])
+        owned = next(row for row in notebooks.data["results"] if row["public_id"] == created.data["public_id"])
+        self.assertTrue(owned["permissions"]["read"])
+        self.assertTrue(owned["permissions"]["write"])
+
+        updated = scientist.patch(
+            f"/api/notebooks/{created.data['id']}/",
+            {
+                "name": "Maria's edited notebook",
+                "description": "Editable metadata",
+                "scope": "TEAM",
+                "team_members": [self.collaborator.pk],
+                "readers": [self.reviewer.pk],
+            },
+            format="json",
+        )
+        self.assertEqual(updated.status_code, 200, updated.data)
+        self.assertEqual(updated.data["name"], "Maria's edited notebook")
+        self.assertEqual(updated.data["description"], "Editable metadata")
+
+        collaborator = self.client_for(self.collaborator)
+        visible = collaborator.get("/api/notebooks/")
+        self.assertEqual(visible.status_code, 200, visible.data)
+        self.assertIn(updated.data["public_id"], [row["public_id"] for row in visible.data["results"]])
+
+        directory = scientist.get("/api/notebooks/collaborators/")
+        self.assertEqual(directory.status_code, 200, directory.data)
+        self.assertIn(self.collaborator.username, [row["username"] for row in directory.data])
+        self.assertNotIn("email", directory.data[0])
