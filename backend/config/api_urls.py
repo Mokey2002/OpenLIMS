@@ -8,10 +8,16 @@ from samples.views import (
     SingleSampleAttachmentViewSet,
 )
 from inventory.views import (
+    BarcodeIdentityViewSet,
     ContainerViewSet,
+    InventoryAlertViewSet,
+    InventoryCycleCountLineViewSet,
+    InventoryCycleCountViewSet,
     InventoryItemViewSet,
     InventoryLotViewSet,
+    InventoryPlacementViewSet,
     InventoryReservationViewSet,
+    InventoryTransactionViewSet,
     LocationViewSet,
 )
 from events.views import EventViewSet
@@ -72,6 +78,22 @@ from pipelines.views import (
     PipelineTemplateViewSet,
     ProcedureDefinitionViewSet,
 )
+from notebook.views import (
+    ExperimentCommentViewSet,
+    ExperimentRevisionViewSet,
+    ExperimentTemplateViewSet,
+    ExperimentViewSet,
+    NotebookViewSet,
+)
+from workflow_requests.views import (
+    AssayRequestTypeViewSet,
+    RequestResourceRequirementViewSet,
+    WorkflowRequestItemViewSet,
+    WorkflowRequestMessageViewSet,
+    WorkflowRequestReportViewSet,
+    WorkflowRequestViewSet,
+    WorkflowRunGroupViewSet,
+)
 
 router = DefaultRouter()
 router.register(r"samples", SampleViewSet, basename="sample")
@@ -87,6 +109,12 @@ router.register(
     InventoryReservationViewSet,
     basename="inventory-reservation",
 )
+router.register(r"inventory-barcodes", BarcodeIdentityViewSet, basename="inventory-barcode")
+router.register(r"inventory-placements", InventoryPlacementViewSet, basename="inventory-placement")
+router.register(r"inventory-transactions", InventoryTransactionViewSet, basename="inventory-transaction")
+router.register(r"inventory-alerts", InventoryAlertViewSet, basename="inventory-alert")
+router.register(r"inventory-cycle-counts", InventoryCycleCountViewSet, basename="inventory-cycle-count")
+router.register(r"inventory-cycle-count-lines", InventoryCycleCountLineViewSet, basename="inventory-cycle-count-line")
 router.register(r"events", EventViewSet, basename="event")
 router.register(r"field-definitions", FieldDefinitionViewSet, basename="field-definition")
 router.register(r"field-values", FieldValueViewSet, basename="field-value")
@@ -148,6 +176,18 @@ router.register(r"analysis-definitions", AnalysisDefinitionViewSet, basename="an
 router.register(r"procedure-definitions", ProcedureDefinitionViewSet, basename="procedure-definition")
 router.register(r"pipeline-templates", PipelineTemplateViewSet, basename="pipeline-template")
 router.register(r"pipeline-runs", PipelineRunViewSet, basename="pipeline-run")
+router.register(r"notebooks", NotebookViewSet, basename="notebook")
+router.register(r"experiment-templates", ExperimentTemplateViewSet, basename="experiment-template")
+router.register(r"experiments", ExperimentViewSet, basename="experiment")
+router.register(r"experiment-revisions", ExperimentRevisionViewSet, basename="experiment-revision")
+router.register(r"experiment-comments", ExperimentCommentViewSet, basename="experiment-comment")
+router.register(r"assay-request-types", AssayRequestTypeViewSet, basename="assay-request-type")
+router.register(r"request-resource-requirements", RequestResourceRequirementViewSet, basename="request-resource-requirement")
+router.register(r"workflow-requests", WorkflowRequestViewSet, basename="workflow-request")
+router.register(r"workflow-request-items", WorkflowRequestItemViewSet, basename="workflow-request-item")
+router.register(r"workflow-request-messages", WorkflowRequestMessageViewSet, basename="workflow-request-message")
+router.register(r"workflow-request-run-groups", WorkflowRunGroupViewSet, basename="workflow-request-run-group")
+router.register(r"workflow-request-reports", WorkflowRequestReportViewSet, basename="workflow-request-report")
 router.register(r"entity-links", EntityLinkViewSet, basename="entity-link")
 router.register(
     r"shared-attachments",

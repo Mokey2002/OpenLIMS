@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.26.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.28.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,13 +25,34 @@
 
 ## Overview
 
-**OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, inventory storage, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
+**OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.26.0 — Registry and Molecular Biology v2`
+**Current release:** `v0.28.0 — Inventory v2 and Workflow Requests v1`
+
+### v0.28.0 highlights
+
+- Site-to-well inventory hierarchies, generic barcodes, plate maps, and well-level sample or reagent placement
+- Scan-based receive, move, transfer, count, consume, adjust, quarantine, dispose, and return operations
+- Immutable quantity ledger with actor, reason, units, before/after values, and work/experiment/request provenance
+- Reagent/vendor/lot/cost/storage metadata, chemical safety data, SDS/COA files, and disposal guidance
+- Expiration, low-stock, reorder, and reservation alerts plus cycle-count reconciliation
+- Configurable internal assay request forms, triage, approval/rejection/cancellation, priority, due dates, and SLAs
+- Dependency-aware pipeline assignment, batch/plate run groups, resource requirements, and automatic material reservations
+- Requester-visible execution, QC, results, messages, attachments, and approved reports
+
+### v0.27.0 highlights
+
+- User-, team-, and project-scoped notebooks with granular read, write, comment, review, and lock permissions
+- Experiment templates and clone-template/clone-experiment workflows
+- Rich block entries for text, headings, tables, checklists, protocols, calculations, media, structured results, and sequences
+- Immutable experiment revisions with autosave, restore, exact linked-object version snapshots, and before/after audit details
+- Comments, mentions, assignments, internal sharing, review, sign-off, and immutable locking
+- Provenance-rich PDF export with authors, reviewers, timestamps, linked records, versions, and revision history
+- Regulated electronic-signature hardening remains scheduled for v1.0
 
 ### v0.26.0 highlights
 
@@ -102,7 +123,9 @@ directly from the repository owner.
 | **Pipelines** | Dependency graphs, parallel and conditional steps, optional work, controlled retries, project/sample-type defaults, assignment by sample/batch/project, failure blocking, QC gates |
 | **Analyses & procedures** | Admin-configurable analysis types, required result schemas, versioned procedures, SOP links, expected duration |
 | **Projects** | Project workspaces, project-scoped visibility, membership, cross-project sample linking, unified sample-to-report workflow view |
-| **Inventory** | Locations, containers, sample placement |
+| **Notebook** | Scoped collaborative notebooks, block experiments, immutable revisions, comments, assignments, review/sign-off, locking, cloning, and provenance-rich PDF export |
+| **Inventory** | Site-to-well location hierarchy, generic barcodes, plate maps, reagent/lot metadata, immutable scan ledger, reservations, alerts, and cycle-count reconciliation |
+| **Workflow Requests** | Configurable internal assay forms, triage/approval, SLAs, pipeline assignment, resource reservation, batch/plate grouping, requester messages, execution status, and approved reports |
 | **Imports** | Instrument CSV imports, flexible header detection, direct instrument/API ingestion |
 | **Migration** | Legacy CSV migration profiles, reusable field mappings, preview/dry-run, queued imports, row review |
 | **External IDs** | Preserve legacy sample IDs and aliases from older systems |
@@ -190,18 +213,23 @@ and handling reason. Disposal clears physical custody and archives the sample.
 
 ### Inventory
 
-OpenLIMS supports basic storage organization:
+OpenLIMS models storage from a physical site down to an individual well:
 
 ```text
-Location → Container → Sample
+Site → Building → Laboratory → Room → Freezer → Shelf → Rack → Box → Well
 ```
 
-Example:
+Locations, containers, samples, reagent lots, and registered materials can have
+generic barcode identities. Scanned operations create immutable transactions
+for receive, move, transfer, count, consume, adjust, quarantine, disposal, and
+return. Every quantity transaction records the actor, reason, unit, before and
+after values, and linked experiment, request, or work item when supplied.
 
-```text
-Freezer A → BOX-A1 → S-ALPHA-001
-Fridge B  → BOX-B1 → S-BETA-001
-```
+Inventory items and lots retain vendor, catalog, manufacturer, received/opened
+and expiration dates, cost, storage conditions, chemical identity, hazards,
+GHS classifications, SDS/COA files, and disposal guidance. Plate maps support
+well-level placement, while reservations, expiration/reorder alerts, cycle
+counts, and reconciliation keep available stock auditable.
 
 ---
 
@@ -322,8 +350,8 @@ The attention summary is permission-filtered and checks samples that have
 remained in an active status for more than three days, missing sample
 information, QC review states, aged open work items, failed instrument
 imports, failed BLAST and alignment jobs, and admin-only system health
-warnings. Inventory quantity and expiry alerts remain unavailable until those
-values are represented in the inventory schema.
+warnings. Inventory quantity, reservation, reorder, and expiry alerts are also
+included when they need attention.
 
 ### Assistant Modes
 
@@ -607,15 +635,20 @@ docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.p
 
 The command is idempotent and seeds connected demonstrations for projects,
 samples, batches, custom metadata, lineage, barcode custody, inventory,
-reservations, workflows, results, QC, instrument imports, migration previews and
-rollback, Registry records, Molecular Biology revisions and assembly plans,
-BLAST, alignments, mass spectrometry, reports, notifications, audit history,
-shared links and attachments, and assistant confirmations. Set
-`OPENLIMS_DEMO_PASSWORD` before running it to enable sign-in for the demo users;
-otherwise newly created demo accounts have unusable passwords.
+reservations, scan transactions, plate maps, cycle counts, workflow requests,
+notebooks and signed experiments, workflows, results, QC, instrument imports,
+migration previews and rollback, Registry records, Molecular Biology revisions
+and assembly plans, BLAST, alignments, mass spectrometry, reports,
+notifications, audit history, shared links and attachments, and assistant
+confirmations.
+The seeder does not create, require, display, or change passwords. Existing
+account credentials are preserved, while newly created demo identities are
+non-login accounts used for realistic ownership, assignment, QC, and audit
+history. Sign in with an existing OpenLIMS administrator account to explore the
+seeded data.
 
-The Registry feature flag is enabled for the comprehensive demo. Notebook,
-Studies, and Insight remain disabled because those modules are still under
+The Registry and Notebook feature flags are enabled for the comprehensive demo.
+Studies and Insight remain disabled because those modules are still under
 development.
 
 ### 6. Open the app
@@ -780,6 +813,9 @@ OpenLIMS is a production-style LIMS prototype with many production-shaped patter
 - JWT authentication
 - Role-based permissions
 - Project-scoped access control
+- Collaborative experiment notebooks and immutable revisions
+- Inventory transaction ledger and cycle-count reconciliation
+- Internal workflow request intake and resource reservation
 - Cross-project sample linking
 - Data migration toolkit
 - External sample IDs and aliases

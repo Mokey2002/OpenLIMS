@@ -35,15 +35,23 @@ def parse_quantity(value):
 
 
 def units_compatible(source_unit, target_unit):
-    source = UNIT_FACTORS.get(normalize_unit(source_unit))
-    target = UNIT_FACTORS.get(normalize_unit(target_unit))
+    normalized_source = normalize_unit(source_unit)
+    normalized_target = normalize_unit(target_unit)
+    if normalized_source and normalized_source == normalized_target:
+        return True
+    source = UNIT_FACTORS.get(normalized_source)
+    target = UNIT_FACTORS.get(normalized_target)
     return bool(source and target and source[0] == target[0])
 
 
 def convert_quantity(value, source_unit, target_unit):
     quantity = Decimal(str(value))
-    source = UNIT_FACTORS.get(normalize_unit(source_unit))
-    target = UNIT_FACTORS.get(normalize_unit(target_unit))
+    normalized_source = normalize_unit(source_unit)
+    normalized_target = normalize_unit(target_unit)
+    if normalized_source and normalized_source == normalized_target:
+        return quantity
+    source = UNIT_FACTORS.get(normalized_source)
+    target = UNIT_FACTORS.get(normalized_target)
     if not source or not target or source[0] != target[0]:
         raise UnitConversionError(
             f"Units {source_unit!r} and {target_unit!r} are not compatible."

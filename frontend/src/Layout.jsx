@@ -275,6 +275,9 @@ export default function Layout() {
                 {featureFlags.registry && (
                   <DropdownItemLink to="/registry">Biological Registry</DropdownItemLink>
                 )}
+                {featureFlags.notebook && (
+                  <DropdownItemLink to="/notebook">Laboratory Notebook</DropdownItemLink>
+                )}
               </NavDropdown>
 
               <NavDropdown title="Analysis" id="analysis-nav">
@@ -302,6 +305,7 @@ export default function Layout() {
                 <DropdownItemLink to="/batches">Sample Batches</DropdownItemLink>
                 <DropdownItemLink to="/qc-review">Result QC</DropdownItemLink>
                 <DropdownItemLink to="/work-queue">Work Queue</DropdownItemLink>
+                <DropdownItemLink to="/workflow-requests">Workflow Requests</DropdownItemLink>
                 <DropdownItemLink to="/labels">Barcode Labels</DropdownItemLink>
 
                 <DropdownItemLink to="/events">Audit Events</DropdownItemLink>

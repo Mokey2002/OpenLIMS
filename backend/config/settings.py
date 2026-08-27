@@ -40,6 +40,15 @@ CHANNEL_LAYERS = {
         },
     },
 }
+if os.getenv("CHANNEL_LAYERS_BACKEND", "").lower() == "inmemory":
+    CHANNEL_LAYERS = {
+        "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
+    }
+
+CELERY_TASK_ALWAYS_EAGER = os.getenv(
+    "CELERY_TASK_ALWAYS_EAGER", "false"
+).lower() in {"1", "true", "yes", "on"}
+CELERY_TASK_EAGER_PROPAGATES = CELERY_TASK_ALWAYS_EAGER
 
 DEBUG = env.bool("DJANGO_DEBUG", default=True)
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="change-me")
@@ -57,6 +66,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'samples',
+    'notebook',
     'inventory',
     'events',
     'rest_framework',
@@ -76,6 +86,7 @@ INSTALLED_APPS = [
     'assistant',
     'pipelines',
     'registry',
+    'workflow_requests',
     'drf_spectacular',
 ]
 REST_FRAMEWORK = {

@@ -38,6 +38,8 @@ import Investigations from "./pages/Investigations";
 import WorkflowDesigner from "./pages/WorkflowDesigner";
 import Traceability from "./pages/Traceability";
 import Registry from "./pages/Registry";
+import NotebookPage from "./pages/Notebook";
+import WorkflowRequests from "./pages/WorkflowRequests";
 
 function RequireAuth({ children }) {
   return isLoggedIn() ? children : <Navigate to="/login" replace />;
@@ -70,6 +72,7 @@ export default function App() {
           <Route path="projects/:id" element={<ProjectDetail />} />
           <Route path="sequences" element={<Sequences />} />
           <Route path="registry" element={<Registry />} />
+          <Route path="notebook" element={<NotebookPage />} />
           <Route path="alignments" element={<Alignments />} />
           <Route path="reports" element={<Reports />} />
           <Route path="system-status" element={<SystemStatus />} />
@@ -83,6 +86,7 @@ export default function App() {
           <Route path="users" element={<Users />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="workflow-designer" element={<WorkflowDesigner />} />
+          <Route path="workflow-requests" element={<WorkflowRequests />} />
           <Route path="imports" element={<Imports />} />
           <Route path="data-migration" element={<DataMigration />} />
           <Route path="data-migration/jobs/:id" element={<MigrationJobDetail />} />

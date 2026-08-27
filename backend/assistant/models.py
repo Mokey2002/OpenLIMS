@@ -5,6 +5,8 @@ from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import Group
 
+from core.models import PublicIDModel
+
 
 class AssistantAction(models.Model):
     ACTION_RUN_BLAST = "RUN_BLAST"
@@ -163,7 +165,7 @@ class BarcodeLabel(models.Model):
         ]
 
 
-class SOPDocument(models.Model):
+class SOPDocument(PublicIDModel):
     STATUS_CURRENT = "CURRENT"
     STATUS_ARCHIVED = "ARCHIVED"
     STATUS_CHOICES = [
