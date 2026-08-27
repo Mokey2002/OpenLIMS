@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, Row, Spinner, Table } from "react-bootstrap";
-import { apiDownload, apiGet, apiGetAll, apiPost } from "../api";
-import { isAdmin } from "../authz";
+import { apiDownload, apiGet, apiGetAll, apiPatch, apiPost } from "../api";
 
 const defaultBlocks = [
   { block_type: "HEADING", data: { text: "Experiment objective" } },
@@ -23,6 +22,21 @@ function statusColor(status) {
   return { DRAFT: "secondary", IN_PROGRESS: "primary", COMPLETED: "warning", REVIEWED: "success", LOCKED: "dark" }[status] || "secondary";
 }
 
+function notebookValues(notebook) {
+  return {
+    name: notebook?.name || "",
+    description: notebook?.description || "",
+    scope: notebook?.scope || "USER",
+    project: notebook?.project ? String(notebook.project) : "",
+    team_members: notebook?.team_members || [],
+    readers: notebook?.readers || [],
+    editors: notebook?.editors || [],
+    commenters: notebook?.commenters || [],
+    reviewers: notebook?.reviewers || [],
+    lockers: notebook?.lockers || [],
+  };
+}
+
 export default function NotebookPage() {
   const [me, setMe] = useState(null);
   const [notebooks, setNotebooks] = useState([]);
@@ -30,6 +44,8 @@ export default function NotebookPage() {
   const [experiments, setExperiments] = useState([]);
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
+  const [selectedNotebookId, setSelectedNotebookId] = useState(null);
+  const [notebookEditForm, setNotebookEditForm] = useState(null);
   const [selected, setSelected] = useState(null);
   const [blocks, setBlocks] = useState([]);
   const [links, setLinks] = useState([]);
@@ -38,23 +54,27 @@ export default function NotebookPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [saveState, setSaveState] = useState("");
-  const [notebookForm, setNotebookForm] = useState({ name: "", scope: "PROJECT", project: "" });
+  const [notebookForm, setNotebookForm] = useState({ name: "", description: "", scope: "PROJECT", project: "" });
   const [templateForm, setTemplateForm] = useState({ notebook: "", name: "", description: "" });
   const [experimentForm, setExperimentForm] = useState({ template: "", title: "" });
   const [linkForm, setLinkForm] = useState({ entity_type: "registry_record", public_id: "", relation_type: "used" });
   const [comment, setComment] = useState("");
   const autosaveTimer = useRef(null);
 
-  async function load(selectId = null) {
+  async function load(selectId = null, selectNotebookId = null) {
     setError("");
     try {
-      const [meData, notebookRows, templateRows, experimentRows, projectRows, userRows, registryRows, sampleRows, lotRows, runRows, workRows, resultRows, sopRows, sequenceRows] = await Promise.all([
+      const [meData, notebookRows, templateRows, experimentRows, projectRows, userRows] = await Promise.all([
         apiGet("/api/me/"), apiGetAll("/api/notebooks/"), apiGetAll("/api/experiment-templates/"),
-        apiGetAll("/api/experiments/"), apiGetAll("/api/projects/"), apiGetAll("/api/users/"),
+        apiGetAll("/api/experiments/"), apiGetAll("/api/projects/"), apiGetAll("/api/notebooks/collaborators/"),
+      ]);
+      const targetRequests = await Promise.allSettled([
         apiGetAll("/api/registry-records/"), apiGetAll("/api/samples/"), apiGetAll("/api/inventory-lots/"),
         apiGetAll("/api/pipeline-runs/"), apiGetAll("/api/work-items/"), apiGetAll("/api/results/"),
         apiGetAll("/api/sop-documents/"), apiGetAll("/api/sequences/"),
       ]);
+      const targetRows = targetRequests.map((result) => result.status === "fulfilled" ? result.value : []);
+      const [registryRows, sampleRows, lotRows, runRows, workRows, resultRows, sopRows, sequenceRows] = targetRows;
       setMe(meData);
       setNotebooks(notebookRows);
       setTemplates(templateRows);
@@ -66,15 +86,34 @@ export default function NotebookPage() {
         pipeline_run: runRows, work_item: workRows, result: resultRows,
         sop_document: sopRows, sequence: sequenceRows,
       });
-      const target = experimentRows.find((row) => String(row.id) === String(selectId || selected?.id)) || experimentRows[0] || null;
+      const notebookId = selectNotebookId || selectedNotebookId;
+      const targetNotebook = notebookRows.find((row) => String(row.id) === String(notebookId)) || notebookRows[0] || null;
+      setSelectedNotebookId(targetNotebook?.id || null);
+      setNotebookEditForm(targetNotebook ? notebookValues(targetNotebook) : null);
+      const notebookExperiments = targetNotebook ? experimentRows.filter((row) => String(row.notebook) === String(targetNotebook.id)) : [];
+      const target = notebookExperiments.find((row) => String(row.id) === String(selectId || selected?.id)) || notebookExperiments[0] || null;
       setSelected(target);
       setBlocks((target?.current_revision_detail?.blocks || []).map((block) => ({ block_type: block.block_type, data: block.data })));
       setLinks((target?.current_revision_detail?.links || []).map((link) => ({ entity_type: link.entity_type, public_id: link.entity_public_id, relation_type: link.relation_type, label: link.label })));
-      if (!templateForm.notebook && notebookRows[0]) setTemplateForm((current) => ({ ...current, notebook: String(notebookRows[0].id) }));
+      if (targetNotebook?.permissions?.write) setTemplateForm((current) => ({ ...current, notebook: String(targetNotebook.id) }));
     } catch (requestError) {
       setError(requestError.message || String(requestError));
     } finally {
       setLoading(false);
+    }
+  }
+
+  function selectNotebook(notebook) {
+    clearTimeout(autosaveTimer.current);
+    setSelectedNotebookId(notebook.id);
+    setNotebookEditForm(notebookValues(notebook));
+    if (notebook.permissions.write) setTemplateForm((current) => ({ ...current, notebook: String(notebook.id) }));
+    const firstExperiment = experiments.find((row) => String(row.notebook) === String(notebook.id)) || null;
+    if (firstExperiment) selectExperiment(firstExperiment);
+    else {
+      setSelected(null);
+      setBlocks([]);
+      setLinks([]);
     }
   }
 
@@ -112,10 +151,35 @@ export default function NotebookPage() {
 
   async function createNotebook(event) {
     event.preventDefault();
-    const created = await apiPost("/api/notebooks/", { ...notebookForm, project: notebookForm.scope === "PROJECT" ? Number(notebookForm.project) : null });
-    setNotebookForm({ name: "", scope: "PROJECT", project: "" });
-    setMessage(`Notebook ${created.name} created.`);
-    await load();
+    try {
+      const created = await apiPost("/api/notebooks/", { ...notebookForm, project: notebookForm.scope === "PROJECT" ? Number(notebookForm.project) : null });
+      setNotebookForm({ name: "", description: "", scope: "PROJECT", project: "" });
+      setMessage(`Notebook ${created.name} created and selected.`);
+      await load(null, created.id);
+    } catch (requestError) {
+      setError(requestError.message || String(requestError));
+    }
+  }
+
+  async function updateNotebook(event) {
+    event.preventDefault();
+    if (!selectedNotebookId || !notebookEditForm) return;
+    try {
+      const payload = {
+        ...notebookEditForm,
+        project: notebookEditForm.scope === "PROJECT" ? Number(notebookEditForm.project) : null,
+      };
+      const updated = await apiPatch(`/api/notebooks/${selectedNotebookId}/`, payload);
+      setMessage(`Notebook ${updated.name} updated.`);
+      await load(selected?.id, updated.id);
+    } catch (requestError) {
+      setError(requestError.message || String(requestError));
+    }
+  }
+
+  function updateNotebookUsers(field, event) {
+    const values = Array.from(event.target.selectedOptions, (option) => Number(option.value));
+    setNotebookEditForm((current) => ({ ...current, [field]: values }));
   }
 
   async function createTemplate(event) {
@@ -193,23 +257,60 @@ export default function NotebookPage() {
 
   const targetOptions = linkTargets[linkForm.entity_type] || [];
   const selectedNotebookTemplates = useMemo(() => templates.filter((template) => !templateForm.notebook || String(template.notebook) === String(templateForm.notebook)), [templates, templateForm.notebook]);
+  const selectedNotebook = useMemo(() => notebooks.find((row) => String(row.id) === String(selectedNotebookId)) || null, [notebooks, selectedNotebookId]);
+  const visibleExperiments = useMemo(() => experiments.filter((row) => String(row.notebook) === String(selectedNotebookId)), [experiments, selectedNotebookId]);
 
   if (loading) return <div className="d-flex gap-2 align-items-center"><Spinner size="sm" /><span>Loading Notebook...</span></div>;
 
   return (
     <div className="w-100">
-      <div className="page-header"><div><h1 className="page-title">Laboratory Notebook</h1><p className="page-subtitle">Collaborative experiments with autosave, immutable revisions, exact material provenance, review, and lock controls.</p></div><Button size="sm" variant="outline-dark" onClick={() => load(selected?.id)}>Refresh</Button></div>
+      <div className="page-header"><div><h1 className="page-title">Laboratory Notebook</h1><p className="page-subtitle">Collaborative experiments with autosave, immutable revisions, exact material provenance, review, and lock controls.</p></div><Button size="sm" variant="outline-dark" onClick={() => load(selected?.id, selectedNotebookId)}>Refresh</Button></div>
       {error && <Alert variant="danger">{error}</Alert>}
       {message && <Alert variant="success" dismissible onClose={() => setMessage("")}>{message}</Alert>}
 
       <Row className="g-4 mb-4">
-        <Col lg={4}><Card className="app-card h-100"><Card.Body><h5 className="section-title">Create notebook</h5><Form onSubmit={createNotebook}><Form.Control className="mb-2" required placeholder="Notebook name" value={notebookForm.name} onChange={(event) => setNotebookForm({ ...notebookForm, name: event.target.value })} /><Form.Select className="mb-2" value={notebookForm.scope} onChange={(event) => setNotebookForm({ ...notebookForm, scope: event.target.value })}><option value="USER">User</option><option value="TEAM">Team</option><option value="PROJECT">Project</option></Form.Select>{notebookForm.scope === "PROJECT" && <Form.Select className="mb-2" required value={notebookForm.project} onChange={(event) => setNotebookForm({ ...notebookForm, project: event.target.value })}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</Form.Select>}<Button type="submit" variant="dark">Create notebook</Button></Form></Card.Body></Card></Col>
+        <Col lg={4}>
+          <Card className="app-card h-100"><Card.Body>
+            <h5 className="section-title">Laboratory notebooks</h5>
+            <div className="feed-meta mb-3">All notebooks you own or can access.</div>
+            {notebooks.length === 0 ? <div className="empty-state">No notebooks yet.</div> : <div className="d-grid gap-2">
+              {notebooks.map((notebook) => <Button key={notebook.id} variant={String(selectedNotebookId) === String(notebook.id) ? "dark" : "outline-secondary"} className="text-start" onClick={() => selectNotebook(notebook)}>
+                <div>{notebook.name}</div>
+                <small>{notebook.scope} · {notebook.project_code || notebook.owner_username} · {notebook.experiment_count} experiments</small>
+              </Button>)}
+            </div>}
+          </Card.Body></Card>
+        </Col>
+        <Col lg={8}>
+          <Card className="app-card h-100"><Card.Body>
+            <h5 className="section-title">Notebook settings</h5>
+            {!selectedNotebook || !notebookEditForm ? <div className="empty-state">Choose or create a notebook.</div> : <Form onSubmit={updateNotebook}>
+              <Row className="g-3">
+                <Col md={7}><Form.Label>Name</Form.Label><Form.Control required value={notebookEditForm.name} disabled={!selectedNotebook.permissions.write} onChange={(event) => setNotebookEditForm({ ...notebookEditForm, name: event.target.value })} /></Col>
+                <Col md={5}><Form.Label>Scope</Form.Label><Form.Select value={notebookEditForm.scope} disabled={!selectedNotebook.permissions.write} onChange={(event) => setNotebookEditForm({ ...notebookEditForm, scope: event.target.value, project: event.target.value === "PROJECT" ? notebookEditForm.project : "" })}><option value="USER">User</option><option value="TEAM">Team</option><option value="PROJECT">Project</option></Form.Select></Col>
+                <Col xs={12}><Form.Label>Description</Form.Label><Form.Control as="textarea" rows={2} value={notebookEditForm.description} disabled={!selectedNotebook.permissions.write} onChange={(event) => setNotebookEditForm({ ...notebookEditForm, description: event.target.value })} /></Col>
+                {notebookEditForm.scope === "PROJECT" && <Col xs={12}><Form.Label>Project</Form.Label><Form.Select required value={notebookEditForm.project} disabled={!selectedNotebook.permissions.write} onChange={(event) => setNotebookEditForm({ ...notebookEditForm, project: event.target.value })}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</Form.Select></Col>}
+                {notebookEditForm.scope === "TEAM" && <Col md={6}><Form.Label>Team members</Form.Label><Form.Select multiple value={notebookEditForm.team_members.map(String)} disabled={!selectedNotebook.permissions.write} onChange={(event) => updateNotebookUsers("team_members", event)}>{users.map((user) => <option key={user.id} value={user.id}>{user.full_name || user.username}</option>)}</Form.Select></Col>}
+                <Col md={6}><Form.Label>Readers</Form.Label><Form.Select multiple value={notebookEditForm.readers.map(String)} disabled={!selectedNotebook.permissions.write} onChange={(event) => updateNotebookUsers("readers", event)}>{users.map((user) => <option key={user.id} value={user.id}>{user.full_name || user.username}</option>)}</Form.Select></Col>
+                <Col md={6}><Form.Label>Editors</Form.Label><Form.Select multiple value={notebookEditForm.editors.map(String)} disabled={!selectedNotebook.permissions.write} onChange={(event) => updateNotebookUsers("editors", event)}>{users.map((user) => <option key={user.id} value={user.id}>{user.full_name || user.username}</option>)}</Form.Select></Col>
+                <Col md={6}><Form.Label>Commenters</Form.Label><Form.Select multiple value={notebookEditForm.commenters.map(String)} disabled={!selectedNotebook.permissions.write} onChange={(event) => updateNotebookUsers("commenters", event)}>{users.map((user) => <option key={user.id} value={user.id}>{user.full_name || user.username}</option>)}</Form.Select></Col>
+                <Col md={6}><Form.Label>Reviewers</Form.Label><Form.Select multiple value={notebookEditForm.reviewers.map(String)} disabled={!selectedNotebook.permissions.write} onChange={(event) => updateNotebookUsers("reviewers", event)}>{users.map((user) => <option key={user.id} value={user.id}>{user.full_name || user.username}</option>)}</Form.Select></Col>
+                <Col md={6}><Form.Label>Lockers</Form.Label><Form.Select multiple value={notebookEditForm.lockers.map(String)} disabled={!selectedNotebook.permissions.write} onChange={(event) => updateNotebookUsers("lockers", event)}>{users.map((user) => <option key={user.id} value={user.id}>{user.full_name || user.username}</option>)}</Form.Select></Col>
+              </Row>
+              {selectedNotebook.permissions.write && <Button type="submit" variant="dark" className="mt-3">Save notebook settings</Button>}
+            </Form>}
+          </Card.Body></Card>
+        </Col>
+      </Row>
+
+      <Row className="g-4 mb-4">
+        <Col lg={4}><Card className="app-card h-100"><Card.Body><h5 className="section-title">Create notebook</h5><Form onSubmit={createNotebook}><Form.Control className="mb-2" required placeholder="Notebook name" value={notebookForm.name} onChange={(event) => setNotebookForm({ ...notebookForm, name: event.target.value })} /><Form.Control className="mb-2" as="textarea" rows={2} placeholder="Description" value={notebookForm.description} onChange={(event) => setNotebookForm({ ...notebookForm, description: event.target.value })} /><Form.Select className="mb-2" value={notebookForm.scope} onChange={(event) => setNotebookForm({ ...notebookForm, scope: event.target.value, project: event.target.value === "PROJECT" ? notebookForm.project : "" })}><option value="USER">User</option><option value="TEAM">Team</option><option value="PROJECT">Project</option></Form.Select>{notebookForm.scope === "PROJECT" && <Form.Select className="mb-2" required value={notebookForm.project} onChange={(event) => setNotebookForm({ ...notebookForm, project: event.target.value })}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</Form.Select>}<Button type="submit" variant="dark">Create notebook</Button></Form></Card.Body></Card></Col>
         <Col lg={4}><Card className="app-card h-100"><Card.Body><h5 className="section-title">Create template</h5><Form onSubmit={createTemplate}><Form.Select className="mb-2" required value={templateForm.notebook} onChange={(event) => setTemplateForm({ ...templateForm, notebook: event.target.value })}><option value="">Choose notebook</option>{notebooks.filter((row) => row.permissions.write).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</Form.Select><Form.Control className="mb-2" required placeholder="Template name" value={templateForm.name} onChange={(event) => setTemplateForm({ ...templateForm, name: event.target.value })} /><Form.Control className="mb-2" placeholder="Description" value={templateForm.description} onChange={(event) => setTemplateForm({ ...templateForm, description: event.target.value })} /><Button type="submit" variant="dark">Create block template</Button></Form></Card.Body></Card></Col>
         <Col lg={4}><Card className="app-card h-100"><Card.Body><h5 className="section-title">Clone from template</h5><Form onSubmit={createExperiment}><Form.Select className="mb-2" required value={experimentForm.template} onChange={(event) => setExperimentForm({ ...experimentForm, template: event.target.value })}><option value="">Choose template</option>{selectedNotebookTemplates.filter((row) => row.active).map((row) => <option key={row.id} value={row.id}>{row.notebook_name} — {row.name}</option>)}</Form.Select><Form.Control className="mb-2" placeholder="Experiment title" value={experimentForm.title} onChange={(event) => setExperimentForm({ ...experimentForm, title: event.target.value })} /><Button type="submit" variant="dark">Create experiment</Button></Form></Card.Body></Card></Col>
       </Row>
 
       <Row className="g-4">
-        <Col lg={4}><Card className="app-card"><Card.Body><h5 className="section-title">Experiments</h5>{experiments.length === 0 ? <div className="empty-state">No experiments yet.</div> : <div className="d-grid gap-2">{experiments.map((experiment) => <Button key={experiment.id} variant={selected?.id === experiment.id ? "dark" : "outline-secondary"} className="text-start" onClick={() => selectExperiment(experiment)}><div>{experiment.title}</div><small>{experiment.project_code || experiment.notebook_name} · r{experiment.current_revision_detail?.number || 0} · {experiment.status}</small></Button>)}</div>}</Card.Body></Card></Col>
+        <Col lg={4}><Card className="app-card"><Card.Body><h5 className="section-title">Experiments in {selectedNotebook?.name || "notebook"}</h5>{visibleExperiments.length === 0 ? <div className="empty-state">No experiments yet.</div> : <div className="d-grid gap-2">{visibleExperiments.map((experiment) => <Button key={experiment.id} variant={selected?.id === experiment.id ? "dark" : "outline-secondary"} className="text-start" onClick={() => selectExperiment(experiment)}><div>{experiment.title}</div><small>{experiment.project_code || experiment.notebook_name} · r{experiment.current_revision_detail?.number || 0} · {experiment.status}</small></Button>)}</div>}</Card.Body></Card></Col>
         <Col lg={8}>{selected ? <div className="d-grid gap-4">
           <Card className="app-card"><Card.Body><div className="toolbar-row"><div><h4 className="mb-1">{selected.title}</h4><div className="feed-meta">{selected.notebook_name} · {selected.project_code || "Private/team"} · author {selected.created_by_username}</div></div><div className="inline-actions"><Badge bg={statusColor(selected.status)}>{selected.status}</Badge>{saveState && <Badge bg={saveState === "Saved" ? "success" : "secondary"}>{saveState}</Badge>}</div></div><div className="inline-actions mt-3">{selected.permissions.write && ["DRAFT", "IN_PROGRESS"].includes(selected.status) && <Button size="sm" variant="outline-dark" onClick={() => action(`/api/experiments/${selected.id}/transition/`, { status: "COMPLETED", reason: "Experiment execution completed" })}>Complete</Button>}{selected.permissions.review && selected.status === "COMPLETED" && <><Button size="sm" variant="success" onClick={() => action(`/api/experiments/${selected.id}/review/`, { decision: "APPROVED", comment: "Reviewed in Notebook", signed_name: me?.username })}>Approve</Button><Button size="sm" variant="outline-warning" onClick={() => action(`/api/experiments/${selected.id}/review/`, { decision: "CHANGES_REQUESTED", comment: "Changes requested" })}>Request changes</Button></>}{selected.permissions.lock && selected.status === "REVIEWED" && <Button size="sm" variant="dark" onClick={() => action(`/api/experiments/${selected.id}/lock/`, { reason: "Final reviewed experiment" })}>Lock</Button>}<Button size="sm" variant="outline-secondary" onClick={() => action(`/api/experiments/${selected.id}/clone/`, { title: `Copy of ${selected.title}` })}>Clone experiment</Button><Button size="sm" variant="outline-primary" onClick={() => apiDownload(`/api/experiments/${selected.id}/export-pdf/`, `${selected.title}.pdf`)}>Export PDF</Button></div></Card.Body></Card>
 
@@ -222,7 +323,6 @@ export default function NotebookPage() {
           <Card className="app-card"><Card.Body><h5 className="section-title">Comments, mentions, and assignments</h5>{selected.permissions.comment && <Form onSubmit={addComment} className="mb-3"><Row className="g-2"><Col><Form.Control required value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Comment on the signed-off content without modifying it" /></Col><Col xs="auto"><Button type="submit">Comment</Button></Col></Row></Form>}{selected.comments.map((row) => <div className="feed-item mb-2" key={row.public_id}><strong>{row.author_username}</strong><div>{row.body}</div><div className="feed-meta">{new Date(row.created_at).toLocaleString()} · revision {row.revision || "general"}{row.assigned_to_username ? ` · assigned to ${row.assigned_to_username}` : ""}</div></div>)}</Card.Body></Card>
         </div> : <Card className="app-card"><Card.Body><div className="empty-state">Choose an experiment.</div></Card.Body></Card>}</Col>
       </Row>
-      {isAdmin(me) && users.length > 0 && <div className="feed-meta mt-4">Directors can configure notebook readers, editors, commenters, reviewers, and lockers through the Notebook API.</div>}
     </div>
   );
 }

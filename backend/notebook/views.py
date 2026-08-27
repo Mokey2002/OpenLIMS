@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -16,6 +17,7 @@ from .serializers import (
     ExperimentRevisionSerializer,
     ExperimentSerializer,
     ExperimentTemplateSerializer,
+    NotebookCollaboratorSerializer,
     NotebookSerializer,
 )
 from .services import (
@@ -27,6 +29,9 @@ from .services import (
     review_experiment,
     revision_payload,
 )
+
+
+User = get_user_model()
 
 
 class NotebookViewSet(viewsets.ModelViewSet):
@@ -52,6 +57,12 @@ class NotebookViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         raise ValidationError({"detail": "Notebooks with immutable experiment history cannot be deleted."})
+
+    @action(detail=False, methods=["get"])
+    def collaborators(self, request):
+        """Return the minimal internal directory used by notebook sharing controls."""
+        users = User.objects.filter(is_active=True).order_by("username")
+        return Response(NotebookCollaboratorSerializer(users, many=True).data)
 
 
 class ExperimentTemplateViewSet(viewsets.ModelViewSet):
