@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.contrib.auth import get_user_model
 
 from .models import (
     Experiment,
@@ -11,6 +12,18 @@ from .models import (
     Notebook,
 )
 from .permissions import user_can_notebook
+
+
+User = get_user_model()
+
+
+class NotebookCollaboratorSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(source="get_full_name", read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "full_name"]
+        read_only_fields = fields
 
 
 class NotebookSerializer(serializers.ModelSerializer):
