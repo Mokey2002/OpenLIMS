@@ -297,11 +297,9 @@ def process_import_job(job_id):
     # Claim the job once. Celery redelivery, eager test execution, or a delayed
     # duplicate message must not create a second work item/result set.
     with transaction.atomic():
-        job = (
-            ImportJob.objects.select_for_update()
-            .select_related("instrument", "project", "uploaded_by")
-            .get(id=job_id)
-        )
+        # Lock only the import job. Some related records are nullable, and
+        # PostgreSQL rejects SELECT FOR UPDATE across those outer joins.
+        job = ImportJob.objects.select_for_update().get(id=job_id)
         if job.status in {"RUNNING", "COMPLETED"}:
             return job.summary
         job.status = "RUNNING"

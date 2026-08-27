@@ -249,7 +249,9 @@ def restore_revision(*, experiment, revision, actor, reason):
 
 @transaction.atomic
 def review_experiment(*, experiment, actor, decision, comment="", signed_name=""):
-    experiment = Experiment.objects.select_for_update().select_related("notebook", "current_revision").get(pk=experiment.pk)
+    # Lock the experiment itself without joining the nullable current revision.
+    # PostgreSQL cannot apply FOR UPDATE to the nullable side of an outer join.
+    experiment = Experiment.objects.select_for_update().get(pk=experiment.pk)
     if not user_can_notebook(actor, experiment.notebook, "review"):
         raise PermissionDenied("You cannot review this experiment.")
     if experiment.status != Experiment.STATUS_COMPLETED or not experiment.current_revision:
@@ -286,7 +288,7 @@ def review_experiment(*, experiment, actor, decision, comment="", signed_name=""
 
 @transaction.atomic
 def lock_experiment(*, experiment, actor, reason=""):
-    experiment = Experiment.objects.select_for_update().select_related("notebook", "current_revision").get(pk=experiment.pk)
+    experiment = Experiment.objects.select_for_update().get(pk=experiment.pk)
     if not user_can_notebook(actor, experiment.notebook, "lock"):
         raise PermissionDenied("You cannot lock this experiment.")
     if experiment.status != Experiment.STATUS_REVIEWED:

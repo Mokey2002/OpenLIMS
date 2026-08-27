@@ -74,7 +74,10 @@ def perform_inventory_operation(
     to_container=None, work_item=None, experiment=None, request_item_public_id=None,
     metadata=None,
 ):
-    lot = InventoryLot.objects.select_for_update().select_related("item", "location", "container").get(pk=lot.pk)
+    # Lock only the lot row. ``location`` and ``container`` are nullable, so
+    # joining them into a SELECT FOR UPDATE makes PostgreSQL reject the query
+    # because they are on the nullable side of an outer join.
+    lot = InventoryLot.objects.select_for_update().get(pk=lot.pk)
     operation = str(operation or "").upper()
     choices = {choice[0] for choice in InventoryTransaction.OP_CHOICES}
     if operation not in choices:
