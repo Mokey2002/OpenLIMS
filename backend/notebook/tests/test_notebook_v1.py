@@ -1,9 +1,11 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from rest_framework.test import APIClient
 
 from assistant.models import SOPDocument
+from events.models import Event
 from inventory.models import InventoryItem, InventoryLot
 from notebook.models import Experiment, ExperimentBlock, ExperimentComment, ExperimentRevision
 from projects.models import Project
@@ -77,6 +79,24 @@ class NotebookV1Tests(TestCase):
         )
         self.assertEqual(experiment_response.status_code, 201, experiment_response.data)
         experiment_id = experiment_response.data["id"]
+
+        attachment = scientist.post(
+            "/api/shared-attachments/",
+            {
+                "target_type": "experiment",
+                "target_public_id": experiment_response.data["public_id"],
+                "display_name": "digest-results.csv",
+                "description": "Raw digest measurements",
+                "file": SimpleUploadedFile(
+                    "digest-results.csv",
+                    b"sample,result\nNB-SAMPLE-001,pass\n",
+                    content_type="text/csv",
+                ),
+            },
+            format="multipart",
+        )
+        self.assertEqual(attachment.status_code, 201, attachment.data)
+        self.assertEqual(len(attachment.data["sha256"]), 64)
 
         autosave = scientist.post(
             f"/api/experiments/{experiment_id}/autosave/",
@@ -158,6 +178,31 @@ class NotebookV1Tests(TestCase):
         self.assertEqual(restored_versions["registry_record"]["record_version"], 1)
         self.assertEqual(ExperimentRevision.objects.filter(experiment_id=experiment_id).count(), 4)
 
+        edited_after_link_restore = scientist.post(
+            f"/api/experiments/{experiment_id}/autosave/",
+            {
+                "reason": "Add notes without changing exact linked versions",
+                "blocks": [
+                    {"block_type": "RICH_TEXT", "data": {"text": "The original plasmid version was used."}},
+                ],
+                "links": [
+                    {
+                        "entity_type": link["entity_type"],
+                        "public_id": link["entity_public_id"],
+                        "relation_type": link["relation_type"],
+                    }
+                    for link in restored_linked.data["links"]
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(edited_after_link_restore.status_code, 200, edited_after_link_restore.data)
+        preserved_versions = {
+            link["entity_type"]: link["version"]
+            for link in edited_after_link_restore.data["revision"]["links"]
+        }
+        self.assertEqual(preserved_versions["registry_record"]["record_version"], 1)
+
         complete = scientist.post(f"/api/experiments/{experiment_id}/transition/", {"status": "COMPLETED", "reason": "Execution complete"}, format="json")
         self.assertEqual(complete.status_code, 200, complete.data)
         reviewer = self.client_for(self.reviewer)
@@ -179,6 +224,19 @@ class NotebookV1Tests(TestCase):
         )
         self.assertEqual(comment.status_code, 201, comment.data)
         self.assertEqual(ExperimentComment.objects.filter(experiment_id=experiment_id).count(), 1)
+        resolved_comment = collaborator.patch(
+            f"/api/experiment-comments/{comment.data['id']}/",
+            {"resolved": True},
+            format="json",
+        )
+        self.assertEqual(resolved_comment.status_code, 200, resolved_comment.data)
+        self.assertTrue(resolved_comment.data["resolved"])
+        self.assertTrue(
+            Event.objects.filter(
+                action="EXPERIMENT_COMMENT_RESOLVED",
+                entity_id=locked.data["public_id"],
+            ).exists()
+        )
         blocked_edit = scientist.post(f"/api/experiments/{experiment_id}/autosave/", {"blocks": [], "links": []}, format="json")
         self.assertEqual(blocked_edit.status_code, 400)
         pdf = collaborator.get(f"/api/experiments/{experiment_id}/export-pdf/")
@@ -236,6 +294,12 @@ class NotebookV1Tests(TestCase):
         self.assertEqual(updated.status_code, 200, updated.data)
         self.assertEqual(updated.data["name"], "Maria's edited notebook")
         self.assertEqual(updated.data["description"], "Editable metadata")
+        self.assertTrue(
+            Event.objects.filter(
+                action="NOTEBOOK_UPDATED",
+                entity_id=updated.data["public_id"],
+            ).exists()
+        )
 
         collaborator = self.client_for(self.collaborator)
         visible = collaborator.get("/api/notebooks/")
@@ -246,3 +310,69 @@ class NotebookV1Tests(TestCase):
         self.assertEqual(directory.status_code, 200, directory.data)
         self.assertIn(self.collaborator.username, [row["username"] for row in directory.data])
         self.assertNotIn("email", directory.data[0])
+
+    def test_autosave_rejects_stale_revision_and_compares_revisions(self):
+        scientist = self.client_for(self.scientist)
+        notebook = scientist.post(
+            "/api/notebooks/",
+            {"name": "Collaborative notebook", "scope": "PROJECT", "project": self.project.pk},
+            format="json",
+        ).data
+        experiment = scientist.post(
+            "/api/experiments/",
+            {
+                "notebook": notebook["id"],
+                "title": "Concurrent experiment",
+                "initial_blocks": [{"block_type": "RICH_TEXT", "data": {"text": "Initial"}}],
+            },
+            format="json",
+        ).data
+        first_revision = experiment["current_revision_detail"]
+        metadata_update = scientist.patch(
+            f"/api/experiments/{experiment['id']}/",
+            {"title": "Concurrent experiment with owner", "assignees": [self.collaborator.pk]},
+            format="json",
+        )
+        self.assertEqual(metadata_update.status_code, 200, metadata_update.data)
+        self.assertEqual(metadata_update.data["assignee_usernames"], [self.collaborator.username])
+        self.assertTrue(
+            Event.objects.filter(
+                action="EXPERIMENT_METADATA_UPDATED",
+                entity_id=experiment["public_id"],
+            ).exists()
+        )
+        second = scientist.post(
+            f"/api/experiments/{experiment['id']}/autosave/",
+            {
+                "expected_revision_public_id": first_revision["public_id"],
+                "reason": "Scientist update",
+                "blocks": [
+                    {"block_type": "RICH_TEXT", "data": {"text": "Updated"}},
+                    {"block_type": "STRUCTURED_RESULT", "data": {"name": "Yield", "value": "42", "unit": "ng/uL"}},
+                ],
+                "links": [],
+            },
+            format="json",
+        )
+        self.assertEqual(second.status_code, 200, second.data)
+
+        stale = scientist.post(
+            f"/api/experiments/{experiment['id']}/autosave/",
+            {
+                "expected_revision_public_id": first_revision["public_id"],
+                "blocks": [{"block_type": "RICH_TEXT", "data": {"text": "Stale edit"}}],
+                "links": [],
+            },
+            format="json",
+        )
+        self.assertEqual(stale.status_code, 400, stale.data)
+        self.assertIn("newer revision", str(stale.data["revision"]))
+
+        comparison = scientist.get(
+            f"/api/experiments/{experiment['id']}/compare/",
+            {"from": first_revision["public_id"], "to": second.data["revision"]["public_id"]},
+        )
+        self.assertEqual(comparison.status_code, 200, comparison.data)
+        self.assertEqual(comparison.data["summary"]["blocks_added"], 1)
+        self.assertEqual(comparison.data["summary"]["blocks_modified"], 1)
+        self.assertEqual(len(comparison.data["block_changes"]), 2)

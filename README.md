@@ -47,6 +47,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 ### v0.27.0 highlights
 
 - User-, team-, and project-scoped notebooks with granular read, write, comment, review, and lock permissions
+- Searchable Notebook workspace with personal queues, visual block editors, safe collaborative autosave, and revision comparison
 - Experiment templates and clone-template/clone-experiment workflows
 - Rich block entries for text, headings, tables, checklists, protocols, calculations, media, structured results, and sequences
 - Immutable experiment revisions with autosave, restore, exact linked-object version snapshots, and before/after audit details
