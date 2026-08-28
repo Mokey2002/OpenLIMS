@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 from django.utils import timezone
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -21,6 +22,7 @@ from .serializers import (
     NotebookSerializer,
 )
 from .services import (
+    compare_revisions,
     create_revision,
     lock_experiment,
     notify_comment,
@@ -53,7 +55,37 @@ class NotebookViewSet(viewsets.ModelViewSet):
         notebook = self.get_object()
         if not user_can_notebook(self.request.user, notebook, "write"):
             raise PermissionDenied("You cannot update this notebook.")
-        serializer.save()
+        before = {
+            "name": notebook.name,
+            "description": notebook.description,
+            "scope": notebook.scope,
+            "project": notebook.project_id,
+            "team_members": list(notebook.team_members.values_list("id", flat=True)),
+            "readers": list(notebook.readers.values_list("id", flat=True)),
+            "editors": list(notebook.editors.values_list("id", flat=True)),
+            "commenters": list(notebook.commenters.values_list("id", flat=True)),
+            "reviewers": list(notebook.reviewers.values_list("id", flat=True)),
+            "lockers": list(notebook.lockers.values_list("id", flat=True)),
+        }
+        updated = serializer.save()
+        record_audit_event(
+            entity=updated,
+            action="NOTEBOOK_UPDATED",
+            actor=self.request.user,
+            before=before,
+            after={
+                "name": updated.name,
+                "description": updated.description,
+                "scope": updated.scope,
+                "project": updated.project_id,
+                "team_members": list(updated.team_members.values_list("id", flat=True)),
+                "readers": list(updated.readers.values_list("id", flat=True)),
+                "editors": list(updated.editors.values_list("id", flat=True)),
+                "commenters": list(updated.commenters.values_list("id", flat=True)),
+                "reviewers": list(updated.reviewers.values_list("id", flat=True)),
+                "lockers": list(updated.lockers.values_list("id", flat=True)),
+            },
+        )
 
     def destroy(self, request, *args, **kwargs):
         raise ValidationError({"detail": "Notebooks with immutable experiment history cannot be deleted."})
@@ -150,7 +182,21 @@ class ExperimentViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You cannot edit this experiment.")
         if experiment.status in {Experiment.STATUS_REVIEWED, Experiment.STATUS_LOCKED}:
             raise ValidationError({"status": "Reviewed or locked experiments cannot be changed."})
-        serializer.save()
+        before = {
+            "title": experiment.title,
+            "assignees": list(experiment.assignees.values_list("id", flat=True)),
+        }
+        updated = serializer.save()
+        record_audit_event(
+            entity=updated,
+            action="EXPERIMENT_METADATA_UPDATED",
+            actor=self.request.user,
+            before=before,
+            after={
+                "title": updated.title,
+                "assignees": list(updated.assignees.values_list("id", flat=True)),
+            },
+        )
 
     def destroy(self, request, *args, **kwargs):
         raise ValidationError({"detail": "Experiments with immutable revision history cannot be deleted."})
@@ -163,8 +209,25 @@ class ExperimentViewSet(viewsets.ModelViewSet):
             blocks=request.data.get("blocks", []),
             links=request.data.get("links", []),
             reason=request.data.get("reason", "Autosave"),
+            expected_revision_public_id=request.data.get("expected_revision_public_id"),
         )
         return Response({"created": created, "revision": ExperimentRevisionSerializer(revision).data})
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("from", str, OpenApiParameter.QUERY, required=True, description="Earlier revision public UUID."),
+            OpenApiParameter("to", str, OpenApiParameter.QUERY, required=True, description="Later revision public UUID."),
+        ],
+        responses=OpenApiTypes.OBJECT,
+    )
+    @action(detail=True, methods=["get"])
+    def compare(self, request, pk=None):
+        experiment = self.get_object()
+        before = experiment.revisions.filter(public_id=request.query_params.get("from")).first()
+        after = experiment.revisions.filter(public_id=request.query_params.get("to")).first()
+        if not before or not after:
+            raise ValidationError({"revision": "Choose two revisions from this experiment."})
+        return Response(compare_revisions(before, after))
 
     @action(detail=True, methods=["post"])
     def restore(self, request, pk=None):
@@ -286,4 +349,10 @@ class ExperimentCommentViewSet(viewsets.ModelViewSet):
         comment.resolved_by = request.user if resolved else None
         comment.resolved_at = timezone.now() if resolved else None
         comment.save(update_fields=["resolved", "resolved_by", "resolved_at"])
+        record_audit_event(
+            entity=comment.experiment,
+            action="EXPERIMENT_COMMENT_RESOLVED" if resolved else "EXPERIMENT_COMMENT_REOPENED",
+            actor=request.user,
+            details={"comment_public_id": str(comment.public_id)},
+        )
         return Response(self.get_serializer(comment).data)

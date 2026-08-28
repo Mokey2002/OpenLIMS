@@ -99,7 +99,7 @@ def entity_version_snapshot(entity_type, obj):
     return snapshot
 
 
-def resolve_links(links, actor, project=None, *, preserve_versions=False):
+def resolve_links(links, actor, project=None, *, preserve_versions=False, existing_versions=None):
     if not isinstance(links, list):
         raise ValidationError({"links": "Links must be a list."})
     cleaned = []
@@ -114,16 +114,20 @@ def resolve_links(links, actor, project=None, *, preserve_versions=False):
         target_project = get_entity_project(obj)
         if project is not None and target_project is not None and target_project.pk != project.pk:
             raise ValidationError({"links": f"{reference['label']} belongs to another project."})
+        relation_type = str(link.get("relation_type") or "used").lower()
         supplied_version = link.get("version")
+        existing_version = (existing_versions or {}).get(
+            (entity_type, str(obj.public_id), relation_type)
+        )
         cleaned.append(
             {
                 "entity_type": entity_type,
                 "entity_public_id": obj.public_id,
-                "relation_type": str(link.get("relation_type") or "used").lower(),
+                "relation_type": relation_type,
                 "label": str(link.get("label") or reference["label"]),
                 "version": (
-                    supplied_version
-                    if preserve_versions and isinstance(supplied_version, dict)
+                    supplied_version if preserve_versions and isinstance(supplied_version, dict)
+                    else existing_version if existing_version is not None
                     else entity_version_snapshot(entity_type, obj)
                 ),
             }
@@ -153,23 +157,112 @@ def revision_payload(revision):
     }
 
 
+def compare_revisions(before, after):
+    """Return a deterministic, UI-friendly comparison of two immutable revisions."""
+    if before.experiment_id != after.experiment_id:
+        raise ValidationError({"revision": "Both revisions must belong to the same experiment."})
+
+    before_payload = revision_payload(before)
+    after_payload = revision_payload(after)
+    before_blocks = {block["position"]: block for block in before_payload["blocks"]}
+    after_blocks = {block["position"]: block for block in after_payload["blocks"]}
+    block_changes = []
+    for position in sorted(set(before_blocks) | set(after_blocks)):
+        old = before_blocks.get(position)
+        new = after_blocks.get(position)
+        if old == new:
+            continue
+        block_changes.append(
+            {
+                "position": position,
+                "change": "added" if old is None else "removed" if new is None else "modified",
+                "before": old,
+                "after": new,
+            }
+        )
+
+    def link_key(link):
+        return (
+            link["entity_type"],
+            str(link["entity_public_id"]),
+            link["relation_type"],
+        )
+
+    before_links = {link_key(link): link for link in before_payload["links"]}
+    after_links = {link_key(link): link for link in after_payload["links"]}
+    link_changes = []
+    for key in sorted(set(before_links) | set(after_links)):
+        old = before_links.get(key)
+        new = after_links.get(key)
+        if old == new:
+            continue
+        link_changes.append(
+            {
+                "change": "added" if old is None else "removed" if new is None else "modified",
+                "before": old,
+                "after": new,
+            }
+        )
+
+    return {
+        "before": {
+            "public_id": before_payload["public_id"],
+            "number": before_payload["number"],
+            "checksum": before_payload["checksum"],
+        },
+        "after": {
+            "public_id": after_payload["public_id"],
+            "number": after_payload["number"],
+            "checksum": after_payload["checksum"],
+        },
+        "summary": {
+            "blocks_added": sum(change["change"] == "added" for change in block_changes),
+            "blocks_removed": sum(change["change"] == "removed" for change in block_changes),
+            "blocks_modified": sum(change["change"] == "modified" for change in block_changes),
+            "links_added": sum(change["change"] == "added" for change in link_changes),
+            "links_removed": sum(change["change"] == "removed" for change in link_changes),
+            "links_modified": sum(change["change"] == "modified" for change in link_changes),
+        },
+        "block_changes": block_changes,
+        "link_changes": link_changes,
+    }
+
+
 @transaction.atomic
 def create_revision(
     *, experiment, actor, blocks, links, reason="Autosave", restored_from=None,
-    preserve_link_versions=False,
+    preserve_link_versions=False, expected_revision_public_id=None,
 ):
     experiment = Experiment.objects.select_for_update().select_related("notebook").get(pk=experiment.pk)
     if not user_can_notebook(actor, experiment.notebook, "write"):
         raise PermissionDenied("You cannot edit this experiment.")
     if experiment.status in {Experiment.STATUS_REVIEWED, Experiment.STATUS_LOCKED}:
         raise ValidationError({"status": "Reviewed or locked experiments cannot be modified; clone the experiment instead."})
+    if expected_revision_public_id is not None:
+        current_public_id = str(experiment.current_revision.public_id) if experiment.current_revision else ""
+        if str(expected_revision_public_id) != current_public_id:
+            raise ValidationError(
+                {
+                    "revision": (
+                        "This experiment has a newer revision. Refresh it before saving so another "
+                        "collaborator's work is not overwritten."
+                    )
+                }
+            )
 
     cleaned_blocks = validate_blocks(blocks)
+    existing_versions = {}
+    if experiment.current_revision_id:
+        existing_versions = {
+            (link.entity_type, str(link.entity_public_id), link.relation_type): link.version
+            for link in experiment.current_revision.links.all()
+        }
     cleaned_links = resolve_links(
         links,
         actor,
         experiment.project,
         preserve_versions=preserve_link_versions,
+        existing_versions=existing_versions,
     )
     checksum_links = [
         {**link, "entity_public_id": str(link["entity_public_id"])} for link in cleaned_links
@@ -352,7 +445,12 @@ def render_experiment_pdf(experiment):
         ["Notebook", experiment.notebook.name],
         ["Project", experiment.project.code if experiment.project else "Private/team"],
         ["Author", experiment.created_by.get_full_name() or experiment.created_by.username],
+        ["Assignees", ", ".join(experiment.assignees.values_list("username", flat=True)) or "-"],
         ["Created", experiment.created_at.isoformat()],
+        ["Completed", experiment.completed_at.isoformat() if experiment.completed_at else "-"],
+        ["Reviewed", experiment.reviewed_at.isoformat() if experiment.reviewed_at else "-"],
+        ["Locked", experiment.locked_at.isoformat() if experiment.locked_at else "-"],
+        ["Locked by", experiment.locked_by.username if experiment.locked_by else "-"],
         ["Revision", str(current.number if current else "-")],
         ["Checksum", current.checksum if current else "-"],
     ]
@@ -371,6 +469,55 @@ def render_experiment_pdf(experiment):
                     block_table = Table([[str(cell) for cell in row] for row in rows], repeatRows=1)
                     block_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.grey)]))
                     story.append(block_table)
+            elif block.block_type == ExperimentBlock.TYPE_RICH_TEXT:
+                story.append(Paragraph(escape(str(data.get("text") or "")).replace("\n", "<br/>"), styles["BodyText"]))
+            elif block.block_type == ExperimentBlock.TYPE_PROTOCOL:
+                marker = "[x]" if data.get("completed") else "[ ]"
+                story.append(Paragraph(f"<b>{marker} Protocol step:</b> {escape(str(data.get('text') or ''))}", styles["BodyText"]))
+                if data.get("notes"):
+                    story.append(Paragraph(f"<i>Execution notes:</i> {escape(str(data['notes']))}", styles["BodyText"]))
+            elif block.block_type == ExperimentBlock.TYPE_CHECKLIST:
+                story.append(Paragraph("<b>Checklist</b>", styles["BodyText"]))
+                for item in data.get("items") or []:
+                    marker = "[x]" if item.get("checked") else "[ ]"
+                    story.append(Paragraph(f"{marker} {escape(str(item.get('text') or ''))}", styles["BodyText"]))
+            elif block.block_type == ExperimentBlock.TYPE_RESULT:
+                result_text = " ".join(
+                    str(value) for value in [data.get("value", ""), data.get("unit", "")] if value
+                ) or "-"
+                story.append(
+                    Paragraph(
+                        f"<b>{escape(str(data.get('name') or 'Result'))}:</b> "
+                        f"{escape(result_text)} ({escape(str(data.get('status') or 'RECORDED'))})",
+                        styles["BodyText"],
+                    )
+                )
+                if data.get("notes"):
+                    story.append(Paragraph(escape(str(data["notes"])), styles["BodyText"]))
+            elif block.block_type == ExperimentBlock.TYPE_CALCULATION:
+                calculation = [
+                    ["Expression", str(data.get("expression") or "-")],
+                    ["Result", " ".join(str(value) for value in [data.get("result", ""), data.get("unit", "")] if value) or "-"],
+                    ["Notes", str(data.get("notes") or "-")],
+                ]
+                calculation_table = Table(calculation, colWidths=[1.1 * inch, 5.9 * inch])
+                calculation_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.grey), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+                story.append(calculation_table)
+            elif block.block_type == ExperimentBlock.TYPE_IMAGE:
+                story.append(Paragraph(f"<b>Image:</b> {escape(str(data.get('caption') or data.get('alt') or 'Experiment image'))}", styles["BodyText"]))
+                if data.get("url"):
+                    story.append(Paragraph(f"Source: {escape(str(data['url']))}", styles["BodyText"]))
+            elif block.block_type == ExperimentBlock.TYPE_ATTACHMENT:
+                story.append(Paragraph(f"<b>Attachment:</b> {escape(str(data.get('name') or 'Experiment attachment'))}", styles["BodyText"]))
+                if data.get("description"):
+                    story.append(Paragraph(escape(str(data["description"])), styles["BodyText"]))
+                if data.get("url"):
+                    story.append(Paragraph(f"Location: {escape(str(data['url']))}", styles["BodyText"]))
+            elif block.block_type == ExperimentBlock.TYPE_SEQUENCE:
+                coordinates = ""
+                if data.get("start") or data.get("end"):
+                    coordinates = f" ({data.get('start') or 1}-{data.get('end') or 'end'}, strand {data.get('strand') or '+'})"
+                story.append(Paragraph(f"<b>Embedded sequence:</b> {escape(str(data.get('label') or data.get('sequence_public_id') or '-'))}{escape(coordinates)}", styles["BodyText"]))
             else:
                 text = data.get("text") or data.get("expression") or data.get("name") or json.dumps(data, default=str)
                 story.append(Paragraph(f"<b>{escape(block.get_block_type_display())}:</b> {escape(str(text))}", styles["BodyText"]))

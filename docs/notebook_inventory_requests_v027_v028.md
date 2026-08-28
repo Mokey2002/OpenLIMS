@@ -31,6 +31,38 @@ These controls are an internal sign-off mechanism, not yet a regulated
 electronic-signature implementation. PDF export includes the content, authors,
 reviewers, timestamps, revision checksums/history, and linked-record versions.
 
+### Notebook workspace
+
+The Notebook page is organized around a searchable experiment workspace rather
+than raw record forms. It provides a complete notebook directory, status and
+assignee filters, personal work and review counters, and separate areas for the
+entry, provenance, discussion, immutable history, and experiment details.
+
+Scientists edit every supported block through a purpose-built control instead
+of JSON. Blocks can be inserted, reordered, duplicated, or removed. Checklists
+and protocol steps are interactive; tables can add rows and columns; results and
+calculations preserve units and notes; images, attachments, and sequence views
+have explicit metadata fields. Experiments can be created blank or from a
+template, assigned to collaborators, and saved manually in addition to
+autosave. Uploaded experiment files use the shared attachment service and add a
+revisioned attachment block containing the file identity, media type, size, and
+SHA-256 checksum.
+
+Autosave uses optimistic revision checks. If a collaborator has produced a
+newer revision, a stale editor is stopped and asked to refresh rather than
+silently replacing that work. Existing exact-version links keep their captured
+version during later content edits. The revision comparison API and UI show
+added, removed, and modified blocks and links:
+
+```text
+GET /api/experiments/{id}/compare/?from={revision_uuid}&to={revision_uuid}
+```
+
+Comments expose mentions, follow-up assignment, resolve, and reopen controls.
+Completion, review, change requests, restore, and locking require an explicit
+reason or review entry in the UI. Notebook sharing and experiment metadata
+changes are recorded in the common audit envelope.
+
 ## Inventory v2
 
 Locations use the hierarchy site, building, laboratory, room, freezer, shelf,

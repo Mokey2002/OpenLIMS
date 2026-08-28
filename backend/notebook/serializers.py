@@ -76,6 +76,11 @@ class ExperimentTemplateSerializer(serializers.ModelSerializer):
             for block in validate_blocks(value)
         ]
 
+    def validate_notebook(self, value):
+        if self.instance and value.pk != self.instance.notebook_id:
+            raise serializers.ValidationError("Templates cannot be moved between notebooks; create a new template instead.")
+        return value
+
 
 class ExperimentBlockSerializer(serializers.ModelSerializer):
     class Meta:
@@ -195,4 +200,6 @@ class ExperimentSerializer(serializers.ModelSerializer):
         template = attrs.get("template", getattr(self.instance, "template", None))
         if template and notebook and template.notebook_id != notebook.pk:
             raise serializers.ValidationError({"template": "The template belongs to a different notebook."})
+        if self.instance and notebook and notebook.pk != self.instance.notebook_id:
+            raise serializers.ValidationError({"notebook": "Experiments cannot be moved between notebooks; clone the experiment instead."})
         return attrs
