@@ -11,8 +11,7 @@ import {
   Table,
 } from "react-bootstrap";
 import { Link } from "react-router-dom";
-import { apiGet } from "../api";
-import { getAccessToken } from "../auth";
+import { apiGet, apiPost, apiPostForm } from "../api";
 
 function statusVariant(status) {
   if (status === "COMPLETED") return "success";
@@ -108,7 +107,6 @@ export default function MassSpec() {
     setUploading(true);
 
     try {
-      const token = getAccessToken();
       const body = new FormData();
 
       body.append("name", form.name);
@@ -117,18 +115,7 @@ export default function MassSpec() {
       if (form.project) body.append("project", form.project);
       if (form.sample) body.append("sample", form.sample);
 
-      const response = await fetch("/api/mass-spec-runs/", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body,
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || `Upload failed with status ${response.status}`);
-      }
+      await apiPostForm("/api/mass-spec-runs/", body);
 
       setForm({
         name: "",
@@ -150,19 +137,7 @@ export default function MassSpec() {
     setErr("");
 
     try {
-      const token = getAccessToken();
-
-      const response = await fetch(`/api/mass-spec-runs/${id}/reprocess/`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Reprocess failed with status ${response.status}`);
-      }
-
+      await apiPost(`/api/mass-spec-runs/${id}/reprocess/`, {});
       await load();
     } catch (e) {
       setErr(e.message || String(e));
