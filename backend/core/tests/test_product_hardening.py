@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -98,6 +98,7 @@ class BrowserAuthenticationHardeningTests(TestCase):
         self.assertTrue(BlacklistedToken.objects.filter(token__jti=new_jti).exists())
 
 
+@override_settings(OPENLIMS_ENFORCE_FEATURE_FLAGS=True)
 class FeatureFlagBoundaryTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
