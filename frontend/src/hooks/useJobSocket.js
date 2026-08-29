@@ -1,29 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
-function getStoredAccessToken() {
-  return (
-    localStorage.getItem("openlims_access") ||
-    localStorage.getItem("access") ||
-    localStorage.getItem("access_token") ||
-    localStorage.getItem("token") ||
-    sessionStorage.getItem("access") ||
-    sessionStorage.getItem("access_token") ||
-    sessionStorage.getItem("token")
-  );
-}
-
 function getWebSocketUrl(path) {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const token = getStoredAccessToken();
-  const query = token ? `?token=${encodeURIComponent(token)}` : "";
-
-  const isLocalDev =
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "127.0.0.1";
-
-  const host = isLocalDev ? "localhost:8000" : window.location.host;
-
-  return `${protocol}//${host}${path}${query}`;
+  return `${protocol}//${window.location.host}${path}`;
 }
 
 export default function useJobSocket({ onMessage } = {}) {
@@ -48,64 +27,34 @@ export default function useJobSocket({ onMessage } = {}) {
     }
 
     function connect() {
-      const token = getStoredAccessToken();
-
-      if (!token) {
-        setConnected(false);
-        setLastMessage({
-          type: "error",
-          message:
-            "No JWT access token found. Log in again, then return to this page.",
-        });
-        return;
-      }
-
       connectionIdRef.current += 1;
       const connectionId = connectionIdRef.current;
-
       const url = getWebSocketUrl("/ws/jobs/");
-      setSocketUrl(url.replace(token, "[token-hidden]"));
+      setSocketUrl(url);
 
       const socket = new WebSocket(url);
       socketRef.current = socket;
 
       socket.onopen = () => {
         if (!isCurrentConnection(connectionId)) return;
-
         setConnected(true);
-        setLastMessage({
-          type: "socket_open",
-          message: "WebSocket connection opened.",
-        });
-
-        socket.send(
-          JSON.stringify({
-            type: "ping",
-          })
-        );
+        setLastMessage({ type: "socket_open", message: "WebSocket connection opened." });
+        socket.send(JSON.stringify({ type: "ping" }));
       };
 
       socket.onmessage = (event) => {
         if (!isCurrentConnection(connectionId)) return;
-
         try {
           const data = JSON.parse(event.data);
           setLastMessage(data);
-
-          if (onMessageRef.current) {
-            onMessageRef.current(data);
-          }
+          onMessageRef.current?.(data);
         } catch {
-          setLastMessage({
-            type: "raw",
-            message: event.data,
-          });
+          setLastMessage({ type: "raw", message: event.data });
         }
       };
 
       socket.onclose = (event) => {
         if (!isCurrentConnection(connectionId)) return;
-
         setConnected(false);
         setLastMessage({
           type: "socket_closed",
@@ -113,7 +62,6 @@ export default function useJobSocket({ onMessage } = {}) {
           code: event.code,
           reason: event.reason || "",
         });
-
         if (!closedByComponent) {
           reconnectTimerRef.current = window.setTimeout(connect, 3000);
         }
@@ -121,12 +69,10 @@ export default function useJobSocket({ onMessage } = {}) {
 
       socket.onerror = () => {
         if (!isCurrentConnection(connectionId)) return;
-
         setConnected(false);
         setLastMessage({
           type: "socket_error",
-          message:
-            "WebSocket error. Check that Daphne is running and /ws/jobs/ exists.",
+          message: "WebSocket error. Check the OpenLIMS web proxy and ASGI service.",
         });
       };
     }
@@ -136,20 +82,10 @@ export default function useJobSocket({ onMessage } = {}) {
     return () => {
       closedByComponent = true;
       connectionIdRef.current += 1;
-
-      if (reconnectTimerRef.current) {
-        window.clearTimeout(reconnectTimerRef.current);
-      }
-
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
+      if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
+      if (socketRef.current) socketRef.current.close();
     };
   }, []);
 
-  return {
-    connected,
-    lastMessage,
-    socketUrl,
-  };
+  return { connected, lastMessage, socketUrl };
 }
