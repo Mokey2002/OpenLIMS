@@ -16,6 +16,7 @@ Browser authentication no longer stores JWT access or refresh tokens in `localSt
 
 - Access and refresh JWTs are stored in `HttpOnly` cookies.
 - Cookie-authenticated unsafe API requests enforce Django CSRF validation.
+- Login, refresh, and logout also require the same-origin CSRF token.
 - Refresh tokens rotate and the replaced token is blacklisted.
 - Logout blacklists the current refresh token and clears both authentication cookies.
 - Bearer JWT authentication remains supported for scripts and non-browser API clients.
@@ -29,7 +30,7 @@ CSRF_COOKIE_SECURE=true
 SESSION_COOKIE_SECURE=true
 ```
 
-Set `SECURE_SSL_REDIRECT=true` when Django consistently receives the original HTTPS scheme through the reverse proxy.
+Set `SECURE_SSL_REDIRECT=true` only when Django consistently receives the original HTTPS scheme through the reverse proxy. The production environment template keeps this disabled by default because TLS may terminate in an upstream proxy.
 
 ## Versioned API
 
@@ -50,17 +51,18 @@ Notebook and Registry feature flags are enforced at the HTTP API boundary for bo
 - Static and media files use persistent volumes.
 - Ollama is optional under the `llm` Compose profile.
 - Browser security headers, including CSP, are emitted by the production web tier.
+- `deploy/.env.prod.example` provides production-oriented defaults instead of reusing the development environment template.
 
 Example:
 
 ```bash
 cd deploy
-cp .env.example .env
-# Edit .env before continuing.
+cp .env.prod.example .env
+# Replace every CHANGE_ME value and set DJANGO_ALLOWED_HOSTS before continuing.
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-The default public port is `8080` and can be changed with `OPENLIMS_HTTP_PORT`. In an Internet-facing deployment, place a TLS reverse proxy such as Caddy in front of this port.
+The default internal web port is `8080` and can be changed with `OPENLIMS_HTTP_PORT`. In an Internet-facing deployment, place a TLS reverse proxy such as Caddy in front of this port.
 
 ## Testing
 
