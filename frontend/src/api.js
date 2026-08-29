@@ -95,6 +95,22 @@ async function request(path, options = {}, retry = true) {
   return response;
 }
 
+function downloadResponseBlob(response, fallbackFilename) {
+  return response.blob().then((blob) => {
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
+    const filename = match ? decodeURIComponent(match[1].replace(/"$/, "")) : fallbackFilename;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  });
+}
+
 export async function apiGet(path) {
   const response = await request(path, { method: "GET" });
   if (!response.ok) {
@@ -175,19 +191,19 @@ export async function apiDownload(path, fallbackFilename = "openlims-download") 
   if (!response.ok) {
     throw new Error(`GET ${normalizeApiPath(path)} failed: ${response.status}`);
   }
+  await downloadResponseBlob(response, fallbackFilename);
+}
 
-  const blob = await response.blob();
-  const disposition = response.headers.get("Content-Disposition") || "";
-  const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
-  const filename = match ? decodeURIComponent(match[1].replace(/"$/, "")) : fallbackFilename;
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+export async function apiPostDownload(path, body, fallbackFilename = "openlims-download") {
+  const response = await request(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`POST ${normalizeApiPath(path)} failed: ${response.status} ${text}`);
+  }
+  await downloadResponseBlob(response, fallbackFilename);
 }
 
 export async function login(username, password) {
