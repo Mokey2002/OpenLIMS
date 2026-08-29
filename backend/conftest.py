@@ -11,6 +11,13 @@ from samples.models import Sample
 User = get_user_model()
 
 
+def pytest_configure():
+    # Historical module suites predate API-level feature-flag enforcement and
+    # exercise Notebook/Registry directly. Dedicated hardening tests explicitly
+    # re-enable enforcement; production defaults to enforcement enabled.
+    settings.OPENLIMS_ENFORCE_FEATURE_FLAGS = False
+
+
 @pytest.fixture
 def api_client():
     return APIClient()
