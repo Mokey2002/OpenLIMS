@@ -1,203 +1,183 @@
-import {
-  getAccessToken,
-  getRefreshToken,
-  setTokens,
-  clearTokens,
-} from "./auth";
+import { clearLegacyTokens, getCSRFToken } from "./auth";
 
-const API_BASE = ""; // Same origin in production through Caddy
+const API_BASE = "";
+const UNVERSIONED_API_PATHS = ["/api/health/", "/api/schema/", "/api/docs/"];
+
+function normalizeApiPath(path) {
+  if (!path) return path;
+
+  if (/^https?:\/\//i.test(path)) {
+    const parsed = new URL(path);
+    return `${parsed.pathname}${parsed.search}`;
+  }
+
+  if (path.startsWith("/api/v1/")) return path;
+  if (UNVERSIONED_API_PATHS.some((prefix) => path.startsWith(prefix))) return path;
+  if (path.startsWith("/api/")) return `/api/v1/${path.slice(5)}`;
+  return path;
+}
 
 function redirectToLogin() {
-  clearTokens();
-
+  clearLegacyTokens();
   if (window.location.pathname !== "/login") {
     window.location.href = "/login";
   }
 }
 
-export async function apiPostForm(path, formData) {
-  const access = getAccessToken();
+async function ensureCSRFToken() {
+  let token = getCSRFToken();
+  if (token) return token;
 
-  const headers = {};
-
-  if (access) {
-    headers.Authorization = `Bearer ${access}`;
-  }
-
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers,
-    body: formData,
+  const response = await fetch(`${API_BASE}/api/v1/auth/csrf/`, {
+    method: "GET",
+    credentials: "same-origin",
   });
-
-  if (res.status === 401) {
-    const newAccess = await refreshAccessToken();
-
-    if (newAccess) {
-      return apiPostForm(path, formData);
-    }
-
-    redirectToLogin();
-    throw new Error("Session expired. Please log in again.");
+  if (!response.ok) {
+    throw new Error(`Unable to initialize CSRF protection: ${response.status}`);
   }
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`POST ${path} failed: ${res.status} ${text}`);
+  token = getCSRFToken();
+  if (!token) {
+    throw new Error("CSRF cookie was not set by the server.");
   }
-
-  return res.json();
+  return token;
 }
 
-export async function apiPatchForm(path, formData) {
-  const access = getAccessToken();
-  const headers = {};
-
-  if (access) {
-    headers.Authorization = `Bearer ${access}`;
-  }
-
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "PATCH",
-    headers,
-    body: formData,
-  });
-
-  if (res.status === 401) {
-    const newAccess = await refreshAccessToken();
-
-    if (newAccess) {
-      return apiPatchForm(path, formData);
-    }
-
-    redirectToLogin();
-    throw new Error("Session expired. Please log in again.");
-  }
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`PATCH ${path} failed: ${res.status} ${text}`);
-  }
-
-  return res.json();
-}
-
-async function refreshAccessToken() {
-  const refresh = getRefreshToken();
-
-  if (!refresh) {
-    return null;
-  }
-
+async function refreshSession() {
   try {
-    const res = await fetch(`${API_BASE}/api/auth/token/refresh/`, {
+    const csrf = await ensureCSRFToken();
+    const response = await fetch(`${API_BASE}/api/v1/auth/refresh/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh }),
+      credentials: "same-origin",
+      headers: { "X-CSRFToken": csrf },
     });
-
-    if (!res.ok) {
-      clearTokens();
-      return null;
-    }
-
-    const data = await res.json();
-
-    if (!data.access) {
-      clearTokens();
-      return null;
-    }
-
-    setTokens({
-      access: data.access,
-      refresh,
-    });
-
-    return data.access;
+    return response.ok;
   } catch {
-    clearTokens();
-    return null;
+    return false;
   }
 }
 
 async function request(path, options = {}, retry = true) {
-  const access = getAccessToken();
+  const requestPath = normalizeApiPath(path);
+  const method = (options.method || "GET").toUpperCase();
+  const isFormData = options.body instanceof FormData;
+  const headers = { ...(options.headers || {}) };
 
-  const headers = {
-    ...(options.headers || {}),
-    "Content-Type": "application/json",
-  };
-
-  if (access) {
-    headers.Authorization = `Bearer ${access}`;
+  if (!isFormData && options.body !== undefined && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  if (!["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
+    headers["X-CSRFToken"] = await ensureCSRFToken();
+  }
+
+  const response = await fetch(`${API_BASE}${requestPath}`, {
     ...options,
+    method,
     headers,
+    credentials: "same-origin",
   });
 
-  if (res.status === 401 && retry) {
-    const newAccess = await refreshAccessToken();
-
-    if (newAccess) {
-      return request(path, options, false);
+  const isAuthRequest = requestPath.startsWith("/api/v1/auth/");
+  if (response.status === 401 && retry && !isAuthRequest) {
+    if (await refreshSession()) {
+      return request(requestPath, options, false);
     }
-
     redirectToLogin();
     throw new Error("Session expired. Please log in again.");
   }
 
-  if (res.status === 401) {
+  if (response.status === 401 && !isAuthRequest) {
     redirectToLogin();
     throw new Error("Session expired. Please log in again.");
   }
 
-  return res;
+  return response;
 }
 
 export async function apiGet(path) {
-  const res = await request(path, { method: "GET" });
-
-  if (!res.ok) {
-    throw new Error(`GET ${path} failed: ${res.status}`);
+  const response = await request(path, { method: "GET" });
+  if (!response.ok) {
+    throw new Error(`GET ${normalizeApiPath(path)} failed: ${response.status}`);
   }
-
-  return res.json();
+  return response.json();
 }
 
 export async function apiGetAll(path, maxPages = 100) {
   const items = [];
-  let next = path;
+  let next = normalizeApiPath(path);
   let pageCount = 0;
 
   while (next && pageCount < maxPages) {
-    let requestPath = next;
-    if (/^https?:\/\//i.test(next)) {
-      const parsed = new URL(next);
-      requestPath = `${parsed.pathname}${parsed.search}`;
-    }
-
-    const data = await apiGet(requestPath);
+    const data = await apiGet(next);
     if (Array.isArray(data)) return [...items, ...data];
 
     items.push(...(data.results || []));
-    next = data.next || null;
+    next = data.next ? normalizeApiPath(data.next) : null;
     pageCount += 1;
   }
 
   return items;
 }
 
-export async function apiDownload(path, fallbackFilename = "openlims-download") {
-  const res = await request(path, { method: "GET" });
+export async function apiPost(path, body) {
+  const response = await request(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`POST ${normalizeApiPath(path)} failed: ${response.status} ${text}`);
+  }
+  return response.status === 204 ? null : response.json();
+}
 
-  if (!res.ok) {
-    throw new Error(`GET ${path} failed: ${res.status}`);
+export async function apiPatch(path, body) {
+  const response = await request(path, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`PATCH ${normalizeApiPath(path)} failed: ${response.status} ${text}`);
+  }
+  return response.status === 204 ? null : response.json();
+}
+
+export async function apiDelete(path) {
+  const response = await request(path, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`DELETE ${normalizeApiPath(path)} failed: ${response.status}`);
+  }
+  return true;
+}
+
+export async function apiPostForm(path, formData) {
+  const response = await request(path, { method: "POST", body: formData });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`POST ${normalizeApiPath(path)} failed: ${response.status} ${text}`);
+  }
+  return response.json();
+}
+
+export async function apiPatchForm(path, formData) {
+  const response = await request(path, { method: "PATCH", body: formData });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`PATCH ${normalizeApiPath(path)} failed: ${response.status} ${text}`);
+  }
+  return response.json();
+}
+
+export async function apiDownload(path, fallbackFilename = "openlims-download") {
+  const response = await request(path, { method: "GET" });
+  if (!response.ok) {
+    throw new Error(`GET ${normalizeApiPath(path)} failed: ${response.status}`);
   }
 
-  const blob = await res.blob();
-  const disposition = res.headers.get("Content-Disposition") || "";
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
   const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
   const filename = match ? decodeURIComponent(match[1].replace(/"$/, "")) : fallbackFilename;
   const url = URL.createObjectURL(blob);
@@ -210,59 +190,36 @@ export async function apiDownload(path, fallbackFilename = "openlims-download") 
   URL.revokeObjectURL(url);
 }
 
-export async function apiPost(path, body) {
-  const res = await request(path, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`POST ${path} failed: ${res.status} ${text}`);
-  }
-
-  return res.json();
-}
-
-export async function apiPatch(path, body) {
-  const res = await request(path, {
-    method: "PATCH",
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`PATCH ${path} failed: ${res.status} ${text}`);
-  }
-
-  return res.json();
-}
-
-export async function apiDelete(path) {
-  const res = await request(path, { method: "DELETE" });
-
-  if (!res.ok) {
-    throw new Error(`DELETE ${path} failed: ${res.status}`);
-  }
-
-  return true;
-}
-
 export async function login(username, password) {
-  const res = await fetch(`${API_BASE}/api/auth/token/`, {
+  clearLegacyTokens();
+  const csrf = await ensureCSRFToken();
+  const response = await fetch(`${API_BASE}/api/v1/auth/login/`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": csrf,
+    },
     body: JSON.stringify({ username, password }),
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Login failed: ${res.status} ${text}`);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Login failed: ${response.status} ${text}`);
   }
 
-  const data = await res.json();
+  return response.json();
+}
 
-  setTokens(data);
-
-  return data;
+export async function logout() {
+  try {
+    const csrf = await ensureCSRFToken();
+    await fetch(`${API_BASE}/api/v1/auth/logout/`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "X-CSRFToken": csrf },
+    });
+  } finally {
+    clearLegacyTokens();
+  }
 }
