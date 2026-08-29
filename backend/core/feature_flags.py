@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.http import JsonResponse
 
 from settings_app.models import SystemSettings
@@ -34,6 +35,9 @@ class FeatureFlagAPIMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        if not getattr(settings, "OPENLIMS_ENFORCE_FEATURE_FLAGS", True):
+            return self.get_response(request)
+
         path = request.path
         feature = None
         for candidate, prefixes in FEATURE_PATH_PREFIXES.items():
