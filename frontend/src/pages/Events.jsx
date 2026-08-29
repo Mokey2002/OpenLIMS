@@ -10,8 +10,7 @@ import {
   Spinner,
   Table,
 } from "react-bootstrap";
-import { apiGet } from "../api";
-import { getAccessToken } from "../auth";
+import { apiDownload, apiGet } from "../api";
 import { isAdmin } from "../authz";
 
 function formatTimestamp(ts) {
@@ -76,19 +75,6 @@ function prettyPayload(payload) {
   }
 }
 
-function renderReasonSummary(payload) {
-  const reason = payload?.reason;
-
-  if (!reason) return null;
-
-  return (
-    <div className="reason-box mb-2">
-      <div className="feed-meta mb-1">Reason for change</div>
-      <div className="fw-semibold">{reason}</div>
-    </div>
-  );
-}
-
 function statusVariant(action) {
   const value = String(action || "").toUpperCase();
 
@@ -122,30 +108,11 @@ function buildQueryString(filters) {
 }
 
 async function downloadAuditExport(format, filters) {
-  const token = getAccessToken();
   const queryString = buildQueryString(filters);
-  const url = `/api/events/export-${format}/${queryString}`;
-
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Export failed with status ${response.status}`);
-  }
-
-  const blob = await response.blob();
-  const downloadUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = downloadUrl;
-  link.download =
+  const filename =
     format === "json" ? "openlims-audit-log.json" : "openlims-audit-log.csv";
 
-  link.click();
-  URL.revokeObjectURL(downloadUrl);
+  await apiDownload(`/api/events/export-${format}/${queryString}`, filename);
 }
 
 export default function Events() {
