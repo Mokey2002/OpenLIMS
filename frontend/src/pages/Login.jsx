@@ -139,7 +139,7 @@ export default function Login() {
                 </p>
 
                 <Form onSubmit={submit}>
-                  <Form.Group className="mb-3">
+                  <Form.Group className="mb-3" controlId="openlims-username">
                     <Form.Label>Username</Form.Label>
                     <Form.Control
                       value={username}
@@ -149,7 +149,7 @@ export default function Login() {
                     />
                   </Form.Group>
 
-                  <Form.Group className="mb-4">
+                  <Form.Group className="mb-4" controlId="openlims-password">
                     <Form.Label>Password</Form.Label>
                     <Form.Control
                       type="password"
