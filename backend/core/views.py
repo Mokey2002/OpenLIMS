@@ -12,6 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from events.models import Event
+from .authentication import enforce_csrf
 from .permissions import IsAdminOnly
 from .serializers import OpenLIMSTokenObtainPairSerializer
 from .serializers import (
@@ -77,6 +78,7 @@ class CookieLoginView(APIView):
     authentication_classes = []
 
     def post(self, request):
+        enforce_csrf(request)
         serializer = OpenLIMSTokenObtainPairSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         tokens = serializer.validated_data
@@ -92,6 +94,7 @@ class CookieRefreshView(APIView):
     authentication_classes = []
 
     def post(self, request):
+        enforce_csrf(request)
         refresh = request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME)
         if not refresh:
             return Response({"detail": "Refresh cookie is missing."}, status=401)
@@ -114,6 +117,7 @@ class CookieLogoutView(APIView):
     authentication_classes = []
 
     def post(self, request):
+        enforce_csrf(request)
         refresh = request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME)
         if refresh:
             try:
