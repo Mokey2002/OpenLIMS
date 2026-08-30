@@ -5,6 +5,14 @@
 </p>
 
 <p align="center">
+  <a href="#-features">Features</a>
+  ·
+  <a href="#-architecture">Architecture</a>
+  ·
+  <a href="#-local-development">Local Development</a>
+</p>
+
+<p align="center">
   <img alt="Version" src="https://img.shields.io/badge/version-v0.28.1-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
@@ -17,141 +25,483 @@
 
 ## Overview
 
-**OpenLIMS** is an open-source, self-hosted Laboratory Information Management System for research labs, small biotech teams, core facilities, and developers who need more structure than spreadsheets without the cost or complexity of a traditional enterprise LIMS.
+**OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
-It supports sample tracking, projects, configurable workflows, collaborative notebooks, inventory custody, internal assay requests, instrument imports, sequence analysis, BLAST, mass spectrometry review, data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support.
+The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
-> **Status:** OpenLIMS is a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
+> **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
 **Current release:** `v0.28.1 — Product Hardening and My Work`
 
----
+### v0.28.1 highlights
 
-## ✨ What’s new in v0.28.1
+- Unified **My Work** signed-in landing page for assigned work, workflow requests, Notebook experiments when enabled, QC attention, alerts, unread notifications, and overdue work
+- Main navigation reorganized around **Plan → Receive → Execute → Review → Report**, with role-specific destinations and user-pinned favorites
+- Browser JWTs moved out of `localStorage`/`sessionStorage` into secure HttpOnly access and refresh cookies
+- CSRF protection for cookie-authenticated writes, refresh-token rotation, blacklist-after-rotation, and server-side logout invalidation
+- Browser WebSocket authentication moved to the HttpOnly session cookie while Bearer JWT support remains available for scripts/API clients
+- Frontend application traffic centralized on `/api/v1/` with legacy API compatibility retained where required
+- Notebook and Registry feature flags enforced at the backend API boundary instead of only hiding navigation links
+- Production `docker-compose.prod.yml` with Daphne, Celery, internal PostgreSQL/Redis, persistent volumes, health checks, production React/Nginx serving, and optional Ollama profile
+- Playwright Chromium E2E coverage for secure login, My Work, workflow navigation, `/api/v1/` browser requests, and logout/session invalidation
+- GitHub Actions now checks the production frontend build, production Compose configuration, backend hardening behavior, and browser E2E flows
 
-### Unified My Work dashboard
+### v0.28.0 highlights
 
-The signed-in home page is now a single **My Work** workspace that brings together:
+- Site-to-well inventory hierarchies, generic barcodes, plate maps, and well-level sample or reagent placement
+- Scan-based receive, move, transfer, count, consume, adjust, quarantine, dispose, and return operations
+- Immutable quantity ledger with actor, reason, units, before/after values, and work/experiment/request provenance
+- Reagent/vendor/lot/cost/storage metadata, chemical safety data, SDS/COA files, and disposal guidance
+- Expiration, low-stock, reorder, and reservation alerts plus cycle-count reconciliation
+- Configurable internal assay request forms, triage, approval/rejection/cancellation, priority, due dates, and SLAs
+- Dependency-aware pipeline assignment, batch/plate run groups, resource requirements, and automatic material reservations
+- Requester-visible execution, QC, results, messages, attachments, and approved reports
 
-- Assigned work
-- Workflow requests
-- Notebook experiments when enabled
-- QC items needing attention
-- Inventory and operational alerts
-- Unread notifications
-- Overdue work
+### v0.27.0 highlights
 
-This reduces the need to jump between many separate screens to understand what needs attention.
+- User-, team-, and project-scoped notebooks with granular read, write, comment, review, and lock permissions
+- Searchable Notebook workspace with personal queues, visual block editors, safe collaborative autosave, and revision comparison
+- Experiment templates and clone-template/clone-experiment workflows
+- Rich block entries for text, headings, tables, checklists, protocols, calculations, media, structured results, and sequences
+- Immutable experiment revisions with autosave, restore, exact linked-object version snapshots, and before/after audit details
+- Comments, mentions, assignments, internal sharing, review, sign-off, and immutable locking
+- Provenance-rich PDF export with authors, reviewers, timestamps, linked records, versions, and revision history
+- Regulated electronic-signature hardening remains scheduled for v1.0
 
-### Simpler workflow navigation
+### v0.26.0 highlights
 
-The main application navigation is organized around the lab workflow:
+- Configurable biological registry types with versioned JSON schemas and stable registry IDs
+- Immutable registry versions, aliases, external identifiers, tags, typed relationships, and project visibility
+- Draft, review, registration, and retirement lifecycle with director approval and common audit payloads
+- Duplicate detection across IDs, aliases, sequence checksums, catalog numbers, and configured schema fields
+- Registry CSV and legacy-database migration through the existing preview/fingerprint/commit toolkit
+- Strict DNA, RNA, and protein validation with linear/circular topology and immutable sequence revisions
+- Revision diff/restore, reverse complement, transcription, translation, ORFs, GC, molecular weight, and primer calculations
+- Restriction-site analysis, virtual digests, simple construct assembly plans, and reusable feature libraries
+- Annotation-preserving FASTA and GenBank import/export and registry-linked sequence revisions
+- English and Spanish Registry and molecular-biology interfaces
 
-```text
-Plan → Receive → Execute → Review → Report
-```
+### v0.25.1 highlights
 
-Navigation is role-aware, supports favorites, and keeps optional modules such as Notebook and Registry hidden when their feature flags are disabled.
+- Stable public UUIDs for projects, samples, sequences, inventory objects, and pipeline runs without replacing existing numeric API IDs
+- Versioned `/api/v1/` routes with an initial OpenAPI schema and interactive documentation
+- Reusable entity links and file attachments addressed by entity type and public ID
+- Shared project-scoped permission helpers and a versioned audit-event payload contract
+- Director-controlled, default-off feature flags for Notebook, Registry, Studies, and Insight
+- Build-time enforcement of English and Spanish metadata for new feature-flagged modules
+- Compatibility coverage keeping existing `/api/` routes available during the versioning transition
 
-### Secure browser authentication
+### v0.25.0 highlights
 
-Browser authentication was hardened substantially:
+- Ask a focused clarification question instead of guessing when a request has multiple valid meanings
+- Offer semantic choices for ambiguous QC sample/result, general sample/result, failure, and inventory requests
+- Preserve the current conversation context while the user chooses a clarification option
+- Show the active investigation, comparison, BLAST setup, sample, result, batch, or inventory context in both assistant interfaces
+- Let users clear retained context before asking an unrelated follow-up
+- Keep clarification prompts rule-based so OpenAI or Ollama cannot rewrite the available choices
 
-- Access and refresh JWTs are stored in **HttpOnly cookies**, not `localStorage`
-- CSRF protection is enforced for cookie-authenticated write requests
-- Refresh-token rotation is enabled
-- Rotated and logged-out refresh tokens are blacklisted
-- Logout invalidates the browser session
-- Content Security Policy and additional security headers are applied
-- Browser WebSockets use the authenticated session cookie instead of exposing a token in the URL
-- Bearer-token authentication remains available for scripts and non-browser API clients
+### v0.24.3 highlights
 
-### Versioned browser API traffic
-
-The frontend now routes normal application API traffic through `/api/v1/` while preserving compatibility routes where needed. Shared frontend request helpers provide consistent session credentials, CSRF handling, refresh behavior, downloads, form uploads, and retry behavior.
-
-### Backend-enforced feature flags
-
-Notebook and Registry feature flags no longer only hide menu entries. When disabled, the corresponding backend API routes are blocked as well.
-
-### Production deployment support
-
-v0.28.1 adds a production Compose configuration with:
-
-- PostgreSQL and Redis kept internal by default
-- Persistent PostgreSQL, Redis, media, and static volumes
-- Daphne ASGI application server
-- Celery worker
-- Production frontend image served by Nginx
-- Health checks and service dependencies
-- WebSocket proxying
-- Optional Ollama profile
-- Configurable public HTTP port
-
-### Frontend end-to-end testing
-
-Playwright browser tests now exercise critical product flows including:
-
-- Login
-- HttpOnly browser sessions
-- No JWT persistence in browser storage
-- My Work loading
-- Versioned API usage
-- Main workflow navigation
-- Logout and session invalidation
-
-GitHub Actions now validates the backend suite, Django checks, migration consistency, frontend production build, production Compose configuration, and Playwright E2E flows.
-
----
-
-## Previous release: v0.28.0
-
-v0.28.0 introduced Inventory v2 and Workflow Requests v1, including:
-
-- Site-to-well inventory hierarchies and plate maps
-- Generic barcodes and scan-based inventory operations
-- Immutable quantity ledger and provenance
-- Reagent, vendor, lot, storage, safety, SDS, and COA metadata
-- Expiration, reorder, reservation, and cycle-count workflows
-- Configurable internal assay request forms
-- Triage, approval, rejection, cancellation, due dates, and SLAs
-- Dependency-aware pipeline assignment
-- Batch and plate run groups
-- Automatic material reservations
-- Requester-visible execution, QC, results, attachments, and approved reports
+- Prevent retained investigation, comparison, and BLAST context from capturing unrelated questions
+- Distinguish samples in QC, samples needing QC review, and samples with failed QC results
+- Return concise QC worklists without automatic graphs or LLM rewriting
+- Require focused investigation follow-ups and show charts only for explicit visualization requests
+- Keep notification language, SOP questions, and analytical comparisons within their intended domains
+- Prevent LLM summaries from generalizing findings to unlisted records
+- Seed eleven realistic instrument runs with direct sample, work-item, and result provenance
+- Upgrade existing demo databases idempotently when `seed_demo` is run again
+- Link connector-created work items directly to their originating instrument import job
+- Expose instrument code, instrument name, run ID, source type, and import job on work-item and result APIs
+- Backfill legacy connector work items from the established `Import Job <id>` naming convention
+- Preserve audit/text fallback behavior for older records that cannot be linked automatically
+- Show direct instrument/run provenance beside results and work items on the sample page
+- Show linked sample, work-item, and result counts on each import job
+- Use the database relation as the highest-confidence instrument provenance in investigations
+- Keep provenance immutable through regular work-item and result APIs
 
 ---
 
-## 🧭 Core product areas
+## Deployment Access
+
+Hosted deployment addresses and access credentials are intentionally not
+published in the repository. Authorized users should obtain access details
+directly from the repository owner.
+
+---
+
+## ✨ Features
 
 | Area | Capabilities |
 |---|---|
-| **My Work** | Unified assigned-work, request, experiment, QC, alert, notification, and overdue-work dashboard |
-| **Samples** | Lifecycle tracking, aliquots, parent/child lineage, custody, statuses, attachments, custom fields, reason-for-change logging |
-| **Projects** | Project workspaces, membership, scoped visibility, cross-project sample linking |
-| **Pipelines** | Dependency graphs, parallel/conditional steps, optional work, controlled retries, defaults, QC gates |
-| **Analyses & procedures** | Configurable analysis types, required result schemas, versioned procedures, SOP links |
-| **Notebook** | Collaborative notebooks, block experiments, immutable revisions, comments, assignments, review/sign-off, locking, cloning, PDF export |
-| **Inventory** | Site-to-well hierarchy, barcodes, plate maps, reagent/lot metadata, immutable scan ledger, reservations, alerts, cycle counting |
-| **Workflow Requests** | Configurable assay forms, triage/approval, SLAs, pipeline assignment, resource reservation, execution status, reports |
+| **My Work** | Unified assigned-work, workflow-request, experiment, QC, alert, notification, and overdue-work dashboard |
+| **Samples** | Sample lifecycle tracking, aliquots and parent/child lineage, custody, statuses, attachments, custom fields, reason-for-change logging |
+| **Pipelines** | Dependency graphs, parallel and conditional steps, optional work, controlled retries, project/sample-type defaults, assignment by sample/batch/project, failure blocking, QC gates |
+| **Analyses & procedures** | Admin-configurable analysis types, required result schemas, versioned procedures, SOP links, expected duration |
+| **Projects** | Project workspaces, project-scoped visibility, membership, cross-project sample linking, unified sample-to-report workflow view |
+| **Notebook** | Scoped collaborative notebooks, block experiments, immutable revisions, comments, assignments, review/sign-off, locking, cloning, and provenance-rich PDF export |
+| **Inventory** | Site-to-well location hierarchy, generic barcodes, plate maps, reagent/lot metadata, immutable scan ledger, reservations, alerts, and cycle-count reconciliation |
+| **Workflow Requests** | Configurable internal assay forms, triage/approval, SLAs, pipeline assignment, resource reservation, batch/plate grouping, requester messages, execution status, and approved reports |
 | **Imports** | Instrument CSV imports, flexible header detection, direct instrument/API ingestion |
-| **Migration** | Legacy migration profiles, reusable field mappings, preview/dry-run, reconciliation, rollback support |
-| **Sequences** | FASTA import, sequence workspaces, metadata, features |
-| **Registry** | Configurable biological entities, immutable versions, aliases, relationships, duplicate detection, review/registration |
-| **Molecular Biology** | DNA/RNA/protein validation, revision tools, digests, construct assembly, feature libraries, FASTA/GenBank interchange |
-| **Alignments** | Clustal Omega alignment jobs and downloadable output |
+| **Migration** | Legacy CSV migration profiles, reusable field mappings, preview/dry-run, queued imports, row review |
+| **External IDs** | Preserve legacy sample IDs and aliases from older systems |
+| **Sequences** | FASTA import workflows, sequence workspaces, sequence metadata and features |
+| **Registry** | Configurable biological entity types, immutable versions, aliases, relationships, duplicate detection, review/registration, and physical-material links |
+| **Molecular Biology** | Strict DNA/RNA/protein validation, circular topology, revision diff/restore, biochemical tools, virtual digests, construct assembly, feature libraries, and FASTA/GenBank interchange |
+| **Alignments** | Clustal Omega alignment jobs with downloadable output |
 | **BLAST** | Local BLAST database building and blastn/blastp search |
-| **Mass Spec** | mzML/mzXML/mzData and OpenMS-compatible review using pyOpenMS |
-| **Audit** | Audit events, custody transfers, reason-for-change tracking, exports |
-| **Reports** | Project, sample, QC, import, audit, comparison, and investigation reports |
-| **Assistant** | OpenLIMS Rules with optional OpenAI or Ollama, clarification, context, investigations, and confirmed actions |
-| **Localization** | Director-controlled English or Spanish interface |
+| **Mass Spec** | mzML, mzXML, mzData, featureXML, consensusXML, mzID/mzIdentML review using pyOpenMS |
+| **Audit** | Audit events, barcode-scanned custody transfers, reason-for-change tracking, CSV exports |
+| **Reports** | Project summaries, sample inventory, QC review, import summaries, audit activity, comparison and investigation CSV/PDF artifacts |
+| **Visual analytics** | Investigation workbench, multi-sample/project/batch comparisons, result trends, outlier review, workflow bottlenecks, automatic charts |
+| **Assistant** | OpenLIMS Rules, optional OpenAI or Ollama, clarification choices, visible removable context, investigation and comparison follow-ups, confirmed actions with expiring user-bound tokens and audit events |
+| **Jobs** | Celery/Redis background jobs and real-time WebSocket updates |
+| **Security** | HttpOnly browser JWT cookies, CSRF protection, refresh rotation/blacklisting, logout invalidation, role-based permissions, and Bearer JWT support for API clients |
+| **Localization** | Director-controlled, instance-wide English or Spanish UI, including the sign-in screen and workflow pages |
+| **Shared foundation** | Stable public IDs, reusable links and attachments, versioned APIs, OpenAPI documentation, common project permissions and audit payloads, and server-enforced guarded module feature flags |
 
 ---
 
-## 🔐 Security and permissions
+## 🧭 Table of Contents
 
-OpenLIMS uses role-based permissions and project-scoped access controls.
+- [Core Concepts](#-core-concepts)
+- [OpenLIMS Assistant](#-openlims-assistant)
+- [Architecture](#-architecture)
+- [Permissions](#-permissions)
+- [Local Development](#-local-development)
+- [Optional Local Ollama Assistant](#-optional-local-ollama-assistant)
+- [Testing](#-testing)
+- [Deployment Notes](#-deployment-notes)
+- [Current Project Status](#-current-project-status)
+- [Roadmap](#-roadmap)
+
+---
+
+## 🧬 Core Concepts
+
+### Samples
+
+Samples are the central records in OpenLIMS. A sample can be assigned to a project, placed in a container, linked to results, connected to sequence records, used in BLAST or alignment workflows, associated with mass spectrometry runs, and connected to external IDs from legacy systems.
+
+Supported sample statuses:
+
+| Status |
+|---|
+| `RECEIVED` |
+| `IN_PROGRESS` |
+| `QC` |
+| `REPORTED` |
+| `ARCHIVED` |
+
+OpenLIMS supports controlled status changes with a required reason for change, helping create a stronger chain-of-custody and audit trail.
+
+### Projects
+
+Projects act as shared workspaces for lab teams. They can contain samples, sequence workspaces, imports, BLAST jobs, alignments, mass spectrometry runs, notes, migration jobs, and project activity.
+
+Project membership controls what non-admin users can see and modify.
+
+### Cross-Project Sample Linking
+
+A sample has one primary project, but it can also be linked to additional projects. This supports cases where a sample belongs to one study or team but needs to be visible to another project without transferring ownership.
+
+```text
+Sample: S-ALPHA-001
+Primary Project: PRJ-ALPHA
+Linked Projects: PRJ-BETA, PRJ-GAMMA
+```
+
+Linked projects provide visibility, while primary project ownership controls modification and import permissions.
+
+### Sample Lineage and Chain of Custody
+
+OpenLIMS records directed relationships between source and derived samples for
+aliquots, splits, derived materials, and pooled components. Lineage links reject
+self-links and cycles, retain the amount and unit when supplied, and require an
+audited reason. A derived sample can be created directly from the Traceability
+workspace while inheriting the source project, linked-project visibility, batch,
+and applicable default workflow.
+
+Barcode or sample-ID scans can record receipt, check-out, check-in, transfer,
+storage movement, processing, and disposal. Each custody event preserves the
+previous and new container and custodian, the operator, scan value, timestamp,
+and handling reason. Disposal clears physical custody and archives the sample.
+
+### Inventory
+
+OpenLIMS models storage from a physical site down to an individual well:
+
+```text
+Site → Building → Laboratory → Room → Freezer → Shelf → Rack → Box → Well
+```
+
+Locations, containers, samples, reagent lots, and registered materials can have
+generic barcode identities. Scanned operations create immutable transactions
+for receive, move, transfer, count, consume, adjust, quarantine, disposal, and
+return. Every quantity transaction records the actor, reason, unit, before and
+after values, and linked experiment, request, or work item when supplied.
+
+Inventory items and lots retain vendor, catalog, manufacturer, received/opened
+and expiration dates, cost, storage conditions, chemical identity, hazards,
+GHS classifications, SDS/COA files, and disposal guidance. Plate maps support
+well-level placement, while reservations, expiration/reorder alerts, cycle
+counts, and reconciliation keep available stock auditable.
+
+---
+
+## 📥 Instrument Imports
+
+OpenLIMS supports CSV-based instrument imports and direct API ingestion.
+
+Instrument profiles define:
+
+- Instrument code and name
+- Delimiter
+- Sample ID column
+- Column mappings
+- Value types
+- Numeric limits
+- Allowed values
+- Header row behavior
+- Auto-detection of true CSV headers
+
+### Flexible CSV Imports
+
+Some instrument exports include metadata rows before the real CSV header. OpenLIMS can scan for the sample ID column and detect the actual header row.
+
+```csv
+Instrument,Example Analyzer
+Run ID,RUN-001
+Operator,Peter
+sample_id,result,operator,qc_status
+S-ALPHA-001,pass,Peter,PASS
+```
+
+---
+
+## 🔁 Data Migration Toolkit
+
+OpenLIMS includes a data migration toolkit for bringing legacy lab database exports into OpenLIMS in a safer, reviewable way.
+
+```text
+SISBI / legacy PostgreSQL, MySQL, SQLite, or CSV
+   ↓
+Migration profile
+   ↓
+Read-only datasets and field mapping
+   ↓
+Preview / dry run
+   ↓
+Confirm import
+   ↓
+Projects, inactive users, samples, metadata, work items, and historical results
+```
+
+The migration toolkit supports:
+
+- Migration profiles
+- Reusable field mappings
+- Saved mapping templates that can be applied to another compatible profile
+- CSV upload
+- Director-managed read-only PostgreSQL, MySQL/MariaDB, and SQLite sources
+- Schema/table inspection without arbitrary SQL
+- Separate datasets for projects, users, samples, and historical results
+- Preview / dry-run before import
+- Required-field, data-type, relationship, status, and timestamp validation
+- A source-and-mapping fingerprint that blocks a changed source after preview
+- Per-job conflict policies: skip, merge blank fields, overwrite mapped fields, or create unique copies
+- Project creation or matching
+- Inactive user creation with unusable passwords and safe non-admin roles
+- Sample creation or matching
+- External sample IDs and aliases
+- Custom field values
+- Work items and results
+- Migration job history
+- Paginated migration row review
+- Skipped/error row filtering
+- CSV export for migration review
+- Reconciliation reports with source, action, status, and entity totals
+- Director-controlled rollback of tracked creations and updates
+
+Database passwords are never stored in OpenLIMS. Configure the password in an
+environment variable, enter only that variable's name in the connection, and
+use a source account that has `SELECT` permission only. Remote hosts must also
+be listed in `MIGRATION_DB_ALLOWED_HOSTS`. Each dataset has a row safety limit;
+the final commit re-reads and fingerprints the source before writing anything.
+Conflict policy is part of that fingerprint. Each committed job records the
+objects it created and the original values it changed, allowing a director to
+perform a guarded rollback. Rollback is blocked if later related data would be
+put at risk.
+
+### External Sample IDs and Aliases
+
+OpenLIMS can preserve legacy identifiers from older databases or spreadsheets.
+
+```text
+Sample: S-UW-001
+Source System: UW Legacy DB
+Label: legacy_specimen_id
+External ID: SP-00921
+```
+
+---
+
+## 🤖 OpenLIMS Assistant
+
+OpenLIMS includes a read-only assistant for quickly finding and summarizing records inside the system.
+
+The assistant can help users ask questions such as:
+
+- Show what needs attention across accessible lab work
+- Find a sample by sample ID
+- Summarize a project
+- Show failed migration jobs
+- Show skipped migration rows
+- Explain why a migration job failed
+- Identify the current logged-in OpenLIMS user
+
+The assistant uses safe backend tools as the source of truth. It does **not** directly modify database records.
+
+The attention summary is permission-filtered and checks samples that have
+remained in an active status for more than three days, missing sample
+information, QC review states, aged open work items, failed instrument
+imports, failed BLAST and alignment jobs, and admin-only system health
+warnings. Inventory quantity, reservation, reorder, and expiry alerts are also
+included when they need attention.
+
+### Assistant Modes
+
+| Mode | Description |
+|---|---|
+| **OpenLIMS Rules** | Built-in rule-based search and summaries with no external model required |
+| **OpenAI** | Optional external LLM summaries using server-side API configuration |
+| **Ollama** | Optional local LLM summaries using a self-hosted Ollama container |
+
+If an LLM is unavailable, the assistant falls back to **OpenLIMS Rules** mode.
+
+The rules layer also handles common conversational requests such as greetings,
+help, the current application date, and the current application time. If a
+question is unrelated to OpenLIMS but can be answered conversationally, the
+constrained route classifier can send it to a separate general-conversation
+prompt. That prompt receives no database records or tool output and cannot run
+an OpenLIMS action. Requests that appear to require unsupported laboratory data
+or application operations remain explicit unsupported requests instead of being
+answered as general chat.
+
+The UI displays the active engine/model, such as:
+
+```text
+Using: OpenLIMS Rules
+Using: OpenAI · gpt-5
+Using: Ollama · llama3.2:1b
+```
+
+---
+
+## 🧫 Sequence, BLAST, and Mass Spec Workflows
+
+### Sequence Workspaces
+
+Users can:
+
+- Create sequence records
+- Link sequences to samples and projects
+- Store sequence metadata
+- Add sequence features
+- Import FASTA files
+- Use sequences in alignment and BLAST workflows
+
+```text
+Sample → FASTA Import → Sequence Workspace → Alignment Job → BLAST Search
+```
+
+### Clustal Omega Alignments
+
+OpenLIMS can queue Clustal Omega alignment jobs asynchronously. Alignment jobs store input FASTA, aligned FASTA, sequence count, alignment summary, status, and downloadable output.
+
+### Local BLAST Search
+
+OpenLIMS includes local BLAST support using NCBI BLAST+.
+
+Users can:
+
+- Upload FASTA files as local BLAST databases
+- Build BLAST databases
+- Run blastn searches
+- Run blastp searches
+- View parsed BLAST hits
+- Inspect identity, e-value, rank, accession, and aligned regions
+
+### Mass Spectrometry Workflows
+
+OpenLIMS includes mass spectrometry support using pyOpenMS and OpenMS-compatible formats.
+
+Supported workflows include:
+
+- mzML, mzXML, and mzData upload
+- featureXML parsing
+- consensusXML parsing
+- mzID / mzIdentML identification summaries
+- TIC preview charts
+- Spectra counts
+- MS1/MS2 counts
+- Retention time ranges
+- m/z ranges
+- Peak summaries
+- Detected features
+- Protein and peptide summaries
+- Run comparison by project, sample, or manual selection
+
+---
+
+## 🧾 Audit Trail and Reports
+
+OpenLIMS records important activity as audit events, including:
+
+- Sample created
+- Sample status changed
+- Sample linked/unlinked from project
+- Container assigned
+- Attachment uploaded
+- Results imported
+- Migration imported
+- FASTA imported
+- Alignment queued or completed
+- BLAST database built
+- BLAST search completed
+- Mass spec run uploaded or processed
+- Settings changed
+
+For controlled sample status changes, OpenLIMS records actor, before/after state, changed fields, reason for change, and timestamp.
+
+Reports and CSV exports include:
+
+- Project summaries
+- Sample inventory
+- QC review
+- Import summaries
+- Alignment summaries
+- BLAST summaries
+- Audit activity
+
+---
+
+## ⚡ Real-Time Job Updates
+
+Background jobs run through Celery and Redis. OpenLIMS uses Django Channels and WebSockets to update the frontend when jobs change status.
+
+Supported live-update workflows include:
+
+- CSV imports
+- Alignment jobs
+- BLAST database builds
+- BLAST searches
+- Mass spec processing
+
+---
+
+## 🔐 Permissions
+
+OpenLIMS uses role-based permissions and project-scoped access control. Browser sessions use HttpOnly JWT cookies with CSRF protection, refresh-token rotation, and logout invalidation. Bearer JWT authentication remains supported for scripts and non-browser API clients.
 
 | Role | Purpose |
 |---|---|
@@ -159,11 +509,15 @@ OpenLIMS uses role-based permissions and project-scoped access controls.
 | **Tech** | Lab workflow access for assigned projects |
 | **Viewer** | Read-only access |
 
-Browser sessions use HttpOnly JWT cookies with CSRF protection, refresh rotation, and logout invalidation. Bearer JWT authentication remains supported for compatible scripts and API clients.
+### Sample Access Rules
 
-Feature flags are enforced in both navigation and backend API access for guarded modules.
+| Role | Sample Visibility | Modify Samples |
+|---|---|---|
+| **Admin / Director** | All samples, including unassigned samples | Yes |
+| **Tech** | Samples in assigned projects, linked project samples, and unassigned samples they created | Only samples they have modification rights for |
+| **Viewer** | Samples in assigned or linked projects | No |
 
-> Production operators should configure a strong Django secret key, allowed hosts, trusted CSRF origins, HTTPS at the edge, secure cookies, backups, and monitoring appropriate to their environment.
+Linked-project access allows a user to see a sample, but it does not automatically grant edit or import permissions.
 
 ---
 
@@ -172,63 +526,113 @@ Feature flags are enforced in both navigation and backend API access for guarded
 | Layer | Technology |
 |---|---|
 | **Frontend** | React + Vite |
-| **Production frontend** | Nginx |
+| **Production Web** | Nginx |
 | **Backend API** | Django REST Framework |
-| **ASGI** | Daphne |
 | **Database** | PostgreSQL |
-| **Background jobs** | Celery |
-| **Broker / cache** | Redis |
-| **Real-time updates** | Django Channels + WebSockets |
+| **Background Jobs** | Celery |
+| **Broker / Cache** | Redis |
+| **Real-Time Updates** | Django Channels + Daphne |
 | **Alignments** | Clustal Omega |
 | **BLAST** | NCBI BLAST+ |
 | **Mass Spec** | pyOpenMS |
 | **Assistant** | OpenLIMS Rules, optional OpenAI, optional Ollama |
-| **Deployment** | Docker Compose |
+| **Reverse Proxy / TLS Edge** | Caddy or another trusted reverse proxy when used |
+| **Deployment** | Docker Compose (development and production) |
+
+High-level architecture:
 
 ```text
-Browser
-  ↓
-Nginx / upstream TLS proxy
-  ↓
-React frontend + /api + /ws proxying
-  ↓
-Django REST Framework / Daphne
-  ↓
+React Frontend / Production Nginx
+   ↓
+Django REST Framework API
+   ↓
 PostgreSQL
 
 Redis
-  ↓
-Celery workers
-  ↓
-Imports / Migrations / Alignments / BLAST / Mass Spec
+   ↓
+Celery Worker
+   ↓
+Imports / Migrations / Alignments / BLAST / Mass Spec Jobs
+
+Daphne + Django Channels
+   ↓
+WebSocket job updates
+
+OpenLIMS Assistant
+   ↓
+Safe read-only backend tools
+   ↓
+Optional OpenAI or local Ollama summary
 ```
+
+### Main Django Apps
+
+| App | Responsibility |
+|---|---|
+| `samples` | Sample lifecycle, access control, attachments, transitions |
+| `projects` | Projects, membership, project posts |
+| `inventory` | Locations and containers |
+| `imports` | Instrument profiles, CSV imports, direct instrument ingestion |
+| `migration_toolkit` | Legacy CSV migration profiles, field mappings, dry-run previews, imports, and external IDs |
+| `results` | Work items and structured results |
+| `events` | Audit trail and audit export |
+| `notifications` | User notifications |
+| `custom_fields` | Configurable fields |
+| `sequences` | Sequence records and features |
+| `alignments` | Clustal Omega alignment jobs |
+| `blast` | BLAST databases, jobs, and hits |
+| `mass_spec` | Mass spec uploads, processing, summaries, and comparison |
+| `settings_app` | Admin settings |
+| `assistant` | Read-only assistant tools, OpenAI/Ollama summaries, and assistant status |
+| `core` | Users, roles, permissions, search, shared utilities |
 
 ---
 
-## 💻 Local development
+## 💻 Local Development
 
-### 1. Clone
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/Mokey2002/OpenLIMS.git
 cd OpenLIMS
 ```
 
-### 2. Create the local environment
+### 2. Create the environment file
 
 ```bash
 cp deploy/.env.example deploy/.env
 ```
 
-For browser development, ensure the frontend origins are trusted for CSRF, for example:
+Example local environment:
 
 ```env
 DJANGO_DEBUG=1
+DJANGO_SECRET_KEY=dev-secret-key
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 CSRF_TRUSTED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+
+POSTGRES_DB=openlims
+POSTGRES_USER=openlims
+POSTGRES_PASSWORD=openlims
+DB_HOST=db
+DB_PORT=5432
+
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/1
+CHANNEL_REDIS_URL=redis://redis:6379/2
+
+INSTRUMENT_API_KEY=my-shared-lab-instrument-key
+
+OPENLIMS_ASSISTANT_LLM_ENABLED=false
+OPENLIMS_ASSISTANT_LLM_PROVIDER=ollama
+OPENLIMS_ASSISTANT_LLM_ROUTING_ENABLED=true
+OPENLIMS_ASSISTANT_LLM_ROUTING_MIN_CONFIDENCE=0.65
+OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_MODEL=llama3.2:1b
+OLLAMA_TIMEOUT_SECONDS=25
 ```
 
-### 3. Start the stack
+### 3. Start services
 
 ```bash
 docker compose -p openlims -f deploy/docker-compose.yml up -d --build
@@ -246,7 +650,23 @@ docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.p
 docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py seed_demo
 ```
 
-`seed_demo` is idempotent. Newly created demo identities intentionally receive unusable passwords; it does not publish or install shared demo credentials. Sign in with an existing OpenLIMS administrator account to explore the seeded data.
+The command is idempotent and seeds connected demonstrations for projects,
+samples, batches, custom metadata, lineage, barcode custody, inventory,
+reservations, scan transactions, plate maps, cycle counts, workflow requests,
+notebooks and signed experiments, workflows, results, QC, instrument imports,
+migration previews and rollback, Registry records, Molecular Biology revisions
+and assembly plans, BLAST, alignments, mass spectrometry, reports,
+notifications, audit history, shared links and attachments, and assistant
+confirmations.
+The seeder does not create, require, display, or change passwords. Existing
+account credentials are preserved, while newly created demo identities are
+non-login accounts used for realistic ownership, assignment, QC, and audit
+history. Sign in with an existing OpenLIMS administrator account to explore the
+seeded data.
+
+The Registry and Notebook feature flags are enabled for the comprehensive demo.
+Studies and Insight remain disabled because those modules are still under
+development.
 
 ### 6. Open the app
 
@@ -259,47 +679,47 @@ docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.p
 
 ---
 
-## 🚀 Production deployment
+## 🦙 Optional Local Ollama Assistant
 
-A production Compose file is included at `deploy/docker-compose.prod.yml`.
+OpenLIMS can run the assistant with a local Ollama model instead of an external LLM provider.
 
-Start from the production environment template:
+Enable the assistant in `deploy/.env`:
 
-```bash
-cp deploy/.env.prod.example deploy/.env
+```env
+OPENLIMS_ASSISTANT_LLM_ENABLED=true
+OPENLIMS_ASSISTANT_LLM_PROVIDER=ollama
+OPENLIMS_ASSISTANT_LLM_ROUTING_ENABLED=true
+OPENLIMS_ASSISTANT_LLM_ROUTING_MIN_CONFIDENCE=0.65
+OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_MODEL=llama3.2:1b
+OLLAMA_TIMEOUT_SECONDS=25
 ```
 
-Before starting the stack, replace placeholder secrets and configure the public hostname and trusted CSRF origin for your deployment.
+OpenLIMS first uses normalized deterministic routes. If no route matches, the
+configured model may return a constrained, confidence-gated route hint from a
+fixed allowlist. OpenLIMS then runs the normal permission checks, frozen
+previews, and confirmation requirements. Invalid, low-confidence, or
+unavailable model classifications fall back to an honest rule-based response.
 
-Then build and start:
-
-```bash
-docker compose -p openlims -f deploy/docker-compose.prod.yml up -d --build
-```
-
-The frontend is exposed on port `8080` by default and can be changed with `OPENLIMS_HTTP_PORT`.
-
-For an Internet-facing deployment, terminate HTTPS at a trusted reverse proxy or load balancer and configure the Django proxy/security settings consistently with that topology.
-
-### Optional local Ollama
-
-The production Compose file includes an optional `llm` profile:
+Start the Ollama container:
 
 ```bash
-docker compose -p openlims -f deploy/docker-compose.prod.yml --profile llm up -d
+docker compose -p openlims -f deploy/docker-compose.yml up -d ollama
 ```
 
-### Database backup
+Pull a small model:
 
 ```bash
-docker compose -p openlims -f deploy/docker-compose.prod.yml exec db pg_dump -U openlims openlims > openlims_backup.sql
+docker compose -p openlims -f deploy/docker-compose.yml exec ollama ollama pull llama3.2:1b
 ```
 
-Restore:
+Restart the API and frontend:
 
 ```bash
-cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.prod.yml exec -T db psql -U openlims openlims
+docker compose -p openlims -f deploy/docker-compose.yml restart api frontend
 ```
+
+The Assistant page will show which engine is active: **OpenLIMS Rules**, **OpenAI**, or **Ollama**.
 
 ---
 
@@ -317,13 +737,7 @@ Run Django checks:
 docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py check
 ```
 
-Verify no uncommitted Django migrations are required:
-
-```bash
-docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py makemigrations --check --dry-run
-```
-
-Build the frontend:
+Run frontend build:
 
 ```bash
 cd frontend
@@ -331,7 +745,7 @@ npm ci
 npm run build
 ```
 
-Run Playwright E2E tests after starting a testable OpenLIMS environment:
+Run Playwright browser tests after starting a testable OpenLIMS environment:
 
 ```bash
 cd frontend/e2e
@@ -340,68 +754,150 @@ npx playwright install chromium
 npm test
 ```
 
-GitHub Actions runs these critical checks automatically for the v0.28.1 pull request.
+The CI workflow also validates `makemigrations --check`, production Compose configuration, the production frontend build, secure-cookie authentication, CSRF behavior, `/api/v1/` browser traffic, workflow navigation, and logout/session invalidation.
 
 ---
 
-## 🩺 Health check
+## 🩺 Health Check
 
-OpenLIMS includes health endpoints used by local and production containers. Health checks cover core service availability and installed analysis dependencies such as the database, Redis/cache, Clustal Omega, BLAST tools, and pyOpenMS where configured.
+OpenLIMS includes a health endpoint:
+
+```bash
+curl http://localhost:8000/api/health/
+```
+
+The health check verifies:
+
+- Database
+- Redis/cache
+- Clustal Omega
+- blastn
+- blastp
+- makeblastdb
+- pyOpenMS
 
 ---
 
-## 🤖 OpenLIMS Assistant
+## 🔖 Frontend Version Footer
 
-The assistant uses permission-aware backend tools as its source of truth. OpenLIMS Rules work without an external model, while OpenAI and Ollama can optionally provide constrained language-model assistance.
+The frontend footer should use the generated `frontend/src/version.js` file instead of a hardcoded version string.
 
-Supported patterns include searching records, summarizing accessible lab work, reviewing failures, investigations, comparisons, and supported confirmed actions. Actions that require confirmation remain subject to normal permission, preview, audit, and anti-duplication controls.
+Recommended footer source:
 
-The UI identifies the active engine, for example:
+```jsx
+OpenLIMS {OPENLIMS_VERSION}
+```
+
+The version file can be generated from the latest Git tag during frontend dev/build so the footer stays aligned with releases.
+
+---
+
+## 🚀 Deployment Notes
+
+OpenLIMS can run locally, on a private lab server, on a VM, or on cloud infrastructure.
+
+v0.28.1 includes `deploy/docker-compose.prod.yml` for production-style deployments. The production stack runs Django under Daphne, serves the built React frontend through Nginx, keeps PostgreSQL and Redis internal by default, persists database/cache/media/static data, includes health checks, and exposes the web service on `${OPENLIMS_HTTP_PORT:-8080}`. Ollama remains optional through the `llm` Compose profile.
+
+Start from the production environment template:
+
+```bash
+cp deploy/.env.prod.example deploy/.env
+```
+
+Replace placeholder secrets, configure `DJANGO_ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` for the public hostname, and then start the stack:
+
+```bash
+docker compose -p openlims -f deploy/docker-compose.prod.yml up -d --build
+```
+
+A typical production-style deployment uses:
 
 ```text
-Using: OpenLIMS Rules
-Using: OpenAI · <model>
-Using: Ollama · <model>
+Trusted TLS reverse proxy / load balancer (optional when TLS is terminated upstream)
+   ↓
+Nginx React frontend
+   ↓
+Django API / Daphne ASGI
+   ↓
+PostgreSQL
+
+Redis
+   ↓
+Celery Worker
+```
+
+For real-time updates, the production web tier forwards WebSocket traffic under `/ws/*` to the Django/Daphne API service.
+
+### Database Backup
+
+Create a backup:
+
+```bash
+docker compose -p openlims -f deploy/docker-compose.prod.yml exec db pg_dump -U openlims openlims > openlims_backup.sql
+```
+
+Restore a backup:
+
+```bash
+cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.prod.yml exec -T db psql -U openlims openlims
 ```
 
 ---
 
-## 📌 Current project status
+## 📌 Current Project Status
 
-OpenLIMS now includes production-shaped patterns across the application:
+OpenLIMS is a production-style LIMS prototype with many production-shaped patterns already in place:
 
-- Unified My Work workspace
-- Workflow-oriented navigation
-- Secure browser cookie sessions
-- CSRF protection and security headers
-- Versioned `/api/v1/` browser traffic
-- Server-enforced feature flags
-- Role-based and project-scoped access control
-- PostgreSQL, Redis, Celery, Daphne, and WebSockets
-- Production frontend container and Compose stack
-- Sample lineage and custody
-- Inventory transaction ledger and cycle counts
-- Workflow requests and resource reservations
-- Collaborative notebooks and immutable revisions
-- Registry and molecular-biology tooling
-- Instrument imports and migration toolkit
-- Sequence, alignment, BLAST, and mass-spectrometry workflows
-- Audit events and reason-for-change logging
-- Reports and global search
-- OpenLIMS Assistant with optional OpenAI/Ollama
-- English/Spanish interface
-- Backend, production-build, Compose, and Playwright CI coverage
+- Dockerized services
+- PostgreSQL database
+- Redis and Celery background jobs
+- Django Channels real-time updates
+- Unified My Work dashboard
+- Workflow-oriented Plan → Receive → Execute → Review → Report navigation
+- HttpOnly browser JWT cookies with CSRF protection, refresh rotation/blacklisting, and logout invalidation
+- Bearer JWT support for scripts and API clients
+- Role-based permissions
+- Project-scoped access control
+- Backend-enforced Notebook and Registry feature flags
+- Versioned `/api/v1/` browser traffic with compatibility routes
+- Collaborative experiment notebooks and immutable revisions
+- Inventory transaction ledger and cycle-count reconciliation
+- Internal workflow request intake and resource reservation
+- Cross-project sample linking
+- Data migration toolkit
+- External sample IDs and aliases
+- Audit event logging
+- Reason-for-change logging
+- Upload validation
+- CSV and FASTA import workflows
+- Flexible CSV header detection
+- Instrument profile mapping
+- Sequence workspaces
+- Clustal Omega integration
+- Local BLAST integration
+- pyOpenMS mass spectrometry workflows
+- Reports
+- Global search
+- OpenLIMS Assistant
+- Optional OpenAI assistant summaries
+- Optional Docker-based local Ollama assistant
+- Assistant engine/model indicator in the UI
+- Admin settings
+- Director-controlled English/Spanish interface
+- System health checks
+- Production Compose deployment and Nginx frontend image
+- Backend, production-build, Compose, and Playwright CI checks
 
-Remaining production-readiness work includes areas such as:
+Remaining production-readiness work includes:
 
-- Formal record-retention and archive policies across all regulated record types
+- Formal data-retention and archive rules across laboratory records
 - SSO and optional MFA
 - External/S3-compatible file storage
-- More formal backup/restore automation
+- More formal backup and restore automation
 - Monitoring and alerting
-- Broader regression and load testing
+- Expanded regression and load coverage
 - Validation-readiness documentation
-- Formal regulated-environment validation packages
+- Formal regulated-environment validation package
 
 ---
 
@@ -409,32 +905,33 @@ Remaining production-readiness work includes areas such as:
 
 Planned and future improvements include:
 
-- Formal retention/archival controls instead of destructive deletion for laboratory records
+- Formal record-retention and archive controls instead of destructive deletion for laboratory records
 - SSO and optional MFA
-- External object storage
+- More advanced migration support for multi-file exports and system-specific API connectors
+- Plate layouts and multi-sample pooling calculations on top of lineage records
+- More advanced QC approval workflows
+- External file storage support
 - Monitoring and alerting
-- Additional QC and approval workflows
-- More advanced migration connectors
-- Broader browser regression coverage
 - Validation-readiness documentation
-- Continued workflow, reporting, and assistant improvements
+- Assistant calculations for safe counts, averages, percentages, and summaries
+- Continued workflow, reporting, and browser regression improvements
 
-See [`docs/product_hardening_v0281.md`](docs/product_hardening_v0281.md) for additional v0.28.1 implementation notes.
+See [`docs/product_hardening_v0281.md`](docs/product_hardening_v0281.md) for the v0.28.1 product-hardening implementation notes.
 
 ---
 
-## 🎯 Project goals
+## 🎯 Project Goals
 
 OpenLIMS aims to be:
 
 - Lightweight
 - Self-hosted
 - Configurable
-- Open source and extensible
-- Practical for real laboratory workflows
-- Easy to run locally or on low-cost infrastructure
-- Useful for research groups, core facilities, and biotech teams
-- A strong foundation for laboratory workflow automation
+- Open source and extensible for laboratory-specific workflows and integrations
+- Practical for real lab workflows
+- Easy to run locally or on low-cost cloud infrastructure
+- Useful for small labs, research groups, and biotech teams
+- A strong foundation for lab workflow automation
 
 ---
 
@@ -450,6 +947,10 @@ LinkedIn: https://www.linkedin.com/in/edlemus/
 
 Copyright © 2026 Eduardo Lemus.
 
-OpenLIMS is open-source software licensed under the [Apache License 2.0](LICENSE). You may use, modify, and distribute the source code in accordance with the license terms.
+OpenLIMS is open-source software licensed under the
+[Apache License 2.0](LICENSE). You may use, modify, and distribute the source
+code in accordance with the license terms.
 
-Third-party dependencies and bundled components remain subject to their own licenses. See [`docs/licensing_history.md`](docs/licensing_history.md) for the project's licensing history.
+Third-party dependencies and bundled components remain subject to their own
+licenses. See [`docs/licensing_history.md`](docs/licensing_history.md) for the
+project's licensing history.
