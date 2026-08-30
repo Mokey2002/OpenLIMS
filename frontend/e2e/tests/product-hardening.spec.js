@@ -1,10 +1,33 @@
 const { test, expect } = require("@playwright/test");
 
-async function loginAsDirector(page) {
+async function loginAsDirector(page, context) {
   await page.goto("/login");
   await page.getByLabel("Username").fill("director");
   await page.getByLabel("Password").fill("Director123!");
+
+  const loginResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/auth/login/") &&
+      response.request().method() === "POST"
+  );
+
   await page.getByRole("button", { name: "Sign in" }).click();
+  const loginResponse = await loginResponsePromise;
+
+  if (!loginResponse.ok()) {
+    const cookies = await context.cookies();
+    const requestHeaders = await loginResponse.request().allHeaders();
+    const responseBody = await loginResponse.text();
+    const hasCsrfCookie = cookies.some((cookie) => cookie.name === "csrftoken");
+    const hasCsrfHeader = Boolean(requestHeaders["x-csrftoken"]);
+
+    throw new Error(
+      `Login failed with HTTP ${loginResponse.status()}; ` +
+        `csrfCookie=${hasCsrfCookie}; csrfHeader=${hasCsrfHeader}; ` +
+        `response=${responseBody}`
+    );
+  }
+
   await expect(page.getByRole("heading", { name: "My Work" })).toBeVisible();
 }
 
@@ -15,7 +38,7 @@ test("browser session uses HttpOnly cookies and no stored JWTs", async ({ page, 
     if (url.pathname.startsWith("/api/")) apiRequests.push(url.pathname);
   });
 
-  await loginAsDirector(page);
+  await loginAsDirector(page, context);
 
   const storage = await page.evaluate(() => ({
     local: Object.keys(localStorage),
@@ -43,7 +66,7 @@ test("browser session uses HttpOnly cookies and no stored JWTs", async ({ page, 
 });
 
 test("workflow navigation is cohesive and logout invalidates the browser session", async ({ page, context }) => {
-  await loginAsDirector(page);
+  await loginAsDirector(page, context);
 
   const nav = page.getByTestId("workflow-navigation");
   await expect(nav.getByText("Plan", { exact: true })).toBeVisible();
