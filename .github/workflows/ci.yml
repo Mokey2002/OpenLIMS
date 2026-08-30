@@ -10,13 +10,6 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      SECRET_KEY: test-secret-key
-      DEBUG: "1"
-      POSTGRES_DB: openlims
-      POSTGRES_USER: openlims
-      POSTGRES_PASSWORD: openlims
-      DB_HOST: db
-      DB_PORT: 5432
       INSTRUMENT_API_KEY: my-shared-lab-instrument-key
 
     steps:
@@ -25,50 +18,141 @@ jobs:
 
       - name: Create deploy env file
         run: |
-          cp deploy/.env.example deploy/.env || true
+          cp deploy/.env.example deploy/.env
           cat >> deploy/.env <<EOF
-          SECRET_KEY=test-secret-key
-          DEBUG=1
+          DJANGO_SECRET_KEY=test-secret-key
+          DJANGO_DEBUG=1
+          DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
           POSTGRES_DB=openlims
           POSTGRES_USER=openlims
           POSTGRES_PASSWORD=openlims
-          DB_HOST=db
-          DB_PORT=5432
+          DATABASE_URL=postgres://openlims:openlims@db:5432/openlims
           INSTRUMENT_API_KEY=my-shared-lab-instrument-key
+          JWT_COOKIE_SECURE=false
+          CSRF_COOKIE_SECURE=false
+          SESSION_COOKIE_SECURE=false
           EOF
 
       - name: Build Docker services
-        run: |
-          docker compose -p openlims -f deploy/docker-compose.yml build
+        run: docker compose -p openlims -f deploy/docker-compose.yml build
 
       - name: Start database
-        run: |
-          docker compose -p openlims -f deploy/docker-compose.yml up -d db
+        run: docker compose -p openlims -f deploy/docker-compose.yml up -d db
 
       - name: Run Django checks
-        run: |
-          docker compose -p openlims -f deploy/docker-compose.yml run --rm api python manage.py check
+        run: docker compose -p openlims -f deploy/docker-compose.yml run --rm api python manage.py check
 
       - name: Check migrations
-        run: |
-          docker compose -p openlims -f deploy/docker-compose.yml run --rm api python manage.py makemigrations --check --dry-run
+        run: docker compose -p openlims -f deploy/docker-compose.yml run --rm api python manage.py makemigrations --check --dry-run
 
       - name: Run migrations
-        run: |
-          docker compose -p openlims -f deploy/docker-compose.yml run --rm api python manage.py migrate
+        run: docker compose -p openlims -f deploy/docker-compose.yml run --rm api python manage.py migrate
 
       - name: Run tests
-        run: |
-          docker compose -p openlims -f deploy/docker-compose.yml run --rm api pytest -v
+        run: docker compose -p openlims -f deploy/docker-compose.yml run --rm api pytest -v
 
-      - name: Stop services
-        if: always()
-        run: |
-          docker compose -p openlims -f deploy/docker-compose.yml down -v
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
 
       - name: Build frontend
         working-directory: frontend
-        run: npm run build
+        run: |
+          set +e
+          npm run build 2>&1 | tee /tmp/openlims-frontend-build.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ]; then
+            message=$(tail -n 20 /tmp/openlims-frontend-build.log | tr '\n' ' ' | sed 's/%/%25/g;s/\r/%0D/g')
+            echo "::error title=Frontend build failed::$message"
+            exit "$status"
+          fi
+
+      - name: Validate production Compose
+        run: docker compose -f deploy/docker-compose.prod.yml config >/dev/null
+
+      - name: Stop services
+        if: always()
+        run: docker compose -p openlims -f deploy/docker-compose.yml down -v
+
+  frontend-e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create E2E deploy env file
+        run: |
+          cp deploy/.env.example deploy/.env
+          cat >> deploy/.env <<EOF
+          DJANGO_SECRET_KEY=e2e-secret-key
+          DJANGO_DEBUG=1
+          DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+          POSTGRES_DB=openlims
+          POSTGRES_USER=openlims
+          POSTGRES_PASSWORD=openlims
+          DATABASE_URL=postgres://openlims:openlims@db:5432/openlims
+          INSTRUMENT_API_KEY=e2e-instrument-key
+          JWT_COOKIE_SECURE=false
+          CSRF_COOKIE_SECURE=false
+          SESSION_COOKIE_SECURE=false
+          EOF
+
+      - name: Start OpenLIMS backend
+        run: |
+          docker compose -p openlims-e2e -f deploy/docker-compose.yml up -d --build db redis api
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8000/health/ >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          docker compose -p openlims-e2e -f deploy/docker-compose.yml logs api
+          exit 1
+
+      - name: Seed demo data
+        run: docker compose -p openlims-e2e -f deploy/docker-compose.yml exec -T api python manage.py seed_demo
+
+      - name: Provision E2E login
+        run: >-
+          docker compose -p openlims-e2e -f deploy/docker-compose.yml exec -T api
+          python manage.py shell -c
+          "from django.contrib.auth import get_user_model; user = get_user_model().objects.get(username='director'); user.set_password('Director123!'); user.save(update_fields=['password'])"
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Start frontend
+        working-directory: frontend
+        run: |
+          npm run dev -- --host 127.0.0.1 > /tmp/openlims-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:5173/login >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/openlims-vite.log
+          exit 1
+
+      - name: Install Playwright harness
+        working-directory: frontend/e2e
+        run: npm install
+
+      - name: Install Chromium
+        working-directory: frontend/e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        working-directory: frontend/e2e
+        env:
+          OPENLIMS_E2E_BASE_URL: http://127.0.0.1:5173
+        run: npm test
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          cat /tmp/openlims-vite.log || true
+          docker compose -p openlims-e2e -f deploy/docker-compose.yml logs api || true
+
+      - name: Stop E2E services
+        if: always()
+        run: docker compose -p openlims-e2e -f deploy/docker-compose.yml down -v

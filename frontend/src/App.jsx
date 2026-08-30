@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./Layout";
+import MyWork from "./pages/MyWork";
 import SamplesList from "./pages/SamplesList";
 import SampleDetail from "./pages/SampleDetail";
 import Inventory from "./pages/Inventory";
@@ -12,7 +13,6 @@ import ProjectDetail from "./pages/ProjectDetail";
 import Users from "./pages/Users";
 import Imports from "./pages/Imports";
 import Notifications from "./pages/Notifications";
-import { isLoggedIn } from "./auth";
 import ImportDetail from "./pages/ImportDetail";
 import Sequences from "./pages/Sequences";
 import Alignments from "./pages/Alignments";
@@ -41,25 +41,14 @@ import Registry from "./pages/Registry";
 import NotebookPage from "./pages/Notebook";
 import WorkflowRequests from "./pages/WorkflowRequests";
 
-function RequireAuth({ children }) {
-  return isLoggedIn() ? children : <Navigate to="/login" replace />;
-}
-
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-
-        <Route
-          path="/"
-          element={
-            <RequireAuth>
-              <Layout />
-            </RequireAuth>
-          }
-        >
-          <Route index element={<Dashboard />} />
+        <Route path="/" element={<Layout />}>
+          <Route index element={<MyWork />} />
+          <Route path="dashboard" element={<Dashboard />} />
           <Route path="getting-started" element={<GettingStarted />} />
           <Route path="assistant" element={<Assistant />} />
           <Route path="samples" element={<SamplesList />} />
@@ -98,7 +87,6 @@ export default function App() {
           <Route path="mass-spec/compare" element={<MassSpecCompare />} />
           <Route path="mass-spec/:id" element={<MassSpecDetail />} />
         </Route>
-
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

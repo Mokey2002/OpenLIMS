@@ -1,14 +1,20 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.middleware.csrf import get_token
 from drf_spectacular.utils import extend_schema
-from rest_framework.viewsets import ReadOnlyModelViewSet, ModelViewSet
-from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from events.models import Event
-from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import OpenLIMSTokenObtainPairSerializer
+from .authentication import enforce_csrf
 from .permissions import IsAdminOnly
+from .serializers import OpenLIMSTokenObtainPairSerializer
 from .serializers import (
     MeSerializer,
     UserAdminUpdateSerializer,
@@ -18,9 +24,112 @@ from .serializers import (
 
 User = get_user_model()
 
+
+def _set_auth_cookies(response, access, refresh=None):
+    response.set_cookie(
+        settings.JWT_ACCESS_COOKIE_NAME,
+        access,
+        max_age=settings.JWT_ACCESS_COOKIE_MAX_AGE,
+        httponly=True,
+        secure=settings.JWT_COOKIE_SECURE,
+        samesite=settings.JWT_COOKIE_SAMESITE,
+        path="/",
+    )
+    if refresh:
+        response.set_cookie(
+            settings.JWT_REFRESH_COOKIE_NAME,
+            refresh,
+            max_age=settings.JWT_REFRESH_COOKIE_MAX_AGE,
+            httponly=True,
+            secure=settings.JWT_COOKIE_SECURE,
+            samesite=settings.JWT_COOKIE_SAMESITE,
+            path="/",
+        )
+
+
+def _clear_auth_cookies(response):
+    response.delete_cookie(
+        settings.JWT_ACCESS_COOKIE_NAME,
+        path="/",
+        samesite=settings.JWT_COOKIE_SAMESITE,
+    )
+    response.delete_cookie(
+        settings.JWT_REFRESH_COOKIE_NAME,
+        path="/",
+        samesite=settings.JWT_COOKIE_SAMESITE,
+    )
+
+
 class OpenLIMSTokenObtainPairView(TokenObtainPairView):
     serializer_class = OpenLIMSTokenObtainPairSerializer
-    
+
+
+class CSRFTokenView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        get_token(request)
+        return Response({"detail": "CSRF cookie set."})
+
+
+class CookieLoginView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        enforce_csrf(request)
+        serializer = OpenLIMSTokenObtainPairSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        tokens = serializer.validated_data
+
+        response = Response({"user": MeSerializer(serializer.user).data})
+        _set_auth_cookies(response, tokens["access"], tokens["refresh"])
+        get_token(request)
+        return response
+
+
+class CookieRefreshView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        enforce_csrf(request)
+        refresh = request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME)
+        if not refresh:
+            return Response({"detail": "Refresh cookie is missing."}, status=401)
+
+        serializer = TokenRefreshSerializer(data={"refresh": refresh})
+        serializer.is_valid(raise_exception=True)
+        tokens = serializer.validated_data
+
+        response = Response({"detail": "Session refreshed."})
+        _set_auth_cookies(
+            response,
+            tokens["access"],
+            tokens.get("refresh"),
+        )
+        return response
+
+
+class CookieLogoutView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        enforce_csrf(request)
+        refresh = request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME)
+        if refresh:
+            try:
+                RefreshToken(refresh).blacklist()
+            except TokenError:
+                pass
+
+        response = Response({"detail": "Logged out."})
+        _clear_auth_cookies(response)
+        return response
+
+
 class UserLiteViewSet(ReadOnlyModelViewSet):
     permission_classes = [IsAdminOnly]
     serializer_class = UserLiteSerializer
@@ -93,11 +202,7 @@ class UserAdminViewSet(ModelViewSet):
             "is_superuser": updated_user.is_superuser,
         }
 
-        changed_fields = [
-            field
-            for field in before
-            if before[field] != after[field]
-        ]
+        changed_fields = [field for field in before if before[field] != after[field]]
 
         if changed_fields:
             action = "USER_UPDATED"

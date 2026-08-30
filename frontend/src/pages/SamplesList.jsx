@@ -11,8 +11,7 @@ import {
   Table,
   Pagination,
 } from "react-bootstrap";
-import { apiGet, apiPost } from "../api";
-import { getAccessToken } from "../auth";
+import { apiGet, apiPost, apiPostDownload } from "../api";
 import { isAdmin, isTech, canWrite } from "../authz";
 
 const STATUS_OPTIONS = [
@@ -73,30 +72,11 @@ function statusVariant(status) {
 }
 
 async function downloadSelectedSamples(ids) {
-  const token = getAccessToken();
-
-  const response = await fetch("/api/samples/export-selected/", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ids }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Export failed with status ${response.status}`);
-  }
-
-  const blob = await response.blob();
-  const downloadUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = downloadUrl;
-  link.download = "openlims-selected-samples.csv";
-  link.click();
-
-  URL.revokeObjectURL(downloadUrl);
+  await apiPostDownload(
+    "/api/samples/export-selected/",
+    { ids },
+    "openlims-selected-samples.csv"
+  );
 }
 
 export default function SamplesList() {

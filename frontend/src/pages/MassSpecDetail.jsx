@@ -10,8 +10,7 @@ import {
   Table,
 } from "react-bootstrap";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { apiGet } from "../api";
-import { getAccessToken } from "../auth";
+import { apiGet, apiPost } from "../api";
 
 function statusVariant(status) {
   if (status === "COMPLETED") return "success";
@@ -232,19 +231,7 @@ export default function MassSpecDetail() {
     setReprocessing(true);
 
     try {
-      const token = getAccessToken();
-
-      const response = await fetch(`/api/mass-spec-runs/${id}/reprocess/`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Reprocess failed with status ${response.status}`);
-      }
-
+      await apiPost(`/api/mass-spec-runs/${id}/reprocess/`, {});
       await load();
     } catch (e) {
       setErr(e.message || String(e));
@@ -628,7 +615,6 @@ export default function MassSpecDetail() {
         </Card.Body>
       </Card>
 
-
       <Card className="app-card mb-4">
         <Card.Body>
           <div className="toolbar-row mb-3">
@@ -724,9 +710,7 @@ export default function MassSpecDetail() {
               </div>
             </div>
 
-            <Badge bg="dark">
-              {openmsSummary.file_type || "unknown"}
-            </Badge>
+            <Badge bg="dark">{openmsSummary.file_type || "unknown"}</Badge>
           </div>
 
           <Row className="g-3 mb-3">
