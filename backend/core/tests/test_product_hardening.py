@@ -51,6 +51,30 @@ class BrowserAuthenticationHardeningTests(TestCase):
         self.assertEqual(me.status_code, 200, me.data)
         self.assertEqual(me.data["username"], self.user.username)
 
+    @override_settings(CSRF_TRUSTED_ORIGINS=["http://127.0.0.1:5173"])
+    def test_trusted_browser_origin_can_log_in(self):
+        csrf = self.csrf_token()
+        response = self.client.post(
+            "/api/v1/auth/login/",
+            {"username": self.user.username, "password": "Hardening123!"},
+            format="json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_ORIGIN="http://127.0.0.1:5173",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+    @override_settings(CSRF_TRUSTED_ORIGINS=["http://127.0.0.1:5173"])
+    def test_untrusted_browser_origin_is_rejected(self):
+        csrf = self.csrf_token()
+        response = self.client.post(
+            "/api/v1/auth/login/",
+            {"username": self.user.username, "password": "Hardening123!"},
+            format="json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_ORIGIN="https://untrusted.example",
+        )
+        self.assertEqual(response.status_code, 403)
+
     def test_cookie_authenticated_writes_require_csrf(self):
         self.login()
 
