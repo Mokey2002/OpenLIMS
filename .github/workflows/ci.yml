@@ -112,6 +112,12 @@ jobs:
       - name: Seed demo data
         run: docker compose -p openlims-e2e -f deploy/docker-compose.yml exec -T api python manage.py seed_demo
 
+      - name: Provision E2E login
+        run: >-
+          docker compose -p openlims-e2e -f deploy/docker-compose.yml exec -T api
+          python manage.py shell -c
+          "from django.contrib.auth import get_user_model; user = get_user_model().objects.get(username='director'); user.set_password('Director123!'); user.save(update_fields=['password'])"
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
