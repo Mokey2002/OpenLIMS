@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.28.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.28.1-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -31,7 +31,20 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.28.0 — Inventory v2 and Workflow Requests v1`
+**Current release:** `v0.28.1 — Product Hardening and My Work`
+
+### v0.28.1 highlights
+
+- Unified **My Work** signed-in landing page for assigned work, workflow requests, Notebook experiments when enabled, QC attention, alerts, unread notifications, and overdue work
+- Main navigation reorganized around **Plan → Receive → Execute → Review → Report**, with role-specific destinations and user-pinned favorites
+- Browser JWTs moved out of `localStorage`/`sessionStorage` into secure HttpOnly access and refresh cookies
+- CSRF protection for cookie-authenticated writes, refresh-token rotation, blacklist-after-rotation, and server-side logout invalidation
+- Browser WebSocket authentication moved to the HttpOnly session cookie while Bearer JWT support remains available for scripts/API clients
+- Frontend application traffic centralized on `/api/v1/` with legacy API compatibility retained where required
+- Notebook and Registry feature flags enforced at the backend API boundary instead of only hiding navigation links
+- Production `docker-compose.prod.yml` with Daphne, Celery, internal PostgreSQL/Redis, persistent volumes, health checks, production React/Nginx serving, and optional Ollama profile
+- Playwright Chromium E2E coverage for secure login, My Work, workflow navigation, `/api/v1/` browser requests, and logout/session invalidation
+- GitHub Actions now checks the production frontend build, production Compose configuration, backend hardening behavior, and browser E2E flows
 
 ### v0.28.0 highlights
 
@@ -120,6 +133,7 @@ directly from the repository owner.
 
 | Area | Capabilities |
 |---|---|
+| **My Work** | Unified assigned-work, workflow-request, experiment, QC, alert, notification, and overdue-work dashboard |
 | **Samples** | Sample lifecycle tracking, aliquots and parent/child lineage, custody, statuses, attachments, custom fields, reason-for-change logging |
 | **Pipelines** | Dependency graphs, parallel and conditional steps, optional work, controlled retries, project/sample-type defaults, assignment by sample/batch/project, failure blocking, QC gates |
 | **Analyses & procedures** | Admin-configurable analysis types, required result schemas, versioned procedures, SOP links, expected duration |
@@ -141,9 +155,9 @@ directly from the repository owner.
 | **Visual analytics** | Investigation workbench, multi-sample/project/batch comparisons, result trends, outlier review, workflow bottlenecks, automatic charts |
 | **Assistant** | OpenLIMS Rules, optional OpenAI or Ollama, clarification choices, visible removable context, investigation and comparison follow-ups, confirmed actions with expiring user-bound tokens and audit events |
 | **Jobs** | Celery/Redis background jobs and real-time WebSocket updates |
-| **Security** | JWT authentication and role-based permissions |
+| **Security** | HttpOnly browser JWT cookies, CSRF protection, refresh rotation/blacklisting, logout invalidation, role-based permissions, and Bearer JWT support for API clients |
 | **Localization** | Director-controlled, instance-wide English or Spanish UI, including the sign-in screen and workflow pages |
-| **Shared foundation** | Stable public IDs, reusable links and attachments, versioned APIs, OpenAPI documentation, common project permissions and audit payloads, and guarded module feature flags |
+| **Shared foundation** | Stable public IDs, reusable links and attachments, versioned APIs, OpenAPI documentation, common project permissions and audit payloads, and server-enforced guarded module feature flags |
 
 ---
 
@@ -487,7 +501,7 @@ Supported live-update workflows include:
 
 ## 🔐 Permissions
 
-OpenLIMS uses JWT authentication and role-based permissions.
+OpenLIMS uses role-based permissions and project-scoped access control. Browser sessions use HttpOnly JWT cookies with CSRF protection, refresh-token rotation, and logout invalidation. Bearer JWT authentication remains supported for scripts and non-browser API clients.
 
 | Role | Purpose |
 |---|---|
@@ -512,6 +526,7 @@ Linked-project access allows a user to see a sample, but it does not automatical
 | Layer | Technology |
 |---|---|
 | **Frontend** | React + Vite |
+| **Production Web** | Nginx |
 | **Backend API** | Django REST Framework |
 | **Database** | PostgreSQL |
 | **Background Jobs** | Celery |
@@ -521,13 +536,13 @@ Linked-project access allows a user to see a sample, but it does not automatical
 | **BLAST** | NCBI BLAST+ |
 | **Mass Spec** | pyOpenMS |
 | **Assistant** | OpenLIMS Rules, optional OpenAI, optional Ollama |
-| **Reverse Proxy** | Caddy |
-| **Deployment** | Docker Compose |
+| **Reverse Proxy / TLS Edge** | Caddy or another trusted reverse proxy when used |
+| **Deployment** | Docker Compose (development and production) |
 
 High-level architecture:
 
 ```text
-React Frontend
+React Frontend / Production Nginx
    ↓
 Django REST Framework API
    ↓
@@ -594,6 +609,7 @@ Example local environment:
 DJANGO_DEBUG=1
 DJANGO_SECRET_KEY=dev-secret-key
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
 POSTGRES_DB=openlims
 POSTGRES_USER=openlims
@@ -725,9 +741,20 @@ Run frontend build:
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run build
 ```
+
+Run Playwright browser tests after starting a testable OpenLIMS environment:
+
+```bash
+cd frontend/e2e
+npm ci
+npx playwright install chromium
+npm test
+```
+
+The CI workflow also validates `makemigrations --check`, production Compose configuration, the production frontend build, secure-cookie authentication, CSRF behavior, `/api/v1/` browser traffic, workflow navigation, and logout/session invalidation.
 
 ---
 
@@ -769,12 +796,26 @@ The version file can be generated from the latest Git tag during frontend dev/bu
 
 OpenLIMS can run locally, on a private lab server, on a VM, or on cloud infrastructure.
 
+v0.28.1 includes `deploy/docker-compose.prod.yml` for production-style deployments. The production stack runs Django under Daphne, serves the built React frontend through Nginx, keeps PostgreSQL and Redis internal by default, persists database/cache/media/static data, includes health checks, and exposes the web service on `${OPENLIMS_HTTP_PORT:-8080}`. Ollama remains optional through the `llm` Compose profile.
+
+Start from the production environment template:
+
+```bash
+cp deploy/.env.prod.example deploy/.env
+```
+
+Replace placeholder secrets, configure `DJANGO_ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` for the public hostname, and then start the stack:
+
+```bash
+docker compose -p openlims -f deploy/docker-compose.prod.yml up -d --build
+```
+
 A typical production-style deployment uses:
 
 ```text
-Caddy Reverse Proxy
+Trusted TLS reverse proxy / load balancer (optional when TLS is terminated upstream)
    ↓
-React Static Frontend
+Nginx React frontend
    ↓
 Django API / Daphne ASGI
    ↓
@@ -785,7 +826,7 @@ Redis
 Celery Worker
 ```
 
-For real-time updates, the production reverse proxy should forward WebSocket traffic under `/ws/*` to the Django/Daphne API service.
+For real-time updates, the production web tier forwards WebSocket traffic under `/ws/*` to the Django/Daphne API service.
 
 ### Database Backup
 
@@ -811,9 +852,14 @@ OpenLIMS is a production-style LIMS prototype with many production-shaped patter
 - PostgreSQL database
 - Redis and Celery background jobs
 - Django Channels real-time updates
-- JWT authentication
+- Unified My Work dashboard
+- Workflow-oriented Plan → Receive → Execute → Review → Report navigation
+- HttpOnly browser JWT cookies with CSRF protection, refresh rotation/blacklisting, and logout invalidation
+- Bearer JWT support for scripts and API clients
 - Role-based permissions
 - Project-scoped access control
+- Backend-enforced Notebook and Registry feature flags
+- Versioned `/api/v1/` browser traffic with compatibility routes
 - Collaborative experiment notebooks and immutable revisions
 - Inventory transaction ledger and cycle-count reconciliation
 - Internal workflow request intake and resource reservation
@@ -839,15 +885,17 @@ OpenLIMS is a production-style LIMS prototype with many production-shaped patter
 - Admin settings
 - Director-controlled English/Spanish interface
 - System health checks
-- CI checks
+- Production Compose deployment and Nginx frontend image
+- Backend, production-build, Compose, and Playwright CI checks
 
 Remaining production-readiness work includes:
 
+- Formal data-retention and archive rules across laboratory records
+- SSO and optional MFA
 - External/S3-compatible file storage
 - More formal backup and restore automation
 - Monitoring and alerting
-- Expanded regression coverage
-- Secure production settings review
+- Expanded regression and load coverage
 - Validation-readiness documentation
 - Formal regulated-environment validation package
 
@@ -857,15 +905,18 @@ Remaining production-readiness work includes:
 
 Planned and future improvements include:
 
+- Formal record-retention and archive controls instead of destructive deletion for laboratory records
+- SSO and optional MFA
 - More advanced migration support for multi-file exports and system-specific API connectors
 - Plate layouts and multi-sample pooling calculations on top of lineage records
 - More advanced QC approval workflows
-- Better dashboards for lab operations
 - External file storage support
 - Monitoring and alerting
 - Validation-readiness documentation
 - Assistant calculations for safe counts, averages, percentages, and summaries
-- Confirmed assistant actions with explicit user approval
+- Continued workflow, reporting, and browser regression improvements
+
+See [`docs/product_hardening_v0281.md`](docs/product_hardening_v0281.md) for the v0.28.1 product-hardening implementation notes.
 
 ---
 
