@@ -25,6 +25,12 @@ The response size therefore stays bounded even when a deployment contains thousa
 
 This replaces separate startup calls for `/me/`, `/feature-flags/`, and `/notifications/`.
 
+## API pagination
+
+Normal paginated API responses now use 50 rows per page instead of 10. Clients may explicitly request a larger page with `?page_size=` up to a maximum of 200 rows.
+
+The frontend `apiGetAll()` helper uses 200-row pages when a screen intentionally needs the complete collection. Existing full-collection screens therefore make up to 20 times fewer pagination requests while normal list responses remain bounded.
+
 ## Frontend code splitting
 
 OpenLIMS routes are loaded with React `lazy()` and `Suspense`. The login shell is kept eager, while feature pages such as Registry, Notebook, Inventory, Mass Spec, BLAST, reporting, and administration are downloaded only when the user opens them.
@@ -58,6 +64,6 @@ These complement the existing workflow/project indexes instead of adding broad i
 
 ## Performance regression coverage
 
-The v0.29 tests verify that My Work returns complete counts while keeping row payloads bounded, that session bootstrap combines shell state correctly, and that both performance endpoints remain authenticated.
+The v0.29 tests verify that My Work returns complete counts while keeping row payloads bounded, that session bootstrap combines shell state correctly, that pagination uses the new bounded defaults and larger intentional fetch pages, and that the performance endpoints remain authenticated.
 
 Future performance work should use realistic seeded datasets plus query-count and latency budgets before adding further indexes or cache layers.
