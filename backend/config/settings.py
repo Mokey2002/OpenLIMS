@@ -143,6 +143,28 @@ ASGI_APPLICATION = "config.asgi.application"
 DATABASES = {
     "default": env.db("DATABASE_URL", default="sqlite:///db.sqlite3")
 }
+DATABASES["default"]["CONN_MAX_AGE"] = env.int(
+    "DB_CONN_MAX_AGE",
+    default=0 if DEBUG else 60,
+)
+DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
+
+CACHE_URL = env("CACHE_URL", default="")
+if CACHE_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": CACHE_URL,
+            "TIMEOUT": 60,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "openlims-default",
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {
