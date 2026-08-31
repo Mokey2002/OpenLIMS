@@ -110,6 +110,10 @@ class WorkItem(PublicIDModel):
                 fields=["status", "due_at", "assigned_to"],
                 name="work_status_due_assignee_idx",
             ),
+            models.Index(
+                fields=["assigned_to", "status", "due_at"],
+                name="work_assignee_status_due_idx",
+            ),
         ]
 
     def __str__(self):
