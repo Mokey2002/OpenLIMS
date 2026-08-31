@@ -93,6 +93,8 @@ class MyWorkSummaryView(APIView):
         active_requests = workflow_requests_for_user(user).filter(
             status__in=ACTIVE_REQUEST_STATUSES,
         )
+        overdue_work_qs = assigned_work.filter(due_at__lt=now)
+        overdue_requests_qs = active_requests.filter(due_at__lt=now)
 
         assigned_rows = list(
             assigned_work.order_by("due_at", "-created_at").values(
@@ -107,9 +109,7 @@ class MyWorkSummaryView(APIView):
         )
 
         overdue_work = list(
-            assigned_work.filter(due_at__lt=now)
-            .order_by("due_at")
-            .values(
+            overdue_work_qs.order_by("due_at").values(
                 "id",
                 "name",
                 "due_at",
@@ -118,9 +118,12 @@ class MyWorkSummaryView(APIView):
             )[:8]
         )
         overdue_requests = list(
-            active_requests.filter(due_at__lt=now)
-            .order_by("due_at")
-            .values("id", "request_number", "title", "due_at")[:8]
+            overdue_requests_qs.order_by("due_at").values(
+                "id",
+                "request_number",
+                "title",
+                "due_at",
+            )[:8]
         )
 
         overdue = [
@@ -159,10 +162,15 @@ class MyWorkSummaryView(APIView):
                 .count()
             )
 
+        unread_notifications = Notification.objects.filter(user=user, is_read=False)
         notifications = list(
-            Notification.objects.filter(user=user, is_read=False)
-            .order_by("-created_at")
-            .values("id", "title", "message", "link", "created_at")[:5]
+            unread_notifications.order_by("-created_at").values(
+                "id",
+                "title",
+                "message",
+                "link",
+                "created_at",
+            )[:5]
         )
 
         summary = {
@@ -173,11 +181,8 @@ class MyWorkSummaryView(APIView):
             "inventory_alerts": InventoryAlert.objects.filter(
                 status=InventoryAlert.STATUS_OPEN
             ).count(),
-            "unread_notifications": Notification.objects.filter(
-                user=user,
-                is_read=False,
-            ).count(),
-            "overdue": len(overdue),
+            "unread_notifications": unread_notifications.count(),
+            "overdue": overdue_work_qs.count() + overdue_requests_qs.count(),
         }
 
         return Response(
