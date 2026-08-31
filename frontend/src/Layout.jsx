@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Badge,
   Button,
@@ -119,7 +119,7 @@ export default function Layout() {
   const location = useLocation();
   const [me, setMe] = useState(null);
   const [loadingMe, setLoadingMe] = useState(true);
-  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [globalSearch, setGlobalSearch] = useState("");
   const [featureFlags, setFeatureFlags] = useState({});
   const [favorites, setFavorites] = useState(loadFavorites);
@@ -128,14 +128,10 @@ export default function Layout() {
     clearLegacyTokens();
     (async () => {
       try {
-        const [meData, notificationData, featureData] = await Promise.all([
-          apiGet("/api/me/"),
-          apiGet("/api/notifications/"),
-          apiGet("/api/feature-flags/"),
-        ]);
-        setMe(meData);
-        setNotifications(notificationData.results || notificationData || []);
-        setFeatureFlags(featureData || {});
+        const session = await apiGet("/api/v1/session/");
+        setMe(session.user);
+        setUnreadCount(session.unread_notification_count || 0);
+        setFeatureFlags(session.feature_flags || {});
       } catch (e) {
         console.error("Failed to load layout data:", e);
       } finally {
@@ -144,10 +140,6 @@ export default function Layout() {
     })();
   }, []);
 
-  const unreadCount = useMemo(
-    () => notifications.filter((notification) => !notification.is_read).length,
-    [notifications]
-  );
   const userIsAdmin = isAdmin(me);
   const userIsTech = isTech(me);
   const currentFavoritePath = routeLabels[location.pathname] ? location.pathname : null;

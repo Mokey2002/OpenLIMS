@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.28.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.29.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -31,7 +31,19 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.28.1 — Product Hardening and My Work`
+**Current release:** `v0.29.0 — Performance & Scalability`
+
+### v0.29.0 highlights
+
+- **My Work** moved from multi-page client aggregation to one bounded `/api/v1/my-work/` server-side summary while preserving complete counts
+- Application startup now uses one `/api/v1/session/` bootstrap request for user, feature flags, and unread-notification count instead of three separate calls
+- Normal API pagination increased from 10 to 50 rows, with intentional full-collection fetches using up to 200 rows per page to reduce request chains
+- React routes are lazy-loaded so feature pages are downloaded only when users open them instead of being bundled into the initial application load
+- Production Nginx enables gzip compression and immutable caching for content-hashed Vite assets while keeping `index.html` fresh
+- Production PostgreSQL connections can be reused with health checks through `DB_CONN_MAX_AGE`
+- Django can use the existing Redis service as an application cache through `CACHE_URL`, with Redis DB 3 reserved in the production template
+- Targeted composite indexes accelerate assigned-work and unread-notification queries used by My Work and the persistent application shell
+- Performance regression tests verify bounded dashboard payloads, complete counts, scalable pagination, authentication, and session bootstrap behavior
 
 ### v0.28.1 highlights
 
@@ -754,7 +766,7 @@ npx playwright install chromium
 npm test
 ```
 
-The CI workflow also validates `makemigrations --check`, production Compose configuration, the production frontend build, secure-cookie authentication, CSRF behavior, `/api/v1/` browser traffic, workflow navigation, and logout/session invalidation.
+The CI workflow also validates `makemigrations --check`, production Compose configuration, the production frontend build, secure-cookie authentication, CSRF behavior, `/api/v1/` browser traffic, workflow navigation, logout/session invalidation, and the v0.29 performance/pagination regressions.
 
 ---
 
@@ -796,7 +808,7 @@ The version file can be generated from the latest Git tag during frontend dev/bu
 
 OpenLIMS can run locally, on a private lab server, on a VM, or on cloud infrastructure.
 
-v0.28.1 includes `deploy/docker-compose.prod.yml` for production-style deployments. The production stack runs Django under Daphne, serves the built React frontend through Nginx, keeps PostgreSQL and Redis internal by default, persists database/cache/media/static data, includes health checks, and exposes the web service on `${OPENLIMS_HTTP_PORT:-8080}`. Ollama remains optional through the `llm` Compose profile.
+`deploy/docker-compose.prod.yml` provides the production-style stack introduced in v0.28.1. v0.29.0 improves runtime efficiency on that stack with reusable PostgreSQL connections, optional Redis-backed Django caching, gzip compression, immutable hashed-asset caching, route-level frontend code splitting, and larger bounded API pages. The production stack runs Django under Daphne, serves the built React frontend through Nginx, keeps PostgreSQL and Redis internal by default, persists database/cache/media/static data, includes health checks, and exposes the web service on `${OPENLIMS_HTTP_PORT:-8080}`. Ollama remains optional through the `llm` Compose profile.
 
 Start from the production environment template:
 
@@ -828,6 +840,17 @@ Celery Worker
 
 For real-time updates, the production web tier forwards WebSocket traffic under `/ws/*` to the Django/Daphne API service.
 
+### Performance settings
+
+The production environment template enables the recommended connection/cache settings:
+
+```env
+DB_CONN_MAX_AGE=60
+CACHE_URL=redis://redis:6379/3
+```
+
+`DB_CONN_MAX_AGE` reuses healthy PostgreSQL connections instead of reconnecting for each request. Redis database 3 is reserved for Django application caching; Celery broker/results and Channels continue to use Redis databases 0, 1, and 2 respectively.
+
 ### Database Backup
 
 Create a backup:
@@ -852,7 +875,12 @@ OpenLIMS is a production-style LIMS prototype with many production-shaped patter
 - PostgreSQL database
 - Redis and Celery background jobs
 - Django Channels real-time updates
-- Unified My Work dashboard
+- Unified My Work dashboard with bounded server-side summary aggregation
+- Single-request application session bootstrap for user, feature flags, and unread-notification count
+- Scalable API pagination with 50-row defaults and up to 200-row intentional collection pages
+- Route-level React code splitting and production gzip/immutable asset caching
+- Production PostgreSQL connection reuse and optional Redis-backed Django cache
+- Targeted indexes for assigned-work and unread-notification hot paths
 - Workflow-oriented Plan → Receive → Execute → Review → Report navigation
 - HttpOnly browser JWT cookies with CSRF protection, refresh rotation/blacklisting, and logout invalidation
 - Bearer JWT support for scripts and API clients
@@ -886,7 +914,7 @@ OpenLIMS is a production-style LIMS prototype with many production-shaped patter
 - Director-controlled English/Spanish interface
 - System health checks
 - Production Compose deployment and Nginx frontend image
-- Backend, production-build, Compose, and Playwright CI checks
+- Backend, production-build, Compose, Playwright, and performance regression CI checks
 
 Remaining production-readiness work includes:
 
@@ -914,9 +942,9 @@ Planned and future improvements include:
 - Monitoring and alerting
 - Validation-readiness documentation
 - Assistant calculations for safe counts, averages, percentages, and summaries
-- Continued workflow, reporting, and browser regression improvements
+- Continued query-count, large-dataset, workflow, reporting, and browser performance regression improvements
 
-See [`docs/product_hardening_v0281.md`](docs/product_hardening_v0281.md) for the v0.28.1 product-hardening implementation notes.
+See [`docs/performance_scalability_v029.md`](docs/performance_scalability_v029.md) for the v0.29.0 performance and scalability implementation notes and [`docs/product_hardening_v0281.md`](docs/product_hardening_v0281.md) for the v0.28.1 product-hardening notes.
 
 ---
 

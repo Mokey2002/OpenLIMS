@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from core.performance_views import MyWorkSummaryView, SessionBootstrapView
 from core.search_views import GlobalSearchView
 from core.views import (
     CSRFTokenView,
@@ -31,5 +32,7 @@ urlpatterns = [
         name="token-refresh",
     ),
     path("me/", MeView.as_view(), name="me"),
+    path("session/", SessionBootstrapView.as_view(), name="session-bootstrap"),
+    path("my-work/", MyWorkSummaryView.as_view(), name="my-work-summary"),
     path("search/", GlobalSearchView.as_view(), name="global-search"),
 ]
