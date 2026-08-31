@@ -17,6 +17,13 @@ function normalizeApiPath(path) {
   return path;
 }
 
+function withPageSize(path, pageSize) {
+  const normalized = normalizeApiPath(path);
+  if (!normalized || !pageSize || /[?&]page_size=/.test(normalized)) return normalized;
+  if (!normalized.startsWith("/api/")) return normalized;
+  return `${normalized}${normalized.includes("?") ? "&" : "?"}page_size=${pageSize}`;
+}
+
 function redirectToLogin() {
   clearLegacyTokens();
   if (window.location.pathname !== "/login") {
@@ -119,9 +126,9 @@ export async function apiGet(path) {
   return response.json();
 }
 
-export async function apiGetAll(path, maxPages = 100) {
+export async function apiGetAll(path, maxPages = 100, pageSize = 200) {
   const items = [];
-  let next = normalizeApiPath(path);
+  let next = withPageSize(path, pageSize);
   let pageCount = 0;
 
   while (next && pageCount < maxPages) {
