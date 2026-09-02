@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -90,6 +91,19 @@ class PerformanceV029Tests(TestCase):
         self.assertEqual(response.data["unread_notification_count"], 1)
         self.assertIn("notebook", response.data["feature_flags"])
         self.assertIn("registry", response.data["feature_flags"])
+
+    def test_session_bootstrap_returns_tech_username_and_role(self):
+        tech = User.objects.create_user(username="peter", password="test-password")
+        tech_group, _ = Group.objects.get_or_create(name="tech")
+        tech.groups.add(tech_group)
+        client = APIClient()
+        client.force_authenticate(tech)
+
+        response = client.get("/api/v1/session/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["user"]["username"], "peter")
+        self.assertIn("tech", response.data["user"]["roles"])
 
     def test_pagination_uses_50_rows_by_default_and_allows_200(self):
         Notification.objects.bulk_create(

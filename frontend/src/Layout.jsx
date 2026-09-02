@@ -114,11 +114,16 @@ function loadFavorites() {
   }
 }
 
+function validIdentity(user) {
+  return Boolean(user?.username && Array.isArray(user?.roles));
+}
+
 export default function Layout() {
   const nav = useNavigate();
   const location = useLocation();
   const [me, setMe] = useState(null);
   const [loadingMe, setLoadingMe] = useState(true);
+  const [identityLoadError, setIdentityLoadError] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
   const [globalSearch, setGlobalSearch] = useState("");
   const [featureFlags, setFeatureFlags] = useState({});
@@ -129,11 +134,34 @@ export default function Layout() {
     (async () => {
       try {
         const session = await apiGet("/api/v1/session/");
+        if (!validIdentity(session?.user)) {
+          throw new Error("Session bootstrap did not include a valid authenticated user.");
+        }
         setMe(session.user);
         setUnreadCount(session.unread_notification_count || 0);
         setFeatureFlags(session.feature_flags || {});
-      } catch (e) {
-        console.error("Failed to load layout data:", e);
+        setIdentityLoadError("");
+      } catch (sessionError) {
+        console.warn("Session bootstrap failed; falling back to /me/:", sessionError);
+        try {
+          const fallbackUser = await apiGet("/api/v1/me/");
+          if (!validIdentity(fallbackUser)) {
+            throw new Error("Fallback identity response did not include username and roles.");
+          }
+          setMe(fallbackUser);
+          setIdentityLoadError("");
+
+          try {
+            const fallbackFlags = await apiGet("/api/v1/feature-flags/");
+            setFeatureFlags(fallbackFlags || {});
+          } catch (flagsError) {
+            console.warn("Failed to load feature flags during identity fallback:", flagsError);
+          }
+        } catch (fallbackError) {
+          console.error("Failed to load authenticated user identity:", fallbackError);
+          setMe(null);
+          setIdentityLoadError("Account unavailable");
+        }
       } finally {
         setLoadingMe(false);
       }
@@ -257,8 +285,8 @@ export default function Layout() {
             <div className="d-flex align-items-center gap-3">
               {loadingMe ? <Spinner animation="border" size="sm" variant="light" /> : (
                 <div className="text-light small text-xl-end">
-                  <div className="fw-semibold">{me?.username || "Unknown"}</div>
-                  <div className="text-light opacity-75">{me?.roles?.length ? me.roles.join(", ") : "No role"}</div>
+                  <div className="fw-semibold" data-testid="current-user-name">{me?.username || identityLoadError || "Account unavailable"}</div>
+                  <div className="text-light opacity-75" data-testid="current-user-roles">{me?.roles?.length ? me.roles.join(", ") : (identityLoadError ? "Unable to load role" : "No assigned role")}</div>
                 </div>
               )}
               <Button variant="outline-light" size="sm" onClick={logout}>Logout</Button>

@@ -66,3 +66,22 @@ def test_non_member_cannot_see_unassigned_project(other_user, project):
     data = response.json()
     results = data["results"] if "results" in data else data
     assert all(p["id"] != project.id for p in results)
+
+
+def test_tech_role_does_not_grant_access_to_unassigned_projects():
+    tech = User.objects.create_user(username="peter", password="pass123")
+    tech_group, _ = Group.objects.get_or_create(name="tech")
+    tech.groups.add(tech_group)
+
+    assigned = Project.objects.create(name="Assigned Project", code="ASSIGNED")
+    hidden = Project.objects.create(name="Hidden Project", code="HIDDEN")
+    assigned.members.add(tech)
+
+    response = auth_client(tech).get("/api/projects/")
+
+    assert response.status_code == 200
+    data = response.json()
+    results = data["results"] if "results" in data else data
+    ids = {item["id"] for item in results}
+    assert assigned.id in ids
+    assert hidden.id not in ids

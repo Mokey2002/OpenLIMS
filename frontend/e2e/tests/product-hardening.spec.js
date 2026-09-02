@@ -40,6 +40,9 @@ test("browser session uses HttpOnly cookies and no stored JWTs", async ({ page, 
 
   await loginAsDirector(page, context);
 
+  await expect(page.getByTestId("current-user-name")).toHaveText("director");
+  await expect(page.getByTestId("current-user-roles")).toContainText("admin");
+
   const storage = await page.evaluate(() => ({
     local: Object.keys(localStorage),
     session: Object.keys(sessionStorage),
@@ -63,6 +66,23 @@ test("browser session uses HttpOnly cookies and no stored JWTs", async ({ page, 
     (path) => !path.startsWith("/api/v1/") && !["/api/health/", "/api/schema/", "/api/docs/"].includes(path)
   );
   expect(nonVersionedBusinessRequests).toEqual([]);
+});
+
+test("authenticated header falls back to me when session bootstrap is unavailable", async ({ page, context }) => {
+  await page.route("**/api/v1/session/", async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "Not found" }),
+    });
+  });
+
+  await loginAsDirector(page, context);
+
+  await expect(page.getByTestId("current-user-name")).toHaveText("director");
+  await expect(page.getByTestId("current-user-roles")).toContainText("admin");
+  await expect(page.getByText("Unknown", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("No role", { exact: true })).toHaveCount(0);
 });
 
 test("Notebook works when crypto.randomUUID is unavailable", async ({ page, context }) => {
