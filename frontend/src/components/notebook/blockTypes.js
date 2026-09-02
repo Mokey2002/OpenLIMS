@@ -1,3 +1,5 @@
+import { createClientId } from "../../utils/clientId";
+
 export const BLOCK_CATALOG = [
   { type: "RICH_TEXT", label: "Rich text", description: "Narrative notes and observations" },
   { type: "HEADING", label: "Heading", description: "Organize the experiment into sections" },
@@ -25,7 +27,7 @@ export function newBlock(type) {
     SEQUENCE_VIEW: { sequence_public_id: "", label: "", start: "", end: "", strand: "+" },
   };
   return {
-    _key: crypto.randomUUID(),
+    _key: createClientId(),
     block_type: type,
     data: defaults[type] || { text: "" },
   };
