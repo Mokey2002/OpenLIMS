@@ -2,6 +2,9 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./Layout";
 import Login from "./pages/Login";
+import { installRandomUUIDCompatibility } from "./utils/clientId";
+
+installRandomUUIDCompatibility();
 
 const MyWork = lazy(() => import("./pages/MyWork"));
 const SamplesList = lazy(() => import("./pages/SamplesList"));

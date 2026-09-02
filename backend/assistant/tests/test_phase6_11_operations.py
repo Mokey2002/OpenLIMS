@@ -222,12 +222,15 @@ class AssistantPhaseSixToElevenTests(APITestCase):
         self.assertTrue(Event.objects.filter(action="LABEL_REPRINTED").exists())
 
     def test_phase8_csv_filters_are_previewed_stored_and_reproducible(self):
-        Event.objects.create(
+        event = Event.objects.create(
             entity_type="Sample",
             entity_id=str(self.samples[0].id),
             action="STATUS_CHANGED",
             actor=self.tech,
             payload={"sample_code": self.samples[0].sample_id, "project_id": self.project.id},
+        )
+        Event.objects.filter(pk=event.pk).update(
+            timestamp=timezone.make_aware(datetime(timezone.localdate().year, 8, 15, 12))
         )
         proposal = self.chat("Export sample status changes from August as CSV")
         filters = proposal.data["pending_action"]["preview"]["current_values"]
