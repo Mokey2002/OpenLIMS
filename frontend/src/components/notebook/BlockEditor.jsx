@@ -47,6 +47,7 @@ export default function BlockEditor({
   count,
   editable,
   sequenceOptions = [],
+  onSequenceFocus,
   onChange,
   onMove,
   onDuplicate,
@@ -110,7 +111,7 @@ export default function BlockEditor({
     </Row>;
   } else if (block.block_type === "SEQUENCE_VIEW") {
     body = <Row className="g-2">
-      <Col md={5}><Form.Label>Sequence</Form.Label><Form.Select value={data.sequence_public_id || ""} disabled={!editable} onChange={(event) => {
+      <Col md={5}><Form.Label>Sequence</Form.Label><Form.Select value={data.sequence_public_id || ""} disabled={!editable} onFocus={onSequenceFocus} onChange={(event) => {
         const sequence = sequenceOptions.find((row) => String(row.public_id) === event.target.value);
         onChange({ ...block, data: { ...data, sequence_public_id: event.target.value, label: sequence?.name || sequence?.title || sequence?.identifier || data.label || "" } });
       }}><option value="">Choose sequence</option>{sequenceOptions.map((sequence) => <option value={sequence.public_id} key={sequence.public_id}>{sequence.name || sequence.title || sequence.identifier || sequence.public_id}</option>)}</Form.Select></Col>
