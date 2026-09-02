@@ -65,6 +65,25 @@ test("browser session uses HttpOnly cookies and no stored JWTs", async ({ page, 
   expect(nonVersionedBusinessRequests).toEqual([]);
 });
 
+test("Notebook works when crypto.randomUUID is unavailable", async ({ page, context }) => {
+  await page.addInitScript(() => {
+    try {
+      Object.defineProperty(globalThis.crypto, "randomUUID", {
+        configurable: true,
+        value: undefined,
+      });
+    } catch {
+      // The compatibility helper is still exercised in browsers that allow this override.
+    }
+  });
+
+  await loginAsDirector(page, context);
+  expect(await page.evaluate(() => typeof globalThis.crypto?.randomUUID)).toBe("function");
+
+  await page.goto("/notebook");
+  await expect(page.getByRole("heading", { name: "Laboratory Notebook" })).toBeVisible();
+});
+
 test("workflow navigation is cohesive and logout invalidates the browser session", async ({ page, context }) => {
   await loginAsDirector(page, context);
 
