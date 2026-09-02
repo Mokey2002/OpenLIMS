@@ -1,9 +1,5 @@
-export function createClientId() {
+function fallbackUuid() {
   const cryptoObject = globalThis.crypto;
-
-  if (cryptoObject && typeof cryptoObject.randomUUID === "function") {
-    return cryptoObject.randomUUID();
-  }
 
   if (cryptoObject && typeof cryptoObject.getRandomValues === "function") {
     const bytes = new Uint8Array(16);
@@ -16,4 +12,32 @@ export function createClientId() {
   }
 
   return `client-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+export function createClientId() {
+  const cryptoObject = globalThis.crypto;
+
+  if (cryptoObject && typeof cryptoObject.randomUUID === "function") {
+    return cryptoObject.randomUUID();
+  }
+
+  return fallbackUuid();
+}
+
+export function installRandomUUIDCompatibility() {
+  const cryptoObject = globalThis.crypto;
+  if (!cryptoObject || typeof cryptoObject.randomUUID === "function") return;
+
+  try {
+    Object.defineProperty(cryptoObject, "randomUUID", {
+      configurable: true,
+      value: fallbackUuid,
+    });
+  } catch {
+    try {
+      cryptoObject.randomUUID = fallbackUuid;
+    } catch {
+      // createClientId() remains available even in browsers that prevent patching Crypto.
+    }
+  }
 }
