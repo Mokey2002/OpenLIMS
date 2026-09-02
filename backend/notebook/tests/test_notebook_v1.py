@@ -272,6 +272,7 @@ class NotebookV1Tests(TestCase):
             format="json",
         )
         self.assertEqual(created.status_code, 201, created.data)
+        self.assertTrue(created.data["permissions"]["write"])
 
         notebooks = scientist.get("/api/notebooks/")
         self.assertEqual(notebooks.status_code, 200, notebooks.data)
@@ -376,3 +377,59 @@ class NotebookV1Tests(TestCase):
         self.assertEqual(comparison.data["summary"]["blocks_added"], 1)
         self.assertEqual(comparison.data["summary"]["blocks_modified"], 1)
         self.assertEqual(len(comparison.data["block_changes"]), 2)
+
+    def test_summary_and_compact_experiment_responses_bound_notebook_payloads(self):
+        scientist = self.client_for(self.scientist)
+        notebook = scientist.post(
+            "/api/notebooks/",
+            {"name": "Fast notebook", "scope": "PROJECT", "project": self.project.pk},
+            format="json",
+        ).data
+        experiment = scientist.post(
+            "/api/experiments/",
+            {
+                "notebook": notebook["id"],
+                "title": "Payload test",
+                "initial_blocks": [{"block_type": "RICH_TEXT", "data": {"text": "Initial"}}],
+            },
+            format="json",
+        ).data
+        scientist.post(
+            f"/api/experiments/{experiment['id']}/autosave/",
+            {
+                "expected_revision_public_id": experiment["current_revision_detail"]["public_id"],
+                "reason": "Second revision",
+                "blocks": [{"block_type": "RICH_TEXT", "data": {"text": "Updated"}}],
+                "links": [],
+            },
+            format="json",
+        )
+        comment = scientist.post(
+            "/api/experiment-comments/",
+            {"experiment": experiment["id"], "body": "Unresolved follow-up"},
+            format="json",
+        )
+        self.assertEqual(comment.status_code, 201, comment.data)
+
+        summary_response = scientist.get("/api/experiments/?summary=1")
+        self.assertEqual(summary_response.status_code, 200, summary_response.data)
+        summary = next(
+            row for row in summary_response.data["results"] if row["id"] == experiment["id"]
+        )
+        self.assertEqual(summary["open_comment_count"], 1)
+        self.assertEqual(summary["current_revision_detail"]["number"], 2)
+        self.assertTrue(summary["permissions"]["write"])
+        self.assertNotIn("blocks", summary["current_revision_detail"])
+        self.assertNotIn("revisions", summary)
+        self.assertNotIn("comments", summary)
+
+        compact_response = scientist.get(f"/api/experiments/{experiment['id']}/?compact=1")
+        self.assertEqual(compact_response.status_code, 200, compact_response.data)
+        self.assertEqual(compact_response.data["current_revision_detail"]["blocks"][0]["data"]["text"], "Updated")
+        self.assertEqual(len(compact_response.data["revisions"]), 2)
+        self.assertNotIn("blocks", compact_response.data["revisions"][0])
+        self.assertEqual(compact_response.data["comments"][0]["body"], "Unresolved follow-up")
+
+        full_response = scientist.get(f"/api/experiments/{experiment['id']}/")
+        self.assertEqual(full_response.status_code, 200, full_response.data)
+        self.assertIn("blocks", full_response.data["revisions"][0])
