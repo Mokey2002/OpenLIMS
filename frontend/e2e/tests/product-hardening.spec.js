@@ -104,6 +104,28 @@ test("Notebook works when crypto.randomUUID is unavailable", async ({ page, cont
   await expect(page.getByRole("heading", { name: "Laboratory Notebook" })).toBeVisible();
 });
 
+test("Notebook defers large provenance catalogs during initial load", async ({ page, context }) => {
+  await loginAsDirector(page, context);
+  const notebookRequests = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith("/api/v1/")) notebookRequests.push(url);
+  });
+
+  await page.goto("/notebook");
+  await expect(page.getByRole("heading", { name: "Laboratory Notebook" })).toBeVisible();
+
+  expect(notebookRequests.some(
+    (url) => url.pathname === "/api/v1/experiments/" && url.searchParams.get("summary") === "1"
+  )).toBe(true);
+  const deferredPaths = new Set([
+    "/api/v1/registry-records/", "/api/v1/samples/", "/api/v1/inventory-lots/",
+    "/api/v1/pipeline-runs/", "/api/v1/work-items/", "/api/v1/results/",
+    "/api/v1/sop-documents/", "/api/v1/sequences/",
+  ]);
+  expect(notebookRequests.filter((url) => deferredPaths.has(url.pathname))).toEqual([]);
+});
+
 test("workflow navigation is cohesive and logout invalidates the browser session", async ({ page, context }) => {
   await loginAsDirector(page, context);
 

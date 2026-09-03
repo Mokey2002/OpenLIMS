@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db.models import Count, Prefetch, Q
 from django.http import HttpResponse
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
@@ -11,12 +12,21 @@ from rest_framework.response import Response
 from core.audit import record_audit_event
 from core.permissions import is_admin
 
-from .models import Experiment, ExperimentComment, ExperimentRevision, ExperimentTemplate, Notebook
+from .models import (
+    Experiment,
+    ExperimentComment,
+    ExperimentRevision,
+    ExperimentReview,
+    ExperimentTemplate,
+    Notebook,
+)
 from .permissions import notebooks_for_user, user_can_notebook
 from .serializers import (
     ExperimentCommentSerializer,
+    ExperimentCompactSerializer,
     ExperimentRevisionSerializer,
     ExperimentSerializer,
+    ExperimentSummarySerializer,
     ExperimentTemplateSerializer,
     NotebookCollaboratorSerializer,
     NotebookSerializer,
@@ -34,15 +44,40 @@ from .services import (
 
 
 User = get_user_model()
+NOTEBOOK_PERMISSION_ACTIONS = ("read", "write", "comment", "review", "lock")
 
 
-class NotebookViewSet(viewsets.ModelViewSet):
+class NotebookPermissionContextMixin:
+    """Resolve notebook capabilities once per response instead of once per row."""
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if is_admin(self.request.user):
+            context["all_notebook_permissions"] = True
+        else:
+            context["notebook_permission_ids"] = {
+                action_name: set(
+                    notebooks_for_user(self.request.user, action_name).values_list("pk", flat=True)
+                )
+                for action_name in NOTEBOOK_PERMISSION_ACTIONS
+            }
+        return context
+
+
+class NotebookViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = NotebookSerializer
 
     def get_queryset(self):
         action_name = "write" if self.request.method not in {"GET", "HEAD", "OPTIONS"} else "read"
-        return notebooks_for_user(self.request.user, action_name).select_related("owner", "project").prefetch_related("team_members", "readers", "editors", "commenters", "reviewers", "lockers")
+        return (
+            notebooks_for_user(self.request.user, action_name)
+            .select_related("owner", "project")
+            .annotate(experiment_count=Count("experiments", distinct=True))
+            .prefetch_related(
+                "team_members", "readers", "editors", "commenters", "reviewers", "lockers"
+            )
+        )
 
     def perform_create(self, serializer):
         project = serializer.validated_data.get("project")
@@ -145,15 +180,70 @@ class ExperimentTemplateViewSet(viewsets.ModelViewSet):
         return Response(ExperimentSerializer(experiment, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
-class ExperimentViewSet(viewsets.ModelViewSet):
+class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = ExperimentSerializer
 
+    def _summary_requested(self):
+        return self.action == "list" and self.request.query_params.get("summary", "").lower() in {
+            "1", "true", "yes",
+        }
+
+    def _compact_requested(self):
+        return self.action == "retrieve" and self.request.query_params.get("compact", "").lower() in {
+            "1", "true", "yes",
+        }
+
+    def get_serializer_class(self):
+        if self._summary_requested():
+            return ExperimentSummarySerializer
+        if self._compact_requested():
+            return ExperimentCompactSerializer
+        return ExperimentSerializer
+
     def get_queryset(self):
-        return (
+        queryset = (
             Experiment.objects.filter(notebook__in=notebooks_for_user(self.request.user))
-            .select_related("notebook", "notebook__project", "template", "created_by", "current_revision", "locked_by")
-            .prefetch_related("assignees", "current_revision__blocks", "current_revision__links", "revisions__blocks", "revisions__links", "comments__mentions", "reviews")
+            .select_related(
+                "notebook", "notebook__project", "template", "created_by", "current_revision",
+                "current_revision__created_by", "current_revision__restored_from", "locked_by",
+            )
+        )
+        if self._summary_requested():
+            return queryset.annotate(
+                open_comment_count=Count(
+                    "comments", filter=Q(comments__resolved=False), distinct=True
+                )
+            ).prefetch_related("assignees")
+
+        if self._compact_requested():
+            return queryset.prefetch_related(
+                "assignees",
+                "current_revision__blocks",
+                "current_revision__links",
+                Prefetch(
+                    "current_revision__reviews",
+                    queryset=ExperimentReview.objects.select_related("reviewer", "revision"),
+                ),
+                Prefetch(
+                    "revisions",
+                    queryset=ExperimentRevision.objects.select_related("created_by", "restored_from"),
+                ),
+                Prefetch(
+                    "comments",
+                    queryset=ExperimentComment.objects.select_related(
+                        "author", "assigned_to", "resolved_by", "revision"
+                    ).prefetch_related("mentions"),
+                ),
+                Prefetch(
+                    "reviews",
+                    queryset=ExperimentReview.objects.select_related("reviewer", "revision"),
+                ),
+            )
+
+        return queryset.prefetch_related(
+            "assignees", "current_revision__blocks", "current_revision__links",
+            "revisions__blocks", "revisions__links", "comments__mentions", "reviews",
         )
 
     def create(self, request, *args, **kwargs):

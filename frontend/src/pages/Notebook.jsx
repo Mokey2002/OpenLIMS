@@ -24,6 +24,17 @@ const LINK_TYPES = [
   ["sop_document", "SOP version"], ["sequence", "Sequence revision"],
 ];
 
+const LINK_TARGET_PATHS = {
+  registry_record: "/api/registry-records/",
+  sample: "/api/samples/",
+  inventory_lot: "/api/inventory-lots/",
+  pipeline_run: "/api/pipeline-runs/",
+  work_item: "/api/work-items/",
+  result: "/api/results/",
+  sop_document: "/api/sop-documents/",
+  sequence: "/api/sequences/",
+};
+
 const RELATION_TYPES = [
   ["used", "Used"], ["input", "Input"], ["output", "Output"],
   ["protocol", "Protocol"], ["reagent_lot", "Reagent lot"],
@@ -98,6 +109,7 @@ export default function NotebookPage() {
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [linkTargets, setLinkTargets] = useState({});
+  const [linkTargetLoading, setLinkTargetLoading] = useState({});
   const [attachments, setAttachments] = useState([]);
   const [attachmentForm, setAttachmentForm] = useState({ file: null, description: "" });
   const [selectedNotebookId, setSelectedNotebookId] = useState(null);
@@ -132,6 +144,7 @@ export default function NotebookPage() {
   const revisionRef = useRef("");
   const dirtyRef = useRef(false);
   const editVersionRef = useRef(0);
+  const linkTargetRequests = useRef(new Set());
 
   function formatDate(value) {
     return value ? new Date(value).toLocaleString(locale) : "—";
@@ -154,15 +167,42 @@ export default function NotebookPage() {
   }
 
   async function loadAttachments(experiment) {
+    const token = selectionToken.current;
+    setAttachments([]);
     if (!experiment) {
-      setAttachments([]);
       return;
     }
     try {
-      setAttachments(await apiGetAll(`/api/shared-attachments/?target_type=experiment&target_public_id=${experiment.public_id}`));
+      const rows = await apiGetAll(`/api/shared-attachments/?target_type=experiment&target_public_id=${experiment.public_id}`);
+      if (token === selectionToken.current) setAttachments(rows);
     } catch {
-      setAttachments([]);
+      if (token === selectionToken.current) setAttachments([]);
     }
+  }
+
+  async function loadLinkTargets(type) {
+    const path = LINK_TARGET_PATHS[type];
+    if (!path || Object.prototype.hasOwnProperty.call(linkTargets, type) || linkTargetRequests.current.has(type)) return;
+    linkTargetRequests.current.add(type);
+    setLinkTargetLoading((current) => ({ ...current, [type]: true }));
+    try {
+      const rows = await apiGetAll(path);
+      setLinkTargets((current) => ({ ...current, [type]: rows }));
+    } catch (requestError) {
+      setError(requestError.message || String(requestError));
+    } finally {
+      linkTargetRequests.current.delete(type);
+      setLinkTargetLoading((current) => ({ ...current, [type]: false }));
+    }
+  }
+
+  async function loadExperimentDetail(experiment) {
+    if (!experiment) return null;
+    const detail = await apiGet(`/api/experiments/${experiment.id}/?compact=1`);
+    setExperiments((current) => current.map((row) => (
+      row.id === detail.id ? { ...row, ...detail } : row
+    )));
+    return detail;
   }
 
   async function load(selectId = null, selectNotebookId = null) {
@@ -170,26 +210,23 @@ export default function NotebookPage() {
     try {
       const [meData, notebookRows, templateRows, experimentRows, projectRows, userRows] = await Promise.all([
         apiGet("/api/me/"), apiGetAll("/api/notebooks/"), apiGetAll("/api/experiment-templates/"),
-        apiGetAll("/api/experiments/"), apiGetAll("/api/projects/"), apiGetAll("/api/notebooks/collaborators/"),
+        apiGetAll("/api/experiments/?summary=1"), apiGetAll("/api/projects/"), apiGetAll("/api/notebooks/collaborators/"),
       ]);
-      const targetRequests = await Promise.allSettled([
-        apiGetAll("/api/registry-records/"), apiGetAll("/api/samples/"), apiGetAll("/api/inventory-lots/"),
-        apiGetAll("/api/pipeline-runs/"), apiGetAll("/api/work-items/"), apiGetAll("/api/results/"),
-        apiGetAll("/api/sop-documents/"), apiGetAll("/api/sequences/"),
-      ]);
-      const targetRows = targetRequests.map((result) => result.status === "fulfilled" ? result.value : []);
-      setMe(meData); setNotebooks(notebookRows); setTemplates(templateRows); setExperiments(experimentRows);
-      setProjects(projectRows); setUsers(userRows);
-      setLinkTargets(Object.fromEntries(LINK_TYPES.map(([type], index) => [type, targetRows[index] || []])));
       const requestedNotebookId = selectNotebookId || selectedNotebookId;
       const targetNotebook = notebookRows.find((row) => String(row.id) === String(requestedNotebookId)) || notebookRows[0] || null;
+      const notebookRowsForTarget = targetNotebook ? experimentRows.filter((row) => String(row.notebook) === String(targetNotebook.id)) : [];
+      const targetSummary = notebookRowsForTarget.find((row) => String(row.id) === String(selectId || selected?.id)) || notebookRowsForTarget[0] || null;
+      const target = targetSummary ? await apiGet(`/api/experiments/${targetSummary.id}/?compact=1`) : null;
+      const hydratedExperiments = target ? experimentRows.map((row) => (
+        row.id === target.id ? { ...row, ...target } : row
+      )) : experimentRows;
+      setMe(meData); setNotebooks(notebookRows); setTemplates(templateRows); setExperiments(hydratedExperiments);
+      setProjects(projectRows); setUsers(userRows);
       setSelectedNotebookId(targetNotebook?.id || null);
       setNotebookEditForm(targetNotebook ? notebookValues(targetNotebook) : null);
       setTemplateForm((current) => ({ ...current, notebook: targetNotebook?.permissions?.write ? String(targetNotebook.id) : "" }));
-      const notebookRowsForTarget = targetNotebook ? experimentRows.filter((row) => String(row.notebook) === String(targetNotebook.id)) : [];
-      const target = notebookRowsForTarget.find((row) => String(row.id) === String(selectId || selected?.id)) || notebookRowsForTarget[0] || null;
       adoptExperiment(target);
-      await loadAttachments(target);
+      void loadAttachments(target);
     } catch (requestError) {
       setError(requestError.message || String(requestError));
     } finally {
@@ -265,9 +302,14 @@ export default function NotebookPage() {
   async function selectExperiment(experiment) {
     if (selected?.id === experiment.id) return;
     if (dirtyRef.current && !(await saveContent(blocks, links, "Saved before switching experiments", selected))) return;
-    adoptExperiment(experiment);
-    await loadAttachments(experiment);
-    setDetailTab("entry");
+    try {
+      const detail = await loadExperimentDetail(experiment);
+      adoptExperiment(detail);
+      void loadAttachments(detail);
+      setDetailTab("entry");
+    } catch (requestError) {
+      setError(requestError.message || String(requestError));
+    }
   }
 
   async function selectNotebook(notebook) {
@@ -277,8 +319,28 @@ export default function NotebookPage() {
     setNotebookEditForm(notebookValues(notebook));
     setTemplateForm((current) => ({ ...current, notebook: notebook.permissions.write ? String(notebook.id) : "" }));
     const firstExperiment = experiments.find((row) => String(row.notebook) === String(notebook.id)) || null;
-    adoptExperiment(firstExperiment);
-    await loadAttachments(firstExperiment);
+    try {
+      const detail = await loadExperimentDetail(firstExperiment);
+      adoptExperiment(detail);
+      void loadAttachments(detail);
+    } catch (requestError) {
+      setError(requestError.message || String(requestError));
+    }
+  }
+
+  function changeDetailTab(key) {
+    setDetailTab(key);
+    if (key === "provenance") void loadLinkTargets(linkForm.entity_type);
+  }
+
+  function changeLinkType(entityType) {
+    setLinkForm((current) => ({ ...current, entity_type: entityType, public_id: "" }));
+    void loadLinkTargets(entityType);
+  }
+
+  function addBlock(type) {
+    if (type === "SEQUENCE_VIEW") void loadLinkTargets("sequence");
+    updateBlocks([...blocks, newBlock(type)]);
   }
 
   function updateBlocks(next) { setBlocks(next); scheduleAutosave(next, links); }
@@ -464,7 +526,9 @@ export default function NotebookPage() {
   }), [notebookExperiments, experimentSearch, statusFilter, myWorkOnly, me]);
   const targetOptions = linkTargets[linkForm.entity_type] || [];
   const editable = Boolean(selected?.permissions?.write && EDITABLE_STATES.has(selected.status));
-  const openComments = experiments.reduce((count, experiment) => count + (experiment.comments || []).filter((comment) => !comment.resolved).length, 0);
+  const openComments = experiments.reduce((count, experiment) => (
+    count + (experiment.open_comment_count ?? (experiment.comments || []).filter((comment) => !comment.resolved).length)
+  ), 0);
   const assignedExperiments = experiments.filter((experiment) => (experiment.assignees || []).includes(me?.id)).length;
   const reviewQueue = experiments.filter((experiment) => experiment.status === "COMPLETED" && experiment.permissions?.review).length;
   const statusCounts = Object.fromEntries(STATUS_OPTIONS.map((status) => [status, notebookExperiments.filter((experiment) => experiment.status === status).length]));
@@ -516,14 +580,15 @@ export default function NotebookPage() {
                 selected={selected} editable={editable} blocks={blocks} links={links} users={users}
                 attachments={attachments} attachmentForm={attachmentForm} setAttachmentForm={setAttachmentForm}
                 linkTargets={linkTargets} linkForm={linkForm} setLinkForm={setLinkForm} targetOptions={targetOptions}
-                detailTab={detailTab} setDetailTab={setDetailTab} saveState={saveState}
+                linkTargetLoading={Boolean(linkTargetLoading[linkForm.entity_type])}
+                detailTab={detailTab} onDetailTabChange={changeDetailTab} onLinkTypeChange={changeLinkType} saveState={saveState}
                 experimentMeta={experimentMeta} setExperimentMeta={setExperimentMeta}
                 commentForm={commentForm} setCommentForm={setCommentForm}
                 compareForm={compareForm} setCompareForm={setCompareForm} comparison={comparison}
                 comparisonLoading={comparisonLoading} locale={locale}
                 onSave={() => saveContent(blocks, links, "Manual save")}
                 onWorkflow={openWorkflowAction} onDownload={() => apiDownload(`/api/experiments/${selected.id}/export-pdf/`, `${selected.title}.pdf`)}
-                onAddBlock={(type) => updateBlocks([...blocks, newBlock(type)])}
+                onAddBlock={addBlock} onSequenceFocus={() => loadLinkTargets("sequence")}
                 onBlockChange={changeBlock} onBlockMove={moveBlock} onBlockDuplicate={duplicateBlock}
                 onBlockRemove={(index) => updateBlocks(blocks.filter((_, blockIndex) => blockIndex !== index))}
                 onAddLink={addLink} onRemoveLink={removeLink} onUploadAttachment={uploadAttachment} onAddComment={addComment}
@@ -561,10 +626,10 @@ export default function NotebookPage() {
 
 function ExperimentWorkspace(props) {
   const { selected, editable, blocks, links, users, attachments, attachmentForm, setAttachmentForm,
-    linkTargets, linkForm, setLinkForm,
-    targetOptions, detailTab, setDetailTab, saveState, experimentMeta, setExperimentMeta,
+    linkTargets, linkForm, setLinkForm, linkTargetLoading,
+    targetOptions, detailTab, onDetailTabChange, onLinkTypeChange, saveState, experimentMeta, setExperimentMeta,
     commentForm, setCommentForm, compareForm, setCompareForm, comparison, comparisonLoading,
-    onSave, onWorkflow, onDownload, onAddBlock, onBlockChange, onBlockMove, onBlockDuplicate,
+    onSave, onWorkflow, onDownload, onAddBlock, onSequenceFocus, onBlockChange, onBlockMove, onBlockDuplicate,
     onBlockRemove, onAddLink, onRemoveLink, onUploadAttachment, onAddComment, onResolveComment, onCompare,
     onSaveMeta, formatDate } = props;
   return <>
@@ -572,7 +637,7 @@ function ExperimentWorkspace(props) {
       <div><div className="inline-actions mb-2"><Badge bg={statusColor(selected.status)}>{statusLabel(selected.status)}</Badge><span className={`notebook-save-state ${saveState.includes("failed") ? "text-danger" : ""}`}>{saveState || `Revision ${selected.current_revision_detail?.number || 0}`}</span></div><h3 className="mb-1">{selected.title}</h3><div className="feed-meta">{selected.notebook_name} · {selected.project_code || "Private/team"} · created by {selected.created_by_username}</div></div>
       <div className="inline-actions">{editable && <Button variant="outline-primary" onClick={onSave}>Save now</Button>}{editable && <Button variant="outline-dark" onClick={() => onWorkflow("complete")}>Complete</Button>}{selected.permissions.review && selected.status === "COMPLETED" && <><Button variant="success" onClick={() => onWorkflow("approve")}>Approve</Button><Button variant="outline-warning" onClick={() => onWorkflow("changes")}>Request changes</Button></>}{selected.permissions.lock && selected.status === "REVIEWED" && <Button variant="dark" onClick={() => onWorkflow("lock")}>Lock</Button>}<Button variant="outline-secondary" onClick={() => onWorkflow("clone")}>Clone</Button><Button variant="outline-primary" onClick={onDownload}>PDF</Button></div>
     </div></Card.Body></Card>
-    <Tab.Container activeKey={detailTab} onSelect={(key) => setDetailTab(key)}>
+    <Tab.Container activeKey={detailTab} onSelect={onDetailTabChange}>
       <Nav variant="pills" className="notebook-detail-tabs mb-3">
         <Nav.Item><Nav.Link eventKey="entry">Entry</Nav.Link></Nav.Item>
         <Nav.Item><Nav.Link eventKey="provenance">Provenance <Badge bg="light" text="dark">{links.length}</Badge></Nav.Link></Nav.Item>
@@ -583,12 +648,12 @@ function ExperimentWorkspace(props) {
       <Tab.Content>
         <Tab.Pane eventKey="entry"><Card className="app-card"><Card.Body>
           <div className="toolbar-row mb-3"><div><h5 className="section-title mb-1">Experiment entry</h5><div className="feed-meta">Use structured blocks; changes autosave into immutable revisions.</div></div>{editable && <Form.Select className="notebook-add-block" defaultValue="" onChange={(event) => { if (event.target.value) onAddBlock(event.target.value); event.target.value = ""; }}><option value="">Add a block...</option>{BLOCK_CATALOG.map((item) => <option key={item.type} value={item.type}>{item.label}</option>)}</Form.Select>}</div>
-          {blocks.length === 0 ? <div className="empty-state py-5"><p>This experiment has no blocks.</p>{editable && <Button variant="outline-dark" onClick={() => onAddBlock("RICH_TEXT")}>Add first block</Button>}</div> : blocks.map((block, index) => <BlockEditor key={block._key} block={block} index={index} count={blocks.length} editable={editable} sequenceOptions={linkTargets.sequence || []} onChange={(next) => onBlockChange(index, next)} onMove={(direction) => onBlockMove(index, direction)} onDuplicate={() => onBlockDuplicate(index)} onRemove={() => onBlockRemove(index)} />)}
+          {blocks.length === 0 ? <div className="empty-state py-5"><p>This experiment has no blocks.</p>{editable && <Button variant="outline-dark" onClick={() => onAddBlock("RICH_TEXT")}>Add first block</Button>}</div> : blocks.map((block, index) => <BlockEditor key={block._key} block={block} index={index} count={blocks.length} editable={editable} sequenceOptions={linkTargets.sequence || []} onSequenceFocus={onSequenceFocus} onChange={(next) => onBlockChange(index, next)} onMove={(direction) => onBlockMove(index, direction)} onDuplicate={() => onBlockDuplicate(index)} onRemove={() => onBlockRemove(index)} />)}
         </Card.Body></Card></Tab.Pane>
 
         <Tab.Pane eventKey="provenance"><Card className="app-card"><Card.Body>
           <h5 className="section-title">Exact linked versions</h5><p className="feed-meta">Each revision preserves the precise registry record, sample, lot, SOP, sequence, workflow, work item, or result used.</p>
-          {editable && <Form onSubmit={onAddLink} className="notebook-link-form"><Row className="g-2"><Col md={3}><Form.Label>Record type</Form.Label><Form.Select value={linkForm.entity_type} onChange={(event) => setLinkForm({ ...linkForm, entity_type: event.target.value, public_id: "" })}>{LINK_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Form.Select></Col><Col md={5}><Form.Label>Exact record</Form.Label><Form.Select required value={linkForm.public_id} onChange={(event) => setLinkForm({ ...linkForm, public_id: event.target.value })}><option value="">Choose exact record</option>{targetOptions.map((target) => <option key={target.public_id} value={target.public_id}>{targetLabel(target)}</option>)}</Form.Select></Col><Col md={2}><Form.Label>Relationship</Form.Label><Form.Select value={linkForm.relation_type} onChange={(event) => setLinkForm({ ...linkForm, relation_type: event.target.value })}>{RELATION_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Form.Select></Col><Col md={2} className="d-flex align-items-end"><Button className="w-100" type="submit">Add link</Button></Col></Row></Form>}
+          {editable && <Form onSubmit={onAddLink} className="notebook-link-form"><Row className="g-2"><Col md={3}><Form.Label>Record type</Form.Label><Form.Select value={linkForm.entity_type} onChange={(event) => onLinkTypeChange(event.target.value)}>{LINK_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Form.Select></Col><Col md={5}><Form.Label>Exact record</Form.Label><Form.Select required disabled={linkTargetLoading} value={linkForm.public_id} onChange={(event) => setLinkForm({ ...linkForm, public_id: event.target.value })}><option value="">{linkTargetLoading ? "Loading records..." : "Choose exact record"}</option>{targetOptions.map((target) => <option key={target.public_id} value={target.public_id}>{targetLabel(target)}</option>)}</Form.Select></Col><Col md={2}><Form.Label>Relationship</Form.Label><Form.Select value={linkForm.relation_type} onChange={(event) => setLinkForm({ ...linkForm, relation_type: event.target.value })}>{RELATION_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Form.Select></Col><Col md={2} className="d-flex align-items-end"><Button className="w-100" type="submit">Add link</Button></Col></Row></Form>}
           {links.length === 0 ? <div className="empty-state py-4">No records linked to this revision.</div> : <Table responsive className="app-table mt-3 align-middle"><thead><tr><th>Type</th><th>Record</th><th>Relationship</th><th>Captured version</th>{editable && <th />}</tr></thead><tbody>{links.map((link, index) => <tr key={`${link.entity_type}-${link.public_id}-${link.relation_type}`}><td>{LINK_TYPES.find(([value]) => value === link.entity_type)?.[1] || link.entity_type}</td><td><strong>{link.label}</strong></td><td>{RELATION_TYPES.find(([value]) => value === link.relation_type)?.[1] || link.relation_type}</td><td><code className="notebook-version-code">{link.version ? JSON.stringify(link.version) : "Captured when saved"}</code></td>{editable && <td><Button size="sm" variant="outline-danger" onClick={() => onRemoveLink(index)}>Unlink</Button></td>}</tr>)}</tbody></Table>}
           <hr className="my-4" /><h6>Experiment attachments</h6><p className="feed-meta">Files use the shared attachment service with uploader, size, media type, and SHA-256 provenance.</p>
           {editable && <Form onSubmit={onUploadAttachment} className="notebook-link-form mb-3"><Row className="g-2"><Col md={5}><Form.Label>File</Form.Label><Form.Control type="file" required onChange={(event) => setAttachmentForm({ ...attachmentForm, file: event.target.files?.[0] || null })} /></Col><Col md={5}><Form.Label>Description</Form.Label><Form.Control value={attachmentForm.description} onChange={(event) => setAttachmentForm({ ...attachmentForm, description: event.target.value })} /></Col><Col md={2} className="d-flex align-items-end"><Button className="w-100" type="submit" disabled={!attachmentForm.file}>Upload</Button></Col></Row></Form>}
