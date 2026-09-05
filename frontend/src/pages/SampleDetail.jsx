@@ -12,6 +12,7 @@ import {
 } from "react-bootstrap";
 import { apiGet, apiPatch, apiPost, apiPostForm } from "../api";
 import { canWrite, readOnlyMessage } from "../authz";
+import SampleFormFields from "../components/SampleFormFields";
 
 function statusVariant(status) {
   switch (status) {
@@ -851,6 +852,9 @@ export default function SampleDetail() {
       {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
 
       <div className="stat-grid mb-4">
+        {sample.form_schema?.fields?.length > 0 && <Card className="app-card"><Card.Body>
+          <SampleFormFields fields={sample.form_schema.fields} values={sample.form_values} readOnly />
+        </Card.Body></Card>}
         <Card className="app-card metric-card h-100">
           <Card.Body>
             <div className="metric-label">Work Items</div>

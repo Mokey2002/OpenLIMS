@@ -34,6 +34,8 @@ class SampleSerializer(serializers.ModelSerializer):
             "public_id",
             "sample_id",
             "sample_type",
+            "form_schema",
+            "form_values",
             "status",
             "project",
             "project_id",
@@ -66,7 +68,24 @@ class SampleSerializer(serializers.ModelSerializer):
             "custodian", "custodian_username", "location_id", "location_name",
             "created_by", "created_by_username", "can_modify", "created_at",
             "status_changed_at", "updated_at",
+            "form_schema",
         ]
+
+    def validate(self, attrs):
+        from custom_fields.forms import schema_for, validate_values
+        if self.instance:
+            schema = self.instance.form_schema
+            if schema and attrs.get("sample_type", self.instance.sample_type) != self.instance.sample_type:
+                raise serializers.ValidationError({"sample_type": "Sample type cannot change. / No se puede cambiar el tipo."})
+            if not schema and attrs.get("sample_type", self.instance.sample_type) != self.instance.sample_type:
+                schema = schema_for(attrs["sample_type"])
+                attrs["form_schema"] = schema
+        else:
+            schema = schema_for(attrs.get("sample_type", "GENERAL"))
+            attrs["form_schema"] = schema
+        values = attrs.get("form_values", self.instance.form_values if self.instance else {})
+        validate_values(schema, values)
+        return attrs
 
     def validate_sample_type(self, value):
         normalized = str(value or "GENERAL").strip().upper()

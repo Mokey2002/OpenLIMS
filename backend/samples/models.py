@@ -50,6 +50,8 @@ class Sample(PublicIDModel):
     ]
 
     sample_id = models.CharField(max_length=64, unique=True)
+    form_schema = models.JSONField(default=dict, blank=True)
+    form_values = models.JSONField(default=dict, blank=True)
     sample_type = models.CharField(
         max_length=64,
         default="GENERAL",
@@ -127,6 +129,15 @@ class Sample(PublicIDModel):
 
     def __str__(self):
         return self.sample_id
+
+    def save(self, *args, **kwargs):
+        # Also cover ordinary ORM creation used by imports and assistant actions.
+        # Bulk SQL writers must not be used for configured sample intake.
+        from custom_fields.forms import schema_for, validate_values
+        if self._state.adding:
+            self.form_schema = schema_for(str(self.sample_type or "GENERAL").strip().upper())
+        validate_values(self.form_schema, self.form_values)
+        return super().save(*args, **kwargs)
 
 
 class SampleRelationship(models.Model):

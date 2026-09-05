@@ -1,5 +1,15 @@
 from django.db import models
 
+
+class SampleForm(models.Model):
+    code = models.CharField(max_length=64, db_index=True)
+    name_en = models.CharField(max_length=128)
+    name_es = models.CharField(max_length=128)
+    fields = models.JSONField(default=list)
+    published = models.BooleanField(default=False)
+    archived = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
 class FieldDefinition(models.Model):
     """
     Defines a custom field for an entity type (v1: Sample).

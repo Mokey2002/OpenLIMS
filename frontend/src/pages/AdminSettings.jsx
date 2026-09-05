@@ -13,6 +13,7 @@ import { apiGet, apiPatch, apiPost } from "../api";
 import { isAdmin, readOnlyMessage } from "../authz";
 import { useLanguage } from "../i18n";
 import { featureDefinitions, featureFlagCopy } from "../featureFlags";
+import LabFormBuilder from "../components/LabFormBuilder";
 
 function formatTimestamp(value, locale) {
   if (!value) return "-";
@@ -502,6 +503,7 @@ export default function AdminSettings() {
           </Card.Body>
         </Card>
       </Form>
+      {userIsAdmin && <LabFormBuilder />}
     </div>
   );
 }

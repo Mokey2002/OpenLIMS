@@ -22,6 +22,7 @@ from inventory.views import (
 )
 from events.views import EventViewSet
 from custom_fields.views import FieldDefinitionViewSet, FieldValueViewSet
+from custom_fields.forms import SampleFormViewSet
 from results.views import WorkItemViewSet, ResultViewSet, SampleAttachmentViewSet
 from projects.views import ProjectViewSet, ProjectPostViewSet
 from core.views import UserLiteViewSet, UserAdminViewSet
@@ -96,6 +97,7 @@ from workflow_requests.views import (
 )
 
 router = DefaultRouter()
+router.register(r"sample-forms", SampleFormViewSet, basename="sample-form")
 router.register(r"samples", SampleViewSet, basename="sample")
 router.register(r"sample-batches", SampleBatchViewSet, basename="sample-batch")
 router.register(r"sample-relationships", SampleRelationshipViewSet, basename="sample-relationship")
