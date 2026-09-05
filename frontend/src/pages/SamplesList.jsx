@@ -13,6 +13,8 @@ import {
 } from "react-bootstrap";
 import { apiGet, apiPost, apiPostDownload } from "../api";
 import { isAdmin, isTech, canWrite } from "../authz";
+import SampleFormFields from "../components/SampleFormFields";
+import { useLanguage } from "../i18n";
 
 const STATUS_OPTIONS = [
   "",
@@ -80,6 +82,9 @@ async function downloadSelectedSamples(ids) {
 }
 
 export default function SamplesList() {
+  const { language } = useLanguage();
+  const [sampleForms, setSampleForms] = useState([]);
+  const [formValues, setFormValues] = useState({});
   const [samples, setSamples] = useState([]);
   const [projects, setProjects] = useState([]);
   const [containers, setContainers] = useState([]);
@@ -124,11 +129,12 @@ export default function SamplesList() {
 
       params.set("page", page);
 
-      const [samplesData, projectsData, containersData, meData] = await Promise.all([
+      const [samplesData, projectsData, containersData, meData, formsData] = await Promise.all([
         apiGet(`/api/samples/?${params.toString()}`),
         apiGet("/api/projects/"),
         apiGet("/api/containers/"),
         apiGet("/api/me/"),
+        apiGet("/api/sample-forms/?active=1"),
       ]);
 
       setSamples(samplesData.results || []);
@@ -138,6 +144,7 @@ export default function SamplesList() {
       setProjects(projectsData.results || projectsData || []);
       setContainers(containersData.results || containersData || []);
       setMe(meData);
+      setSampleForms(formsData.filter(f => f.published && !f.archived));
     } catch (e) {
       setErr(e.message || String(e));
     }
@@ -215,12 +222,14 @@ export default function SamplesList() {
       await apiPost("/api/samples/", {
         sample_id: id,
         sample_type: sampleType.trim() || "GENERAL",
+        form_values: formValues,
         status: "RECEIVED",
         project: projectId ? Number(projectId) : null,
       });
 
       setSampleId("");
       setSampleType("GENERAL");
+      setFormValues({});
       setProjectId("");
       setSuccess("Sample created.");
       await load();
@@ -367,6 +376,7 @@ export default function SamplesList() {
           <h5 className="section-title">Create Sample</h5>
 
           <Form onSubmit={createSample}>
+            <SampleFormFields fields={sampleForms.find(f => f.code === sampleType.trim().toUpperCase())?.fields || []} values={formValues} onChange={setFormValues} />
             <Row className="g-2">
               <Col md={4}>
                 <Form.Control
@@ -379,9 +389,11 @@ export default function SamplesList() {
               <Col md={3}>
                 <Form.Control
                   value={sampleType}
-                  onChange={(e) => setSampleType(e.target.value)}
+                  list="configured-sample-types"
+                  onChange={(e) => { setSampleType(e.target.value); setFormValues({}); }}
                   placeholder="Sample type, e.g. DNA"
                 />
+                <datalist id="configured-sample-types">{[...new Set(sampleForms.map(f => f.code))].map(code => <option key={code} value={code}>{sampleForms.find(f => f.code === code)?.[language === "es" ? "name_es" : "name_en"]}</option>)}</datalist>
               </Col>
 
               <Col md={3}>

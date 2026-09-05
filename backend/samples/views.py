@@ -48,6 +48,8 @@ REASON_MIN_LENGTH = 10
 def sample_audit_state(sample):
     return {
         "sample_type": sample.sample_type,
+        "form_schema": sample.form_schema,
+        "form_values": sample.form_values,
         "status": sample.status,
         "project_id": sample.project_id,
         "container_id": sample.container_id,
