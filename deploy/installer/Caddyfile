@@ -1,0 +1,5 @@
+{$OPENLIMS_DOMAIN} {
+    # Never expose laboratory uploads as anonymous static files.
+    respond /media/* 404
+    reverse_proxy web:80
+}

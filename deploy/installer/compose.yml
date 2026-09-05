@@ -1,0 +1,76 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openlims
+      POSTGRES_USER: openlims
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes: ["database:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openlims -d openlims"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  setup:
+    image: ${OPENLIMS_BACKEND_IMAGE:?}
+    env_file: [".env"]
+    command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput"
+    volumes: ["media:/app/media", "static:/app/staticfiles"]
+    profiles: ["setup"]
+  api:
+    image: ${OPENLIMS_BACKEND_IMAGE:?}
+    restart: unless-stopped
+    env_file: [".env"]
+    command: daphne -b 0.0.0.0 -p 8000 config.asgi:application
+    volumes: ["media:/app/media", "static:/app/staticfiles"]
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+  worker:
+    image: ${OPENLIMS_BACKEND_IMAGE:?}
+    restart: unless-stopped
+    env_file: [".env"]
+    command: celery -A config worker -l info -n worker@%h
+    volumes: ["media:/app/media"]
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d worker@$${HOSTNAME} --timeout 5 | grep -q pong"]
+      interval: 30s
+      timeout: 15s
+      start_period: 30s
+      retries: 5
+  web:
+    image: ${OPENLIMS_FRONTEND_IMAGE:?}
+    restart: unless-stopped
+    volumes: ["static:/srv/openlims/static:ro"]
+    depends_on:
+      api: {condition: service_healthy}
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      OPENLIMS_DOMAIN: ${OPENLIMS_DOMAIN:?}
+    ports: ["80:80", "443:443"]
+    volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro", "certificates:/data", "caddy_config:/config"]
+    depends_on: [web]
+volumes:
+  database:
+  media:
+  static:
+  certificates:
+  caddy_config:
