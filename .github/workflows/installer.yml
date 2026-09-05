@@ -1,0 +1,57 @@
+name: Installer checks and optional images
+on:
+  pull_request:
+    paths: ["deploy/openlims", "deploy/installer/**", ".github/workflows/installer.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s deploy/installer -p 'test_*.py' -v
+      - name: Validate Compose schema
+        env:
+          OPENLIMS_DOMAIN: lims.example.org
+          OPENLIMS_BACKEND_IMAGE: example/api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          OPENLIMS_FRONTEND_IMAGE: example/web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          POSTGRES_PASSWORD: schema-test-only
+        run: |
+          touch deploy/installer/.env
+          docker compose -f deploy/installer/compose.yml --profile setup config --quiet
+  images:
+    if: github.event_name == 'workflow_dispatch'
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: name
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: echo "repository=${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: ./${{ matrix.component }}
+          push: true
+          tags: ghcr.io/${{ steps.name.outputs.repository }}-${{ matrix.component }}:${{ github.sha }}
+      - name: Report immutable reference
+        env:
+          IMAGE: ghcr.io/${{ steps.name.outputs.repository }}-${{ matrix.component }}@${{ steps.build.outputs.digest }}
+        run: echo "$IMAGE" >> "$GITHUB_STEP_SUMMARY"

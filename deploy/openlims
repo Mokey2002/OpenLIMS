@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Conservative, resumable fresh-server installer. Python standard library only."""
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import shutil
+import socket
+import subprocess
+import sys
+import urllib.request
+
+TEMPLATES = Path(__file__).resolve().parent / "installer"
+
+
+def domain(value):
+    value = value.lower()
+    if len(value) > 253 or "." not in value or not all(
+        re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", part)
+        for part in value.split(".")
+    ) or value.replace(".", "").isdigit():
+        raise argparse.ArgumentTypeError("Use a public DNS hostname, without a URL or port.")
+    return value
+
+
+def image(value):
+    # Require immutable digests: tags can move between resumed installation runs.
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]*@sha256:[a-f0-9]{64}", value):
+        raise argparse.ArgumentTypeError("Supply an image reference pinned with @sha256:<64 hex digits>.")
+    return value
+
+
+def run(args, **kwargs):
+    # Do not dump command output: Docker errors/configuration may contain secrets.
+    result = subprocess.run(args, **kwargs)
+    if result.returncode:
+        raise RuntimeError("Operation failed. Configuration and data were preserved; resolve the cause and rerun.")
+    return result
+
+
+def private_write(path, content):
+    with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as handle:
+        handle.write(content)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def prepare(root, args):
+    config = root / ".env"
+    expected = {"OPENLIMS_DOMAIN": args.domain,
+                "OPENLIMS_BACKEND_IMAGE": args.backend_image,
+                "OPENLIMS_FRONTEND_IMAGE": args.frontend_image}
+    if config.exists():
+        values = dict(line.split("=", 1) for line in config.read_text().splitlines())
+        if any(values.get(k) != v for k, v in expected.items()):
+            raise RuntimeError("Existing installation differs. This command is not an upgrade or domain-change tool.")
+        required = {"POSTGRES_PASSWORD", "DJANGO_SECRET_KEY", "DATABASE_URL", "DJANGO_DEBUG"}
+        if not required <= values.keys() or values["DJANGO_DEBUG"] != "false":
+            raise RuntimeError("Existing configuration is incomplete or unsafe; manual review required.")
+        if config.stat().st_mode & 0o077:
+            raise RuntimeError("Configuration permissions must be 0600.")
+    else:
+        password = secrets.token_hex(32)
+        values = dict(expected, POSTGRES_PASSWORD=password,
+                      DJANGO_SECRET_KEY=secrets.token_hex(64), DJANGO_DEBUG="false",
+                      DATABASE_URL=f"postgres://openlims:{password}@db:5432/openlims",
+                      DJANGO_ALLOWED_HOSTS=f"{args.domain},127.0.0.1,localhost",
+                      CSRF_TRUSTED_ORIGINS=f"https://{args.domain}",
+                      JWT_COOKIE_SECURE="true", SESSION_COOKIE_SECURE="true",
+                      CSRF_COOKIE_SECURE="true", CELERY_BROKER_URL="redis://redis:6379/0",
+                      CELERY_RESULT_BACKEND="redis://redis:6379/1",
+                      CHANNEL_REDIS_URL="redis://redis:6379/2")
+        private_write(config, "".join(f"{k}={v}\n" for k, v in values.items()))
+    for name in ("compose.yml", "Caddyfile"):
+        target = root / name
+        content = (TEMPLATES / name).read_text()
+        if target.exists() and target.read_text() != content:
+            raise RuntimeError(f"Existing {name} differs; refusing to overwrite it.")
+        if not target.exists():
+            private_write(target, content)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=["install", "doctor", "admin"])
+    parser.add_argument("--directory", type=Path, default=Path("openlims-install"))
+    parser.add_argument("--domain", type=domain)
+    parser.add_argument("--backend-image", type=image)
+    parser.add_argument("--frontend-image", type=image)
+    args = parser.parse_args()
+    if args.command == "install" and not all((args.domain, args.backend_image, args.frontend_image)):
+        parser.error("install requires --domain, --backend-image and --frontend-image")
+    root = args.directory.resolve()
+    if root == Path("/") or root == Path.home() or root == Path.cwd():
+        parser.error("Use a dedicated installation directory, not /, your home, or the current directory.")
+    if not shutil.which("docker"):
+        raise RuntimeError("Install Docker Engine and Docker Compose v2 first; no privileged installation is attempted.")
+    run(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    run(["docker", "compose", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if args.command != "install" and not (root / ".env").exists():
+        raise RuntimeError("No installation found in this directory.")
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with (root / ".installer.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError("Another installer operation is running.") from None
+        marker = root / "installation.json"
+        if marker.exists():
+            project = json.loads(marker.read_text())["project"]
+        else:
+            if any(p.name != ".installer.lock" for p in root.iterdir()):
+                raise RuntimeError("Directory is not an installer-managed installation; refusing to adopt it.")
+            project = "openlims-" + secrets.token_hex(6)
+            private_write(marker, json.dumps({"project": project}))
+        compose = ["docker", "compose", "--project-name", project, "--project-directory", str(root),
+                   "--env-file", str(root / ".env"), "-f", str(root / "compose.yml")]
+        def dc(*parts):
+            return run(compose + list(parts), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if args.command == "install":
+            if os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") < 2 * 1024**3:
+                raise RuntimeError("At least 2 GiB RAM is required (4 GiB recommended; Ollama is excluded).")
+            if shutil.disk_usage(root).free < 10 * 1024**3:
+                raise RuntimeError("At least 10 GiB free disk space is required.")
+            socket.getaddrinfo(args.domain, 443)
+            if not (root / ".env").exists():
+                for port in (80, 443):
+                    with socket.socket() as probe:
+                        try:
+                            probe.bind(("0.0.0.0", port))
+                        except OSError:
+                            raise RuntimeError(f"Port {port} is unavailable. Use a fresh server.") from None
+            prepare(root, args)
+            print("Validating configuration and downloading images...", flush=True)
+            dc("config", "--quiet")
+            dc("--profile", "setup", "pull")
+            # Never run migrations during a resume if application services are active.
+            active = run(compose + ["ps", "--status", "running", "--services"],
+                         capture_output=True, text=True).stdout.splitlines()
+            if not set(active) & {"api", "worker", "web", "caddy"}:
+                print("Starting database and running initialization...", flush=True)
+                dc("up", "-d", "--wait", "--wait-timeout", "180", "db", "redis")
+                dc("run", "--rm", "--no-deps", "setup")
+            print("Starting application and checking service health...", flush=True)
+            dc("up", "-d", "--wait", "--wait-timeout", "240", "api", "worker", "web", "caddy")
+        if args.command == "admin":
+            run(compose + ["exec", "api", "python", "manage.py", "createsuperuser"])
+            return
+        dc("exec", "-T", "api", "python", "manage.py", "check")
+        dc("exec", "-T", "worker", "sh", "-c",
+           'celery -A config inspect ping -d worker@$HOSTNAME --timeout 5 | grep -q pong')
+        values = dict(line.split("=", 1) for line in (root / ".env").read_text().splitlines())
+        hostname = domain(values["OPENLIMS_DOMAIN"])
+        for path in ("/", "/health/"):
+            with urllib.request.urlopen(f"https://{hostname}{path}", timeout=15) as response:
+                if response.status != 200:
+                    raise RuntimeError("HTTPS health verification failed.")
+        print(f"HTTPS and application checks passed: https://{hostname}")
+        print("Run the admin command to create your account. No demo users were created.")
+        print("NOT production-ready until off-server backups and a restore drill are configured and verified.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (RuntimeError, OSError, ValueError) as error:
+        # Exceptions from remote services may embed URLs or connection credentials.
+        if isinstance(error, RuntimeError):
+            print(str(error), file=sys.stderr)
+        else:
+            print("System, network, or configuration check failed. No data was deleted. Run doctor after resolving it.", file=sys.stderr)
+        sys.exit(1)
