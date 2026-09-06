@@ -134,6 +134,11 @@ class ProcedureDefinitionSerializer(serializers.ModelSerializer):
 
 
 class PipelineTemplateStepSerializer(serializers.ModelSerializer):
+    def validate_form(self, form):
+        if form and (not form.published or form.archived):
+            raise serializers.ValidationError("Select a published, unarchived form. / Seleccione un formulario publicado y no archivado.")
+        return form
+
     procedure_code = serializers.CharField(source="procedure.code", read_only=True)
     procedure_name = serializers.CharField(source="procedure.name", read_only=True)
     procedure_version = serializers.CharField(source="procedure.version", read_only=True)
@@ -143,6 +148,7 @@ class PipelineTemplateStepSerializer(serializers.ModelSerializer):
     class Meta:
         model = PipelineTemplateStep
         fields = [
+            "form",
             "id",
             "position",
             "procedure",
@@ -349,6 +355,16 @@ class PipelineTemplateSerializer(serializers.ModelSerializer):
 
 
 class PipelineStepRunSerializer(serializers.ModelSerializer):
+    form_errors = serializers.SerializerMethodField()
+
+    def get_form_errors(self, obj):
+        from custom_fields.forms import validate_values
+        try:
+            validate_values(obj.form_schema, obj.form_values)
+        except serializers.ValidationError as error:
+            return error.detail
+        return {}
+
     work_item_status = serializers.CharField(source="work_item.status", read_only=True)
     work_item_qc_status = serializers.CharField(source="work_item.qc_status", read_only=True)
     assigned_to_username = serializers.CharField(
@@ -361,6 +377,7 @@ class PipelineStepRunSerializer(serializers.ModelSerializer):
     class Meta:
         model = PipelineStepRun
         fields = [
+            "form_schema", "form_values", "form_errors",
             "id",
             "position",
             "name",

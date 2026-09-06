@@ -249,6 +249,14 @@ def start_pipeline(*, sample, template, actor):
     for template_step in template_steps:
         procedure = template_step.procedure
         analysis = procedure.analysis
+        form_schema = {}
+        if template_step.form_id:
+            form = template_step.form
+            if not form.published or form.archived:
+                raise ValidationError({"form": "Workflow form is unpublished or archived. / El formulario del flujo no está publicado o está archivado."})
+            from custom_fields.forms import validate_fields
+            validate_fields(form.fields)
+            form_schema = {"version": form.pk, "code": form.code, "name_en": form.name_en, "name_es": form.name_es, "fields": form.fields}
         step_runs.append(
             PipelineStepRun.objects.create(
                 pipeline_run=run,
@@ -260,6 +268,7 @@ def start_pipeline(*, sample, template, actor):
                 procedure_version=procedure.version,
                 work_type=analysis.code,
                 required_fields=analysis.required_fields,
+                form_schema=form_schema,
                 requires_qc=template_step.requires_qc,
                 dependency_positions=(
                     template_step.dependency_positions
@@ -294,14 +303,22 @@ def missing_required_fields(work_item, step=None):
     if step is None:
         step = PipelineStepRun.objects.filter(work_item=work_item).first()
     definitions = step.required_fields if step else work_item.required_fields
+    form_missing = []
+    if step and step.form_schema:
+        from custom_fields.forms import validate_values
+        try:
+            validate_values(step.form_schema, step.form_values)
+        except ValidationError as error:
+            details = error.detail.get("form_values", {})
+            form_missing = [f"form:{key}" for key in details] if isinstance(details, dict) else ["form"]
     if not definitions:
-        return []
+        return form_missing
 
     result_map = {
         result.key.strip().lower(): result
         for result in work_item.results.all()
     }
-    missing = []
+    missing = list(form_missing)
     for definition in definitions:
         if not definition.get("required", True):
             continue
@@ -334,6 +351,9 @@ def validate_work_item_pipeline_completion(work_item, next_status):
         })
     if next_status != WorkItem.STATUS_COMPLETED:
         return
+    if step and step.form_schema:
+        from custom_fields.forms import validate_values
+        validate_values(step.form_schema, step.form_values)
     missing = missing_required_fields(work_item, step)
     if missing:
         raise ValidationError({
@@ -516,6 +536,8 @@ def retry_pipeline_step(*, run, step, actor, reason):
         raise ValidationError({"detail": "This step has no retries remaining."})
 
     step.retry_count += 1
+    previous_form_values = step.form_values
+    step.form_values = {}
     step.status = PipelineStepRun.STATUS_BLOCKED
     step.work_item = None
     step.started_at = None
@@ -523,14 +545,14 @@ def retry_pipeline_step(*, run, step, actor, reason):
     step.failure_reason = ""
     step.save(update_fields=[
         "retry_count", "status", "work_item", "started_at", "completed_at",
-        "failure_reason", "updated_at",
+        "failure_reason", "updated_at", "form_values",
     ])
     run.status = PipelineRun.STATUS_ACTIVE
     run.completed_at = None
     run.save(update_fields=["status", "completed_at", "updated_at"])
     _activate_step(step, actor)
     payload = _step_payload(step)
-    payload.update({"retry_count": step.retry_count, "reason": reason})
+    payload.update({"retry_count": step.retry_count, "reason": reason, "previous_form_values": previous_form_values, "form_version": step.form_schema.get("version")})
     _event("PipelineRun", run.id, "PIPELINE_STEP_RETRIED", actor, payload)
     _event("Sample", run.sample_id, "PIPELINE_STEP_RETRIED", actor, payload)
     return step
