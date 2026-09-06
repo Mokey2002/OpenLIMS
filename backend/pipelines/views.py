@@ -194,6 +194,39 @@ class PipelineRunViewSet(ModelViewSet):
     serializer_class = PipelineRunSerializer
     http_method_names = ["get", "post", "head", "options"]
 
+    @action(detail=True, methods=["post"], url_path=r"steps/(?P<step_id>[0-9]+)/form")
+    def step_form(self, request, pk=None, step_id=None):
+        from django.db import transaction
+        from .models import PipelineStepRun
+        from results.models import WorkItem
+        from custom_fields.forms import validate_values
+        from .serializers import PipelineStepRunSerializer
+        run = self.get_object()
+        require_sample_modify_access(request.user, run.sample)
+        with transaction.atomic():
+            step = PipelineStepRun.objects.select_for_update().filter(pk=step_id, pipeline_run=run).first()
+            if not step:
+                raise NotFound()
+            work = WorkItem.objects.select_for_update().filter(pk=step.work_item_id).first()
+            if not step.form_schema or not work or step.status not in [PipelineStepRun.STATUS_READY, PipelineStepRun.STATUS_IN_PROGRESS] or work.status not in [WorkItem.STATUS_PENDING, WorkItem.STATUS_IN_PROGRESS]:
+                raise ValidationError("Only an active step with an attached form can be edited. / Solo se puede editar un paso activo con formulario.")
+            if request.data.get("before") != step.form_values:
+                raise ValidationError("Values changed; reload before saving. / Los valores cambiaron; recargue antes de guardar.")
+            if request.data.get("work_item") != work.pk:
+                raise ValidationError("Attempt changed; reload before saving. / El intento cambió; recargue antes de guardar.")
+            reason = request.data.get("reason", "")
+            if not isinstance(reason, str) or len(reason.strip()) < 10:
+                raise ValidationError("Provide a reason of at least 10 characters. / Indique un motivo de al menos 10 caracteres.")
+            values = request.data.get("values")
+            validate_values(step.form_schema, values)
+            before = step.form_values
+            step.form_values = values
+            step.save(update_fields=["form_values", "updated_at"])
+            Event.objects.create(entity_type="PipelineRun", entity_id=str(run.pk), action="STEP_FORM_SAVED", actor=request.user,
+                payload={"step_id": step.pk, "work_item_id": work.pk, "form_version": step.form_schema.get("version"),
+                         "retry_count": step.retry_count, "before": before, "after": values, "reason": reason.strip()})
+            return Response(PipelineStepRunSerializer(step).data)
+
     def get_queryset(self):
         allowed_samples = get_sample_access_queryset(Sample.objects.all(), self.request.user)
         queryset = (

@@ -12,6 +12,7 @@ import {
 } from "react-bootstrap";
 import { apiGet, apiGetAll, apiPatch, apiPost } from "../api";
 import { isAdmin } from "../authz";
+import { useLanguage } from "../i18n";
 
 function emptyRequiredField() {
   return { key: "", label: "", value_type: "STRING", required: true, unit: "" };
@@ -43,6 +44,7 @@ function emptyProcedure() {
 
 function emptyPipelineStep() {
   return {
+    form: "",
     procedure: "",
     name: "",
     requires_qc: false,
@@ -96,6 +98,8 @@ function DependencyGraph({ steps }) {
 }
 
 export default function WorkflowDesigner() {
+  const { language } = useLanguage();
+  const [stepForms, setStepForms] = useState([]);
   const [me, setMe] = useState(null);
   const [analyses, setAnalyses] = useState([]);
   const [procedures, setProcedures] = useState([]);
@@ -120,19 +124,21 @@ export default function WorkflowDesigner() {
       const meData = await apiGet("/api/me/");
       setMe(meData);
       if (!isAdmin(meData)) return;
-      const [analysisRows, procedureRows, templateRows, projectRows, sopRows] =
+      const [analysisRows, procedureRows, templateRows, projectRows, sopRows, formRows] =
         await Promise.all([
           apiGetAll("/api/analysis-definitions/"),
           apiGetAll("/api/procedure-definitions/"),
           apiGetAll("/api/pipeline-templates/"),
           apiGetAll("/api/projects/"),
           apiGetAll("/api/sop-documents/"),
+          apiGetAll("/api/sample-forms/"),
         ]);
       setAnalyses(analysisRows);
       setProcedures(procedureRows);
       setTemplates(templateRows);
       setProjects(projectRows);
       setSops(sopRows);
+      setStepForms(formRows);
     } catch (requestError) {
       setError(requestError.message || String(requestError));
     } finally {
@@ -282,6 +288,7 @@ export default function WorkflowDesigner() {
       default_project: template.default_project ? String(template.default_project) : "",
       default_sample_type: template.default_sample_type || "",
       steps: template.steps.map((step) => ({
+        form: step.form ? String(step.form) : "",
         procedure: String(step.procedure),
         name: step.name || "",
         requires_qc: step.requires_qc,
@@ -311,6 +318,7 @@ export default function WorkflowDesigner() {
         ? Number(pipelineForm.default_project)
         : null,
       steps: pipelineForm.steps.map((step, index) => ({
+        form: step.form ? Number(step.form) : null,
         position: index + 1,
         procedure: Number(step.procedure),
         name: step.name,
@@ -442,6 +450,10 @@ export default function WorkflowDesigner() {
                 <Row className="g-2 align-items-center">
                   <Col md={1}><Badge bg="dark">Step {index + 1}</Badge></Col>
                   <Col md={4}><Form.Select required value={step.procedure} onChange={(event) => updatePipelineStep(index, "procedure", event.target.value)}><option value="">Select procedure</option>{activeProcedures.map((procedure) => <option key={procedure.id} value={procedure.id}>{procedure.code} v{procedure.version} — {procedure.name}</option>)}</Form.Select></Col>
+                  <Col md={4}><Form.Label htmlFor={`workflow-form-${index}`}>{language === "es" ? "Formulario de mediciones" : "Measurement form"}</Form.Label><Form.Select id={`workflow-form-${index}`} value={step.form || ""} onChange={e => updatePipelineStep(index, "form", e.target.value)}>
+                    <option value="">{language === "es" ? "Sin formulario" : "No form"}</option>
+                    {stepForms.filter(f => (f.published && !f.archived) || String(f.id) === step.form).map(f => <option key={f.id} value={f.id} disabled={!f.published || f.archived}>{f[language === "es" ? "name_es" : "name_en"]} · #{f.id}{f.archived ? (language === "es" ? " (archivado)" : " (archived)") : ""}</option>)}
+                  </Form.Select></Col>
                   <Col md={3}><Form.Control value={step.name} onChange={(event) => updatePipelineStep(index, "name", event.target.value)} placeholder="Optional step name" /></Col>
                   <Col md={2}><Form.Check label="QC approval required" checked={step.requires_qc} onChange={(event) => updatePipelineStep(index, "requires_qc", event.target.checked)} /></Col>
                   <Col md={2} className="inline-actions"><Button type="button" size="sm" variant="outline-secondary" disabled={index === 0} onClick={() => movePipelineStep(index, -1)}>↑</Button><Button type="button" size="sm" variant="outline-secondary" disabled={index === pipelineForm.steps.length - 1} onClick={() => movePipelineStep(index, 1)}>↓</Button><Button type="button" size="sm" variant="outline-danger" disabled={pipelineForm.steps.length === 1} onClick={() => setPipelineForm({ ...pipelineForm, steps: pipelineForm.steps.filter((_, itemIndex) => itemIndex !== index) })}>×</Button></Col>

@@ -13,6 +13,7 @@ import {
 import { apiGet, apiPatch, apiPost, apiPostForm } from "../api";
 import { canWrite, readOnlyMessage } from "../authz";
 import SampleValuesEditor from "../components/SampleValuesEditor";
+import WorkflowStepForm from "../components/WorkflowStepForm";
 
 function statusVariant(status) {
   switch (status) {
@@ -1187,7 +1188,7 @@ export default function SampleDetail() {
                             <div className="feed-meta">After: {step.dependency_positions?.length ? step.dependency_positions.join(", ") : "workflow start"}</div>
                             {step.optional && <div className="feed-meta">Optional step</div>}
                           </td>
-                          <td>{step.work_item ? `#${step.work_item} · ${step.work_item_status}` : "Not created"}</td>
+                          <td>{step.work_item ? `#${step.work_item} · ${step.work_item_status}` : "Not created"}<WorkflowStepForm key={`${step.id}-${step.retry_count}`} run={run} step={step} canEdit={userCanWrite} onSaved={load} /></td>
                           <td><Badge bg={pipelineStatusVariant(step.status)}>{step.status}</Badge>{step.failure_reason && <div className="text-danger small mt-1">{step.failure_reason}</div>}{userCanWrite && step.status === "FAILED" && step.retry_count < step.max_retries && <Button size="sm" variant="outline-dark" className="mt-2" onClick={() => retryPipelineStep(run, step)}>Retry ({step.max_retries - step.retry_count} left)</Button>}</td>
                         </tr>
                       ))}
