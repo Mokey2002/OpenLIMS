@@ -195,6 +195,9 @@ class PipelineTemplateStepSerializer(serializers.ModelSerializer):
         if not isinstance(value, dict):
             raise serializers.ValidationError("Activation condition must be an object.")
         required = {"source_position", "result_key", "operator", "value"}
+        source_kind = value.get("source_kind", "result")
+        if source_kind not in ("result", "measurement"):
+            raise serializers.ValidationError("Invalid rule source. / Origen de regla inválido.")
         missing = required - set(value)
         if missing:
             raise serializers.ValidationError(
@@ -212,6 +215,7 @@ class PipelineTemplateStepSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Condition result key is required.")
         return {
             "source_position": source_position,
+            "source_kind": source_kind,
             "result_key": result_key,
             "operator": operator,
             "value": value["value"],
@@ -302,6 +306,14 @@ class PipelineTemplateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     f"Step {position}'s condition source must be one of its dependencies."
                 )
+            if condition.get("source_kind") == "measurement":
+                from .rules import normalize_expected
+                source = next(s for s in ordered if s["position"] == condition["source_position"])
+                form = source.get("form")
+                field = next((f for f in form.fields if f["key"] == condition["result_key"]), None) if form else None
+                if not field:
+                    raise serializers.ValidationError("Select a measurement from the source step's form. / Seleccione una medición del formulario del paso de origen.")
+                condition["value"] = normalize_expected(field, condition["operator"], condition["value"])
         return ordered
 
     def validate(self, attrs):

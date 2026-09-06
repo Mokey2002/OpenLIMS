@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.29.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.30.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,15 +25,34 @@
 
 ## Overview
 
+### v0.30.0 — Configurable laboratory workflows
+
+Directors can configure bilingual sample forms with required fields, dropdowns, numeric bounds
+and conditional visibility; preview and publish revisions; and share templates as JSON.
+Sample values support audited editing and previewed CSV intake/export. Workflow steps can
+attach a published measurement form and retain its version throughout a run, including retries.
+
+Workflow Designer now supports **Form measurement** activation rules: select a source step,
+measurement, comparison and expected value, then test an example before saving. For example,
+activate a review step when concentration is below 10, or a processing step when it is at least
+10. The source must be a dependency. Existing QC requirements remain enforced. Missing values
+never activate measurement branches, including “not equal.” Rule outcomes are audited and
+running workflows retain their original conditions.
+
+This release also includes the guided installer foundation from earlier PRs. It does not yet
+provide automatic team assignment/notifications, a general rules engine, or automatic upgrades.
+Local test results do not replace PostgreSQL and browser validation; see
+[v0.30.0 release notes](docs/releases/v0.30.0.md) for scope and remaining deployment gates.
+
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current release:** `v0.29.0 — Performance & Scalability`
+**Current development version:** `v0.30.0 — Configurable laboratory workflows` (validation gates remain; see release notes).
 
-### v0.29.0 highlights
+### Previous v0.29.0 highlights
 
 - **My Work** moved from multi-page client aggregation to one bounded `/api/v1/my-work/` server-side summary while preserving complete counts
 - Application startup now uses one `/api/v1/session/` bootstrap request for user, feature flags, and unread-notification count instead of three separate calls
