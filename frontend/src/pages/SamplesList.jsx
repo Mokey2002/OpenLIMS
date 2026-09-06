@@ -14,6 +14,7 @@ import {
 import { apiGet, apiPost, apiPostDownload } from "../api";
 import { isAdmin, isTech, canWrite } from "../authz";
 import SampleFormFields from "../components/SampleFormFields";
+import ConfiguredIntake from "../components/ConfiguredIntake";
 import { useLanguage } from "../i18n";
 
 const STATUS_OPTIONS = [
@@ -374,6 +375,7 @@ export default function SamplesList() {
       <Card className="app-card mb-4">
         <Card.Body>
           <h5 className="section-title">Create Sample</h5>
+          {canWrite(me) && <ConfiguredIntake projects={projects} onImported={load} />}
 
           <Form onSubmit={createSample}>
             <SampleFormFields fields={sampleForms.find(f => f.code === sampleType.trim().toUpperCase())?.fields || []} values={formValues} onChange={setFormValues} />

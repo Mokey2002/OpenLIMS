@@ -1,4 +1,5 @@
 import csv
+import json
 
 from django.utils import timezone
 from django.http import HttpResponse
@@ -262,8 +263,10 @@ class SampleViewSet(ModelViewSet):
 
             start_default_pipeline_for_sample(sample, self.request.user)
 
+    @transaction.atomic
     def perform_update(self, serializer):
-        sample = self.get_object()
+        sample = Sample.objects.select_for_update().get(pk=serializer.instance.pk)
+        serializer.instance = sample
         require_sample_modify_access(self.request.user, sample)
 
         requested_project = serializer.validated_data.get("project", sample.project)
@@ -284,6 +287,11 @@ class SampleViewSet(ModelViewSet):
         requested_status = serializer.validated_data.get("status", sample.status)
         status_changed = requested_status != sample.status
         reason = None
+        values_changed = serializer.validated_data.get("form_values", sample.form_values) != sample.form_values
+        if values_changed:
+            if self.request.data.get("form_values_before") != sample.form_values:
+                raise ValidationError({"form_values": "Values changed or original values missing; reload. / Recargue los valores originales."})
+            reason = validate_change_reason(get_change_reason(self.request))
 
         if status_changed:
             reason = validate_change_reason(get_change_reason(self.request))
@@ -304,11 +312,11 @@ class SampleViewSet(ModelViewSet):
         if changed_fields:
             extra_payload = {}
 
-            if status_changed:
+            if status_changed or values_changed:
                 extra_payload.update({
                     "reason": reason,
                     "reason_required": True,
-                    "reason_type": "sample_status_change",
+                    "reason_type": "sample_form_change" if values_changed else "sample_status_change",
                 })
 
             action = (
@@ -806,6 +814,9 @@ class SampleViewSet(ModelViewSet):
             "container_code",
             "location_name",
             "created_at",
+            "form_version",
+            "form_values",
+            "form_schema",
         ])
 
         for sample in samples:
@@ -823,9 +834,17 @@ class SampleViewSet(ModelViewSet):
                     else ""
                 ),
                 sample.created_at.isoformat() if sample.created_at else "",
+                sample.form_schema.get("version", ""),
+                json.dumps(sample.form_values, ensure_ascii=False),
+                json.dumps(sample.form_schema, ensure_ascii=False),
             ])
 
         return response
+
+    @action(detail=False, methods=["post"], url_path="import-configured")
+    def import_configured(self, request):
+        from custom_fields.intake import import_configured
+        return import_configured(self, request)
 
 
 class SampleBatchViewSet(ReadOnlyModelViewSet):
