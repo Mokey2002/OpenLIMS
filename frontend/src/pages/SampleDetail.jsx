@@ -12,7 +12,7 @@ import {
 } from "react-bootstrap";
 import { apiGet, apiPatch, apiPost, apiPostForm } from "../api";
 import { canWrite, readOnlyMessage } from "../authz";
-import SampleFormFields from "../components/SampleFormFields";
+import SampleValuesEditor from "../components/SampleValuesEditor";
 
 function statusVariant(status) {
   switch (status) {
@@ -853,7 +853,7 @@ export default function SampleDetail() {
 
       <div className="stat-grid mb-4">
         {sample.form_schema?.fields?.length > 0 && <Card className="app-card"><Card.Body>
-          <SampleFormFields fields={sample.form_schema.fields} values={sample.form_values} readOnly />
+          <SampleValuesEditor sample={sample} canEdit={userCanWrite} onSaved={updated => { setSample(updated); load(); }} />
         </Card.Body></Card>}
         <Card className="app-card metric-card h-100">
           <Card.Body>

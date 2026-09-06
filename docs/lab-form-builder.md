@@ -1,5 +1,9 @@
 # Sample form builder / Editor de formularios de muestras
 
+This document describes the initial release. For current editing, CSV intake/export,
+dropdowns, conditions and template portability, see [Lifecycle improvements](lab-configuration-lifecycle.md).
+Este documento describe la versión inicial. Consulte las mejoras de ciclo de vida para las funciones nuevas.
+
 ## English
 
 As an administrator/director, open **Admin Settings → Lab Configuration · Sample forms**.
