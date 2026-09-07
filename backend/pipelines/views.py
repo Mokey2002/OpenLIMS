@@ -172,6 +172,17 @@ class PipelineTemplateViewSet(ImmutableDeleteMixin, ModelViewSet):
     permission_classes = [PipelineConfigurationPermission]
     serializer_class = PipelineTemplateSerializer
 
+    @action(detail=False, methods=["get"], url_path="action-users")
+    def action_users(self, request):
+        from django.contrib.auth import get_user_model
+        from rest_framework.exceptions import PermissionDenied
+        if not is_admin(request.user):
+            raise PermissionDenied()
+        return Response([
+            {"id": user.pk, "username": user.username, "can_assign": is_admin(user) or is_tech(user)}
+            for user in get_user_model().objects.filter(is_active=True).prefetch_related("groups").order_by("username")
+        ])
+
     @action(detail=False, methods=["post"], url_path="preview-rule")
     def preview_rule(self, request):
         from custom_fields.models import SampleForm

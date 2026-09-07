@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.30.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.31.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -24,6 +24,22 @@
 ---
 
 ## Overview
+
+### v0.31.0 — Workflow assignments and in-app notifications
+
+In Workflow Designer, each step now has **When this step activates** settings: select an
+administrator or technician as assignee, notify that person, and select additional in-app
+recipients. These actions follow the step's activation condition, so a low-concentration
+branch can activate review, assign its work, and notify the selected people.
+
+Running workflows retain their original action settings. Activation rechecks current sample
+permissions: ineligible assignments remain unassigned and unavailable recipients are skipped,
+with outcomes recorded in the audit trail. Repeated synchronization does not repeat alerts;
+an explicit retry creates a new work item and notification. Assignment does not grant QC approval
+rights. This supports named users, not team scheduling, email, or arbitrary event triggers.
+
+Apply the new `pipelines.0005` migration before starting the updated API and workers. See
+[v0.31.0 release notes](docs/releases/v0.31.0.md) for validation and deployment limitations.
 
 ### v0.30.0 — Configurable laboratory workflows
 
@@ -39,8 +55,8 @@ activate a review step when concentration is below 10, or a processing step when
 never activate measurement branches, including “not equal.” Rule outcomes are audited and
 running workflows retain their original conditions.
 
-This release also includes the guided installer foundation from earlier PRs. It does not yet
-provide automatic team assignment/notifications, a general rules engine, or automatic upgrades.
+This release also includes the guided installer foundation from earlier PRs. Named-user assignment
+and in-app notifications are added in v0.31.0; team scheduling, a general rules engine, and automatic upgrades remain future work.
 Local test results do not replace PostgreSQL and browser validation; see
 [v0.30.0 release notes](docs/releases/v0.30.0.md) for scope and remaining deployment gates.
 
@@ -50,7 +66,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.30.0 — Configurable laboratory workflows` (validation gates remain; see release notes).
+**Current development version:** `v0.31.0 — Workflow assignments and notifications` (validation gates remain; see release notes).
 
 ### Previous v0.29.0 highlights
 

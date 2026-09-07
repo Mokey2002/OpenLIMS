@@ -134,6 +134,10 @@ class ProcedureDefinitionSerializer(serializers.ModelSerializer):
 
 
 class PipelineTemplateStepSerializer(serializers.ModelSerializer):
+    def validate_automation(self, value):
+        from .automation import validate_automation
+        return validate_automation(value)
+
     def validate_form(self, form):
         if form and (not form.published or form.archived):
             raise serializers.ValidationError("Select a published, unarchived form. / Seleccione un formulario publicado y no archivado.")
@@ -149,6 +153,7 @@ class PipelineTemplateStepSerializer(serializers.ModelSerializer):
         model = PipelineTemplateStep
         fields = [
             "form",
+            "automation",
             "id",
             "position",
             "procedure",
@@ -389,6 +394,7 @@ class PipelineStepRunSerializer(serializers.ModelSerializer):
     class Meta:
         model = PipelineStepRun
         fields = [
+            "automation",
             "form_schema", "form_values", "form_errors",
             "id",
             "position",

@@ -14,6 +14,7 @@ import { apiGet, apiGetAll, apiPatch, apiPost } from "../api";
 import { isAdmin } from "../authz";
 import { useLanguage } from "../i18n";
 import MeasurementRulePreview from "../components/MeasurementRulePreview";
+import WorkflowStepActions from "../components/WorkflowStepActions";
 
 function emptyRequiredField() {
   return { key: "", label: "", value_type: "STRING", required: true, unit: "" };
@@ -45,6 +46,7 @@ function emptyProcedure() {
 
 function emptyPipelineStep() {
   return {
+    automation: {},
     form: "",
     procedure: "",
     name: "",
@@ -102,6 +104,7 @@ function DependencyGraph({ steps }) {
 export default function WorkflowDesigner() {
   const { language } = useLanguage();
   const [stepForms, setStepForms] = useState([]);
+  const [actionUsers, setActionUsers] = useState([]);
   const [me, setMe] = useState(null);
   const [analyses, setAnalyses] = useState([]);
   const [procedures, setProcedures] = useState([]);
@@ -126,7 +129,7 @@ export default function WorkflowDesigner() {
       const meData = await apiGet("/api/me/");
       setMe(meData);
       if (!isAdmin(meData)) return;
-      const [analysisRows, procedureRows, templateRows, projectRows, sopRows, formRows] =
+      const [analysisRows, procedureRows, templateRows, projectRows, sopRows, formRows, userRows] =
         await Promise.all([
           apiGetAll("/api/analysis-definitions/"),
           apiGetAll("/api/procedure-definitions/"),
@@ -134,6 +137,7 @@ export default function WorkflowDesigner() {
           apiGetAll("/api/projects/"),
           apiGetAll("/api/sop-documents/"),
           apiGetAll("/api/sample-forms/"),
+          apiGet("/api/pipeline-templates/action-users/"),
         ]);
       setAnalyses(analysisRows);
       setProcedures(procedureRows);
@@ -141,6 +145,7 @@ export default function WorkflowDesigner() {
       setProjects(projectRows);
       setSops(sopRows);
       setStepForms(formRows);
+      setActionUsers(userRows);
     } catch (requestError) {
       setError(requestError.message || String(requestError));
     } finally {
@@ -290,6 +295,7 @@ export default function WorkflowDesigner() {
       default_project: template.default_project ? String(template.default_project) : "",
       default_sample_type: template.default_sample_type || "",
       steps: template.steps.map((step) => ({
+        automation: step.automation || {},
         form: step.form ? String(step.form) : "",
         procedure: String(step.procedure),
         name: step.name || "",
@@ -321,6 +327,7 @@ export default function WorkflowDesigner() {
         ? Number(pipelineForm.default_project)
         : null,
       steps: pipelineForm.steps.map((step, index) => ({
+        automation: step.automation || {},
         form: step.form ? Number(step.form) : null,
         position: index + 1,
         procedure: Number(step.procedure),
@@ -452,6 +459,7 @@ export default function WorkflowDesigner() {
             {pipelineForm.steps.map((step, index) => (
               <Card className="soft-card mb-3" key={index}><Card.Body>
                 <Row className="g-2 align-items-center">
+                  <Col md={12}><WorkflowStepActions value={step.automation} users={actionUsers} onChange={value => updatePipelineStep(index, "automation", value)} /></Col>
                   <Col md={1}><Badge bg="dark">Step {index + 1}</Badge></Col>
                   <Col md={4}><Form.Select required value={step.procedure} onChange={(event) => updatePipelineStep(index, "procedure", event.target.value)}><option value="">Select procedure</option>{activeProcedures.map((procedure) => <option key={procedure.id} value={procedure.id}>{procedure.code} v{procedure.version} — {procedure.name}</option>)}</Form.Select></Col>
                   <Col md={4}><Form.Label htmlFor={`workflow-form-${index}`}>{language === "es" ? "Formulario de mediciones" : "Measurement form"}</Form.Label><Form.Select id={`workflow-form-${index}`} value={step.form || ""} onChange={e => updatePipelineStep(index, "form", e.target.value)}>

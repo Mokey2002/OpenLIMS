@@ -115,6 +115,9 @@ def _activate_step(step, actor):
     step.failure_reason = ""
     step.save(update_fields=["status", "work_item", "failure_reason", "updated_at"])
 
+    from .automation import apply_step_actions
+    apply_step_actions(step, actor)
+
     payload = _step_payload(step)
     payload["due_at"] = due_at.isoformat()
     _event("PipelineRun", step.pipeline_run_id, "PIPELINE_STEP_ACTIVATED", actor, payload)
@@ -296,6 +299,7 @@ def start_pipeline(*, sample, template, actor):
                     else ([] if previous_position is None else [previous_position])
                 ),
                 activation_condition=template_step.activation_condition,
+                automation=template_step.automation,
                 optional=template_step.optional,
                 max_retries=template_step.max_retries,
                 estimated_duration_minutes=procedure.estimated_duration_minutes,
