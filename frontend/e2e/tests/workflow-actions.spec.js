@@ -32,7 +32,8 @@ test("director configures activation actions and reloads them for editing", asyn
   await page.getByLabel("Additional in-app recipients", { exact: true }).selectOption(["1", "2"]);
   await page.getByRole("button", { name: "Create pipeline", exact: true }).click();
   await expect.poll(() => saved?.steps[0].automation).toEqual({ assigned_to: 2, notify_assignee: true, notify_users: [1, 2] });
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  const pipelineCard = page.locator(".feed-item").filter({ has: page.getByText("FLOW — Flow", { exact: true }) });
+  await pipelineCard.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(page.getByLabel("Assign work to", { exact: true })).toHaveValue("2");
   await expect(page.getByLabel("Notify the assignee in the app", { exact: true })).toBeChecked();
   await expect(page.getByLabel("Additional in-app recipients", { exact: true })).toHaveValues(["1", "2"]);
