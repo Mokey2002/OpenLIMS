@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Row, Spinner, Table } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api";
+import WorkspacePreferences from "../components/WorkspacePreferences";
+import { defaultWorkspace } from "../workspaceDefaults";
+import { useLanguage } from "../i18n";
 
 function isPast(value) {
   return Boolean(value && new Date(value).getTime() < Date.now());
@@ -29,6 +32,8 @@ function SummaryCard({ label, value, hint, to }) {
 }
 
 export default function MyWork() {
+  const [view, setView] = useState(defaultWorkspace);
+  const { language } = useLanguage();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -46,6 +51,7 @@ export default function MyWork() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, []);
 
@@ -59,6 +65,8 @@ export default function MyWork() {
 
   const summary = data.summary;
   const alertCount = summary.inventory_alerts + summary.unread_notifications;
+  const visibleWork = data.assigned_work.filter(item => (!view.status || item.status === view.status) && `${item.name} ${item.sample_code} ${item.project_code}`.toLowerCase().includes(view.query.toLowerCase()));
+  const columnLabels = language === "es" ? { name: "Trabajo", sample: "Muestra", status: "Estado", qc: "QC", due: "Vencimiento" } : { name: "Work", sample: "Sample", status: "Status", qc: "QC", due: "Due" };
 
   return (
     <div data-testid="my-work-page">
@@ -72,36 +80,33 @@ export default function MyWork() {
         <Button variant="outline-dark" size="sm" onClick={load}>Refresh</Button>
       </div>
 
-      <Row className="g-3 mb-4">
+      <WorkspacePreferences value={view} onChange={setView} />
+      {view.widgets.includes("summary") && <Row className="g-3 mb-4">
         <Col sm={6} xl={2}><SummaryCard label="Assigned" value={summary.assigned} hint="Active work items" to="/work-queue" /></Col>
         <Col sm={6} xl={2}><SummaryCard label="Requests" value={summary.requests} hint="Visible active requests" to="/workflow-requests" /></Col>
         <Col sm={6} xl={2}><SummaryCard label="Experiments" value={summary.experiments} hint={data.notebook_enabled ? "Assigned or created" : "Notebook disabled"} to={data.notebook_enabled ? "/notebook" : null} /></Col>
         <Col sm={6} xl={2}><SummaryCard label="QC" value={summary.qc} hint="Pending / rerun" to="/qc-review" /></Col>
         <Col sm={6} xl={2}><SummaryCard label="Alerts" value={alertCount} hint="Inventory + notifications" to="/notifications" /></Col>
         <Col sm={6} xl={2}><SummaryCard label="Overdue" value={summary.overdue} hint="Needs attention" /></Col>
-      </Row>
+      </Row>}
 
       <Row className="g-4">
-        <Col xl={7}>
+        {view.widgets.includes("assigned") && <Col xl={7}>
           <Card className="shadow-sm border-0 h-100">
             <Card.Body>
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <h5 className="mb-0">Assigned work</h5>
                 <Link to="/work-queue">Open queue</Link>
               </div>
-              {data.assigned_work.length === 0 ? (
+              {visibleWork.length === 0 ? (
                 <div className="text-muted">No active work is assigned to you.</div>
               ) : (
                 <Table responsive hover size="sm" className="align-middle mb-0">
-                  <thead><tr><th>Work</th><th>Sample</th><th>Status</th><th>QC</th><th>Due</th></tr></thead>
+                  <thead><tr>{view.columns.map(key => <th scope="col" key={key}>{columnLabels[key]}</th>)}</tr></thead>
                   <tbody>
-                    {data.assigned_work.map((item) => (
+                    {visibleWork.map((item) => (
                       <tr key={item.id}>
-                        <td><div className="fw-semibold">{item.name}</div><div className="small text-muted">{item.project_code || "No project"}</div></td>
-                        <td>{item.sample_code || "—"}</td>
-                        <td><Badge bg={statusVariant(item.status)}>{item.status}</Badge></td>
-                        <td><Badge bg={statusVariant(item.qc_status)}>{item.qc_status}</Badge></td>
-                        <td className={isPast(item.due_at) ? "text-danger fw-semibold" : ""}>{item.due_at ? new Date(item.due_at).toLocaleString() : "—"}</td>
+                        {view.columns.map(key => <td key={key} className={key === "due" && isPast(item.due_at) ? "text-danger fw-semibold" : ""}>{({ name: item.name, sample: item.sample_code || "—", status: <Badge bg={statusVariant(item.status)}>{item.status}</Badge>, qc: <Badge bg={statusVariant(item.qc_status)}>{item.qc_status}</Badge>, due: item.due_at ? new Date(item.due_at).toLocaleString() : "—" })[key]}</td>)}
                       </tr>
                     ))}
                   </tbody>
@@ -109,10 +114,10 @@ export default function MyWork() {
               )}
             </Card.Body>
           </Card>
-        </Col>
+        </Col>}
 
         <Col xl={5}>
-          <Card className="shadow-sm border-0 mb-4">
+          {view.widgets.includes("overdue") && <Card className="shadow-sm border-0 mb-4">
             <Card.Body>
               <h5>Overdue</h5>
               {data.overdue.length === 0 ? <div className="text-muted">Nothing overdue.</div> : data.overdue.map((item) => (
@@ -123,9 +128,9 @@ export default function MyWork() {
                 </div>
               ))}
             </Card.Body>
-          </Card>
+          </Card>}
 
-          <Card className="shadow-sm border-0">
+          {view.widgets.includes("attention") && <Card className="shadow-sm border-0">
             <Card.Body>
               <div className="d-flex justify-content-between align-items-center mb-2"><h5 className="mb-0">Attention</h5><Link to="/notifications">Notifications</Link></div>
               <div className="d-flex gap-2 flex-wrap mb-3">
@@ -137,7 +142,7 @@ export default function MyWork() {
                 <div key={item.id} className="border-top py-2"><div className="fw-semibold">{item.title}</div><div className="small text-muted">{item.message}</div></div>
               ))}
             </Card.Body>
-          </Card>
+          </Card>}
         </Col>
       </Row>
     </div>

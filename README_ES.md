@@ -1,5 +1,22 @@
 # OpenLIMS
 
+## v0.32.0 — Vistas guardadas y plantillas de impresión
+
+En **Mi trabajo → Personalizar Mi trabajo**, seleccione widgets, columnas y su orden, filtre el
+trabajo asignado y guarde vistas con nombre. Las vistas personales son privadas; la dirección
+puede compartir vistas por rol. La configuración se guarda en el servidor y la última selección
+se recuerda por usuario en el navegador. Estas opciones no cambian los permisos ni los registros.
+
+En **Informes** (PDF de auditoría) y **Etiquetas**, la dirección puede crear plantillas, descargar
+vistas previas con datos ficticios y configurar encabezados, pies, logotipos PNG, papel Carta/A4,
+orientación del informe y cuadrículas de etiquetas. Seleccione una plantilla antes de la vista
+de confirmación habitual: el trabajo conserva su revisión y configuración aunque después se
+edite o archive. La identidad, los códigos de barras, las marcas de reimpresión, el alcance y
+la procedencia de auditoría siguen siendo obligatorios. No se controlan impresoras físicas.
+
+Aplique `settings_app.0005` antes de reiniciar la API y los workers.
+Consulte las [notas de v0.32.0](docs/releases/v0.32.0.md).
+
 ## v0.31.0 — Asignaciones y notificaciones del flujo
 
 En Workflow Designer, use **Cuando se activa este paso** para seleccionar un administrador o
@@ -38,7 +55,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.31.0`
+**Versión de desarrollo actual:** `v0.32.0`
 
 **Demo:** http://35.164.28.250
 

@@ -41,6 +41,7 @@ from registry.views import (
 from alignments.views import AlignmentJobViewSet
 from settings_app.views import PublicUISettingsView, SystemSettingsViewSet
 from settings_app.views import FeatureFlagsView
+from settings_app.customization import WorkspaceViewSet, PrintTemplateViewSet
 from core.entity_views import (
     EntityLinkViewSet,
     EntityReferenceView,
@@ -152,6 +153,8 @@ router.register(
 )
 router.register(r"alignment-jobs", AlignmentJobViewSet, basename="alignment-job")
 router.register(r"system-settings", SystemSettingsViewSet, basename="system-settings")
+router.register(r"workspace-views", WorkspaceViewSet, basename="workspace-views")
+router.register(r"print-templates", PrintTemplateViewSet, basename="print-templates")
 router.register(r"blast-databases", BlastDatabaseViewSet, basename="blast-database")
 router.register(r"blast-jobs", BlastJobViewSet, basename="blast-job")
 router.register(r"mass-spec-runs", MassSpecRunViewSet, basename="mass-spec-run")
