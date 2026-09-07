@@ -1,5 +1,21 @@
 # OpenLIMS
 
+## v0.30.0 — Flujos de laboratorio configurables
+
+Incluye formularios bilingües con versiones, campos obligatorios, listas, límites y condiciones;
+edición auditada de valores, importación CSV con vista previa, exportación y plantillas JSON.
+Los pasos del flujo pueden utilizar formularios publicados y conservar su versión durante la ejecución.
+
+En Workflow Designer seleccione **Medición del formulario** como origen de una regla, el paso
+de origen, campo, operador y valor esperado. Pruebe una medición de ejemplo antes de guardar.
+Puede activar un paso de revisión cuando la concentración sea menor que 10 y otro de procesamiento
+cuando sea mayor o igual a 10. El origen debe ser una dependencia. Los valores ausentes no activan
+la rama; QC se sigue aplicando y las decisiones quedan auditadas.
+
+No incluye asignación automática a equipos, notificaciones configurables ni actualizaciones
+automáticas. Las pruebas completas de PostgreSQL y navegador siguen pendientes antes de desplegar.
+Consulte las [notas de v0.30.0](docs/releases/v0.30.0.md).
+
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.

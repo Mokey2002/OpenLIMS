@@ -172,6 +172,30 @@ class PipelineTemplateViewSet(ImmutableDeleteMixin, ModelViewSet):
     permission_classes = [PipelineConfigurationPermission]
     serializer_class = PipelineTemplateSerializer
 
+    @action(detail=False, methods=["post"], url_path="preview-rule")
+    def preview_rule(self, request):
+        from custom_fields.models import SampleForm
+        from .rules import normalize_expected, matches
+        from rest_framework import serializers
+        class Input(serializers.Serializer):
+            form = serializers.PrimaryKeyRelatedField(queryset=SampleForm.objects.filter(published=True, archived=False))
+            field = serializers.CharField(max_length=64)
+            operator = serializers.ChoiceField(choices=["EQ", "NE", "GT", "GTE", "LT", "LTE", "IN"])
+            value = serializers.JSONField()
+            actual = serializers.JSONField(required=False, allow_null=True)
+        data = Input(data=request.data)
+        data.is_valid(raise_exception=True)
+        values = data.validated_data
+        field = next((f for f in values["form"].fields if f["key"] == values["field"]), None)
+        if not field:
+            raise ValidationError("Unknown measurement. / Medición desconocida.")
+        expected = normalize_expected(field, values["operator"], values["value"])
+        actual = values.get("actual")
+        if actual is not None and actual != "":
+            actual = normalize_expected(field, "EQ", actual)
+        return Response({"matches": matches(actual, values["operator"], expected),
+                         "normalized_expected": expected, "form_version": values["form"].pk})
+
     def get_queryset(self):
         queryset = (
             PipelineTemplate.objects.select_related("default_project", "created_by")

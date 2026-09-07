@@ -136,6 +136,17 @@ def _condition_matches(step):
     ).select_related("work_item").first()
     if not source or not source.work_item_id:
         return False
+    if condition.get("source_kind") == "measurement":
+        from .rules import matches, normalize_expected
+        field = next((f for f in source.form_schema.get("fields", []) if f["key"] == condition["result_key"]), None)
+        if not field:
+            return False
+        actual = source.form_values.get(condition["result_key"])
+        try:
+            expected = normalize_expected(field, condition["operator"], condition["value"])
+        except ValidationError:
+            return False
+        return matches(actual, condition["operator"], expected)
     result = source.work_item.results.filter(
         key__iexact=str(condition.get("result_key") or "").strip()
     ).first()
@@ -179,7 +190,16 @@ def _advance_run(run, actor):
             dependencies = [by_position.get(position) for position in step.dependency_positions]
             if any(dependency is None or dependency.status not in terminal for dependency in dependencies):
                 continue
-            if not _condition_matches(step):
+            condition_matched = _condition_matches(step)
+            if (step.activation_condition or {}).get("source_kind") == "measurement":
+                source = by_position.get(step.activation_condition["source_position"])
+                _event("PipelineRun", run.id, "WORKFLOW_RULE_EVALUATED", actor, {
+                    "step_id": step.pk, "condition": step.activation_condition, "matched": condition_matched,
+                    "source_step_id": source.pk if source else None,
+                    "form_version": source.form_schema.get("version") if source else None,
+                    "actual": source.form_values.get(step.activation_condition["result_key"]) if source else None,
+                })
+            if not condition_matched:
                 step.status = PipelineStepRun.STATUS_SKIPPED
                 step.completed_at = timezone.now()
                 step.failure_reason = "Activation condition was not met."

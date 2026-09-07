@@ -13,6 +13,7 @@ import {
 import { apiGet, apiGetAll, apiPatch, apiPost } from "../api";
 import { isAdmin } from "../authz";
 import { useLanguage } from "../i18n";
+import MeasurementRulePreview from "../components/MeasurementRulePreview";
 
 function emptyRequiredField() {
   return { key: "", label: "", value_type: "STRING", required: true, unit: "" };
@@ -52,6 +53,7 @@ function emptyPipelineStep() {
     optional: false,
     max_retries: 0,
     condition_source: "",
+    condition_kind: "result",
     condition_key: "",
     condition_operator: "EQ",
     condition_value: "",
@@ -299,6 +301,7 @@ export default function WorkflowDesigner() {
         optional: step.optional,
         max_retries: step.max_retries || 0,
         condition_source: step.activation_condition?.source_position || "",
+        condition_kind: step.activation_condition?.source_kind || "result",
         condition_key: step.activation_condition?.result_key || "",
         condition_operator: step.activation_condition?.operator || "EQ",
         condition_value: step.activation_condition?.value ?? "",
@@ -335,6 +338,7 @@ export default function WorkflowDesigner() {
           step.condition_source && step.condition_key.trim()
             ? {
                 source_position: Number(step.condition_source),
+                source_kind: step.condition_kind || "result",
                 result_key: step.condition_key.trim(),
                 operator: step.condition_operator,
                 value: step.condition_value,
@@ -461,9 +465,11 @@ export default function WorkflowDesigner() {
                   <Col md={2}><Form.Label>Retries</Form.Label><Form.Control type="number" min="0" max="10" value={step.max_retries} onChange={(event) => updatePipelineStep(index, "max_retries", event.target.value)} /></Col>
                   <Col md={2} className="d-flex align-items-end"><Form.Check label="Optional step" checked={step.optional} onChange={(event) => updatePipelineStep(index, "optional", event.target.checked)} /></Col>
                   <Col md={2}><Form.Label>Condition step</Form.Label><Form.Control type="number" min="1" value={step.condition_source} onChange={(event) => updatePipelineStep(index, "condition_source", event.target.value)} placeholder="Position" /></Col>
-                  <Col md={2}><Form.Label>Result key</Form.Label><Form.Control value={step.condition_key} onChange={(event) => updatePipelineStep(index, "condition_key", event.target.value)} placeholder="qc_status" /></Col>
+                  <Col md={2}><Form.Label>{language === "es" ? "Origen de la regla" : "Rule source"}</Form.Label><Form.Select value={step.condition_kind || "result"} onChange={e => { updatePipelineStep(index, "condition_kind", e.target.value); updatePipelineStep(index, "condition_key", ""); }}><option value="result">{language === "es" ? "Resultado" : "Result"}</option><option value="measurement">{language === "es" ? "Medición del formulario" : "Form measurement"}</option></Form.Select></Col>
+                  <Col md={2}><Form.Label>{language === "es" ? "Campo de la regla" : "Rule field"}</Form.Label>{step.condition_kind === "measurement" ? <Form.Select value={step.condition_key} onChange={e => updatePipelineStep(index, "condition_key", e.target.value)}><option value="">{language === "es" ? "Seleccione una medición" : "Select a measurement"}</option>{(stepForms.find(f => String(f.id) === String(pipelineForm.steps[Number(step.condition_source) - 1]?.form))?.fields || []).map(f => <option key={f.key} value={f.key}>{f[language === "es" ? "es" : "en"]}</option>)}</Form.Select> : <Form.Control value={step.condition_key} onChange={(event) => updatePipelineStep(index, "condition_key", event.target.value)} placeholder="qc_status" />}</Col>
                   <Col md={1}><Form.Label>Operator</Form.Label><Form.Select value={step.condition_operator} onChange={(event) => updatePipelineStep(index, "condition_operator", event.target.value)}><option>EQ</option><option>NE</option><option>GT</option><option>GTE</option><option>LT</option><option>LTE</option><option>IN</option></Form.Select></Col>
                   <Col md={2}><Form.Label>Expected value</Form.Label><Form.Control value={step.condition_value} onChange={(event) => updatePipelineStep(index, "condition_value", event.target.value)} /></Col>
+                  {step.condition_kind === "measurement" && <Col md={12}><MeasurementRulePreview key={JSON.stringify([step.condition_source, step.condition_key, step.condition_operator, step.condition_value, pipelineForm.steps[Number(step.condition_source) - 1]?.form])} form={pipelineForm.steps[Number(step.condition_source) - 1]?.form} field={step.condition_key} operator={step.condition_operator} value={step.condition_value} /></Col>}
                 </Row>
               </Card.Body></Card>
             ))}
