@@ -129,6 +129,7 @@ class PipelineTemplate(models.Model):
 
 
 class PipelineTemplateStep(models.Model):
+    automation = models.JSONField(default=dict, blank=True)
     form = models.ForeignKey("custom_fields.SampleForm", on_delete=models.PROTECT, null=True, blank=True, related_name="workflow_steps")
     template = models.ForeignKey(
         PipelineTemplate,
@@ -236,6 +237,7 @@ class PipelineRun(PublicIDModel):
 
 
 class PipelineStepRun(models.Model):
+    automation = models.JSONField(default=dict, blank=True)
     form_schema = models.JSONField(default=dict, blank=True)
     form_values = models.JSONField(default=dict, blank=True)
     STATUS_BLOCKED = "BLOCKED"

@@ -1,5 +1,21 @@
 # OpenLIMS
 
+## v0.31.0 — Asignaciones y notificaciones del flujo
+
+En Workflow Designer, use **Cuando se activa este paso** para seleccionar un administrador o
+técnico, notificar a la persona asignada y elegir destinatarios adicionales en la aplicación.
+Las acciones respetan la condición del paso: una concentración baja puede activar la revisión,
+asignar el trabajo y notificar a las personas seleccionadas.
+
+Cada ejecución conserva su configuración original. Al activar el paso se comprueba nuevamente
+el acceso a la muestra: las asignaciones no permitidas quedan sin asignar y los destinatarios
+no disponibles se omiten; los resultados quedan auditados. Sincronizar otra vez no duplica avisos;
+un reintento explícito crea otro trabajo y otra notificación. La asignación no concede permisos
+de aprobación QC. No incluye distribución por equipos, correo ni disparadores arbitrarios.
+
+Aplique la migración `pipelines.0005` antes de iniciar la API y los workers actualizados.
+Consulte las [notas de v0.31.0](docs/releases/v0.31.0.md) para las limitaciones de validación.
+
 ## v0.30.0 — Flujos de laboratorio configurables
 
 Incluye formularios bilingües con versiones, campos obligatorios, listas, límites y condiciones;
@@ -12,8 +28,8 @@ Puede activar un paso de revisión cuando la concentración sea menor que 10 y o
 cuando sea mayor o igual a 10. El origen debe ser una dependencia. Los valores ausentes no activan
 la rama; QC se sigue aplicando y las decisiones quedan auditadas.
 
-No incluye asignación automática a equipos, notificaciones configurables ni actualizaciones
-automáticas. Las pruebas completas de PostgreSQL y navegador siguen pendientes antes de desplegar.
+La asignación a usuarios y las notificaciones configurables se añaden en v0.31.0. La distribución
+por equipos y las actualizaciones automáticas siguen pendientes.
 Consulte las [notas de v0.30.0](docs/releases/v0.30.0.md).
 
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
@@ -22,7 +38,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión descrita:** `v0.25.0`
+**Versión de desarrollo actual:** `v0.31.0`
 
 **Demo:** http://35.164.28.250
 
