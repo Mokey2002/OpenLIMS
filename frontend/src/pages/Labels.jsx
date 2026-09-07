@@ -4,8 +4,10 @@ import { apiGet, apiGetAll, apiPost } from "../api";
 import { canWrite } from "../authz";
 import ConfirmedOperationCard from "../components/ConfirmedOperationCard";
 import useConfirmedOperation from "../hooks/useConfirmedOperation";
+import PrintTemplates from "../components/PrintTemplates";
 
 export default function Labels() {
+  const [printTemplate, setPrintTemplate] = useState("");
   const [batches, setBatches] = useState([]);
   const [samples, setSamples] = useState([]);
   const [me, setMe] = useState(null);
@@ -59,12 +61,12 @@ export default function Labels() {
     if (mode === "BATCH") {
       const batch = batches.find((row) => String(row.id) === String(batchId));
       if (!batch) return;
-      await operation.propose(`Create barcode labels for batch ${batch.code}`);
+      await operation.propose(`Create barcode labels for batch ${batch.code}`, printTemplate ? { print_template_id: Number(printTemplate) } : {});
       return;
     }
     const sample = samples.find((row) => String(row.id) === String(sampleId));
     if (!sample) return;
-    await operation.propose(`Regenerate the barcode label for sample ${sample.sample_id}`);
+    await operation.propose(`Regenerate the barcode label for sample ${sample.sample_id}`, printTemplate ? { print_template_id: Number(printTemplate) } : {});
   }
 
   async function submitScan(event) {
@@ -117,6 +119,7 @@ export default function Labels() {
         <Card className="app-card mb-4">
           <Card.Body>
             <h5 className="section-title">Generate label PDF</h5>
+            <PrintTemplates kind="LABEL" selected={printTemplate} onSelect={setPrintTemplate} />
             <Form onSubmit={proposeLabels}>
               <Row className="g-3 align-items-end">
                 <Col md={3}>
@@ -209,7 +212,7 @@ export default function Labels() {
             <tbody>
               <tr><th>Barcode format</th><td>Code 128</td></tr>
               <tr><th>Label fields</th><td>Sample ID, project code, barcode, and readable barcode text</td></tr>
-              <tr><th>Page layout</th><td>10 labels per US Letter page</td></tr>
+              <tr><th>Page layout</th><td>{printTemplate ? "Custom template / Plantilla personalizada" : "10 labels per US Letter page"}</td></tr>
               <tr><th>Reprints</th><td>Marked REPRINT and recorded in the audit trail</td></tr>
               <tr><th>Maximum</th><td>100 labels per generated PDF</td></tr>
             </tbody>

@@ -85,7 +85,6 @@ def _report_type(message):
 
 
 def route_reporting_operations(message, user, context=None):
-    del context
     lower = str(message or "").lower()
     if not any(word in lower for word in ["export", "report", "handled", "approvals", "approved"]):
         return None
@@ -106,7 +105,10 @@ def route_reporting_operations(message, user, context=None):
             return {"answer": "The requested user was not found; use the exact username.", "links": [], "skip_llm": True}
 
     output_format = "CSV" if "csv" in lower or "export" in lower else "PDF"
+    from settings_app.customization import print_snapshot
+    print_template = print_snapshot(context, "REPORT") if output_format == "PDF" else {}
     filters = {
+        "print_template": print_template,
         "report_type": report_type,
         "project_id": project.id if project else None,
         "project_label": project.code if project else "All accessible projects",
@@ -126,7 +128,7 @@ def route_reporting_operations(message, user, context=None):
         "excluded_count": 0,
         "records": [{"id": report_type, "label": report_type.replace("_", " ").title(), "current": filters, "proposed": {"output": output_format}}],
         "current_values": filters,
-        "proposed_values": {"format": output_format, "audited": True, "reproducible": True},
+        "proposed_values": {"format": output_format, "audited": True, "reproducible": True, "print_template": {key: value for key, value in print_template.items() if key != "config"}},
     }
     return {
         "answer": "I interpreted the filters shown below. Confirm to generate the reproducible, audited report.",
@@ -567,6 +569,9 @@ def _investigation_pdf_bytes(result, filters):
 
 
 def _pdf_bytes(rows, filters, project):
+    if filters.get("print_template"):
+        from settings_app.print_rendering import render_report
+        return render_report(rows, filters, filters["print_template"])
     stream = BytesIO()
     document = SimpleDocTemplate(stream, pagesize=letter, rightMargin=0.55 * inch, leftMargin=0.55 * inch, topMargin=0.55 * inch, bottomMargin=0.55 * inch)
     styles = getSampleStyleSheet()

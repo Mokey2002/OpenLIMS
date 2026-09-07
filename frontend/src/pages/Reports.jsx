@@ -13,6 +13,7 @@ import {
 import { apiGet } from "../api";
 import ConfirmedOperationCard from "../components/ConfirmedOperationCard";
 import useConfirmedOperation from "../hooks/useConfirmedOperation";
+import PrintTemplates from "../components/PrintTemplates";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -128,6 +129,7 @@ export default function Reports() {
 
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [complianceType, setComplianceType] = useState("PROJECT_REPORT");
+  const [printTemplate, setPrintTemplate] = useState("");
   const [complianceFormat, setComplianceFormat] = useState("PDF");
   const [complianceMonth, setComplianceMonth] = useState("");
   const [complianceProjectId, setComplianceProjectId] = useState("");
@@ -571,7 +573,7 @@ export default function Reports() {
       command = `Generate a ${complianceFormat} report${projectText}${monthText}`;
     }
 
-    await complianceOperation.propose(command);
+    await complianceOperation.propose(command, complianceFormat === "PDF" && printTemplate ? { print_template_id: Number(printTemplate) } : {});
   }
 
   if (loading) {
@@ -610,6 +612,7 @@ export default function Reports() {
             Generate a server-side CSV or PDF with stored filters, checksum, access
             checks, and an audit event. No AI model is required.
           </p>
+          {complianceFormat === "PDF" && <PrintTemplates kind="REPORT" selected={printTemplate} onSelect={setPrintTemplate} />}
           <Form onSubmit={proposeComplianceReport}>
             <Row className="g-3 align-items-end">
               <Col lg={4}>

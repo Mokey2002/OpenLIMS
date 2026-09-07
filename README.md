@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.31.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.32.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -24,6 +24,23 @@
 ---
 
 ## Overview
+
+### v0.32.0 — Saved workspace views and print templates
+
+Use **My Work → Customize My Work** to choose visible widgets, select and order work-table
+columns, filter assigned work, and save named views. Personal views are private to their owner;
+directors can share views with a role. Saved configurations live on the server, while the last
+selected view is remembered per user in the browser. These settings only affect presentation.
+
+On **Reports** (compliance PDF) and **Barcode Labels**, directors can create named print templates,
+preview PDFs with synthetic data, and configure headings, footers, PNG logos, Letter/A4 paper,
+report orientation, and supported label grids. Select a template before the normal confirmation
+preview. Its revision and settings are captured with the job, preserving the layout if the
+template is later edited or archived. Sample identity, barcodes, reprint indicators, report
+scope, and audit provenance remain mandatory. Physical printers are not controlled by the app.
+
+Apply `settings_app.0005` before restarting the API/workers. See
+[v0.32.0 release notes](docs/releases/v0.32.0.md) for supported layouts and validation scope.
 
 ### v0.31.0 — Workflow assignments and in-app notifications
 
@@ -66,7 +83,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.31.0 — Workflow assignments and notifications` (validation gates remain; see release notes).
+**Current development version:** `v0.32.0 — Saved workspace views and print templates` (see release notes for validation scope).
 
 ### Previous v0.29.0 highlights
 

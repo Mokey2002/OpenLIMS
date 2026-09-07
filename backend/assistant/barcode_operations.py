@@ -62,7 +62,6 @@ def _selected_samples(message, user):
 
 
 def route_barcode_operations(message, user, context=None):
-    del context
     lower = str(message or "").lower()
     if not any(word in lower for word in ["barcode", "label", "labels"]):
         return None
@@ -74,6 +73,9 @@ def route_barcode_operations(message, user, context=None):
             "links": [],
             "skip_llm": True,
         }
+
+    from settings_app.customization import print_snapshot
+    print_template = print_snapshot(context, "LABEL")
 
     samples = _selected_samples(message, user)
     if not samples:
@@ -123,6 +125,7 @@ def route_barcode_operations(message, user, context=None):
         "records": records,
         "current_values": {"previously_generated": reprint_count},
         "proposed_values": {
+            "print_template": {key: value for key, value in print_template.items() if key != "config"},
             "label_template": LABEL_TEMPLATE,
             "label_count": len(records),
             "output": "Downloadable PDF",
@@ -140,6 +143,7 @@ def route_barcode_operations(message, user, context=None):
             "payload": {
                 "operation": "GENERATE_LABELS",
                 "template": LABEL_TEMPLATE,
+                "print_template": print_template,
                 "sample_ids": [sample.id for sample in samples],
                 "snapshots": {str(sample.id): sample.sample_id for sample in samples},
                 "preview": preview,
@@ -148,16 +152,20 @@ def route_barcode_operations(message, user, context=None):
     }
 
 
-def _render_labels(labels):
+def _render_labels(labels, print_template=None):
+    from settings_app.print_rendering import page_size, draw_label_logo, print_fonts
+    from reportlab.lib.utils import simpleSplit
+    config = (print_template or {}).get("config", {})
+    regular, bold = print_fonts()
     stream = BytesIO()
-    page_width, page_height = letter
-    pdf = canvas.Canvas(stream, pagesize=letter, pageCompression=1)
+    page_width, page_height = page_size(config)
+    pdf = canvas.Canvas(stream, pagesize=(page_width, page_height), pageCompression=1)
     pdf.setTitle("OpenLIMS Sample Barcode Labels")
     pdf.setAuthor("OpenLIMS")
     margin_x = 36
     margin_y = 36
-    columns = 2
-    rows = 5
+    columns = config.get("columns", 2)
+    rows = config.get("rows", 5)
     label_width = (page_width - (2 * margin_x)) / columns
     label_height = (page_height - (2 * margin_y)) / rows
 
@@ -169,19 +177,29 @@ def _render_labels(labels):
         column = slot % columns
         x = margin_x + column * label_width
         y = page_height - margin_y - (row + 1) * label_height
-        pdf.roundRect(x + 4, y + 4, label_width - 8, label_height - 8, 6)
-        pdf.setFont("Helvetica-Bold", 12)
-        pdf.drawString(x + 14, y + label_height - 24, sample.sample_id)
-        pdf.setFont("Helvetica", 8)
+        if config.get("border", True):
+            pdf.roundRect(x + 4, y + 4, label_width - 8, label_height - 8, 6)
+        pdf.setFont(regular, 7)
+        pdf.drawString(x + 14, y + label_height - 17, config.get("title", "")[:45])
+        draw_label_logo(pdf, config, x + label_width - 60, y + label_height - 27)
+        pdf.setFont(bold, 9)
+        for line_index, line in enumerate(simpleSplit(sample.sample_id, bold, 9, label_width - 28)[:2]):
+            pdf.drawString(x + 14, y + label_height - 34 - line_index * 11, line)
+        pdf.setFont(regular, 8)
         project_code = sample.project.code if sample.project else "No project"
-        pdf.drawString(x + 14, y + label_height - 38, project_code)
-        barcode = Code128(label.barcode, barHeight=34, barWidth=0.65)
+        if config.get("show_project", True):
+            pdf.drawString(x + 14, y + label_height - 60, project_code[:45])
+        barcode = Code128(label.barcode, barHeight=28, barWidth=0.5)
+        if barcode.width > label_width - 28:
+            raise LabelGenerationError("Barcode too wide for this grid; select one column. / Código demasiado ancho; seleccione una columna.")
         barcode.drawOn(pdf, x + 14, y + 30)
-        pdf.setFont("Helvetica", 7)
+        pdf.setFont(regular, 6)
         pdf.drawCentredString(x + label_width / 2, y + 18, label.barcode)
         if is_reprint:
-            pdf.setFont("Helvetica-Bold", 7)
-            pdf.drawRightString(x + label_width - 14, y + label_height - 24, "REPRINT")
+            pdf.setFont(bold, 7)
+            pdf.drawRightString(x + label_width - 14, y + 7, "REPRINT")
+        pdf.setFont(regular, 6)
+        pdf.drawString(x + 14, y + 7, config.get("footer", "")[:40])
 
     pdf.save()
     return stream.getvalue()
@@ -223,7 +241,7 @@ def execute_label_generation(action):
             raise LabelGenerationError("A barcode resolves to more than one label record.")
         labels.append((sample, label, label.generation_count > 0))
 
-    pdf_bytes = _render_labels(labels)
+    pdf_bytes = _render_labels(labels, payload.get("print_template"))
     checksum = hashlib.sha256(pdf_bytes).hexdigest()
     filename = f"openlims-labels-{timezone.now():%Y%m%d-%H%M%S}.pdf"
     artifact = GeneratedArtifact.objects.create(
@@ -234,6 +252,7 @@ def execute_label_generation(action):
         parameters={
             "sample_ids": sample_ids,
             "template": payload.get("template", LABEL_TEMPLATE),
+            "print_template": payload.get("print_template", {}),
         },
         created_by=action.requested_by,
     )

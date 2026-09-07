@@ -2,6 +2,21 @@ from django.conf import settings
 from django.db import models
 
 
+class WorkspaceView(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE)
+    role = models.CharField(max_length=20, blank=True)
+    name = models.CharField(max_length=80)
+    config = models.JSONField(default=dict)
+
+
+class PrintTemplate(models.Model):
+    name = models.CharField(max_length=80)
+    kind = models.CharField(max_length=10, choices=[("REPORT", "Report"), ("LABEL", "Label")])
+    config = models.JSONField(default=dict)
+    revision = models.PositiveIntegerField(default=1)
+    archived = models.BooleanField(default=False)
+
+
 class SystemSettings(models.Model):
     UI_LANGUAGE_ENGLISH = "en"
     UI_LANGUAGE_SPANISH = "es"
