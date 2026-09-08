@@ -490,6 +490,34 @@ class AssistantComparisonTests(APITestCase):
         with artifact.file.open("rb") as stream:
             self.assertEqual(stream.read(4), b"%PDF")
 
+    def test_confirmed_pdf_uses_frozen_print_template(self):
+        from settings_app.models import PrintTemplate
+        template = PrintTemplate.objects.create(name="Frozen evidence", kind="REPORT", config={"title": "Original heading", "orientation": "portrait", "chart_position": "after"})
+        comparison = self.chat("Compare Project Alpha and Project Beta")
+        proposal = self.chat(
+            "Export this comparison as PDF",
+            context={**comparison.data["context"], "print_template_id": template.pk},
+        )
+
+        self.assertEqual(proposal.data["pending_action"]["type"], "COMPLIANCE_REPORT")
+        template.config = {"title": "Later heading"}
+        template.save()
+        confirmed = self.confirm(proposal)
+
+        self.assertEqual(confirmed.status_code, 200)
+        self.assertEqual(confirmed.data["status"], "COMPLETED")
+        artifact = GeneratedArtifact.objects.get(
+            id=confirmed.data["result"]["artifact_id"]
+        )
+        self.assertEqual(artifact.kind, GeneratedArtifact.KIND_REPORT_PDF)
+        self.assertEqual(
+            artifact.parameters["report_type"],
+            "COMPARISON_ANALYSIS",
+        )
+        self.assertEqual(artifact.parameters["print_template"]["config"]["title"], "Original heading")
+        with artifact.file.open("rb") as stream:
+            self.assertEqual(stream.read(4), b"%PDF")
+
     def test_regular_endpoint_requires_authentication(self):
         self.client.force_authenticate(user=None)
         response = self.client.post(

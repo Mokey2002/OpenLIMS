@@ -96,3 +96,37 @@ class CustomizationTests(APITestCase):
         for columns in [1, 2]:
             for rows in [3, 4, 5]:
                 self.assertTrue(_render_labels([(sample, label, True)] * 12, {"config": {"columns": columns, "rows": rows, "page_size": "A4"}}).startswith(b"%PDF"))
+
+    def test_analysis_exports_freeze_layout_and_csv_ignores_it(self):
+        from assistant.comparisons import _comparison_export
+        from assistant.investigations import _export_investigation
+        template = PrintTemplate.objects.create(name="Evidence", kind="REPORT", config={"show_chart": False, "summary_position": "after"})
+        for route, kind in [(_comparison_export, "comparison"), (_export_investigation, "investigation")]:
+            context = {kind: {"identifier": "demo"}, "print_template_id": template.pk}
+            result = route(context, "PDF")
+            frozen = result["pending_action"]["payload"]["filters"]["print_template"]
+            self.assertEqual(frozen["config"]["summary_position"], "after")
+            self.assertEqual(frozen["revision"], 1)
+            template.config = {"title": "Changed"}
+            template.save()
+            self.assertNotIn("title", frozen["config"])
+            template.config = {"show_chart": False, "summary_position": "after"}
+            template.save()
+            csv = route({**context, "print_template_id": "invalid"}, "CSV")
+            self.assertNotIn("print_template", csv["pending_action"]["payload"]["filters"])
+        template.archived = True
+        template.save()
+        with self.assertRaises(ValidationError):
+            _comparison_export({"print_template_id": template.pk}, "PDF")
+
+    def test_analysis_preview_layouts_and_validation(self):
+        for kind in ["comparison", "investigation"]:
+            for orientation in ["portrait", "landscape"]:
+                response = self.client.post("/api/print-templates/preview/", {"name": "Evidence", "kind": "REPORT", "report_type": kind,
+                    "config": {"page_size": "A4", "orientation": orientation, "summary_position": "after", "chart_position": "after"}}, format="json")
+                self.assertEqual(response.status_code, 200, response.content[:200])
+                self.assertTrue(response.content.startswith(b"%PDF"))
+        for config in [{"show_chart": "false"}, {"summary_position": []}, {"chart_position": "middle"}, {"hide_evidence": True}]:
+            with self.assertRaises(ValidationError):
+                validate_print_config("REPORT", config)
+        self.assertEqual(PrintTemplate.objects.count(), 0)

@@ -370,6 +370,9 @@ def _comparison_chart_drawing(chart):
 
 
 def _comparison_pdf_bytes(result, filters):
+    if filters.get("print_template"):
+        from settings_app.print_rendering import render_analysis
+        return render_analysis(result, filters, filters["print_template"], "comparison")
     comparison = result.get("comparison") or {}
     chart = result.get("chart") or {}
     columns = comparison.get("columns") or []
@@ -480,6 +483,9 @@ def _investigation_csv_bytes(result, filters):
 
 
 def _investigation_pdf_bytes(result, filters):
+    if filters.get("print_template"):
+        from settings_app.print_rendering import render_analysis
+        return render_analysis(result, filters, filters["print_template"], "investigation")
     investigation = result.get("investigation") or {}
     stream = BytesIO()
     page_size = landscape(letter)

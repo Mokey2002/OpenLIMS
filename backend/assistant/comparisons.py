@@ -1472,6 +1472,9 @@ def _comparison_export(context, output_format):
         "output_format": output_format,
         "timezone": str(timezone.get_current_timezone()),
     }
+    from settings_app.customization import print_snapshot
+    if output_format == "PDF":
+        filters["print_template"] = print_snapshot(context, "REPORT")
     preview = {
         "title": "Comparison artifact preview",
         "operation": "GENERATE_COMPARISON_ARTIFACT",
@@ -1489,6 +1492,7 @@ def _comparison_export(context, output_format):
             "format": output_format,
             "recalculate_at_confirmation": True,
             "audited": True,
+            "print_template": {k: v for k, v in filters.get("print_template", {}).items() if k != "config"},
         },
     }
     return {

@@ -1,3 +1,4 @@
+import PrintTemplates from "../components/PrintTemplates";
 import { useEffect, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, Row } from "react-bootstrap";
 import { Link } from "react-router-dom";
@@ -25,6 +26,7 @@ export default function Investigations() {
   const [samples, setSamples] = useState([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
+  const [printTemplate, setPrintTemplate] = useState("");
   const [result, setResult] = useState(null);
 
   const exportOperation = useConfirmedOperation(async (action) => {
@@ -65,7 +67,7 @@ export default function Investigations() {
 
   async function proposeExport(format) {
     if (!result?.context) return;
-    await exportOperation.propose(`Export this investigation as ${format}`, result.context);
+    await exportOperation.propose(`Export this investigation as ${format}`, { ...result.context, ...(format === "PDF" && printTemplate ? { print_template_id: Number(printTemplate) } : {}) });
   }
 
   return (
@@ -151,6 +153,7 @@ export default function Investigations() {
               {result.links.map((link) => <Button key={link.url} as={Link} to={link.url} size="sm" variant="outline-dark">{link.label}</Button>)}
             </div>
           )}
+          {result.investigation && <PrintTemplates kind="REPORT" reportType="investigation" selected={printTemplate} onSelect={setPrintTemplate} />}
           {result.investigation && (
             <div className="d-flex justify-content-end gap-2 mt-3">
               <Button size="sm" variant="outline-dark" disabled={exportOperation.busy} onClick={() => proposeExport("CSV")}>Export CSV</Button>

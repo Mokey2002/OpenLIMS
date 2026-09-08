@@ -75,7 +75,7 @@ class WorkspaceViewSet(viewsets.ModelViewSet):
 
 def validate_print_config(kind, value):
     common = {"title", "footer", "logo", "page_size"}
-    allowed = common | ({"orientation", "show_summary"} if kind == "REPORT" else {"columns", "rows", "show_project", "border"})
+    allowed = common | ({"orientation", "show_summary", "show_chart", "summary_position", "chart_position"} if kind == "REPORT" else {"columns", "rows", "show_project", "border"})
     if not isinstance(value, dict) or set(value) - allowed:
         raise ValidationError("Invalid template settings. / Configuración de plantilla inválida.")
     for key, limit in [("title", 80), ("footer", 100)]:
@@ -83,9 +83,12 @@ def validate_print_config(kind, value):
             raise ValidationError("Invalid template text. / Texto de plantilla inválido.")
     if value.get("page_size", "LETTER") not in ["LETTER", "A4"] or value.get("orientation", "portrait") not in ["portrait", "landscape"]:
         raise ValidationError("Invalid page layout. / Diseño de página inválido.")
-    for key in ["show_summary", "show_project", "border"]:
+    for key in ["show_summary", "show_chart", "show_project", "border"]:
         if key in value and type(value[key]) is not bool:
             raise ValidationError("Expected a checkbox value. / Se requiere un valor de casilla.")
+    for key in ["summary_position", "chart_position"]:
+        if value.get(key, "before") not in ["before", "after"]:
+            raise ValidationError("Invalid section position. / Posición de sección inválida.")
     if kind == "LABEL":
         for key, choices in [("columns", [1, 2]), ("rows", [3, 4, 5])]:
             if type(value.get(key, choices[-1])) is not int or value.get(key, choices[-1]) not in choices:
@@ -143,7 +146,22 @@ class PrintTemplateViewSet(viewsets.ModelViewSet):
             sample = SimpleNamespace(sample_id="DEMO-001", project=SimpleNamespace(code="DEMO"))
             label = SimpleNamespace(barcode="OPENLIMS-SAMPLE-1-DEMO-001")
             content = _render_labels([(sample, label, True)] * 12, template)
+        elif request.data.get("report_type", "project") in ["comparison", "investigation"]:
+            from .print_rendering import render_analysis
+            kind = request.data["report_type"]
+            result = {
+                "answer": "Synthetic summary for layout preview.",
+                "chart": {"chartType": "bar", "xKey": "entity", "data": [{"entity": "Demo A", "value": 3}, {"entity": "Demo B", "value": 7}], "series": [{"name": "Demo metric", "dataKey": "value"}]},
+                "comparison": {"title": "Synthetic comparison", "columns": [{"key": "sample", "label": "Sample"}, {"key": "value", "label": "Value"}],
+                               "rows": [{"sample": "DEMO-001", "value": n} for n in range(40)], "notes": ["Synthetic method note; no laboratory records used."]},
+                "investigation": {"title": "Synthetic investigation", "findings": [{"severity": "medium", "confidence": "low", "evidence_type": "demo", "title": "Example finding", "detail": "Synthetic evidence for checking the layout."}] * 20,
+                                  "results": [{"id": n, "key": "Demo analyte", "display_value": "3 ng", "reference_min": 1, "reference_max": 5, "unit": "ng", "qc_status": "PASS", "entered_by": "demo"} for n in range(10)],
+                                  "disclaimers": ["Synthetic preview; no scientific conclusions."]},
+            }
+            content = render_analysis(result, {kind + "_spec": {"scope": "synthetic"}}, template, kind)
         else:
+            if request.data.get("report_type", "project") != "project":
+                raise ValidationError("Unsupported report preview.")
             from .print_rendering import render_report
             content = render_report([{"timestamp": "2026-01-01T12:00:00", "actor": "demo", "action": "SAMPLE_UPDATED", "entity_type": "Sample", "entity_id": "DEMO-001"}] * 40,
                                     {"project_label": "DEMO - synthetic preview", "timezone": "UTC"}, template)
