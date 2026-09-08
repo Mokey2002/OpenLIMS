@@ -6,7 +6,7 @@ import { useLanguage } from "../i18n";
 
 const defaults = kind => kind === "LABEL" ? { title: "", footer: "", page_size: "LETTER", columns: 2, rows: 5, show_project: true, border: true } : { title: "", footer: "", page_size: "LETTER", orientation: "portrait", show_summary: true };
 
-export default function PrintTemplates({ kind, selected, onSelect }) {
+export default function PrintTemplates({ kind, selected, onSelect, reportType = "project" }) {
   const { language } = useLanguage();
   const t = (en, es) => language === "es" ? es : en;
   const id = useId();
@@ -30,7 +30,7 @@ export default function PrintTemplates({ kind, selected, onSelect }) {
   }
   async function preview() {
     setBusy(true); setError("");
-    try { await apiPostDownload("/api/print-templates/preview/", { name: draft.name || "Preview", kind, config: draft.config }, "template-preview.pdf"); }
+    try { await apiPostDownload("/api/print-templates/preview/", { name: draft.name || "Preview", kind, config: draft.config, report_type: reportType }, "template-preview.pdf"); }
     catch(e) { setError(e.message); } finally { setBusy(false); }
   }
   async function logo(file) {
@@ -54,7 +54,14 @@ export default function PrintTemplates({ kind, selected, onSelect }) {
         {[ ["columns", t("Columns", "Columnas"), [1, 2]], ["rows", t("Rows", "Filas"), [3, 4, 5]] ].map(([key, label, choices]) => <div key={key}><Form.Label htmlFor={`${id}-${key}`}>{label}</Form.Label><Form.Select id={`${id}-${key}`} value={draft.config[key]} onChange={e => update(key, Number(e.target.value))}>{choices.map(n => <option key={n}>{n}</option>)}</Form.Select></div>)}
         <Form.Check id={`${id}-project`} label={t("Show project", "Mostrar proyecto")} checked={draft.config.show_project ?? true} onChange={e => update("show_project", e.target.checked)} />
         <Form.Check id={`${id}-border`} label={t("Label borders", "Bordes de etiquetas")} checked={draft.config.border ?? true} onChange={e => update("border", e.target.checked)} />
-      </> : <><Form.Label htmlFor={`${id}-orientation`}>{t("Orientation", "Orientación")}</Form.Label><Form.Select id={`${id}-orientation`} value={draft.config.orientation || "portrait"} onChange={e => update("orientation", e.target.value)}><option value="portrait">{t("Portrait", "Vertical")}</option><option value="landscape">{t("Landscape", "Horizontal")}</option></Form.Select><Form.Check id={`${id}-summary`} label={t("Show event count", "Mostrar cantidad de eventos")} checked={draft.config.show_summary ?? true} onChange={e => update("show_summary", e.target.checked)} /></>}
+      </> : <><Form.Label htmlFor={`${id}-orientation`}>{t("Orientation", "Orientación")}</Form.Label><Form.Select id={`${id}-orientation`} value={draft.config.orientation || "portrait"} onChange={e => update("orientation", e.target.value)}><option value="portrait">{t("Portrait", "Vertical")}</option><option value="landscape">{t("Landscape", "Horizontal")}</option></Form.Select><Form.Check id={`${id}-summary`} label={t("Show summary", "Mostrar resumen")} checked={draft.config.show_summary ?? true} onChange={e => update("show_summary", e.target.checked)} /></>}
+      {kind === "REPORT" && <>
+        <Form.Label htmlFor={`${id}-summary-position`}>{t("Summary placement", "Posición del resumen")}</Form.Label>
+        <Form.Select id={`${id}-summary-position`} value={draft.config.summary_position || "before"} onChange={e => update("summary_position", e.target.value)}><option value="before">{t("Before data", "Antes de los datos")}</option><option value="after">{t("After data", "Después de los datos")}</option></Form.Select>
+        {reportType !== "project" && <><Form.Check id={`${id}-chart`} label={t("Show chart", "Mostrar gráfico")} checked={draft.config.show_chart ?? true} onChange={e => update("show_chart", e.target.checked)} />
+          <Form.Label htmlFor={`${id}-chart-position`}>{t("Chart placement", "Posición del gráfico")}</Form.Label>
+          <Form.Select id={`${id}-chart-position`} value={draft.config.chart_position || "before"} onChange={e => update("chart_position", e.target.value)}><option value="before">{t("Before data", "Antes de los datos")}</option><option value="after">{t("After data", "Después de los datos")}</option></Form.Select></>}
+      </>}
       <Form.Label htmlFor={`${id}-logo`}>{t("PNG logo (200 KB, 1000 pixels maximum)", "Logotipo PNG (máximo 200 KB y 1000 píxeles)")}</Form.Label><Form.Control id={`${id}-logo`} type="file" accept="image/png" onChange={e => logo(e.target.files[0])} />
       {draft.config.logo && <><img alt={t("Logo preview", "Vista previa del logotipo")} src={draft.config.logo} style={{ maxWidth: 120, maxHeight: 60 }} /><Button size="sm" type="button" onClick={() => update("logo", "")}>{t("Remove logo", "Quitar logotipo")}</Button></>}
       <div className="d-flex gap-2 mt-2"><Button type="button" disabled={busy} onClick={preview}>{t("Preview PDF (synthetic data)", "Vista previa PDF (datos ficticios)")}</Button><Button type="button" disabled={busy || !draft.name.trim()} onClick={() => save()}>{t("Save template", "Guardar plantilla")}</Button>{draft.id && <Button type="button" variant="outline-danger" disabled={busy} onClick={() => save(true)}>{t("Archive template", "Archivar plantilla")}</Button>}</div>

@@ -1,3 +1,4 @@
+import PrintTemplates from "../components/PrintTemplates";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -74,6 +75,7 @@ export default function Comparisons() {
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
+  const [printTemplate, setPrintTemplate] = useState("");
   const [result, setResult] = useState(null);
 
   const exportOperation = useConfirmedOperation(async (action) => {
@@ -177,7 +179,7 @@ export default function Comparisons() {
     if (!result?.context) return;
     await exportOperation.propose(
       `Export this comparison as ${format}`,
-      result.context
+      { ...result.context, ...(format === "PDF" && printTemplate ? { print_template_id: Number(printTemplate) } : {}) }
     );
   }
 
@@ -362,6 +364,7 @@ export default function Comparisons() {
             </div>
           )}
 
+          {result.comparison && <PrintTemplates kind="REPORT" reportType="comparison" selected={printTemplate} onSelect={setPrintTemplate} />}
           {result.comparison && (
             <div className="d-flex justify-content-end gap-2 mt-3">
               <Button

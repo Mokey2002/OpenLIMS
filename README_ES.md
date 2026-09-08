@@ -1,5 +1,17 @@
 # OpenLIMS
 
+## v0.33.0 — Diseños de cuaderno e informes
+
+En **Cuaderno → Plantillas → Editar estructura**, añada, edite, duplique, reordene y elimine
+secciones de experimentos. Los cambios se aplican a nuevos experimentos, conservando las
+revisiones existentes. Los cambios se auditan y se rechazan guardados desde editores desactualizados.
+
+En **Informes**, **Comparaciones** e **Investigaciones**, seleccione una plantilla para exportar PDF.
+Los directores pueden configurar marca, papel, orientación y posición del resumen; los informes
+de análisis permiten mostrar gráficos antes o después de los datos. La vista previa utiliza datos
+ficticios del tipo de informe seleccionado. Se conservan tablas de evidencia, alcance, notas y limitaciones.
+Consulte las [notas de v0.33.0](docs/releases/v0.33.0.md).
+
 ## v0.32.0 — Vistas guardadas y plantillas de impresión
 
 En **Mi trabajo → Personalizar Mi trabajo**, seleccione widgets, columnas y su orden, filtre el
@@ -55,7 +67,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.32.0`
+**Versión de desarrollo actual:** `v0.33.0`
 
 **Demo:** http://35.164.28.250
 

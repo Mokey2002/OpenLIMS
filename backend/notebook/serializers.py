@@ -83,6 +83,7 @@ class NotebookSerializer(serializers.ModelSerializer):
 
 
 class ExperimentTemplateSerializer(serializers.ModelSerializer):
+    expected_updated_at = serializers.DateTimeField(write_only=True, required=False)
     notebook_name = serializers.CharField(source="notebook.name", read_only=True)
     created_by_username = serializers.CharField(source="created_by.username", read_only=True)
 
@@ -90,7 +91,7 @@ class ExperimentTemplateSerializer(serializers.ModelSerializer):
         model = ExperimentTemplate
         fields = [
             "id", "public_id", "notebook", "notebook_name", "name", "description",
-            "blocks", "active", "created_by", "created_by_username", "created_at", "updated_at",
+            "blocks", "active", "expected_updated_at", "created_by", "created_by_username", "created_at", "updated_at",
         ]
         read_only_fields = ["id", "public_id", "created_by", "created_by_username", "created_at", "updated_at"]
 
@@ -237,6 +238,8 @@ class ExperimentSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         notebook = attrs.get("notebook", getattr(self.instance, "notebook", None))
         template = attrs.get("template", getattr(self.instance, "template", None))
+        if template and not template.active and not self.instance:
+            raise serializers.ValidationError({"template": "This template is inactive."})
         if template and notebook and template.notebook_id != notebook.pk:
             raise serializers.ValidationError({"template": "The template belongs to a different notebook."})
         if self.instance and notebook and notebook.pk != self.instance.notebook_id:

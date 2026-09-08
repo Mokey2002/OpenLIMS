@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Count, Prefetch, Q
 from django.http import HttpResponse
 from django.utils import timezone
@@ -143,15 +144,33 @@ class ExperimentTemplateViewSet(viewsets.ModelViewSet):
         notebook = serializer.validated_data["notebook"]
         if not user_can_notebook(self.request.user, notebook, "write"):
             raise PermissionDenied("You cannot create templates in this notebook.")
+        serializer.validated_data.pop("expected_updated_at", None)
         serializer.save(created_by=self.request.user)
 
+    @transaction.atomic
     def perform_update(self, serializer):
         if not user_can_notebook(self.request.user, self.get_object().notebook, "write"):
             raise PermissionDenied("You cannot update this template.")
-        serializer.save()
+        locked = ExperimentTemplate.objects.select_for_update().get(pk=serializer.instance.pk)
+        expected = serializer.validated_data.pop("expected_updated_at", None)
+        if expected is not None and expected != locked.updated_at:
+            raise ValidationError("Template changed. Close the editor and reload before editing again.")
+        from hashlib import sha256
+        import json
+        def fingerprint(template):
+            content = {"name": template.name, "description": template.description, "blocks": template.blocks, "active": template.active}
+            return sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
+        before = fingerprint(locked)
+        serializer.instance = locked
+        saved = serializer.save()
+        from events.models import Event
+        Event.objects.create(entity_type="ExperimentTemplate", entity_id=str(saved.pk), action="EXPERIMENT_TEMPLATE_UPDATED", actor=self.request.user,
+                             payload={"before_sha256": before, "after_sha256": fingerprint(saved)})
 
     def destroy(self, request, *args, **kwargs):
         template = self.get_object()
+        if not user_can_notebook(request.user, template.notebook, "write"):
+            raise PermissionDenied("You cannot delete this template.")
         if template.experiments.exists():
             template.active = False
             template.save(update_fields=["active", "updated_at"])
@@ -163,6 +182,8 @@ class ExperimentTemplateViewSet(viewsets.ModelViewSet):
         template = self.get_object()
         if not user_can_notebook(request.user, template.notebook, "write"):
             raise PermissionDenied("You cannot create experiments in this notebook.")
+        if not template.active:
+            raise ValidationError("This template is inactive.")
         experiment = Experiment.objects.create(
             notebook=template.notebook,
             template=template,
