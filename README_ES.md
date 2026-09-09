@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.33.3 — Pruebas de rendimiento
+
+Pruebas opcionales de API y navegador real miden latencia p50/p95, tamaño de respuestas y consultas SQL. La suite de API crea datos desechables de 100 a 500.000 muestras con tareas asignadas. Esto no certifica capacidad a gran escala. Consulte los [comandos y límites](docs/performance_testing.md).
+
 ## v0.33.2 — Recuperación de navegación
 
 La navegación permanece visible mientras carga una página. Si una pestaña antigua solicita un módulo que falta después de una actualización, OpenLIMS intenta una recarga automática por versión y pestaña en la URL seleccionada. Los errores persistentes muestran opciones para recargar o volver a Mi trabajo. La navegación normal no recarga el documento.
@@ -75,7 +79,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.33.2`
+**Versión de desarrollo actual:** `v0.33.3`
 
 **Demo:** http://35.164.28.250
 
