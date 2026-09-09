@@ -22,7 +22,7 @@ class PublicUISettingsView(APIView):
     @extend_schema(responses=PublicUISettingsSerializer)
     def get(self, request):
         settings_obj = SystemSettings.load()
-        return Response({"ui_language": settings_obj.ui_language})
+        return Response({"ui_language": settings_obj.ui_language, "assistant_helper_enabled": settings_obj.assistant_helper_enabled})
 
 
 class FeatureFlagsView(APIView):
@@ -99,6 +99,7 @@ class SystemSettingsViewSet(viewsets.ModelViewSet):
         settings_obj.lab_name = "OpenLIMS Demo Lab"
         settings_obj.organization_name = "OpenLIMS"
         settings_obj.ui_language = SystemSettings.UI_LANGUAGE_ENGLISH
+        settings_obj.assistant_helper_enabled = True
         settings_obj.default_timezone = "UTC"
         settings_obj.default_sample_status = "RECEIVED"
         settings_obj.max_upload_size_mb = 10

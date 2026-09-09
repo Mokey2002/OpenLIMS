@@ -33,6 +33,8 @@ class SystemSettings(models.Model):
         default=UI_LANGUAGE_ENGLISH,
     )
 
+    assistant_helper_enabled = models.BooleanField(default=True)
+
     default_timezone = models.CharField(max_length=100, default="UTC")
     default_sample_status = models.CharField(max_length=50, default="RECEIVED")
 

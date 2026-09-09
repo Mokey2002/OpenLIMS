@@ -34,7 +34,7 @@ function parseExtensionText(value) {
 }
 
 export default function AdminSettings() {
-  const { language, locale, setLanguage } = useLanguage();
+  const { language, locale, setLanguage, setAssistantHelperEnabled } = useLanguage();
   const [me, setMe] = useState(null);
   const [settings, setSettings] = useState(null);
   const [form, setForm] = useState(null);
@@ -106,6 +106,7 @@ export default function AdminSettings() {
         lab_name: form.lab_name,
         organization_name: form.organization_name,
         ui_language: form.ui_language,
+        assistant_helper_enabled: form.assistant_helper_enabled !== false,
         default_timezone: form.default_timezone,
         default_sample_status: form.default_sample_status,
         max_upload_size_mb: Number(form.max_upload_size_mb),
@@ -128,6 +129,7 @@ export default function AdminSettings() {
       const data = await apiPatch("/api/system-settings/1/", payload);
 
       setLanguage(data.ui_language);
+      setAssistantHelperEnabled(data.assistant_helper_enabled !== false);
       setSettings(data);
       setForm({
         ...data,
@@ -158,6 +160,7 @@ export default function AdminSettings() {
       const data = await apiPost("/api/system-settings/reset-defaults/", {});
 
       setLanguage(data.ui_language);
+      setAssistantHelperEnabled(data.assistant_helper_enabled !== false);
       setSettings(data);
       setForm({
         ...data,
@@ -255,6 +258,14 @@ export default function AdminSettings() {
                   <div className="form-text">
                     Choose the language shown to every signed-in OpenLIMS user.
                   </div>
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Check id="assistant-helper-enabled" type="switch"
+                    label={language === "es" ? "Mostrar ayudante flotante" : "Show floating assistant helper"}
+                    checked={form.assistant_helper_enabled !== false} disabled={!userIsAdmin || saving || resetting}
+                    onChange={e => updateField("assistant_helper_enabled", e.target.checked)} />
+                  <Form.Text>{language === "es" ? "Se aplica a todos los usuarios al cargar la página. La página del Asistente sigue disponible." : "Applies to everyone when they load the page. The Assistant page remains available."}</Form.Text>
                 </Form.Group>
 
                 <Form.Group className="mb-3">

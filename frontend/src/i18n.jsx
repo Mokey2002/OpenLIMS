@@ -956,6 +956,7 @@ const LanguageContext = createContext({
 });
 
 export function LanguageProvider({ children }) {
+  const [assistantHelperEnabled, setAssistantHelperEnabled] = useState(null);
   const [language, setLanguageState] = useState(() =>
     normalizeLanguage(window.localStorage.getItem(LANGUAGE_STORAGE_KEY))
   );
@@ -970,7 +971,10 @@ export function LanguageProvider({ children }) {
     let active = true;
     apiGet("/api/ui-settings/")
       .then((settings) => {
-        if (active) setLanguage(settings.ui_language);
+        if (active) {
+          setLanguage(settings.ui_language);
+          setAssistantHelperEnabled(settings.assistant_helper_enabled !== false);
+        }
       })
       .catch(() => {
         // Keep the last known language when settings are temporarily unavailable.
@@ -1012,9 +1016,11 @@ export function LanguageProvider({ children }) {
       language,
       locale: language === "es" ? "es-MX" : "en-US",
       setLanguage,
+      assistantHelperEnabled,
+      setAssistantHelperEnabled,
       t: (text) => translateText(text, language),
     }),
-    [language, setLanguage]
+    [language, setLanguage, assistantHelperEnabled]
   );
 
   return (
