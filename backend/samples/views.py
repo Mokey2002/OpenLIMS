@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.http import HttpResponse
 from django.db import transaction
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -31,6 +31,7 @@ from .serializers import (
 from .workflows import get_allowed_transitions
 from .access import (
     get_sample_access_queryset,
+    with_sample_modify_permission,
     user_can_access_sample,
     require_sample_modify_access,
     validate_sample_project_assignment,
@@ -41,6 +42,7 @@ from .access import (
 from custom_fields.models import FieldValue
 from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite
 from events.models import Event
+from projects.models import Project
 
 
 REASON_MIN_LENGTH = 10
@@ -138,7 +140,7 @@ class SampleViewSet(ModelViewSet):
                 "assigned_to",
                 "custodian",
             )
-            .prefetch_related("linked_projects")
+            .prefetch_related(Prefetch("linked_projects", queryset=Project.objects.order_by("code", "pk")))
             .all()
             .order_by("-created_at")
         )
@@ -174,7 +176,7 @@ class SampleViewSet(ModelViewSet):
             else:
                 queryset = queryset.filter(assigned_to_id=assigned_to)
 
-        return get_sample_access_queryset(queryset, self.request.user)
+        return with_sample_modify_permission(get_sample_access_queryset(queryset, self.request.user), self.request.user)
 
     @action(detail=True, methods=["post"], url_path="derive")
     def derive(self, request, pk=None):

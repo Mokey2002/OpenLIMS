@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.33.4 — Carga de muestras más rápida
+
+La lista calcula permisos en una consulta y reutiliza los proyectos precargados. La búsqueda espera 250 ms, cancela solicitudes obsoletas y reutiliza los datos auxiliares al filtrar o cambiar de página. En SQLite local, 50 filas pasaron de 207 a 9 consultas (p95: 74,42 a 17,85 ms). La capacidad en producción requiere pruebas en el servidor. Consulte las [notas de versión](docs/releases/v0.33.4.md).
+
 ## v0.33.3 — Pruebas de rendimiento
 
 Pruebas opcionales de API y navegador real miden latencia p50/p95, tamaño de respuestas y consultas SQL. La suite de API crea datos desechables de 100 a 500.000 muestras con tareas asignadas. Esto no certifica capacidad a gran escala. Consulte los [comandos y límites](docs/performance_testing.md).
@@ -79,7 +83,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.33.3`
+**Versión de desarrollo actual:** `v0.33.4`
 
 **Demo:** http://35.164.28.250
 

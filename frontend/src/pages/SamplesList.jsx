@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Alert,
@@ -100,6 +100,8 @@ export default function SamplesList() {
   const [projectId, setProjectId] = useState("");
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const sampleRequest = useRef(null);
   const [status, setStatus] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
   const [containerFilter, setContainerFilter] = useState("");
@@ -117,48 +119,56 @@ export default function SamplesList() {
   const [nextPageUrl, setNextPageUrl] = useState(null);
   const [previousPageUrl, setPreviousPageUrl] = useState(null);
 
-  async function load() {
-    setErr("");
-
-    try {
-      const params = new URLSearchParams();
-
-      if (search.trim()) params.set("search", search.trim());
-      if (status) params.set("status", status);
-      if (projectFilter) params.set("project", projectFilter);
-      if (containerFilter) params.set("container", containerFilter);
-
-      params.set("page", page);
-
-      const [samplesData, projectsData, containersData, meData, formsData] = await Promise.all([
-        apiGet(`/api/samples/?${params.toString()}`),
-        apiGet("/api/projects/"),
-        apiGet("/api/containers/"),
-        apiGet("/api/me/"),
-        apiGet("/api/sample-forms/?active=1"),
-      ]);
-
-      setSamples(samplesData.results || []);
-      setTotalCount(samplesData.count || 0);
-      setNextPageUrl(samplesData.next || null);
-      setPreviousPageUrl(samplesData.previous || null);
+  useEffect(() => {
+    const controller = new AbortController();
+    const options = { signal: controller.signal };
+    Promise.all([
+      apiGet("/api/projects/", options), apiGet("/api/containers/", options),
+      apiGet("/api/me/", options), apiGet("/api/sample-forms/?active=1", options),
+    ]).then(([projectsData, containersData, meData, formsData]) => {
+      if (controller.signal.aborted) return;
       setProjects(projectsData.results || projectsData || []);
       setContainers(containersData.results || containersData || []);
       setMe(meData);
       setSampleForms(formsData.filter(f => f.published && !f.archived));
+    }).catch(e => { if (!controller.signal.aborted) setErr(e.message || String(e)); });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (search.trim() === debouncedSearch) return;
+    const timeout = setTimeout(() => { setDebouncedSearch(search.trim()); setPage(1); }, 250);
+    return () => clearTimeout(timeout);
+  }, [search, debouncedSearch]);
+
+  const load = useCallback(async () => {
+    sampleRequest.current?.abort();
+    const controller = new AbortController();
+    sampleRequest.current = controller;
+    setErr("");
+    try {
+      const params = new URLSearchParams({ page: String(page) });
+      if (debouncedSearch) params.set("search", debouncedSearch);
+      if (status) params.set("status", status);
+      if (projectFilter) params.set("project", projectFilter);
+      if (containerFilter) params.set("container", containerFilter);
+      const data = await apiGet(`/api/samples/?${params}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setSamples(data.results || []);
+      setTotalCount(data.count || 0);
+      setNextPageUrl(data.next || null);
+      setPreviousPageUrl(data.previous || null);
     } catch (e) {
-      setErr(e.message || String(e));
+      if (!controller.signal.aborted) setErr(e.message || String(e));
     }
-  }
+  }, [debouncedSearch, status, projectFilter, containerFilter, page]);
 
   useEffect(() => {
+    // The effect starts an external request; state updates reflect its result.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, status, projectFilter, containerFilter, page]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, status, projectFilter, containerFilter]);
+    return () => sampleRequest.current?.abort();
+  }, [load]);
 
   const selectedVisibleCount = useMemo(() => {
     return samples.filter((sample) => selectedIds.includes(sample.id)).length;
@@ -440,7 +450,7 @@ export default function SamplesList() {
             <Col md={2}>
               <Form.Select
                 value={status}
-                onChange={(e) => setStatus(e.target.value)}
+                onChange={(e) => { setStatus(e.target.value); setPage(1); }}
               >
                 <option value="">All statuses</option>
 
@@ -455,7 +465,7 @@ export default function SamplesList() {
             <Col md={3}>
               <Form.Select
                 value={projectFilter}
-                onChange={(e) => setProjectFilter(e.target.value)}
+                onChange={(e) => { setProjectFilter(e.target.value); setPage(1); }}
               >
                 <option value="">All projects</option>
 
@@ -470,7 +480,7 @@ export default function SamplesList() {
             <Col md={3}>
               <Form.Select
                 value={containerFilter}
-                onChange={(e) => setContainerFilter(e.target.value)}
+                onChange={(e) => { setContainerFilter(e.target.value); setPage(1); }}
               >
                 <option value="">All containers</option>
 

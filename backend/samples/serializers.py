@@ -94,6 +94,9 @@ class SampleSerializer(serializers.ModelSerializer):
         return normalized
 
     def get_linked_project_summaries(self, obj):
+        projects = getattr(obj, "_prefetched_objects_cache", {}).get("linked_projects")
+        if projects is None:
+            projects = obj.linked_projects.order_by("code", "pk")
         return [
             {
                 "id": project.id,
@@ -101,12 +104,14 @@ class SampleSerializer(serializers.ModelSerializer):
                 "code": project.code,
                 "name": project.name,
             }
-            for project in obj.linked_projects.all().order_by("code")
+            for project in projects
         ]
 
     def get_can_modify(self, obj):
         request = self.context.get("request")
         user = request.user if request else None
+        if hasattr(obj, "_display_can_modify") and getattr(obj, "_display_permission_user", None) == getattr(user, "pk", None):
+            return obj._display_can_modify
         return user_can_modify_sample(user, obj)
 
     def get_created_by_username(self, obj):

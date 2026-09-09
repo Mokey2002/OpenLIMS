@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.33.3-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.33.4-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -24,6 +24,10 @@
 ---
 
 ## Overview
+
+### v0.33.4 — Faster sample loading
+
+Sample lists batch permission checks and reuse prefetched linked projects. Search is debounced, outdated requests are cancelled, and supporting data is reused across filters and pages. Local SQLite benchmarks reduced a 50-row list from 207 to 9 queries (p95: 74.42 to 17.85 ms); production capacity requires deployment testing. See [release notes](docs/releases/v0.33.4.md).
 
 ### v0.33.3 — Performance benchmarks
 
@@ -107,7 +111,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.33.3 — Performance benchmarks` (see release notes for validation scope).
+**Current development version:** `v0.33.4 — Faster sample loading` (see release notes for validation scope).
 
 ### Previous v0.29.0 highlights
 
