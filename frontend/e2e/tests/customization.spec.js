@@ -2,6 +2,7 @@ const { test, expect } = require("@playwright/test");
 
 async function mockApp(page, context, language = "en") {
   const state = { views: [], templates: [], preview: null, notebookTemplate: { id: 1, notebook: 1, name: "Core protocol", description: "", active: true, updated_at: "2026-01-01T00:00:00Z", blocks: [{ block_type: "HEADING", data: { text: "Objective", level: 2 } }] } };
+  state.settings = { id: 1, assistant_helper_enabled: true, ui_language: language, lab_name: "Core", organization_name: "Lab", default_timezone: "UTC", default_sample_status: "RECEIVED", max_upload_size_mb: 10, allowed_fasta_extensions: [".fasta"], max_sequences_per_alignment: 25, max_sequence_length: 100000 };
   const user = { id: 1, username: "director", roles: ["admin"] };
   await context.addCookies([{ name: "csrftoken", value: "test-token", url: "http://127.0.0.1:5173" }]);
   await page.route("**/api/**", async route => {
@@ -9,7 +10,11 @@ async function mockApp(page, context, language = "en") {
     let body = [];
     if (path.endsWith("/session/")) body = { user, feature_flags: { notebook: true } };
     else if (path.endsWith("/me/")) body = user;
-    else if (path.endsWith("/ui-settings/")) body = { ui_language: language };
+    else if (path.endsWith("/ui-settings/")) body = { ui_language: language, assistant_helper_enabled: state.settings.assistant_helper_enabled };
+    else if (path === "/api/system-settings/" || path === "/api/system-settings/1/") {
+      if (request.method() === "PATCH") state.settings = { ...state.settings, ...request.postDataJSON() };
+      body = state.settings;
+    }
     else if (path === "/api/notebooks/") body = [{ id: 1, name: "Core", scope: "USER", permissions: { write: true }, readers: [], editors: [], commenters: [], reviewers: [], lockers: [], team_members: [] }];
     else if (path === "/api/experiment-templates/") body = [state.notebookTemplate];
     else if (path === "/api/experiment-templates/1/") { state.savedStructure = request.postDataJSON(); state.notebookTemplate = { ...state.notebookTemplate, ...state.savedStructure }; body = state.notebookTemplate; }
@@ -134,4 +139,22 @@ test("investigation PDF carries the selected template and previews its layout", 
   await page.getByRole("button", { name: "Export CSV", exact: true }).click();
   await expect.poll(() => state.exportRequest?.message).toContain("CSV");
   expect(state.exportRequest.context.print_template_id).toBeUndefined();
+});
+
+
+test("director disables floating helper, persists it, and enables it again", async ({ page, context }) => {
+  const state = await mockApp(page, context);
+  await page.goto("/settings");
+  const helper = page.getByRole("button", { name: "Open OpenLIMS Assistant", exact: true });
+  await expect(helper).toBeVisible();
+  await page.getByLabel("Show floating assistant helper", { exact: true }).uncheck();
+  await page.getByRole("button", { name: "Save Settings", exact: true }).click();
+  await expect(helper).toHaveCount(0);
+  expect(state.settings.assistant_helper_enabled).toBe(false);
+  await page.reload();
+  await expect(page.getByLabel("Show floating assistant helper", { exact: true })).not.toBeChecked();
+  await expect(helper).toHaveCount(0);
+  await page.getByLabel("Show floating assistant helper", { exact: true }).check();
+  await page.getByRole("button", { name: "Save Settings", exact: true }).click();
+  await expect(helper).toBeVisible();
 });

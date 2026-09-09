@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.33.1 — Configuración del ayudante
+
+Los directores pueden desactivar el botón flotante en **Configuración → Configuración general → Mostrar ayudante flotante**. Al guardar se aplica a la sesión actual; los demás usuarios deben recargar la página. La página del Asistente sigue disponible. Está activado por defecto y se reactiva al restablecer los valores predeterminados. Ejecute las migraciones al actualizar.
+
 ## v0.33.0 — Diseños de cuaderno e informes
 
 En **Cuaderno → Plantillas → Editar estructura**, añada, edite, duplique, reordene y elimine
@@ -67,7 +71,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.33.0`
+**Versión de desarrollo actual:** `v0.33.1`
 
 **Demo:** http://35.164.28.250
 

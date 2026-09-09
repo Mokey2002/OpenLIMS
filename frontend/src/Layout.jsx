@@ -14,6 +14,7 @@ import { apiGet, logout as apiLogout } from "./api";
 import { clearLegacyTokens } from "./auth";
 import { isAdmin, isTech } from "./authz";
 import { OPENLIMS_VERSION } from "./version";
+import { useLanguage } from "./i18n";
 import AssistantWidget from "./components/AssistantWidget";
 
 const FAVORITES_KEY = "openlims_favorites";
@@ -119,6 +120,7 @@ function validIdentity(user) {
 }
 
 export default function Layout() {
+  const { assistantHelperEnabled } = useLanguage();
   const nav = useNavigate();
   const location = useLocation();
   const [me, setMe] = useState(null);
@@ -297,7 +299,7 @@ export default function Layout() {
 
       <Container fluid className="px-4 pb-5"><Outlet /></Container>
       <footer className="app-footer-version">OpenLIMS {OPENLIMS_VERSION}</footer>
-      <AssistantWidget />
+      {assistantHelperEnabled && <AssistantWidget />}
       <TutorialBar userIsAdmin={userIsAdmin} />
     </>
   );

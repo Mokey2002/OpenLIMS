@@ -13,7 +13,7 @@ def test_ui_language_is_available_before_login(api_client):
     response = api_client.get("/api/ui-settings/")
 
     assert response.status_code == 200
-    assert response.data == {"ui_language": "es"}
+    assert response.data == {"ui_language": "es", "assistant_helper_enabled": True}
 
 
 @pytest.mark.django_db
@@ -138,3 +138,14 @@ def test_reset_defaults_disables_foundation_feature_flags(admin_client):
         "studies": False,
         "insight": False,
     }
+
+
+@pytest.mark.django_db
+def test_director_can_disable_helper_and_reset_restores_it(admin_client, api_client, viewer_client):
+    response = admin_client.patch("/api/system-settings/1/", {"assistant_helper_enabled": False}, format="json")
+    assert response.status_code == 200
+    assert api_client.get("/api/ui-settings/").data["assistant_helper_enabled"] is False
+    assert Event.objects.get(action="SETTINGS_UPDATED").payload["after"]["assistant_helper_enabled"] is False
+    assert viewer_client.patch("/api/system-settings/1/", {"assistant_helper_enabled": True}, format="json").status_code == 403
+    assert SystemSettings.load().assistant_helper_enabled is False
+    assert admin_client.post("/api/system-settings/reset-defaults/").data["assistant_helper_enabled"] is True

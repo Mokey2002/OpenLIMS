@@ -4,6 +4,7 @@ from .models import SystemSettings
 
 
 class PublicUISettingsSerializer(serializers.Serializer):
+    assistant_helper_enabled = serializers.BooleanField()
     ui_language = serializers.ChoiceField(choices=SystemSettings.UI_LANGUAGE_CHOICES)
 
 
@@ -27,6 +28,7 @@ class SystemSettingsSerializer(serializers.ModelSerializer):
             "lab_name",
             "organization_name",
             "ui_language",
+            "assistant_helper_enabled",
             "default_timezone",
             "default_sample_status",
             "max_upload_size_mb",
