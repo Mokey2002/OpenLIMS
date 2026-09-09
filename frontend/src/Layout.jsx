@@ -9,12 +9,13 @@ import {
   NavDropdown,
   Spinner,
 } from "react-bootstrap";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { apiGet, logout as apiLogout } from "./api";
 import { clearLegacyTokens } from "./auth";
 import { isAdmin, isTech } from "./authz";
 import { OPENLIMS_VERSION } from "./version";
 import { useLanguage } from "./i18n";
+import RouteContent from "./components/RouteContent";
 import AssistantWidget from "./components/AssistantWidget";
 
 const FAVORITES_KEY = "openlims_favorites";
@@ -297,7 +298,7 @@ export default function Layout() {
         </Container>
       </Navbar>
 
-      <Container fluid className="px-4 pb-5"><Outlet /></Container>
+      <Container fluid className="px-4 pb-5"><RouteContent /></Container>
       <footer className="app-footer-version">OpenLIMS {OPENLIMS_VERSION}</footer>
       {assistantHelperEnabled && <AssistantWidget />}
       <TutorialBar userIsAdmin={userIsAdmin} />
