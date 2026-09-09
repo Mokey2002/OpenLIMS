@@ -80,7 +80,7 @@ API dataset: 1,000 samples and 1,000 assigned work items; 20 warm requests per s
 | Sample-ID search | 7.71 | 11 |
 | Sample detail | 5.76 | 10 |
 
-The sample list's 207 queries are an optimization target. These numbers exclude network and
+This historical baseline predates the v0.33.4 sample-list optimization. These numbers exclude network and
 login overhead. First-request time can include Python URL/module initialization and is not
 a controlled cold-database-cache measurement.
 
@@ -89,3 +89,20 @@ backend with 100 samples/work items. Five Projects and Samples visits plus ten M
 passed with zero document reloads. Observed p95: Projects 439 ms, Samples 462 ms, My Work 505 ms.
 These small smoke measurements do not establish production capacity or concurrency limits.
 The production frontend build and opt-out behavior of routine pytest collection were also checked.
+
+## v0.33.4 sample loading
+
+The same local SQLite fixture (1,000 samples/work items, 20 warm rounds) now records
+9 queries and 17.85 ms p95 for a 50-row sample list, compared with the baseline's
+207 queries and 74.42 ms p95. The response remains 36,406 bytes. Query count is
+independent of page length; a regression test compares 1 and 50 rows.
+
+Permissions are annotated with a correlated membership EXISTS expression, scoped to
+the requesting user. Linked-project summaries consume the ordered prefetch instead
+of issuing another query for each sample. Mutation authorization still checks fresh
+membership. Search waits 250 ms after typing, cancels older requests, and only reloads
+samples when filters or pagination change. Reference data loads on each page visit.
+
+A mocked-browser regression checks request counts, debounce, stale response handling
+and page reset; its timing is not a production speed measurement. SQLite results
+exclude network/concurrent load and do not establish PostgreSQL deployment capacity.

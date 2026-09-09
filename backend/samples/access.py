@@ -123,3 +123,26 @@ def validate_unassign_project(user, sample):
             "Tech users can only unassign samples they created."
         )
     })
+
+
+def with_sample_modify_permission(queryset, user):
+    """Compute display permissions in SQL for a whole page, scoped to this user.
+
+    Mutation authorization still uses require_sample_modify_access on fresh records.
+    """
+    from django.db.models import BooleanField, Case, Exists, IntegerField, OuterRef, Value, When
+    from projects.models import Project
+
+    if not user or not user.is_authenticated:
+        permission = Value(False, output_field=BooleanField())
+    elif is_admin(user):
+        permission = Value(True, output_field=BooleanField())
+    elif not is_tech(user):
+        permission = Value(False, output_field=BooleanField())
+    else:
+        membership = Project.members.through.objects.filter(project_id=OuterRef("project_id"), user_id=user.pk)
+        permission = Case(
+            When(project__isnull=True, created_by_id=user.pk, then=Value(True)),
+            default=Exists(membership), output_field=BooleanField(),
+        )
+    return queryset.annotate(_display_can_modify=permission, _display_permission_user=Value(user.pk if user else None, output_field=IntegerField()))

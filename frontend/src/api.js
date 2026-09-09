@@ -118,8 +118,8 @@ function downloadResponseBlob(response, fallbackFilename) {
   });
 }
 
-export async function apiGet(path) {
-  const response = await request(path, { method: "GET" });
+export async function apiGet(path, { signal } = {}) {
+  const response = await request(path, { method: "GET", signal });
   if (!response.ok) {
     throw new Error(`GET ${normalizeApiPath(path)} failed: ${response.status}`);
   }
