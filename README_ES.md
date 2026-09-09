@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.33.2 — Recuperación de navegación
+
+La navegación permanece visible mientras carga una página. Si una pestaña antigua solicita un módulo que falta después de una actualización, OpenLIMS intenta una recarga automática por versión y pestaña en la URL seleccionada. Los errores persistentes muestran opciones para recargar o volver a Mi trabajo. La navegación normal no recarga el documento.
+
 ## v0.33.1 — Configuración del ayudante
 
 Los directores pueden desactivar el botón flotante en **Configuración → Configuración general → Mostrar ayudante flotante**. Al guardar se aplica a la sesión actual; los demás usuarios deben recargar la página. La página del Asistente sigue disponible. Está activado por defecto y se reactiva al restablecer los valores predeterminados. Ejecute las migraciones al actualizar.
@@ -71,7 +75,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.33.1`
+**Versión de desarrollo actual:** `v0.33.2`
 
 **Demo:** http://35.164.28.250
 
