@@ -30,3 +30,6 @@ media/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Local performance artifacts
+frontend/e2e/performance-results/

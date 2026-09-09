@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.33.2-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.33.3-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -24,6 +24,10 @@
 ---
 
 ## Overview
+
+### v0.33.3 — Performance benchmarks
+
+Opt-in API and real-browser speed tests report p50/p95 latency, payload sizes and query counts. The API suite creates disposable datasets of 100–500,000 samples with assigned work items. Larger capacity remains unverified until tested on representative hardware. See [performance testing](docs/performance_testing.md) for commands, optional budgets and limitations.
 
 ### v0.33.2 — Page navigation recovery
 
@@ -103,7 +107,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.33.2 — Page navigation recovery` (see release notes for validation scope).
+**Current development version:** `v0.33.3 — Performance benchmarks` (see release notes for validation scope).
 
 ### Previous v0.29.0 highlights
 
