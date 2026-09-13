@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.33.4-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.33.5-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -24,6 +24,10 @@
 ---
 
 ## Overview
+
+### v0.33.5 — Remove guided demo
+
+Removed the Getting Started walkthrough, dashboard demo prompt, and floating tour controls. Old `/getting-started` links redirect to My Work. Demo data and the assistant remain available.
 
 ### v0.33.4 — Faster sample loading
 
@@ -111,7 +115,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.33.4 — Faster sample loading` (see release notes for validation scope).
+**Current development version:** `v0.33.5 — Remove guided demo` (see release notes for validation scope).
 
 ### Previous v0.29.0 highlights
 

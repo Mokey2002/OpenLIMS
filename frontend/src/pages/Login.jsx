@@ -170,15 +170,7 @@ export default function Login() {
                   </Button>
                 </Form>
 
-                <Alert variant="light" className="border mt-4 mb-0">
-                  <div className="fw-semibold mb-1">Recommended demo login</div>
-                  <div className="small text-muted">
-                    Start with <strong>director / Director123!</strong> to see the
-                    full guided demo, imports, admin settings, system status, audit
-                    workflows, and mass spec comparison. Then try
-                    <strong> viewer / viewer123</strong> to see read-only access.
-                  </div>
-                </Alert>
+
               </Card.Body>
             </Card>
           </Col>

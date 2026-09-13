@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.33.5 — Eliminación de la demostración guiada
+
+Se eliminaron el recorrido de primeros pasos, el anuncio del panel y los controles flotantes del recorrido. Los enlaces antiguos a `/getting-started` redirigen a Mi trabajo. Los datos de demostración y el asistente siguen disponibles.
+
 ## v0.33.4 — Carga de muestras más rápida
 
 La lista calcula permisos en una consulta y reutiliza los proyectos precargados. La búsqueda espera 250 ms, cancela solicitudes obsoletas y reutiliza los datos auxiliares al filtrar o cambiar de página. En SQLite local, 50 filas pasaron de 207 a 9 consultas (p95: 74,42 a 17,85 ms). La capacidad en producción requiere pruebas en el servidor. Consulte las [notas de versión](docs/releases/v0.33.4.md).
@@ -83,7 +87,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.33.4`
+**Versión de desarrollo actual:** `v0.33.5`
 
 **Demo:** http://35.164.28.250
 

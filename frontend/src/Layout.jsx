@@ -23,7 +23,6 @@ const FAVORITES_KEY = "openlims_favorites";
 const routeLabels = {
   "/": "My Work",
   "/dashboard": "Dashboard",
-  "/getting-started": "Getting Started",
   "/assistant": "Assistant",
   "/projects": "Projects",
   "/samples": "Samples",
@@ -56,55 +55,8 @@ const routeLabels = {
   "/data-migration": "Data Migration",
 };
 
-const tutorialSteps = [
-  { number: 1, title: "My Work overview", path: "/" },
-  { number: 2, title: "Project workspace", path: "/projects" },
-  { number: 3, title: "Sample traceability", path: "/samples" },
-  { number: 4, title: "Import lab data", path: "/imports" },
-  { number: 5, title: "Analyze imported results", path: "/analyze" },
-  { number: 6, title: "Sequence workspaces", path: "/sequences" },
-  { number: 7, title: "Clustal Omega alignments", path: "/alignments" },
-  { number: 8, title: "Local BLAST search", path: "/blast" },
-  { number: 9, title: "Mass spec run details", path: "/mass-spec" },
-  { number: 10, title: "Compare mass spec runs", path: "/mass-spec/compare" },
-  { number: 11, title: "Audit trail", path: "/events" },
-];
-
 function DropdownItemLink({ to, children }) {
   return <NavDropdown.Item as={NavLink} to={to}>{children}</NavDropdown.Item>;
-}
-
-function TutorialBar({ userIsAdmin }) {
-  const location = useLocation();
-  const nav = useNavigate();
-  const params = new URLSearchParams(location.search);
-  const stepNumber = Number(params.get("tour"));
-  if (!stepNumber) return null;
-
-  const steps = userIsAdmin
-    ? [...tutorialSteps, { number: 12, title: "Admin settings", path: "/settings" }, { number: 13, title: "System status", path: "/system-status" }]
-    : tutorialSteps;
-  const index = steps.findIndex((step) => step.number === stepNumber);
-  if (index < 0) return null;
-
-  const step = steps[index];
-  const previous = steps[index - 1];
-  const next = steps[index + 1];
-
-  return (
-    <div className="tutorial-floating-bar">
-      <div>
-        <div className="feed-meta text-light opacity-75">Guided demo step {step.number} of {steps.length}</div>
-        <div className="fw-semibold text-light">{step.title}</div>
-      </div>
-      <div className="inline-actions">
-        <Button variant="outline-light" size="sm" disabled={!previous} onClick={() => previous && nav(`${previous.path}?tour=${previous.number}`)}>Previous</Button>
-        <Button variant="light" size="sm" disabled={!next} onClick={() => next && nav(`${next.path}?tour=${next.number}`)}>{next ? `Next: ${next.title}` : "Done"}</Button>
-        <Button variant="outline-light" size="sm" onClick={() => nav(`/getting-started?tour=${step.number}`)}>Guide</Button>
-        <Button variant="outline-light" size="sm" onClick={() => nav(location.pathname)}>Exit</Button>
-      </div>
-    </div>
-  );
 }
 
 function loadFavorites() {
@@ -225,7 +177,6 @@ export default function Layout() {
               <NavDropdown title="Plan" id="plan-nav">
                 <DropdownItemLink to="/dashboard">Dashboard</DropdownItemLink>
                 <DropdownItemLink to="/projects">Projects</DropdownItemLink>
-                <DropdownItemLink to="/getting-started">Getting Started</DropdownItemLink>
                 <DropdownItemLink to="/assistant">Assistant</DropdownItemLink>
                 {userIsAdmin && <DropdownItemLink to="/workflow-designer">Workflow Designer</DropdownItemLink>}
               </NavDropdown>
@@ -301,7 +252,6 @@ export default function Layout() {
       <Container fluid className="px-4 pb-5"><RouteContent /></Container>
       <footer className="app-footer-version">OpenLIMS {OPENLIMS_VERSION}</footer>
       {assistantHelperEnabled && <AssistantWidget />}
-      <TutorialBar userIsAdmin={userIsAdmin} />
     </>
   );
 }
