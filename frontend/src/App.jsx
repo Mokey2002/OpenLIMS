@@ -30,7 +30,6 @@ const Blast = lazyPage(() => import("./pages/Blast"));
 const MassSpec = lazyPage(() => import("./pages/MassSpec"));
 const MassSpecDetail = lazyPage(() => import("./pages/MassSpecDetail"));
 const MassSpecCompare = lazyPage(() => import("./pages/MassSpecCompare"));
-const GettingStarted = lazyPage(() => import("./pages/GettingStarted"));
 const DataMigration = lazyPage(() => import("./pages/DataMigration"));
 const Assistant = lazyPage(() => import("./pages/Assistant"));
 const MigrationJobDetail = lazyPage(() => import("./pages/MigrationJobDetail"));
@@ -60,7 +59,7 @@ export default function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<MyWork />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="getting-started" element={<GettingStarted />} />
+            <Route path="getting-started" element={<Navigate to="/" replace />} />
             <Route path="assistant" element={<Assistant />} />
             <Route path="samples" element={<SamplesList />} />
             <Route path="samples/:id" element={<SampleDetail />} />
