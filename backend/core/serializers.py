@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from rest_framework import serializers
@@ -67,7 +68,9 @@ class UserListSerializer(serializers.ModelSerializer):
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
+    is_active = serializers.BooleanField(default=True)
+    password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
+    send_invitation = serializers.BooleanField(write_only=True, required=False)
     role = serializers.ChoiceField(
         choices=VALID_ROLES,
         write_only=True,
@@ -85,6 +88,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "last_name",
             "full_name",
             "password",
+            "send_invitation",
             "role",
             "roles",
             "is_active",
@@ -103,12 +107,26 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "date_joined",
         ]
 
+    def validate(self, attrs):
+        from .invitations import invitation_origin
+        invite = attrs.get("send_invitation", False)
+        attrs["send_invitation"] = invite
+        if invite:
+            invitation_origin()
+            if not attrs.get("email") or not attrs.get("is_active", True):
+                raise serializers.ValidationError({"email": "Invitation requires an active user and email address."})
+        elif not attrs.get("password"):
+            raise serializers.ValidationError({"password": "A password is required without an invitation."})
+        return attrs
+
+    @transaction.atomic
     def create(self, validated_data):
         role = validated_data.pop("role")
-        password = validated_data.pop("password")
+        password = validated_data.pop("password", None)
+        invite = validated_data.pop("send_invitation", False)
 
         user = User.objects.create(**validated_data)
-        user.set_password(password)
+        user.set_password(None if invite else password)
 
         if role == "admin":
             user.is_staff = True

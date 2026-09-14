@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.33.5-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.33.6-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -24,6 +24,10 @@
 ---
 
 ## Overview
+
+### v0.33.6 — User invitations
+
+User Management can send welcome emails with a username and a 24-hour, single-use password-setup link. New invitations require users to choose a password before login. Directors can send invitations to existing accounts and retry failed deliveries. Configure SMTP and the exact public HTTPS URL first; see [setup instructions](docs/user_invitations.md).
 
 ### v0.33.5 — Remove guided demo
 
@@ -115,7 +119,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.33.5 — Remove guided demo` (see release notes for validation scope).
+**Current development version:** `v0.33.6 — User invitations` (see release notes for validation scope).
 
 ### Previous v0.29.0 highlights
 

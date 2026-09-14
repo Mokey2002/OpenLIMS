@@ -15,6 +15,24 @@ const SUPPORTED_LANGUAGES = new Set(["en", "es"]);
 const TRANSLATABLE_ATTRIBUTES = ["placeholder", "title", "aria-label"];
 
 const spanishText = {
+  "Set your OpenLIMS password": "Establece tu contraseña de OpenLIMS",
+  "Passwords do not match.": "Las contraseñas no coinciden.",
+  "Password saved. You can now sign in.": "Contraseña guardada. Ya puedes iniciar sesión.",
+  "Invalid invitation link. Ask your director for a new invitation.": "Enlace de invitación no válido. Solicita una nueva invitación a tu director.",
+  "Choose your own password to access your account.": "Elige tu propia contraseña para acceder a tu cuenta.",
+  "New password": "Nueva contraseña",
+  "Confirm password": "Confirmar contraseña",
+  "Save password": "Guardar contraseña",
+  "Unable to set password. Use a strong password, or ask your director for a new invitation if the link has expired.": "No se pudo establecer la contraseña. Usa una contraseña segura o solicita otra invitación a tu director si el enlace venció.",
+  "Enter a username and an email for invitations, or a password for manual accounts.": "Introduce un usuario y un correo para invitaciones, o una contraseña para cuentas manuales.",
+  "Send invitation email so the user can set a password": "Enviar una invitación por correo para que el usuario establezca su contraseña",
+  "User created, but invitation email failed. Check email settings and resend the invitation.": "Usuario creado, pero falló el envío de la invitación. Revisa la configuración del correo y vuelve a enviarla.",
+  "User created. Invitation submitted for email delivery.": "Usuario creado. Invitación enviada al servicio de correo.",
+  "Invitation submitted for email delivery.": "Invitación enviada al servicio de correo.",
+  "Invitation could not be sent. Check the account email and server email settings, then try again.": "No se pudo enviar la invitación. Revisa el correo de la cuenta y la configuración del servidor e inténtalo de nuevo.",
+  "Send invitation": "Enviar invitación",
+  "Sending...": "Enviando...",
+
   // Application shell and navigation
   Demo: "Demostración",
   Dashboard: "Panel",
