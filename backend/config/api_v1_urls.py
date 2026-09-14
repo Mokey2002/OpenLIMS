@@ -1,3 +1,4 @@
+from core.invitations import AcceptInvitationView
 from django.urls import include, path
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -16,6 +17,7 @@ from core.views import (
 app_name = "api-v1"
 
 urlpatterns = [
+    path("auth/set-password/", AcceptInvitationView.as_view(), name="set-password"),
     path("", include("config.api_urls")),
     path("auth/csrf/", CSRFTokenView.as_view(), name="csrf"),
     path("auth/login/", CookieLoginView.as_view(), name="cookie-login"),

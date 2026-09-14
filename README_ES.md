@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.33.6 — Invitaciones de usuarios
+
+La gestión de usuarios envía correos de bienvenida con el usuario y un enlace de un solo uso, válido por 24 horas, para establecer la contraseña. Los directores pueden invitar cuentas existentes y reintentar envíos fallidos. Configura SMTP y la URL HTTPS pública antes de usarlo; consulta la [guía](docs/user_invitations.md).
+
 ## v0.33.5 — Eliminación de la demostración guiada
 
 Se eliminaron el recorrido de primeros pasos, el anuncio del panel y los controles flotantes del recorrido. Los enlaces antiguos a `/getting-started` redirigen a Mi trabajo. Los datos de demostración y el asistente siguen disponibles.
@@ -87,7 +91,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.33.5`
+**Versión de desarrollo actual:** `v0.33.6`
 
 **Demo:** http://35.164.28.250
 

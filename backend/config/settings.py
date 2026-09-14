@@ -239,3 +239,17 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
 OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "60"))
+
+# Account invitations. Configure SMTP before enabling invitation delivery.
+OPENLIMS_EMAIL_ENABLED = env.bool("OPENLIMS_EMAIL_ENABLED", default=False)
+OPENLIMS_PUBLIC_URL = os.getenv("OPENLIMS_PUBLIC_URL", "")
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "openlims@localhost")
+PASSWORD_RESET_TIMEOUT = 86400

@@ -1,3 +1,5 @@
+from rest_framework.decorators import action
+from .invitations import send_invitation, InvitationSendThrottle
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.middleware.csrf import get_token
@@ -160,7 +162,24 @@ class UserAdminViewSet(ModelViewSet):
 
         return UserCreateSerializer
 
+    def get_throttles(self):
+        if self.action in ["create", "invite"]:
+            return [InvitationSendThrottle()]
+        return super().get_throttles()
+
+    def create(self, request, *args, **kwargs):
+        self.invitation_status = None
+        response = super().create(request, *args, **kwargs)
+        response.data["invitation_status"] = self.invitation_status
+        return response
+
+    @action(detail=True, methods=["post"])
+    def invite(self, request, pk=None):
+        status = send_invitation(self.get_object(), request.user)
+        return Response({"invitation_status": status}, status=200 if status == "sent" else 503)
+
     def perform_create(self, serializer):
+        invite = serializer.validated_data.get("send_invitation", False)
         user = serializer.save()
 
         Event.objects.create(
@@ -176,6 +195,9 @@ class UserAdminViewSet(ModelViewSet):
                 "is_active": user.is_active,
             },
         )
+
+        if invite:
+            self.invitation_status = send_invitation(user, self.request.user)
 
     def perform_update(self, serializer):
         user = self.get_object()

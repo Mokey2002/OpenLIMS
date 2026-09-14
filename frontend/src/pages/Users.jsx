@@ -68,6 +68,8 @@ export default function Users() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
+  const [sendInvitation, setSendInvitation] = useState(true);
+  const [invitingId, setInvitingId] = useState(null);
   const [role, setRole] = useState("tech");
 
   const [editingUserId, setEditingUserId] = useState(null);
@@ -121,20 +123,21 @@ export default function Users() {
     setErr("");
     setSuccess("");
 
-    if (!username || !password) {
-      setErr("Username and password are required.");
+    if (!username || (sendInvitation ? !email : !password)) {
+      setErr("Enter a username and an email for invitations, or a password for manual accounts.");
       return;
     }
 
     setSaving(true);
 
     try {
-      await apiPost("/api/admin-users/", {
+      const created = await apiPost("/api/admin-users/", {
         username,
         email,
         first_name: firstName,
         last_name: lastName,
-        password,
+        ...(sendInvitation ? {} : { password }),
+        send_invitation: sendInvitation,
         role,
       });
 
@@ -145,12 +148,28 @@ export default function Users() {
       setPassword("");
       setRole("tech");
 
-      setSuccess("User created successfully.");
+      setSuccess(created.invitation_status === "failed"
+        ? "User created, but invitation email failed. Check email settings and resend the invitation."
+        : created.invitation_status === "sent" ? "User created. Invitation submitted for email delivery." : "User created successfully.");
       await load();
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function inviteUser(user) {
+    setInvitingId(user.id);
+    setErr("");
+    setSuccess("");
+    try {
+      await apiPost(`/api/admin-users/${user.id}/invite/`, {});
+      setSuccess("Invitation submitted for email delivery.");
+    } catch {
+      setErr("Invitation could not be sent. Check the account email and server email settings, then try again.");
+    } finally {
+      setInvitingId(null);
     }
   }
 
@@ -341,6 +360,9 @@ export default function Users() {
           <h5 className="section-title">Create User</h5>
 
           <Form onSubmit={createUser}>
+            <Form.Check className="mb-3" type="switch" id="send-invitation"
+              label="Send invitation email so the user can set a password"
+              checked={sendInvitation} onChange={e => setSendInvitation(e.target.checked)} />
             <Row className="g-3">
               <Col md={3}>
                 <Form.Group>
@@ -357,6 +379,8 @@ export default function Users() {
                 <Form.Group>
                   <Form.Label>Email</Form.Label>
                   <Form.Control
+                    type="email"
+                    required={sendInvitation}
                     placeholder="email@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -391,6 +415,8 @@ export default function Users() {
                   <Form.Label>Temporary Password</Form.Label>
                   <Form.Control
                     type="password"
+                    disabled={sendInvitation}
+                    required={!sendInvitation}
                     placeholder="Temporary password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -581,6 +607,11 @@ export default function Users() {
                           </div>
                         ) : (
                           <div className="inline-actions">
+                            <Button size="sm" variant="outline-primary"
+                              disabled={!user.email || !user.is_active || invitingId !== null}
+                              onClick={() => inviteUser(user)}>
+                              {invitingId === user.id ? "Sending..." : "Send invitation"}
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline-dark"
