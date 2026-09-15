@@ -11,7 +11,7 @@ User = get_user_model()
 
 
 @override_settings(OPENLIMS_EMAIL_ENABLED=True,
-                   OPENLIMS_PUBLIC_URL='https://agrobiom.matmor.unam.mx:8443',
+                   OPENLIMS_PUBLIC_URL='https://lims.example.org:8443',
                    EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
 class InvitationTests(APITestCase):
     def setUp(self):
@@ -29,7 +29,7 @@ class InvitationTests(APITestCase):
 
     def credentials(self):
         link = next(line for line in mail.outbox[-1].body.splitlines() if line.startswith('https://'))
-        self.assertTrue(link.startswith('https://agrobiom.matmor.unam.mx:8443/set-password#'))
+        self.assertTrue(link.startswith('https://lims.example.org:8443/set-password#'))
         return {key: values[0] for key, values in parse_qs(urlsplit(link).fragment).items()}
 
     def test_invite_and_single_use_password_setup(self):

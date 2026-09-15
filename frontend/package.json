@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "predev": "node scripts/write-version.mjs",
     "prebuild": "node scripts/check-feature-translations.mjs && node scripts/write-version.mjs",
-    "check:i18n": "node scripts/check-feature-translations.mjs"
+    "check:i18n": "node scripts/check-feature-translations.mjs",
+    "test:i18n": "node --test scripts/lab-translations.test.mjs"
   },
   "dependencies": {
     "bootstrap": "^5.3.8",

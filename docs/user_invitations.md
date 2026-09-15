@@ -6,7 +6,7 @@ Configure `deploy/.env` with the SMTP service supplied by the hosting team:
 
 ```dotenv
 OPENLIMS_EMAIL_ENABLED=true
-OPENLIMS_PUBLIC_URL=https://agrobiom.matmor.unam.mx:8443
+OPENLIMS_PUBLIC_URL=https://lims.example.org:8443
 EMAIL_HOST=YOUR_SMTP_HOST
 EMAIL_PORT=587
 EMAIL_HOST_USER=YOUR_SMTP_USERNAME

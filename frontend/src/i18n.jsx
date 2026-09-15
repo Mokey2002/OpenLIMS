@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { apiGet } from "./api";
+import { labSpanish } from "./translations/labSpanish";
 
 const LANGUAGE_STORAGE_KEY = "openlims-ui-language";
 const SUPPORTED_LANGUAGES = new Set(["en", "es"]);
@@ -847,6 +848,7 @@ const spanishText = {
   "Lab workflow access focused on sequencing QC, FASTA imports, sequence workspaces, and alignment review.": "Acceso a workflows enfocados en QC de secuenciación, importaciones FASTA, secuencias y revisión de alineamientos.",
   "Lab workflow access focused on endotoxin review, instrument results, sample QC, and project updates.": "Acceso a workflows enfocados en endotoxinas, resultados de instrumentos, QC de muestras y proyectos.",
   "Read-only demo access. Can view dashboards, samples, projects, events, analysis, sequences, and alignments but cannot make changes.": "Acceso de demostración de solo lectura. Puede consultar paneles, muestras, proyectos, eventos, análisis, secuencias y alineamientos sin realizar cambios.",
+  ...labSpanish,
 };
 
 function normalizeLanguage(language) {

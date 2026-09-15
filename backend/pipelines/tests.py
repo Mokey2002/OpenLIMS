@@ -33,7 +33,7 @@ class PipelineWorkflowTests(APITestCase):
         self.qc = User.objects.create_user(username="reviewer", password="pass")
         self.qc.groups.add(qc_group)
 
-        self.project = Project.objects.create(code="UNAM", name="UNAM Pilot")
+        self.project = Project.objects.create(code="LAB", name="LAB Pilot")
         self.project.members.add(self.tech, self.qc)
 
     def create_definitions(self):
@@ -181,7 +181,7 @@ class PipelineWorkflowTests(APITestCase):
         response = self.client.post(
             "/api/samples/",
             {
-                "sample_id": "UNAM-DNA-001",
+                "sample_id": "LAB-DNA-001",
                 "sample_type": "dna",
                 "status": "RECEIVED",
                 "project": self.project.id,
@@ -189,7 +189,7 @@ class PipelineWorkflowTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 201, response.data)
-        sample = Sample.objects.get(sample_id="UNAM-DNA-001")
+        sample = Sample.objects.get(sample_id="LAB-DNA-001")
         run = PipelineRun.objects.get(sample=sample)
         self.assertEqual(run.template, template)
         self.assertEqual(run.steps.get(position=1).status, PipelineStepRun.STATUS_READY)
@@ -199,7 +199,7 @@ class PipelineWorkflowTests(APITestCase):
     def test_steps_advance_in_order_and_wait_for_configured_qc(self):
         template = self.create_template()
         sample = Sample.objects.create(
-            sample_id="UNAM-DNA-002",
+            sample_id="LAB-DNA-002",
             sample_type="DNA",
             project=self.project,
             created_by=self.tech,
@@ -269,7 +269,7 @@ class PipelineWorkflowTests(APITestCase):
     def test_required_analysis_results_block_early_completion(self):
         template = self.create_template()
         sample = Sample.objects.create(
-            sample_id="UNAM-DNA-003",
+            sample_id="LAB-DNA-003",
             sample_type="DNA",
             project=self.project,
             created_by=self.tech,
@@ -294,7 +294,7 @@ class PipelineWorkflowTests(APITestCase):
     def test_failed_work_item_blocks_pipeline_and_future_steps(self):
         template = self.create_template()
         sample = Sample.objects.create(
-            sample_id="UNAM-DNA-004",
+            sample_id="LAB-DNA-004",
             sample_type="DNA",
             project=self.project,
             created_by=self.tech,
@@ -325,7 +325,7 @@ class PipelineWorkflowTests(APITestCase):
     def test_pipeline_can_be_cancelled_with_an_audited_reason(self):
         template = self.create_template()
         sample = Sample.objects.create(
-            sample_id="UNAM-DNA-005",
+            sample_id="LAB-DNA-005",
             sample_type="DNA",
             project=self.project,
             created_by=self.tech,
@@ -341,7 +341,7 @@ class PipelineWorkflowTests(APITestCase):
 
         response = self.client.post(
             f"/api/pipeline-runs/{run_id}/cancel/",
-            {"reason": "UNAM operator stopped the run after a damaged sample was found."},
+            {"reason": "LAB operator stopped the run after a damaged sample was found."},
             format="json",
         )
         self.assertEqual(response.status_code, 200, response.data)
