@@ -585,4 +585,13 @@ export const labSpanish = {
   "Zoom in": "Acercar",
   "Reset zoom": "Restablecer zoom",
   "Copy selected sequence": "Copiar secuencia seleccionada",
+  "Selected region actions": "Acciones de la región seleccionada",
+  "Add annotation": "Agregar anotación",
+  "Add primer": "Agregar cebador",
+  "Add translation": "Agregar traducción",
+  "Add highlight": "Agregar región resaltada",
+  "Create feature from selection": "Crear característica a partir de la selección",
+  "Feature color": "Color de la característica",
+  "The sequence changed. Select the region again.": "La secuencia cambió. Selecciona la región de nuevo.",
+  "Feature added. Save the workspace to keep your changes.": "Característica agregada. Guarda el espacio de trabajo para conservar los cambios.",
 };

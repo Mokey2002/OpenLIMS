@@ -10,6 +10,8 @@ import {
   Row,
   Table,
   Tabs,
+  Dropdown,
+  Modal,
   Tab,
 } from "react-bootstrap";
 import { parseSingleSequence, selectedSequence } from "../utils/sequenceImport";
@@ -249,6 +251,8 @@ export default function Sequences() {
   const [fileLoading, setFileLoading] = useState(false);
   const [sequenceNotice, setSequenceNotice] = useState("");
   const [sequenceError, setSequenceError] = useState("");
+  const [regionMenu, setRegionMenu] = useState(null);
+  const [regionDraft, setRegionDraft] = useState(null);
   const [editorTab, setEditorTab] = useState("features");
 
   function openEditor(tab) {
@@ -449,6 +453,40 @@ export default function Sequences() {
       end: selection.end,
       name: prev.name || "Selected Highlight",
     }));
+  }
+
+  function showRegionMenu(event) {
+    if (!selectedSequence(cleanSequence, selection)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setRegionMenu({
+      x: Math.max(8, Math.min(event.clientX || 8, window.innerWidth - 260)),
+      y: Math.max(8, Math.min(event.clientY || 8, window.innerHeight - 260)),
+      start: Number(selection.start), end: Number(selection.end), sequence: cleanSequence, workspaceId: selectedSequenceId,
+    });
+  }
+
+  function prepareRegionFeature(kind) {
+    if (!userCanWrite || !regionMenu) return;
+    setRegionDraft({ ...regionMenu, kind, name: "", direction: 1, color: "#22c55e" });
+    setRegionMenu(null);
+  }
+
+  function addRegionFeature(event) {
+    event.preventDefault();
+    if (!userCanWrite || !regionDraft || !regionDraft.name.trim()) return;
+    if (regionDraft.workspaceId !== selectedSequenceId || regionDraft.sequence !== cleanSequence || !selectedSequence(cleanSequence, regionDraft)) {
+      setSequenceError(t("The sequence changed. Select the region again."));
+      setRegionDraft(null);
+      return;
+    }
+    const { start, end, name: featureName, color, direction, kind } = regionDraft;
+    const item = { start, end, name: featureName.trim(), color };
+    if (kind !== "highlight") item.direction = Number(direction);
+    const setters = { annotation: setAnnotations, primer: setPrimers, translation: setTranslations, highlight: setHighlights };
+    setters[kind]((items) => [...items, item]);
+    setRegionDraft(null);
+    setSequenceNotice(t("Feature added. Save the workspace to keep your changes."));
   }
 
   async function importSequenceFile(event) {
@@ -1005,6 +1043,48 @@ export default function Sequences() {
 
   return (
     <div className="w-100">
+      {regionMenu && (
+        <Dropdown show onToggle={(open) => { if (!open) setRegionMenu(null); }} focusFirstItemOnShow="keyboard">
+          <Dropdown.Menu show role="menu" aria-label={t("Selected region actions")} style={{ position: "fixed", left: regionMenu.x, top: regionMenu.y, zIndex: 1060, maxHeight: "80vh", overflowY: "auto" }}>
+            <Dropdown.Header>{t("Selected Region")}: {regionMenu.start + 1}–{regionMenu.end}</Dropdown.Header>
+            {[["annotation", "Add annotation"], ["primer", "Add primer"], ["translation", "Add translation"], ["highlight", "Add highlight"]].map(([kind, label]) => (
+              <Dropdown.Item key={kind} disabled={!userCanWrite || regionMenu.sequence !== cleanSequence} onClick={() => prepareRegionFeature(kind)}>{t(label)}</Dropdown.Item>
+            ))}
+            <Dropdown.Divider />
+            <Dropdown.Item onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(selectedSequence(regionMenu.sequence, regionMenu));
+                setSequenceNotice(t("Selected sequence copied."));
+              } catch {
+                setSequenceError(t("Clipboard access failed. Allow clipboard access or copy from the sequence field."));
+              }
+              setRegionMenu(null);
+            }}>{t("Copy selected sequence")}</Dropdown.Item>
+          </Dropdown.Menu>
+        </Dropdown>
+      )}
+      <Modal show={Boolean(regionDraft)} onHide={() => setRegionDraft(null)} centered>
+        <Modal.Header closeButton><Modal.Title>{t("Create feature from selection")}</Modal.Title></Modal.Header>
+        {regionDraft && <Form onSubmit={addRegionFeature}>
+          <Modal.Body>
+            <p>{t("Selected Region")}: {regionDraft.start + 1}–{regionDraft.end}</p>
+            <Form.Group controlId="region-feature-name" className="mb-3">
+              <Form.Label>{t("Name")}</Form.Label>
+              <Form.Control autoFocus required value={regionDraft.name} onChange={(e) => setRegionDraft({ ...regionDraft, name: e.target.value })} />
+            </Form.Group>
+            {regionDraft.kind !== "highlight" && <Form.Group controlId="region-feature-direction" className="mb-3">
+              <Form.Label>{t("Direction")}</Form.Label>
+              <Form.Select value={regionDraft.direction} onChange={(e) => setRegionDraft({ ...regionDraft, direction: Number(e.target.value) })}>
+                <option value={1}>{t("Forward")}</option><option value={-1}>{t("Reverse")}</option>
+              </Form.Select>
+            </Form.Group>}
+            <Form.Group controlId="region-feature-color"><Form.Label>{t("Feature color")}</Form.Label>
+              <Form.Control type="color" value={regionDraft.color} onChange={(e) => setRegionDraft({ ...regionDraft, color: e.target.value })} />
+            </Form.Group>
+          </Modal.Body>
+          <Modal.Footer><Button variant="secondary" onClick={() => setRegionDraft(null)}>{t("Cancel")}</Button><Button type="submit" disabled={!userCanWrite || !regionDraft.name.trim()}>{t("Add")}</Button></Modal.Footer>
+        </Form>}
+      </Modal>
       <div className="page-header">
         <div>
           <h1 className="page-title">Sequences</h1>
@@ -1457,6 +1537,10 @@ export default function Sequences() {
                 <Button size="sm" variant="outline-secondary" disabled={viewer === "circular" || zoom <= 0} onClick={() => setZoom(Math.max(0, zoom - 10))}>{t("Zoom out")}</Button>
                 <Button size="sm" variant="outline-secondary" disabled={viewer === "circular" || zoom >= 100} onClick={() => setZoom(Math.min(100, zoom + 10))}>{t("Zoom in")}</Button>
                 <Button size="sm" variant="outline-secondary" disabled={viewer === "circular"} onClick={() => setZoom(50)}>{t("Reset zoom")}</Button>
+                <Button size="sm" variant="outline-primary" disabled={!selectedSequence(cleanSequence, selection)} onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  showRegionMenu({ clientX: rect.left, clientY: rect.bottom, preventDefault() {}, stopPropagation() {} });
+                }}>{t("Selected region actions")}</Button>
                 <Button size="sm" variant="outline-primary" disabled={!selectedSequence(cleanSequence, selection)} onClick={copySelectedSequence}>{t("Copy selected sequence")}</Button>
               </div>
               {sequenceLength === 0 ? (
@@ -1465,6 +1549,13 @@ export default function Sequences() {
                 </Alert>
               ) : (
                 <div
+                  onContextMenuCapture={showRegionMenu}
+                  onMouseDownCapture={(event) => {
+                    if (event.button === 2 && selectedSequence(cleanSequence, selection)) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }
+                  }}
                   style={{
                     height: "780px",
                     width: "100%",

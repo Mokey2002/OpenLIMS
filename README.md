@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.33.8-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.33.9-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -24,6 +24,10 @@
 ---
 
 ## Overview
+
+### v0.33.9 — Sequence region actions
+
+Select a forward region and right-click to create an annotation, primer, translation, or highlight in a dialog, or copy the bases. A toolbar actions button provides an alternative to right-click. Features remain local until saved.
 
 ### v0.33.8 — Easier sequence workspaces
 
@@ -127,7 +131,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.33.8 — Easier sequence workspaces` (see release notes for validation scope).
+**Current development version:** `v0.33.9 — Sequence region actions` (see release notes for validation scope).
 
 ### Previous v0.29.0 highlights
 
