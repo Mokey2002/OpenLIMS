@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.33.7 — Más traducciones de la interfaz al español
+
+Se agregaron 562 entradas al diccionario en español para Mi trabajo, cuadernos, proyectos, inventario, muestras, usuarios, notificaciones, calidad, tareas, importaciones, flujos de trabajo, informes, procedimientos, controles del asistente, alineamientos y espectrometría de masas. Se utiliza la configuración de idioma existente; se amplía la cobertura, sin afirmar que toda la interfaz esté traducida. No se modifican los registros almacenados ni los identificadores científicos.
+
 ## v0.33.6 — Invitaciones de usuarios
 
 La gestión de usuarios envía correos de bienvenida con el usuario y un enlace de un solo uso, válido por 24 horas, para establecer la contraseña. Los directores pueden invitar cuentas existentes y reintentar envíos fallidos. Configura SMTP y la URL HTTPS pública antes de usarlo; consulta la [guía](docs/user_invitations.md).
@@ -91,7 +95,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.33.6`
+**Versión de desarrollo actual:** `v0.33.7`
 
 **Demo:** http://35.164.28.250
 
