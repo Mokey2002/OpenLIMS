@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.34.0 — Área de trabajo de secuencias
+
+El visor ocupa la pantalla principal, con una barra para guardar, buscar, visualizar y exportar, y paneles laterales para biblioteca, configuración y características. Los espacios nuevos comienzan vacíos; el ejemplo es opcional. Se agregaron filtros por proyecto, edición de características, deshacer/rehacer con historial limitado, estado de guardado y confirmación antes de cambiar o cerrar con cambios sin guardar. Las coordenadas mostradas comienzan en 1 e incluyen el final; las coordenadas almacenadas mantienen su convención. Incluye textos en inglés y español.
+
 ## v0.33.9 — Acciones sobre regiones de secuencias
 
 Selecciona un intervalo directo y haz clic derecho para crear anotaciones, cebadores, traducciones o regiones resaltadas en un diálogo, o copiar las bases. También puedes usar el botón de acciones del visor. Los cambios permanecen locales hasta guardar.
@@ -103,7 +107,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.33.9`
+**Versión de desarrollo actual:** `v0.34.0`
 
 **Demo:** http://35.164.28.250
 

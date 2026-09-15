@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useReducer } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Alert,
@@ -11,10 +11,11 @@ import {
   Table,
   Tabs,
   Dropdown,
-  Modal,
+  Offcanvas,
   Tab,
 } from "react-bootstrap";
 import { parseSingleSequence, selectedSequence } from "../utils/sequenceImport";
+import { initialHistory, workspaceHistory } from "../utils/workspaceHistory";
 import { useLanguage } from "../i18n";
 import { SeqViz } from "seqviz";
 import { apiDelete, apiDownload, apiGet, apiPatch, apiPost } from "../api";
@@ -130,7 +131,7 @@ function isValidRange(item, sequenceLength) {
 }
 
 function formatRange(item) {
-  return `${item.start}–${item.end}`;
+  return `${Number(item.start) + 1}–${item.end}`;
 }
 
 function ColorSwatch({ color }) {
@@ -164,7 +165,7 @@ function SelectionDetails({ selection }) {
       <div className="feed-meta mb-2">Selected Region</div>
 
       <div>
-        <strong>Start:</strong> {selection.start ?? "-"}
+        <strong>Start:</strong> {selection.start === undefined ? "-" : Number(selection.start) + 1}
       </div>
 
       <div>
@@ -199,7 +200,7 @@ function JsonPreview({ title, data }) {
   );
 }
 
-function FeatureTable({ items, type, onRemove, canEdit }) {
+function FeatureTable({ items, type, onRemove, onEdit, canEdit }) {
   if (items.length === 0) {
     return <div className="empty-state mt-3">No {type} added yet.</div>;
   }
@@ -219,7 +220,7 @@ function FeatureTable({ items, type, onRemove, canEdit }) {
       <tbody>
         {items.map((item, index) => (
           <tr key={`${type}-${item.name || item.start}-${index}`}>
-            <td>{item.name || "-"}</td>
+            <td><Button variant="link" onClick={() => onEdit(index)}>{item.name || "-"}</Button></td>
             <td>{formatRange(item)}</td>
             <td>{item.direction === -1 ? "REV" : "FWD"}</td>
             <td>
@@ -245,6 +246,29 @@ function FeatureTable({ items, type, onRemove, canEdit }) {
 }
 
 export default function Sequences() {
+  const [history, dispatch] = useReducer(workspaceHistory, null, () => initialHistory({
+    name: "",
+    description: "",
+    sequenceType: "DNA",
+    topology: "LINEAR",
+    sequence: "",
+    projectId: "",
+    viewer: "linear",
+    showComplement: true,
+    rotateOnScroll: false,
+    zoom: 50,
+    annotations: [],
+    primers: [],
+    translations: [],
+    highlights: [],
+    enzymes: [],
+    bpColors: defaultBpColors,
+  }));
+  const dirty = JSON.stringify(history.value) !== history.saved;
+  const [panel, setPanel] = useState("library");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [visibleFeatures, setVisibleFeatures] = useState(true);
+
   const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useLanguage();
   const [workspaceQuery, setWorkspaceQuery] = useState("");
@@ -257,38 +281,52 @@ export default function Sequences() {
 
   function openEditor(tab) {
     setEditorTab(tab);
-    requestAnimationFrame(() => {
-      document.getElementById("sequence-editors")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    setPanel("features");
   }
 
-  const [name, setName] = useState("Demo GFP Construct");
-  const [description, setDescription] = useState("Saved from SeqViz workspace");
-  const [sequenceType, setSequenceType] = useState("DNA");
-  const [topology, setTopology] = useState("LINEAR");
-  const [sequence, setSequence] = useState(demoSequence);
+  const name = history.value.name;
+  const setName = (value) => dispatch({ type: "set", key: "name", value });
+  const description = history.value.description;
+  const setDescription = (value) => dispatch({ type: "set", key: "description", value });
+  const sequenceType = history.value.sequenceType;
+  const setSequenceType = (value) => dispatch({ type: "set", key: "sequenceType", value });
+  const topology = history.value.topology;
+  const setTopology = (value) => dispatch({ type: "set", key: "topology", value });
+  const sequence = history.value.sequence;
+  const setSequence = (value) => dispatch({ type: "set", key: "sequence", value });
   const [revisions, setRevisions] = useState([]);
   const [changeSummary, setChangeSummary] = useState("");
   const [molecularResult, setMolecularResult] = useState(null);
 
-  const [projectId, setProjectId] = useState("");
+  const projectId = history.value.projectId;
+  const setProjectId = (value) => dispatch({ type: "set", key: "projectId", value });
   const [projects, setProjects] = useState([]);
 
-  const [viewer, setViewer] = useState("both");
-  const [showComplement, setShowComplement] = useState(true);
-  const [rotateOnScroll, setRotateOnScroll] = useState(false);
-  const [zoom, setZoom] = useState(50);
+  const viewer = history.value.viewer;
+  const setViewer = (value) => dispatch({ type: "set", key: "viewer", value });
+  const showComplement = history.value.showComplement;
+  const setShowComplement = (value) => dispatch({ type: "set", key: "showComplement", value });
+  const rotateOnScroll = history.value.rotateOnScroll;
+  const setRotateOnScroll = (value) => dispatch({ type: "set", key: "rotateOnScroll", value });
+  const zoom = history.value.zoom;
+  const setZoom = (value) => dispatch({ type: "set", key: "zoom", value });
 
-  const [annotations, setAnnotations] = useState(defaultAnnotations);
-  const [primers, setPrimers] = useState(defaultPrimers);
-  const [translations, setTranslations] = useState(defaultTranslations);
-  const [highlights, setHighlights] = useState(defaultHighlights);
-  const [enzymes, setEnzymes] = useState(defaultEnzymes);
-  const [bpColors, setBpColors] = useState(defaultBpColors);
+  const annotations = history.value.annotations;
+  const setAnnotations = (value) => dispatch({ type: "set", key: "annotations", value });
+  const primers = history.value.primers;
+  const setPrimers = (value) => dispatch({ type: "set", key: "primers", value });
+  const translations = history.value.translations;
+  const setTranslations = (value) => dispatch({ type: "set", key: "translations", value });
+  const highlights = history.value.highlights;
+  const setHighlights = (value) => dispatch({ type: "set", key: "highlights", value });
+  const enzymes = history.value.enzymes;
+  const setEnzymes = (value) => dispatch({ type: "set", key: "enzymes", value });
+  const bpColors = history.value.bpColors;
+  const setBpColors = (value) => dispatch({ type: "set", key: "bpColors", value });
 
   const [selection, setSelection] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("ATG");
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchMismatch, setSearchMismatch] = useState(0);
 
   const [savedSequences, setSavedSequences] = useState([]);
@@ -365,6 +403,24 @@ export default function Sequences() {
     loadInitialData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const unload = (event) => { event.preventDefault(); event.returnValue = ""; };
+    const navigate = (event) => {
+      const anchor = event.target.closest?.("a[href]");
+      if (anchor && !anchor.hasAttribute("download") && anchor.target !== "_blank" && anchor.href !== window.location.href && !window.confirm(t("Discard unsaved sequence changes?"))) {
+        event.preventDefault(); event.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", unload);
+    document.addEventListener("click", navigate, true);
+    return () => { window.removeEventListener("beforeunload", unload); document.removeEventListener("click", navigate, true); };
+  }, [dirty, t]);
+
+  function allowDiscard() {
+    return !dirty || window.confirm(t("Discard unsaved sequence changes?"));
+  }
 
   async function loadInitialData() {
     const [meData] = await Promise.all([
@@ -466,6 +522,14 @@ export default function Sequences() {
     });
   }
 
+  function editFeature(kind, index) {
+    const collections = { annotation: annotations, primer: primers, translation: translations, highlight: highlights };
+    const item = collections[kind][index];
+    setSelection({ ...item });
+    setPanel(null);
+    setRegionDraft({ ...item, kind, index, sequence: cleanSequence, workspaceId: selectedSequenceId });
+  }
+
   function prepareRegionFeature(kind) {
     if (!userCanWrite || !regionMenu) return;
     setRegionDraft({ ...regionMenu, kind, name: "", direction: 1, color: "#22c55e" });
@@ -484,7 +548,7 @@ export default function Sequences() {
     const item = { start, end, name: featureName.trim(), color };
     if (kind !== "highlight") item.direction = Number(direction);
     const setters = { annotation: setAnnotations, primer: setPrimers, translation: setTranslations, highlight: setHighlights };
-    setters[kind]((items) => [...items, item]);
+    setters[kind]((items) => regionDraft.index === undefined ? [...items, item] : items.map((old, index) => index === regionDraft.index ? item : old));
     setRegionDraft(null);
     setSequenceNotice(t("Feature added. Save the workspace to keep your changes."));
   }
@@ -547,6 +611,9 @@ export default function Sequences() {
   }
 
   function resetDemo() {
+    if (saving || loadingWorkspace || !allowDiscard()) return;
+    setSelectedSequenceId("");
+    setSearchParams({});
     setName("Demo GFP Construct");
     setDescription("Saved from SeqViz workspace");
     setSequenceType("DNA");
@@ -573,11 +640,14 @@ export default function Sequences() {
   }
 
   function startNewWorkspace() {
+    if (saving || loadingWorkspace || !allowDiscard()) return;
     setSelectedSequenceId("");
     setSearchParams({});
     setSaveMessage("");
     setSaveError("");
-    resetDemo();
+    dispatch({ type: "reset", value: { ...history.value, name: "", description: "", sequence: "", projectId: "", annotations: [], primers: [], translations: [], highlights: [], enzymes: [] } });
+    setSelection(null); setRevisions([]); setMolecularResult(null); setChangeSummary("");
+    setPanel("setup");
   }
 
   function buildFeaturesPayload() {
@@ -661,6 +731,7 @@ export default function Sequences() {
         setSaveMessage(`Saved "${saved.name}" successfully.`);
       }
 
+      dispatch({ type: "saved", value: history.value });
       await loadSavedSequences();
     } catch (e) {
       setSaveError(e.message || String(e));
@@ -709,8 +780,8 @@ export default function Sequences() {
     }
   }
 
-  async function loadSequenceWorkspace(id) {
-    if (!id) return;
+  async function loadSequenceWorkspace(id, skipGuard = false) {
+    if (!id || (!skipGuard && !allowDiscard())) return;
 
     setSaveMessage("");
     setSaveError("");
@@ -744,6 +815,8 @@ export default function Sequences() {
 
       setSelection(null);
       setSearchResults([]);
+      dispatch({ type: "checkpoint" });
+      setPanel(null);
       setSaveMessage(`Loaded "${data.name}".`);
     } catch (e) {
       setSaveError(e.message || String(e));
@@ -773,7 +846,8 @@ export default function Sequences() {
       setSaveMessage(`Deleted "${name}".`);
       setSelectedSequenceId("");
       setSearchParams({});
-      resetDemo();
+      dispatch({ type: "reset", value: { ...history.value, name: "", sequence: "", annotations: [], primers: [], translations: [], highlights: [] } });
+      setSelection(null); setRevisions([]); setPanel("library");
       await loadSavedSequences();
     } catch (e) {
       setSaveError(e.message || String(e));
@@ -1031,7 +1105,7 @@ export default function Sequences() {
         revision,
         change_summary: `Restored revision ${revision}`,
       });
-      await loadSequenceWorkspace(selectedSequenceId);
+      await loadSequenceWorkspace(selectedSequenceId, true);
       await loadSavedSequences();
       setSaveMessage(`Revision ${revision} restored as a new immutable revision.`);
     } catch (e) {
@@ -1063,11 +1137,15 @@ export default function Sequences() {
           </Dropdown.Menu>
         </Dropdown>
       )}
-      <Modal show={Boolean(regionDraft)} onHide={() => setRegionDraft(null)} centered>
-        <Modal.Header closeButton><Modal.Title>{t("Create feature from selection")}</Modal.Title></Modal.Header>
+      <Offcanvas show={Boolean(regionDraft)} onHide={() => setRegionDraft(null)} placement="end">
+        <Offcanvas.Header closeButton><Offcanvas.Title>{t(regionDraft?.index === undefined ? "Create feature from selection" : "Edit selected feature")}</Offcanvas.Title></Offcanvas.Header>
         {regionDraft && <Form onSubmit={addRegionFeature}>
-          <Modal.Body>
-            <p>{t("Selected Region")}: {regionDraft.start + 1}–{regionDraft.end}</p>
+          <Offcanvas.Body>
+            <p>{t("Displayed coordinates are 1-based; end position is included.")}</p>
+            <Row className="mb-3">
+              <Col><Form.Group controlId="feature-start"><Form.Label>{t("Start:")}</Form.Label><Form.Control type="number" min={1} max={sequenceLength} required value={Number(regionDraft.start) + 1} onChange={(e) => setRegionDraft({ ...regionDraft, start: Number(e.target.value) - 1 })} /></Form.Group></Col>
+              <Col><Form.Group controlId="feature-end"><Form.Label>{t("End:")}</Form.Label><Form.Control type="number" min={Number(regionDraft.start) + 1} max={sequenceLength} required value={regionDraft.end} onChange={(e) => setRegionDraft({ ...regionDraft, end: Number(e.target.value) })} /></Form.Group></Col>
+            </Row>
             <Form.Group controlId="region-feature-name" className="mb-3">
               <Form.Label>{t("Name")}</Form.Label>
               <Form.Control autoFocus required value={regionDraft.name} onChange={(e) => setRegionDraft({ ...regionDraft, name: e.target.value })} />
@@ -1081,10 +1159,10 @@ export default function Sequences() {
             <Form.Group controlId="region-feature-color"><Form.Label>{t("Feature color")}</Form.Label>
               <Form.Control type="color" value={regionDraft.color} onChange={(e) => setRegionDraft({ ...regionDraft, color: e.target.value })} />
             </Form.Group>
-          </Modal.Body>
-          <Modal.Footer><Button variant="secondary" onClick={() => setRegionDraft(null)}>{t("Cancel")}</Button><Button type="submit" disabled={!userCanWrite || !regionDraft.name.trim()}>{t("Add")}</Button></Modal.Footer>
+          </Offcanvas.Body>
+          <div className="d-flex gap-2 p-3"><Button variant="secondary" onClick={() => setRegionDraft(null)}>{t("Cancel")}</Button><Button type="submit" disabled={!userCanWrite || !regionDraft.name.trim() || !isValidNamedRange(regionDraft, sequenceLength)}>{t(regionDraft.index === undefined ? "Add" : "Apply changes")}</Button></div>
         </Form>}
-      </Modal>
+      </Offcanvas>
       <div className="page-header">
         <div>
           <h1 className="page-title">Sequences</h1>
@@ -1095,9 +1173,7 @@ export default function Sequences() {
 
         <div className="inline-actions">
           <Badge bg="dark">{sequenceLength} bp</Badge>
-          <Button variant="outline-dark" size="sm" onClick={resetDemo}>
-            Reset Demo
-          </Button>
+
         </div>
       </div>
 
@@ -1111,12 +1187,16 @@ export default function Sequences() {
       {sequenceNotice && <Alert variant="success" role="status">{sequenceNotice}</Alert>}
       {sequenceError && <Alert variant="danger">{sequenceError}</Alert>}
 
-      <Row className="g-4 mb-4">
-        <Col lg={4}>
-          <Card className="app-card mb-4 border-0 shadow-sm">
+      <Offcanvas show={panel === "library" || panel === "setup"} onHide={() => setPanel(null)} placement="start" style={{ width: "min(520px, 95vw)" }}>
+        <Offcanvas.Header closeButton><Offcanvas.Title>{t(panel === "library" ? "Sequence library" : "Sequence Setup")}</Offcanvas.Title></Offcanvas.Header>
+        <Offcanvas.Body>
+          <Card className="app-card mb-4 border-0 shadow-sm" hidden={panel !== "library"}>
             <Card.Body>
               <div className="toolbar-row mb-3">
                 <h5 className="section-title mb-0">Saved Workspaces</h5>
+                <Button onClick={startNewWorkspace} disabled={saving || loadingWorkspace}>{t("New sequence")}</Button>
+                <Button variant="outline-primary" onClick={() => setPanel("setup")}>{t("Details and import")}</Button>
+                <Button variant="outline-secondary" size="sm" onClick={() => { resetDemo(); }}>{t("Load example sequence")}</Button>
                 <Badge bg="dark">{savedSequences.length}</Badge>
               </div>
 
@@ -1145,6 +1225,10 @@ export default function Sequences() {
 
               <Form.Group className="mb-3">
                 <Form.Label>Load saved workspace</Form.Label>
+                <Form.Select aria-label={t("Filter by project")} value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="mb-2">
+                  <option value="">{t("All projects")}</option>
+                  {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                </Form.Select>
                 <Form.Control
                   type="search"
                   className="mb-2"
@@ -1156,21 +1240,19 @@ export default function Sequences() {
                 <Form.Select
                   aria-label={t("Load saved workspace")}
                   value={selectedSequenceId}
-                  disabled={loadingWorkspace}
+                  disabled={loadingWorkspace || saving}
                   onChange={(e) => {
                     const id = e.target.value;
-                    setSelectedSequenceId(id);
-
                     if (id) {
                       loadSequenceWorkspace(id);
                     } else {
-                      setSearchParams({});
+                      startNewWorkspace();
                     }
                   }}
                 >
                   <option value="">New unsaved workspace</option>
 
-                  {savedSequences.filter((item) =>
+                  {savedSequences.filter((item) => !projectFilter || String(item.project) === projectFilter || String(item.id) === String(selectedSequenceId)).filter((item) =>
                     String(item.id) === String(selectedSequenceId) ||
                     `${item.name} ${item.sequence_type}`.toLowerCase().includes(workspaceQuery.trim().toLowerCase())
                   ).map((item) => (
@@ -1258,7 +1340,7 @@ export default function Sequences() {
             </Card.Body>
           </Card>
 
-          <Card className="app-card mb-4 border-0 shadow-sm">
+          <Card className="app-card mb-4 border-0 shadow-sm" hidden={panel !== "setup"}>
             <Card.Body>
               <h5 className="section-title">Sequence Setup</h5>
 
@@ -1417,7 +1499,7 @@ export default function Sequences() {
             </Card.Body>
           </Card>
 
-          <Card className="app-card mb-4 border-0 shadow-sm">
+          <Card className="app-card mb-4 border-0 shadow-sm" hidden={panel !== "setup"}>
             <Card.Body>
               <h5 className="section-title">Search</h5>
 
@@ -1505,9 +1587,30 @@ export default function Sequences() {
               </div>
             </Card.Body>
           </Card>
-        </Col>
-
-        <Col lg={8}>
+        </Offcanvas.Body>
+      </Offcanvas>
+      <div className="d-flex flex-wrap align-items-center gap-2 p-3 bg-light border rounded mb-3" role="toolbar" aria-label={t("Sequence tools")}>
+        <Button variant="outline-dark" onClick={() => setPanel("library")}>{t("Sequence library")}</Button>
+        <Button variant="outline-dark" disabled={saving || loadingWorkspace} onClick={startNewWorkspace}>{t("New sequence")}</Button>
+        <Button variant="outline-dark" onClick={() => setPanel("setup")}>{t("Details and import")}</Button>
+        <Button variant="outline-dark" onClick={() => setPanel("features")}>{t("Feature editor")}</Button>
+        <Button disabled={!userCanWrite || saving || loadingWorkspace || !name || !cleanSequence} onClick={saveSequenceWorkspace}>{t(saving ? "Saving..." : "Save")}</Button>
+        <Button variant="outline-secondary" disabled={!userCanWrite || saving || loadingWorkspace || !history.past.length} onClick={() => dispatch({ type: "undo" })}>{t("Undo")}</Button>
+        <Button variant="outline-secondary" disabled={!userCanWrite || saving || loadingWorkspace || !history.future.length} onClick={() => dispatch({ type: "redo" })}>{t("Redo")}</Button>
+        <Button variant="outline-secondary" disabled={!cleanSequence} onClick={exportFasta}>{t("Export FASTA")}</Button>
+        <Badge bg={dirty ? "warning" : "success"} text={dirty ? "dark" : "white"}>{t(dirty ? "Unsaved changes" : "No unsaved changes")}</Badge>
+        <Form.Control style={{ width: 180 }} aria-label={t("Search sequence")} placeholder={t("Search sequence")} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        <Form.Select style={{ width: 170 }} aria-label={t("Viewer Mode")} value={viewer} onChange={(e) => setViewer(e.target.value)}>
+          <option value="linear">{t("Linear Only")}</option><option value="circular">{t("Circular Only")}</option><option value="both">{t("Circular + Linear")}</option>
+        </Form.Select>
+        <Form.Check label={t("Show features")} checked={visibleFeatures} onChange={(e) => setVisibleFeatures(e.target.checked)} />
+      </div>
+      {saveMessage && <Alert variant="success">{saveMessage}</Alert>}
+      {saveError && <Alert variant="danger">{saveError}</Alert>}
+      <p className="small text-muted">{name || t("New sequence")} · {t("Displayed coordinates are 1-based; end position is included.")}</p>
+      {hasSelectionRange() && <p>{t("Selected Region")}: {Number(selection.start) + 1}–{selection.end} ({Number(selection.end) - Number(selection.start)})</p>}
+      <Row className="g-4 mb-4">
+        <Col xs={12}>
           <Card className="app-card h-100 border-0 shadow-sm">
             <Card.Body>
               <div className="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
@@ -1557,7 +1660,7 @@ export default function Sequences() {
                     }
                   }}
                   style={{
-                    height: "780px",
+                    height: "max(420px, calc(100vh - 340px))",
                     width: "100%",
                     border: "1px solid #e5e7eb",
                     borderRadius: "18px",
@@ -1569,14 +1672,22 @@ export default function Sequences() {
                     name={name}
                     seq={cleanSequence}
                     viewer={viewer}
-                    annotations={annotations}
-                    primers={primers}
-                    translations={translations}
-                    highlights={highlights}
+                    annotations={visibleFeatures ? annotations : []}
+                    primers={visibleFeatures ? primers : []}
+                    translations={visibleFeatures ? translations : []}
+                    highlights={visibleFeatures ? highlights : []}
                     enzymes={enzymes}
                     search={search}
                     onSearch={(results) => setSearchResults(results || [])}
-                    onSelection={(selected) => setSelection(selected)}
+                    onSelection={(selected) => {
+                      setSelection(selected);
+                      if (selected?.name) {
+                        for (const [kind, items] of [["annotation", annotations], ["primer", primers], ["translation", translations], ["highlight", highlights]]) {
+                          const index = items.findIndex((item) => item.name === selected.name && item.start === selected.start && item.end === selected.end);
+                          if (index >= 0) { editFeature(kind, index); break; }
+                        }
+                      }
+                    }}
                     showComplement={showComplement}
                     rotateOnScroll={rotateOnScroll}
                     zoom={{ linear: zoom }}
@@ -1594,7 +1705,9 @@ export default function Sequences() {
         </Col>
       </Row>
 
-      <div id="sequence-editors" style={{ scrollMarginTop: "1rem" }}>
+      <Offcanvas show={panel === "features"} onHide={() => setPanel(null)} placement="end" style={{ width: "min(720px, 95vw)" }}>
+      <Offcanvas.Header closeButton><Offcanvas.Title>{t("Feature editor")}</Offcanvas.Title></Offcanvas.Header>
+      <Offcanvas.Body><div id="sequence-editors">
       <Tabs id="sequence-editor-tabs" activeKey={editorTab} onSelect={setEditorTab} className="mb-3">
       <Tab eventKey="features" title={t("Annotations and primers")}>
       <Row className="g-4 mb-4">
@@ -1625,11 +1738,11 @@ export default function Sequences() {
                     <Form.Control
                       type="number"
                       placeholder="Start"
-                      value={annotationForm.start}
+                      value={annotationForm.start === "" ? "" : Number(annotationForm.start) + 1}
                       onChange={(e) =>
                         setAnnotationForm({
                           ...annotationForm,
-                          start: e.target.value,
+                          start: e.target.value === "" ? "" : Number(e.target.value) - 1,
                         })
                       }
                     />
@@ -1692,6 +1805,7 @@ export default function Sequences() {
 
               <FeatureTable
                 items={annotations}
+                onEdit={(index) => editFeature("annotation", index)}
                 type="annotation"
                 onRemove={(index) => removeItem(setAnnotations, index)}
                 canEdit={userCanWrite}
@@ -1727,11 +1841,11 @@ export default function Sequences() {
                     <Form.Control
                       type="number"
                       placeholder="Start"
-                      value={primerForm.start}
+                      value={primerForm.start === "" ? "" : Number(primerForm.start) + 1}
                       onChange={(e) =>
                         setPrimerForm({
                           ...primerForm,
-                          start: e.target.value,
+                          start: e.target.value === "" ? "" : Number(e.target.value) - 1,
                         })
                       }
                     />
@@ -1794,6 +1908,7 @@ export default function Sequences() {
 
               <FeatureTable
                 items={primers}
+                onEdit={(index) => editFeature("primer", index)}
                 type="primer"
                 onRemove={(index) => removeItem(setPrimers, index)}
                 canEdit={userCanWrite}
@@ -1833,11 +1948,11 @@ export default function Sequences() {
                     <Form.Control
                       type="number"
                       placeholder="Start"
-                      value={translationForm.start}
+                      value={translationForm.start === "" ? "" : Number(translationForm.start) + 1}
                       onChange={(e) =>
                         setTranslationForm({
                           ...translationForm,
-                          start: e.target.value,
+                          start: e.target.value === "" ? "" : Number(e.target.value) - 1,
                         })
                       }
                     />
@@ -1900,6 +2015,7 @@ export default function Sequences() {
 
               <FeatureTable
                 items={translations}
+                onEdit={(index) => editFeature("translation", index)}
                 type="translation"
                 onRemove={(index) => removeItem(setTranslations, index)}
                 canEdit={userCanWrite}
@@ -1924,11 +2040,11 @@ export default function Sequences() {
                     <Form.Control
                       type="number"
                       placeholder="Start"
-                      value={highlightForm.start}
+                      value={highlightForm.start === "" ? "" : Number(highlightForm.start) + 1}
                       onChange={(e) =>
                         setHighlightForm({
                           ...highlightForm,
-                          start: e.target.value,
+                          start: e.target.value === "" ? "" : Number(e.target.value) - 1,
                         })
                       }
                     />
@@ -1990,7 +2106,7 @@ export default function Sequences() {
                   <tbody>
                     {highlights.map((item, index) => (
                       <tr key={`${item.start}-${item.end}-${index}`}>
-                        <td>{item.name || "-"}</td>
+                        <td><Button variant="link" onClick={() => editFeature("highlight", index)}>{item.name || "-"}</Button></td>
                         <td>{formatRange(item)}</td>
                         <td>
                           <ColorSwatch color={item.color} />
@@ -2237,7 +2353,7 @@ export default function Sequences() {
       </Row>
       </Tab>
       </Tabs>
-      </div>
+      </div></Offcanvas.Body></Offcanvas>
     </div>
   );
 }
