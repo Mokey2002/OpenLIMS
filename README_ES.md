@@ -2,7 +2,7 @@
 
 ## v0.33.8 — Espacios de secuencias más sencillos
 
-Busca secuencias guardadas por nombre o tipo, usa pestañas de edición y accede a las herramientas desde una región seleccionada. Los datos JSON avanzados se muestran bajo demanda. Incluye textos en inglés y español.
+Busca secuencias guardadas por nombre o tipo, usa pestañas de edición y accede a las herramientas desde una región seleccionada. Los datos JSON avanzados se muestran bajo demanda. Importa un registro FASTA o de texto en un espacio nuevo, con validación del alfabeto y confirmación antes de descartar cambios sin guardar. Copia un intervalo seleccionado en sentido directo y ajusta el zoom lineal junto al visor. Incluye textos en inglés y español.
 
 ## v0.33.7 — Más traducciones de la interfaz al español
 

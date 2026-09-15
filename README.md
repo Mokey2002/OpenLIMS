@@ -27,7 +27,7 @@
 
 ### v0.33.8 — Easier sequence workspaces
 
-Search saved sequences by name or type, use focused editor tabs, and jump from a selected region to its editing tools. Advanced workspace JSON is collapsed by default. Includes English and Spanish UI copy.
+Search saved sequences by name or type, use focused editor tabs, and jump from a selected region to its editing tools. Advanced workspace JSON is collapsed by default. Import a single FASTA/text record as a new workspace with alphabet validation and confirmation before discarding unsaved edits. Copy a forward selected range and adjust linear zoom beside the viewer. Includes English and Spanish UI copy.
 
 ### v0.33.7 — Expanded Spanish UI
 
