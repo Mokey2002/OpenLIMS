@@ -1,1 +1,1 @@
-export const OPENLIMS_VERSION = "v0.33.7";
+export const OPENLIMS_VERSION = "v0.33.8";

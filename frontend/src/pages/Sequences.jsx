@@ -9,7 +9,11 @@ import {
   Form,
   Row,
   Table,
+  Tabs,
+  Tab,
 } from "react-bootstrap";
+import { parseSingleSequence, selectedSequence } from "../utils/sequenceImport";
+import { useLanguage } from "../i18n";
 import { SeqViz } from "seqviz";
 import { apiDelete, apiDownload, apiGet, apiPatch, apiPost } from "../api";
 import { canWrite, readOnlyMessage } from "../authz";
@@ -240,6 +244,19 @@ function FeatureTable({ items, type, onRemove, canEdit }) {
 
 export default function Sequences() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { t } = useLanguage();
+  const [workspaceQuery, setWorkspaceQuery] = useState("");
+  const [fileLoading, setFileLoading] = useState(false);
+  const [sequenceNotice, setSequenceNotice] = useState("");
+  const [sequenceError, setSequenceError] = useState("");
+  const [editorTab, setEditorTab] = useState("features");
+
+  function openEditor(tab) {
+    setEditorTab(tab);
+    requestAnimationFrame(() => {
+      document.getElementById("sequence-editors")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 
   const [name, setName] = useState("Demo GFP Construct");
   const [description, setDescription] = useState("Saved from SeqViz workspace");
@@ -390,7 +407,7 @@ export default function Sequences() {
     );
   }
 
-  function useSelectionForAnnotation() {
+  function applySelectionForAnnotation() {
     if (!hasSelectionRange()) return;
 
     setAnnotationForm((prev) => ({
@@ -401,7 +418,7 @@ export default function Sequences() {
     }));
   }
 
-  function useSelectionForPrimer() {
+  function applySelectionForPrimer() {
     if (!hasSelectionRange()) return;
 
     setPrimerForm((prev) => ({
@@ -412,7 +429,7 @@ export default function Sequences() {
     }));
   }
 
-  function useSelectionForTranslation() {
+  function applySelectionForTranslation() {
     if (!hasSelectionRange()) return;
 
     setTranslationForm((prev) => ({
@@ -423,7 +440,7 @@ export default function Sequences() {
     }));
   }
 
-  function useSelectionForHighlight() {
+  function applySelectionForHighlight() {
     if (!hasSelectionRange()) return;
 
     setHighlightForm((prev) => ({
@@ -432,6 +449,63 @@ export default function Sequences() {
       end: selection.end,
       name: prev.name || "Selected Highlight",
     }));
+  }
+
+  async function importSequenceFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !userCanWrite) return;
+    setSequenceNotice("");
+    setSequenceError("");
+    if (file.size > 1024 * 1024) {
+      setSequenceError(t("Choose a sequence file smaller than 1 MB."));
+      return;
+    }
+    setFileLoading(true);
+    try {
+      const importedType = sequenceType;
+      const parsed = parseSingleSequence(await file.text(), importedType);
+      if (!window.confirm(t("Open this file as a new workspace? Unsaved edits will be discarded. Existing saved workspaces will not change."))) return;
+      setSelectedSequenceId("");
+      setSearchParams({});
+      setName(parsed.name || file.name.replace(/\.[^.]+$/, ""));
+      setDescription("");
+      setSequence(parsed.sequence);
+      setSequenceType(importedType);
+      setTopology("LINEAR");
+      setProjectId("");
+      setAnnotations([]);
+      setPrimers([]);
+      setTranslations([]);
+      setHighlights([]);
+      setEnzymes([]);
+      setSelection(null);
+      setSearchQuery("");
+      setSearchResults([]);
+      setRevisions([]);
+      setChangeSummary("");
+      setMolecularResult(null);
+      setSaveMessage("");
+      setSaveError("");
+      setSequenceNotice(t("Sequence imported locally. Save the workspace to keep it."));
+    } catch (error) {
+      setSequenceError(t(error.message || "Unable to read sequence file."));
+    } finally {
+      setFileLoading(false);
+    }
+  }
+
+  async function copySelectedSequence() {
+    const text = selectedSequence(cleanSequence, selection);
+    if (!text) return;
+    setSequenceNotice("");
+    setSequenceError("");
+    try {
+      await navigator.clipboard.writeText(text);
+      setSequenceNotice(t("Selected sequence copied."));
+    } catch {
+      setSequenceError(t("Clipboard access failed. Allow clipboard access or copy from the sequence field."));
+    }
   }
 
   function resetDemo() {
@@ -935,9 +1009,7 @@ export default function Sequences() {
         <div>
           <h1 className="page-title">Sequences</h1>
           <p className="page-subtitle">
-            Saveable SeqViz workspaces for annotations, primers, translations,
-            enzyme sites, highlights, search, selected regions, and project
-            linkage.
+            {t("Open a saved sequence or paste your own, then select a region to add features.")}
           </p>
         </div>
 
@@ -956,6 +1028,8 @@ export default function Sequences() {
       </Alert>
 
       {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
+      {sequenceNotice && <Alert variant="success" role="status">{sequenceNotice}</Alert>}
+      {sequenceError && <Alert variant="danger">{sequenceError}</Alert>}
 
       <Row className="g-4 mb-4">
         <Col lg={4}>
@@ -991,7 +1065,16 @@ export default function Sequences() {
 
               <Form.Group className="mb-3">
                 <Form.Label>Load saved workspace</Form.Label>
+                <Form.Control
+                  type="search"
+                  className="mb-2"
+                  aria-label={t("Search saved sequences")}
+                  placeholder={t("Search by name or sequence type")}
+                  value={workspaceQuery}
+                  onChange={(e) => setWorkspaceQuery(e.target.value)}
+                />
                 <Form.Select
+                  aria-label={t("Load saved workspace")}
                   value={selectedSequenceId}
                   disabled={loadingWorkspace}
                   onChange={(e) => {
@@ -1007,7 +1090,10 @@ export default function Sequences() {
                 >
                   <option value="">New unsaved workspace</option>
 
-                  {savedSequences.map((item) => (
+                  {savedSequences.filter((item) =>
+                    String(item.id) === String(selectedSequenceId) ||
+                    `${item.name} ${item.sequence_type}`.toLowerCase().includes(workspaceQuery.trim().toLowerCase())
+                  ).map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name} — {item.sequence_type} —{" "}
                       {item.sequence.length} bp
@@ -1205,6 +1291,11 @@ export default function Sequences() {
                 />
               </div>
 
+              <Form.Group className="mb-3" controlId="sequence-file-import">
+                <Form.Label>{t("Open FASTA or text file")}</Form.Label>
+                <Form.Control type="file" accept=".fa,.fasta,.fna,.faa,.txt" disabled={!userCanWrite || fileLoading || saving || loadingWorkspace} onChange={importSequenceFile} />
+                <Form.Text>{t("Select the sequence type first. One record per file, up to 1 MB.")}</Form.Text>
+              </Form.Group>
               <Form.Group>
                 <Form.Label>Sequence</Form.Label>
                 <Form.Control
@@ -1300,7 +1391,7 @@ export default function Sequences() {
                   variant="outline-primary"
                   size="sm"
                   disabled={!userCanWrite || !hasSelectionRange()}
-                  onClick={useSelectionForAnnotation}
+                  onClick={() => { applySelectionForAnnotation(); openEditor("features"); }}
                 >
                   Use for Annotation
                 </Button>
@@ -1309,7 +1400,7 @@ export default function Sequences() {
                   variant="outline-secondary"
                   size="sm"
                   disabled={!userCanWrite || !hasSelectionRange()}
-                  onClick={useSelectionForPrimer}
+                  onClick={() => { applySelectionForPrimer(); openEditor("features"); }}
                 >
                   Use for Primer
                 </Button>
@@ -1318,7 +1409,7 @@ export default function Sequences() {
                   variant="outline-success"
                   size="sm"
                   disabled={!userCanWrite || !hasSelectionRange()}
-                  onClick={useSelectionForTranslation}
+                  onClick={() => { applySelectionForTranslation(); openEditor("translation"); }}
                 >
                   Use for Translation
                 </Button>
@@ -1327,7 +1418,7 @@ export default function Sequences() {
                   variant="outline-warning"
                   size="sm"
                   disabled={!userCanWrite || !hasSelectionRange()}
-                  onClick={useSelectionForHighlight}
+                  onClick={() => { applySelectionForHighlight(); openEditor("translation"); }}
                 >
                   Use for Highlight
                 </Button>
@@ -1362,6 +1453,12 @@ export default function Sequences() {
                 </div>
               </div>
 
+              <div className="d-flex align-items-center flex-wrap gap-2 mb-3">
+                <Button size="sm" variant="outline-secondary" disabled={viewer === "circular" || zoom <= 0} onClick={() => setZoom(Math.max(0, zoom - 10))}>{t("Zoom out")}</Button>
+                <Button size="sm" variant="outline-secondary" disabled={viewer === "circular" || zoom >= 100} onClick={() => setZoom(Math.min(100, zoom + 10))}>{t("Zoom in")}</Button>
+                <Button size="sm" variant="outline-secondary" disabled={viewer === "circular"} onClick={() => setZoom(50)}>{t("Reset zoom")}</Button>
+                <Button size="sm" variant="outline-primary" disabled={!selectedSequence(cleanSequence, selection)} onClick={copySelectedSequence}>{t("Copy selected sequence")}</Button>
+              </div>
               {sequenceLength === 0 ? (
                 <Alert variant="light" className="mb-0">
                   Paste a DNA, RNA, or protein sequence to view it.
@@ -1406,6 +1503,9 @@ export default function Sequences() {
         </Col>
       </Row>
 
+      <div id="sequence-editors" style={{ scrollMarginTop: "1rem" }}>
+      <Tabs id="sequence-editor-tabs" activeKey={editorTab} onSelect={setEditorTab} className="mb-3">
+      <Tab eventKey="features" title={t("Annotations and primers")}>
       <Row className="g-4 mb-4">
         <Col lg={6}>
           <Card className="app-card h-100 border-0 shadow-sm">
@@ -1612,6 +1712,8 @@ export default function Sequences() {
         </Col>
       </Row>
 
+      </Tab>
+      <Tab eventKey="translation" title={t("Translations and highlights")}>
       <Row className="g-4 mb-4">
         <Col lg={6}>
           <Card className="app-card h-100 border-0 shadow-sm">
@@ -1824,6 +1926,8 @@ export default function Sequences() {
         </Col>
       </Row>
 
+      </Tab>
+      <Tab eventKey="enzymes" title={t("Enzymes and display")}>
       <Row className="g-4 mb-4">
         <Col lg={6}>
           <Card className="app-card h-100 border-0 shadow-sm">
@@ -2008,6 +2112,8 @@ export default function Sequences() {
                 ))}
               </Row>
 
+              <details className="mt-3">
+              <summary>{t("Advanced workspace data")}</summary>
               <JsonPreview
                 title="Workspace JSON Preview"
                 data={{
@@ -2033,10 +2139,14 @@ export default function Sequences() {
                   bpColors,
                 }}
               />
+              </details>
             </Card.Body>
           </Card>
         </Col>
       </Row>
+      </Tab>
+      </Tabs>
+      </div>
     </div>
   );
 }

@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.33.7-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.33.8-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -24,6 +24,10 @@
 ---
 
 ## Overview
+
+### v0.33.8 — Easier sequence workspaces
+
+Search saved sequences by name or type, use focused editor tabs, and jump from a selected region to its editing tools. Advanced workspace JSON is collapsed by default. Import a single FASTA/text record as a new workspace with alphabet validation and confirmation before discarding unsaved edits. Copy a forward selected range and adjust linear zoom beside the viewer. Includes English and Spanish UI copy.
 
 ### v0.33.7 — Expanded Spanish UI
 
@@ -123,7 +127,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.33.7 — Expanded Spanish UI` (see release notes for validation scope).
+**Current development version:** `v0.33.8 — Easier sequence workspaces` (see release notes for validation scope).
 
 ### Previous v0.29.0 highlights
 

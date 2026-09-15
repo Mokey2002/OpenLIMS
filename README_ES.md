@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.33.8 — Espacios de secuencias más sencillos
+
+Busca secuencias guardadas por nombre o tipo, usa pestañas de edición y accede a las herramientas desde una región seleccionada. Los datos JSON avanzados se muestran bajo demanda. Importa un registro FASTA o de texto en un espacio nuevo, con validación del alfabeto y confirmación antes de descartar cambios sin guardar. Copia un intervalo seleccionado en sentido directo y ajusta el zoom lineal junto al visor. Incluye textos en inglés y español.
+
 ## v0.33.7 — Más traducciones de la interfaz al español
 
 Se agregaron 562 entradas al diccionario en español para Mi trabajo, cuadernos, proyectos, inventario, muestras, usuarios, notificaciones, calidad, tareas, importaciones, flujos de trabajo, informes, procedimientos, controles del asistente, alineamientos y espectrometría de masas. Se utiliza la configuración de idioma existente; se amplía la cobertura, sin afirmar que toda la interfaz esté traducida. No se modifican los registros almacenados ni los identificadores científicos.
@@ -95,7 +99,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.33.7`
+**Versión de desarrollo actual:** `v0.33.8`
 
 **Demo:** http://35.164.28.250
 
