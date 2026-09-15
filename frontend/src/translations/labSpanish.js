@@ -562,4 +562,11 @@ export const labSpanish = {
   "Demo DNA BLAST DB": "Base de datos de demostración de BLAST para ADN",
   "Small local reference database": "Pequeña base de datos local de referencia",
   "Demo BLAST search": "Búsqueda BLAST de demostración",
+  "Open a saved sequence or paste your own, then select a region to add features.": "Abre una secuencia guardada o pega la tuya y selecciona una región para agregar características.",
+  "Search saved sequences": "Buscar secuencias guardadas",
+  "Search by name or sequence type": "Buscar por nombre o tipo de secuencia",
+  "Annotations and primers": "Anotaciones y cebadores",
+  "Translations and highlights": "Traducciones y regiones resaltadas",
+  "Enzymes and display": "Enzimas y visualización",
+  "Advanced workspace data": "Datos avanzados del espacio de trabajo",
 };
