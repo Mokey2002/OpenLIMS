@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.33.9 — Acciones sobre regiones de secuencias
+
+Selecciona un intervalo directo y haz clic derecho para crear anotaciones, cebadores, traducciones o regiones resaltadas en un diálogo, o copiar las bases. También puedes usar el botón de acciones del visor. Los cambios permanecen locales hasta guardar.
+
 ## v0.33.8 — Espacios de secuencias más sencillos
 
 Busca secuencias guardadas por nombre o tipo, usa pestañas de edición y accede a las herramientas desde una región seleccionada. Los datos JSON avanzados se muestran bajo demanda. Importa un registro FASTA o de texto en un espacio nuevo, con validación del alfabeto y confirmación antes de descartar cambios sin guardar. Copia un intervalo seleccionado en sentido directo y ajusta el zoom lineal junto al visor. Incluye textos en inglés y español.
@@ -99,7 +103,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.33.8`
+**Versión de desarrollo actual:** `v0.33.9`
 
 **Demo:** http://35.164.28.250
 
