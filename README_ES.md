@@ -1,5 +1,23 @@
 # OpenLIMS
 
+## Área de trabajo del proyecto
+
+Abre un proyecto desde **Proyectos** para consultar su descripción, equipo, número de muestras y accesos al trabajo pendiente y a la revisión de calidad.
+
+| Sección | Qué permite hacer |
+| --- | --- |
+| Resumen | Consultar los indicadores y acceder al trabajo que requiere atención. |
+| Muestras | Buscar muestras vinculadas por identificador, estado o contenedor y abrir sus registros. |
+| Flujos de trabajo | Asignar un análisis o pipeline al proyecto, lote o muestra; consultar tareas y resultados. |
+| Revisión de calidad | Ver los totales por estado de las muestras y la cola de revisión de calidad. |
+| Secuencias e importaciones | Consultar secuencias del proyecto, importaciones recientes y alineamientos. |
+| Equipo | Consultar integrantes; los administradores pueden modificar el equipo. |
+| Actividad | Leer publicaciones y actividad reciente; los usuarios con permisos de escritura pueden publicar una nota o imagen. |
+
+**Añadir muestras al proyecto** abre la página de muestras con el proyecto preseleccionado en el formulario y en el filtro. Los usuarios con permisos de escritura pueden asignar flujos y publicar actualizaciones; los lectores mantienen acceso de solo lectura. Los textos nuevos están disponibles en inglés y español.
+
+Para empezar, un administrador puede asignar integrantes y un usuario autorizado puede añadir muestras y asignar un flujo. Las secciones organizan registros y acciones existentes; no agregan módulos de experimentos ni de carga de archivos. La búsqueda abarca las muestras cargadas del proyecto; las importaciones, los alineamientos y la actividad son resúmenes recientes, no una exportación del historial completo.
+
 ## v0.34.0 — Área de trabajo de secuencias
 
 El visor ocupa la pantalla principal, con una barra para guardar, buscar, visualizar y exportar, y paneles laterales para biblioteca, configuración y características. Los espacios nuevos comienzan vacíos; el ejemplo es opcional. Se agregaron filtros por proyecto, edición de características, deshacer/rehacer con historial limitado, estado de guardado y confirmación antes de cambiar o cerrar con cambios sin guardar. Las coordenadas mostradas comienzan en 1 e incluyen el final; las coordenadas almacenadas mantienen su convención. Incluye textos en inglés y español.
