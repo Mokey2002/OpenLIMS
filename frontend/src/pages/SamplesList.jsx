@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Alert,
   Badge,
@@ -83,6 +83,7 @@ async function downloadSelectedSamples(ids) {
 }
 
 export default function SamplesList() {
+  const [searchParams] = useSearchParams();
   const { language } = useLanguage();
   const [sampleForms, setSampleForms] = useState([]);
   const [formValues, setFormValues] = useState({});
@@ -97,13 +98,13 @@ export default function SamplesList() {
 
   const [sampleId, setSampleId] = useState("");
   const [sampleType, setSampleType] = useState("GENERAL");
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(() => searchParams.get("project") || "");
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const sampleRequest = useRef(null);
   const [status, setStatus] = useState("");
-  const [projectFilter, setProjectFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState(() => searchParams.get("project") || "");
   const [containerFilter, setContainerFilter] = useState("");
 
   const [selectedIds, setSelectedIds] = useState([]);
