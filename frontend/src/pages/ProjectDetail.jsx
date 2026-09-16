@@ -9,10 +9,12 @@ import {
   Row,
   Col,
   Table,
+  Nav,
 } from "react-bootstrap";
 import { apiGet, apiPatch, apiPost, apiPostForm } from "../api";
 import ProjectSequences from "../components/ProjectSequences";
 import { canWrite, isAdmin, readOnlyMessage } from "../authz";
+import { filterProjectSamples } from "./projectWorkspace";
 
 function formatTimestamp(ts) {
   if (!ts) return "-";
@@ -145,6 +147,12 @@ function formatCustomFieldValue(value) {
 
 export default function ProjectDetail() {
   const { id } = useParams();
+  return <ProjectWorkspace key={id} id={id} />;
+}
+
+function ProjectWorkspace({ id }) {
+  const [section, setSection] = useState("overview");
+  const [sampleQuery, setSampleQuery] = useState("");
 
   const [project, setProject] = useState(null);
   const [samples, setSamples] = useState([]);
@@ -295,11 +303,14 @@ export default function ProjectDetail() {
   }
 
   useEffect(() => {
+    // Load server data on mount; load also clears the previous request error.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const userIsAdmin = isAdmin(me);
+  const visibleSamples = useMemo(() => filterProjectSamples(samples, sampleQuery), [samples, sampleQuery]);
   const userCanWrite = canWrite(me);
   const readOnlyText = readOnlyMessage(me);
   const assignmentScopeReady =
@@ -594,7 +605,53 @@ export default function ProjectDetail() {
       {err && <Alert variant="danger">{err}</Alert>}
       {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
 
-      <div className="stat-grid mb-4">
+      <Nav variant="pills" className="gap-2 mb-4" aria-label="Project sections">
+        {[["overview", "Overview"], ["samples", "Samples"], ["workflow", "Workflows"],
+          ["review", "Quality review"], ["data", "Sequences & imports"],
+          ["team", "Team"], ["activity", "Activity"]].map(([key, label]) => (
+          <Nav.Item key={key}>
+            <Nav.Link as="button" type="button" active={section === key}
+              aria-current={section === key ? "page" : undefined}
+              onClick={() => setSection(key)}>{label}</Nav.Link>
+          </Nav.Item>
+        ))}
+      </Nav>
+
+      {section === "overview" && (
+        <Card className="app-card mb-4">
+          <Card.Body>
+            <h2 className="h5">Project at a glance</h2>
+            <p>{project.description || "Add a project description to explain the team's goal."}</p>
+            <div className="feed-meta mb-3">
+              <span>Team Members</span>: {project.member_usernames?.join(", ") || "—"}
+            </div>
+            <h3 className="h6">Needs attention</h3>
+            <div className="d-flex flex-wrap gap-2 mb-3">
+              <Button variant="outline-dark" onClick={() => setSection("workflow")}>
+                <span>Open work</span> ({workflowTotals.openWork})
+              </Button>
+              <Button variant="outline-dark" onClick={() => setSection("review")}>
+                <span>QC Review Queue</span> ({openReviewItems.length})
+              </Button>
+              <Button variant="outline-dark" onClick={() => setSection("workflow")}>
+                <span>Failed work items</span> ({workItems.filter(item => item.status === "FAILED").length})
+              </Button>
+            </div>
+            {!samples.length && <Alert variant="info">
+              Start with your team and samples, then assign a workflow. Each section keeps this project's context.
+            </Alert>}
+            <div className="d-flex flex-wrap gap-2">
+              <Button variant="dark" onClick={() => setSection("samples")}>Browse project samples</Button>
+              {userCanWrite && <Link className="btn btn-outline-dark" to={`/samples?project=${id}`}>Add project samples</Link>}
+              {userCanWrite && <Button variant="outline-dark" onClick={() => setSection("workflow")}>Assign Workflow</Button>}
+              {userCanWrite && <Button variant="outline-dark" onClick={() => setSection("activity")}>Post a project update</Button>}
+              {userIsAdmin && <Button variant="outline-dark" onClick={() => setSection("team")}>Manage Team</Button>}
+            </div>
+          </Card.Body>
+        </Card>
+      )}
+
+      <div style={section !== "overview" ? { display: "none" } : undefined} className="stat-grid mb-4">
         <Card className="app-card metric-card h-100">
           <Card.Body>
             <div className="metric-label">Samples</div>
@@ -634,7 +691,7 @@ export default function ProjectDetail() {
         </Card>
       </div>
 
-      <Card className="app-card mb-4">
+      <Card style={section !== "workflow" ? { display: "none" } : undefined} className="app-card mb-4">
         <Card.Body>
           <div className="toolbar-row mb-3">
             <div>
@@ -922,7 +979,7 @@ export default function ProjectDetail() {
         </Card.Body>
       </Card>
 
-      <Row className="g-4 mb-4">
+      <Row style={section !== "team" ? { display: "none" } : undefined} className="g-4 mb-4">
         <Col lg={8}>
           <Card className="app-card h-100">
             <Card.Body>
@@ -1027,7 +1084,7 @@ export default function ProjectDetail() {
         )}
       </Row>
 
-      <Row className="g-4 mb-4">
+      <Row style={section !== "review" ? { display: "none" } : undefined} className="g-4 mb-4">
         <Col lg={6}>
           <Card className="app-card h-100">
             <Card.Body>
@@ -1099,7 +1156,7 @@ export default function ProjectDetail() {
         </Col>
       </Row>
 
-      <Row className="g-4 mb-4">
+      <Row style={section !== "data" ? { display: "none" } : undefined} className="g-4 mb-4">
         <Col lg={6}>
           <Card className="app-card h-100">
             <Card.Body>
@@ -1183,9 +1240,11 @@ export default function ProjectDetail() {
         </Col>
       </Row>
 
-      <ProjectSequences projectId={project.id} />
+      <div hidden={section !== "data"}>
+        <ProjectSequences projectId={project.id} />
+      </div>
 
-      <Card className="app-card mb-4">
+      <Card style={section !== "activity" ? { display: "none" } : undefined} className="app-card mb-4">
         <Card.Body>
           <h5 className="section-title">Project Feed</h5>
 
@@ -1256,7 +1315,7 @@ export default function ProjectDetail() {
         </Card.Body>
       </Card>
 
-      <Card className="app-card mb-4">
+      <Card style={section !== "activity" ? { display: "none" } : undefined} className="app-card mb-4">
         <Card.Body>
           <div className="toolbar-row mb-3">
             <h5 className="section-title mb-0">Recent Project Activity</h5>
@@ -1293,15 +1352,21 @@ export default function ProjectDetail() {
         </Card.Body>
       </Card>
 
-      <Card className="app-card">
+      <Card style={section !== "samples" ? { display: "none" } : undefined} className="app-card">
         <Card.Body>
           <div className="toolbar-row mb-3">
             <h5 className="section-title mb-0">Project Samples</h5>
             <div className="feed-meta">{samples.length} linked samples</div>
+            {userCanWrite && <Link className="btn btn-sm btn-outline-dark" to={`/samples?project=${id}`}>Add project samples</Link>}
           </div>
 
+          <Form.Control type="search" className="mb-3" aria-label="Search project samples"
+            placeholder="Search by sample ID, status, or container"
+            value={sampleQuery} onChange={e => setSampleQuery(e.target.value)} />
           {samples.length === 0 ? (
             <div className="empty-state">No samples in this project yet.</div>
+          ) : visibleSamples.length === 0 ? (
+            <div className="empty-state">No samples match your search.</div>
           ) : (
             <Table responsive hover className="app-table">
               <thead>
@@ -1318,7 +1383,7 @@ export default function ProjectDetail() {
               </thead>
 
               <tbody>
-                {samples.map((sample) => (
+                {visibleSamples.map((sample) => (
                   <tr key={sample.id}>
                     <td>{sample.id}</td>
 
