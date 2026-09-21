@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, Row } from "react-bootstrap";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { login } from "../api";
 
 const demoAccounts = [
@@ -83,7 +83,7 @@ export default function Login() {
     try {
       await login(account.username, account.password);
       nav("/");
-    } catch (e) {
+    } catch {
       setErr(
         `Demo login failed for ${account.label}. Make sure seed_demo has been run.`
       );
@@ -169,6 +169,7 @@ export default function Login() {
                     {loading ? "Signing in..." : "Sign in"}
                   </Button>
                 </Form>
+                <Link to="/forgot-password" className="d-block mt-3">Forgot password?</Link>
 
 
               </Card.Body>

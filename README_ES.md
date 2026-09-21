@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.34.1 — Recuperación de contraseña
+
+Los usuarios pueden solicitar un enlace desde el inicio de sesión. El correo bilingüe incluye un enlace de un solo uso válido durante 24 horas. Las solicitudes tienen límites de frecuencia y muestran la misma confirmación para cuentas existentes y desconocidas. Requiere SMTP, la URL pública HTTPS y un worker de Celery activo. Los cambios de contraseña invalidan las sesiones; tras actualizar, los usuarios deben volver a iniciar sesión. Consulta la [configuración del correo](docs/user_invitations.md).
+
 ## Área de trabajo del proyecto
 
 Las secciones del proyecto reúnen muestras, flujos de trabajo, revisión de calidad, secuencias, equipo y actividad en vistas específicas. El resumen destaca el trabajo pendiente y la revisión de calidad, con accesos para añadir muestras y asignar flujos. Incluye búsqueda de muestras y textos en inglés y español.

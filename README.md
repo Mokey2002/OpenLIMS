@@ -1074,203 +1074,27 @@ OpenLIMS aims to be:
 - Open source and extensible for laboratory-specific workflows and integrations
 - Practical for real lab workflows
 - Easy to run locally or on low-cost cloud infrastructure
-- Useful for small labs, res…20707 tokens truncated…ument results, sample QC, and project updates.",
-  },
-  {
-    label: "Viewer",
-    username: "viewer",
-    password: "viewer123",
-    badge: "Read Only",
-    variant: "outline-secondary",
-    description:
-      "Read-only demo access. Can view dashboards, samples, projects, events, analysis, sequences, and alignments but cannot make changes.",
-  },
-];
+- Useful for small labs, research groups, and biotech teams
+- A strong foundation for lab workflow automation
 
-export default function Login() {
-  const nav = useNavigate();
+---
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [demoLoading, setDemoLoading] = useState("");
+## 👤 Author
 
-  async function submit(e) {
-    e.preventDefault();
+**Eduardo L**
 
-    setErr("");
-    setLoading(true);
+LinkedIn: https://www.linkedin.com/in/edlemus/
 
-    try {
-      await login(username, password);
-      nav("/");
-    } catch (e) {
-      setErr(e.message || String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
+---
 
-  async function loginAsDemo(account) {
-    setErr("");
-    setDemoLoading(account.label);
+## 📄 License
 
-    try {
-      await login(account.username, account.password);
-      nav("/");
-    } catch {
-      setErr(
-        `Demo login failed for ${account.label}. Make sure seed_demo has been run.`
-      );
-    } finally {
-      setDemoLoading("");
-    }
-  }
+Copyright © 2026 Eduardo Lemus.
 
-  return (
-    <div
-      className="d-flex align-items-center justify-content-center"
-      style={{
-        minHeight: "100vh",
-        background:
-          "linear-gradient(135deg, #f8fafc 0%, #eef2ff 45%, #f8fafc 100%)",
-      }}
-    >
-      <div className="w-100 px-3" style={{ maxWidth: "1120px" }}>
-        <div className="text-center mb-4">
-          <div
-            className="mx-auto mb-3 d-flex align-items-center justify-content-center"
-            style={{
-              width: "64px",
-              height: "64px",
-              borderRadius: "18px",
-              background: "#111827",
-              color: "#ffffff",
-              fontWeight: "800",
-              fontSize: "1.4rem",
-              boxShadow: "0 18px 35px rgba(15, 23, 42, 0.18)",
-            }}
-          >
-            OL
-          </div>
+OpenLIMS is open-source software licensed under the
+[Apache License 2.0](LICENSE). You may use, modify, and distribute the source
+code in accordance with the license terms.
 
-          <h1 className="fw-bold mb-2">OpenLIMS</h1>
-
-          <p className="text-muted mb-0">
-            For the best demo experience, start with the Director account first.
-          </p>
-        </div>
-
-        {err && <Alert variant="danger">{err}</Alert>}
-
-        <Row className="g-4 align-items-stretch">
-          <Col lg={5}>
-            <Card className="app-card border-0 shadow-sm h-100">
-              <Card.Body className="p-4">
-                <h4 className="mb-2">Sign in</h4>
-
-                <p className="text-muted">
-                  Use your OpenLIMS account or try one of the demo roles.
-                </p>
-
-                <Form onSubmit={submit}>
-                  <Form.Group className="mb-3" controlId="openlims-username">
-                    <Form.Label>Username</Form.Label>
-                    <Form.Control
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="Enter username"
-                      autoComplete="username"
-                    />
-                  </Form.Group>
-
-                  <Form.Group className="mb-4" controlId="openlims-password">
-                    <Form.Label>Password</Form.Label>
-                    <Form.Control
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter password"
-                      autoComplete="current-password"
-                    />
-                  </Form.Group>
-
-                  <Button
-                    type="submit"
-                    variant="dark"
-                    className="w-100"
-                    disabled={loading || !username || !password}
-                  >
-                    {loading ? "Signing in..." : "Sign in"}
-                  </Button>
-                </Form>
-                <Link to="/forgot-password" className="d-block mt-3">Forgot password?</Link>
-
-
-              </Card.Body>
-            </Card>
-          </Col>
-
-          <Col lg={7}>
-            <Card className="app-card border-0 shadow-sm h-100">
-              <Card.Body className="p-4">
-                <div className="mb-3">
-                  <h4 className="mb-1">Demo Accounts</h4>
-                  <p className="text-muted mb-0">
-                    Start with Director for the full demo, then compare with Tech
-                    and Viewer permissions.
-                  </p>
-                </div>
-
-                <div className="d-grid gap-3">
-                  {demoAccounts.map((account) => (
-                    <div key={account.label} className="soft-card">
-                      <div className="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-                        <div style={{ maxWidth: "520px" }}>
-                          <div className="d-flex align-items-center gap-2 mb-1">
-                            <strong>{account.label}</strong>
-                            <Badge bg="light" text="dark">
-                              {account.badge}
-                            </Badge>
-                          </div>
-
-                          <div className="text-muted small mb-2">
-                            {account.description}
-                          </div>
-
-                          <div className="small">
-                            <code>{account.username}</code>
-                            <span className="text-muted"> / </span>
-                            <code>{account.password}</code>
-                          </div>
-                        </div>
-
-                        <Button
-                          variant={account.variant}
-                          size="sm"
-                          onClick={() => loginAsDemo(account)}
-                          disabled={Boolean(demoLoading)}
-                        >
-                          {demoLoading === account.label
-                            ? "Signing in..."
-                            : `Login as ${account.label}`}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <Alert variant="info" className="mt-4 mb-0">
-                  <strong>Role differences:</strong> Viewer is read-only, Lab
-                  Techs can perform lab workflows, and Director can manage users,
-                  settings, and admin workflows.
-                </Alert>
-              </Card.Body>
-            </Card>
-          </Col>
-        </Row>
-      </div>
-    </div>
-  );
-}
+Third-party dependencies and bundled components remain subject to their own
+licenses. See [`docs/licensing_history.md`](docs/licensing_history.md) for the
+project's licensing history.
