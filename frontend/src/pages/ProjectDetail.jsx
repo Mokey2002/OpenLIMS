@@ -14,6 +14,7 @@ import {
 import { apiGet, apiPatch, apiPost, apiPostForm } from "../api";
 import ProjectSequences from "../components/ProjectSequences";
 import { canWrite, isAdmin, readOnlyMessage } from "../authz";
+import "./ProjectDetail.css";
 import { filterProjectSamples } from "./projectWorkspace";
 
 function formatTimestamp(ts) {
@@ -584,9 +585,10 @@ function ProjectWorkspace({ id }) {
   }
 
   return (
-    <div className="w-100">
-      <div className="page-header">
+    <div className="w-100 project-workspace">
+      <div className="page-header project-header">
         <div>
+          <Link className="project-back" to="/projects">← <span>Projects</span></Link>
           <h1 className="page-title">{project.name}</h1>
           <p className="page-subtitle">
             {project.code} · Project dashboard, QC review, imports, sequences,
@@ -605,7 +607,7 @@ function ProjectWorkspace({ id }) {
       {err && <Alert variant="danger">{err}</Alert>}
       {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
 
-      <Nav variant="pills" className="gap-2 mb-4" aria-label="Project sections">
+      <Nav variant="pills" className="project-navigation mb-4" aria-label="Project sections">
         {[["overview", "Overview"], ["samples", "Samples"], ["workflow", "Workflows"],
           ["review", "Quality review"], ["data", "Sequences & imports"],
           ["team", "Team"], ["activity", "Activity"]].map(([key, label]) => (
@@ -618,7 +620,7 @@ function ProjectWorkspace({ id }) {
       </Nav>
 
       {section === "overview" && (
-        <Card className="app-card mb-4">
+        <Card className="app-card project-summary mb-4">
           <Card.Body>
             <h2 className="h5">Project at a glance</h2>
             <p>{project.description || "Add a project description to explain the team's goal."}</p>
@@ -626,21 +628,21 @@ function ProjectWorkspace({ id }) {
               <span>Team Members</span>: {project.member_usernames?.join(", ") || "—"}
             </div>
             <h3 className="h6">Needs attention</h3>
-            <div className="d-flex flex-wrap gap-2 mb-3">
+            <div className="project-attention mb-4">
               <Button variant="outline-dark" onClick={() => setSection("workflow")}>
-                <span>Open work</span> ({workflowTotals.openWork})
+                <span>Open work</span><strong>{workflowTotals.openWork}</strong>
               </Button>
               <Button variant="outline-dark" onClick={() => setSection("review")}>
-                <span>QC Review Queue</span> ({openReviewItems.length})
+                <span>QC Review Queue</span><strong>{openReviewItems.length}</strong>
               </Button>
               <Button variant="outline-dark" onClick={() => setSection("workflow")}>
-                <span>Failed work items</span> ({workItems.filter(item => item.status === "FAILED").length})
+                <span>Failed work items</span><strong>{workItems.filter(item => item.status === "FAILED").length}</strong>
               </Button>
             </div>
             {!samples.length && <Alert variant="info">
               Start with your team and samples, then assign a workflow. Each section keeps this project's context.
             </Alert>}
-            <div className="d-flex flex-wrap gap-2">
+            <div className="project-actions">
               <Button variant="dark" onClick={() => setSection("samples")}>Browse project samples</Button>
               {userCanWrite && <Link className="btn btn-outline-dark" to={`/samples?project=${id}`}>Add project samples</Link>}
               {userCanWrite && <Button variant="outline-dark" onClick={() => setSection("workflow")}>Assign Workflow</Button>}

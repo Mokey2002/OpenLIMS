@@ -629,4 +629,8 @@ export const labSpanish = {
   "Load example sequence": "Cargar secuencia de ejemplo",
   "Edit selected feature": "Editar característica seleccionada",
   "Apply changes": "Aplicar cambios",
+  "Interactive alignment": "Alineamiento interactivo",
+  "Table view": "Vista de tabla",
+  "Protein alignments use the table view.": "Los alineamientos de proteínas utilizan la vista de tabla.",
+  "The interactive viewer could not load. Use the table view or download FASTA.": "No se pudo cargar el visor interactivo. Utiliza la vista de tabla o descarga el FASTA.",
 };

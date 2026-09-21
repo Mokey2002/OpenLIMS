@@ -11,6 +11,7 @@ import {
 } from "react-bootstrap";
 import { apiGet, apiPost } from "../api";
 import { canWrite, readOnlyMessage } from "../authz";
+import TeselagenAlignment from "../components/TeselagenAlignment";
 import useJobSocket from "../hooks/useJobSocket";
 
 function formatTimestamp(ts) {
@@ -240,6 +241,7 @@ function AlignmentGrid({ records }) {
 }
 
 export default function Alignments() {
+  const [viewer, setViewer] = useState("interactive");
   const [me, setMe] = useState(null);
   const [projects, setProjects] = useState([]);
   const [sequences, setSequences] = useState([]);
@@ -733,7 +735,18 @@ export default function Alignments() {
               This job does not have aligned FASTA output yet.
             </div>
           ) : (
-            <AlignmentGrid records={alignmentRecords} />
+            <>
+              <div className="d-flex gap-2 mb-3">
+                <Button variant={viewer === "interactive" ? "dark" : "outline-dark"} onClick={() => setViewer("interactive")}>Interactive alignment</Button>
+                <Button variant={viewer === "table" ? "dark" : "outline-dark"} onClick={() => setViewer("table")}>Table view</Button>
+              </div>
+              {viewer === "interactive" && !selectedJob.sequences_detail?.some(sequence => sequence.sequence_type === "PROTEIN") ? (
+                <TeselagenAlignment key={`${selectedJob.id}-${selectedJob.updated_at}`} jobId={selectedJob.id} records={alignmentRecords} />
+              ) : <>
+                {viewer === "interactive" && <Alert variant="info">Protein alignments use the table view.</Alert>}
+                <AlignmentGrid records={alignmentRecords} />
+              </>}
+            </>
           )}
         </Card.Body>
       </Card>

@@ -1,0 +1,26 @@
+/* Scoped to the project detail workspace. */
+.project-workspace .project-header { padding: 24px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; align-items: center; }
+.project-back { display: inline-block; margin-bottom: 12px; color: var(--muted); font-size: .875rem; text-decoration: none; }
+.project-workspace .page-title { overflow-wrap: anywhere; }
+.project-navigation { padding: 6px; gap: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+.project-navigation .nav-link { color: var(--text); border-radius: 8px; font-weight: 600; padding: 10px 16px; }
+.project-navigation .nav-link.active { background: var(--brand); color: white; }
+.project-navigation .nav-link:hover:not(.active) { background: var(--panel-2); }
+.project-workspace button:focus-visible, .project-workspace a:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
+.project-summary .card-body { padding: 28px; }
+.project-summary h2 { font-size: 1.3rem; font-weight: 700; margin-bottom: 12px; }
+.project-summary h3 { margin-top: 24px; color: var(--muted); }
+.project-attention { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.project-attention .btn { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; border-color: var(--border); background: var(--panel-2); color: var(--text); text-align: left; }
+.project-attention .btn:hover { border-color: var(--brand); background: var(--panel); }
+.project-attention strong { font-size: 1.8rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.project-actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 20px; border-top: 1px solid var(--border); }
+.project-workspace .metric-card .metric-value { font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) {
+  .project-workspace .project-header, .project-summary .card-body { padding: 18px; }
+  .project-attention { grid-template-columns: 1fr; }
+  .project-attention .btn { flex-direction: row; align-items: center; justify-content: space-between; }
+  .project-navigation .nav-item { flex: 1 0 auto; }
+  .project-navigation .nav-link { width: 100%; }
+  .project-actions > * { flex: 1 1 auto; }
+}

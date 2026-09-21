@@ -9,13 +9,14 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "predev": "node scripts/write-version.mjs",
-    "prebuild": "node scripts/check-feature-translations.mjs && node scripts/write-version.mjs",
+    "predev": "node scripts/prepare-alignment-viewer.mjs && node scripts/write-version.mjs",
+    "prebuild": "node scripts/prepare-alignment-viewer.mjs && node scripts/check-feature-translations.mjs && node scripts/write-version.mjs",
     "check:i18n": "node scripts/check-feature-translations.mjs",
     "test:sequences": "node --test scripts/sequence-import.test.mjs scripts/workspace-history.test.mjs",
     "test:i18n": "node --test scripts/lab-translations.test.mjs"
   },
   "dependencies": {
+    "@teselagen/ove": "0.8.42",
     "bootstrap": "^5.3.8",
     "chart.js": "^4.5.1",
     "react": "^19.2.0",

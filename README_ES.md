@@ -2,21 +2,11 @@
 
 ## Área de trabajo del proyecto
 
-Abre un proyecto desde **Proyectos** para consultar su descripción, equipo, número de muestras y accesos al trabajo pendiente y a la revisión de calidad.
+Las secciones del proyecto reúnen muestras, flujos de trabajo, revisión de calidad, secuencias, equipo y actividad en vistas específicas. El resumen destaca el trabajo pendiente y la revisión de calidad, con accesos para añadir muestras y asignar flujos. Incluye búsqueda de muestras y textos en inglés y español.
 
-| Sección | Qué permite hacer |
-| --- | --- |
-| Resumen | Consultar los indicadores y acceder al trabajo que requiere atención. |
-| Muestras | Buscar muestras vinculadas por identificador, estado o contenedor y abrir sus registros. |
-| Flujos de trabajo | Asignar un análisis o pipeline al proyecto, lote o muestra; consultar tareas y resultados. |
-| Revisión de calidad | Ver los totales por estado de las muestras y la cola de revisión de calidad. |
-| Secuencias e importaciones | Consultar secuencias del proyecto, importaciones recientes y alineamientos. |
-| Equipo | Consultar integrantes; los administradores pueden modificar el equipo. |
-| Actividad | Leer publicaciones y actividad reciente; los usuarios con permisos de escritura pueden publicar una nota o imagen. |
+## Visor interactivo de alineamientos
 
-**Añadir muestras al proyecto** abre la página de muestras con el proyecto preseleccionado en el formulario y en el filtro. Los usuarios con permisos de escritura pueden asignar flujos y publicar actualizaciones; los lectores mantienen acceso de solo lectura. Los textos nuevos están disponibles en inglés y español.
-
-Para empezar, un administrador puede asignar integrantes y un usuario autorizado puede añadir muestras y asignar un flujo. Las secciones organizan registros y acciones existentes; no agregan módulos de experimentos ni de carga de archivos. La búsqueda abarca las muestras cargadas del proyecto; las importaciones, los alineamientos y la actividad son resúmenes recientes, no una exportación del historial completo.
+Los alineamientos de ADN y ARN completados se muestran en el visor TeselaGen Open Vector Editor alojado localmente, con vista de tabla y descargas FASTA/JSON disponibles. Los alineamientos de proteínas conservan la tabla. Clustal Omega sigue ejecutando los trabajos; las interacciones del visor no modifican los resultados guardados. Los controles del visor integrado están en inglés.
 
 ## v0.34.0 — Área de trabajo de secuencias
 
