@@ -27,21 +27,11 @@
 
 ### Project workspace
 
-Open a project from **Projects** to see its description, team, sample count, and shortcuts to open work and QC review. Use the project sections to focus on one task:
+Project sections bring samples, workflows, quality review, sequences, team membership, and activity into focused views. The overview highlights open work and QC items, with shortcuts to add samples and assign workflows. Includes project sample search and English/Spanish labels.
 
-| Section | What you can do |
-| --- | --- |
-| Overview | Check summary counts and jump to work that needs attention. |
-| Samples | Search linked samples by sample ID, status, or container and open their records. |
-| Workflows | Assign an analysis or pipeline to the project, a batch, or a sample; review work and results. |
-| Quality review | See sample status totals and the open QC review queue. |
-| Sequences & imports | View project sequences, recent imports, and alignments. |
-| Team | View membership; administrators can update the team. |
-| Activity | Read project posts and recent recorded activity; writers can post a note or image. |
+### Interactive alignment viewer
 
-**Add project samples** opens the sample page with the project preselected in both the creation form and list filter. Writers can assign workflows and post updates; viewers retain read-only access. New interface labels support English and Spanish.
-
-For a new project, an administrator can assign team members, then an authorized writer can add samples and assign a workflow. These sections organize existing records and actions; they do not add new experiment or file-upload modules. Search covers the samples loaded for the project, while imports, alignments, and activity are recent summaries rather than a complete history export.
+Completed DNA and RNA alignments open in the locally hosted TeselaGen Open Vector Editor viewer, with a table view and FASTA/JSON downloads available. Protein alignments retain the table view. Clustal Omega still runs the alignment jobs; viewer interactions do not modify saved results. The embedded viewer's controls are in English.
 
 ### v0.34.0 — Sequence workbench
 
