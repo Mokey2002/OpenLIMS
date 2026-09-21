@@ -18,6 +18,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
+
 from events.models import Event
 from .authentication import enforce_csrf
 
@@ -108,6 +110,8 @@ class AcceptInvitationView(APIView):
                 raise serializers.ValidationError({'password': exc.messages})
             user.set_password(values['password'])
             user.save(update_fields=['password'])
+            for outstanding in OutstandingToken.objects.filter(user=user):
+                BlacklistedToken.objects.get_or_create(token=outstanding)
             Event.objects.create(entity_type='User', entity_id=str(user.pk),
                                  action='USER_PASSWORD_SET', actor=user,
                                  payload={'user_id': user.pk})

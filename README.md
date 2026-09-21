@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.34.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.34.1-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -24,6 +24,10 @@
 ---
 
 ## Overview
+
+### v0.34.1 — Self-service password recovery
+
+Users can request a password reset from the login page. A bilingual email provides a single-use link valid for 24 hours. Requests are rate-limited and return the same confirmation for existing and unknown accounts. Requires configured SMTP, the public HTTPS URL, and a running Celery worker. Password changes invalidate sessions; users must sign in again after this upgrade. See [email setup](docs/user_invitations.md).
 
 ### Project workspace
 

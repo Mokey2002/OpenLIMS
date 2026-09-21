@@ -8,7 +8,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.exceptions import TokenError, AuthenticationFailed
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -101,8 +102,14 @@ class CookieRefreshView(APIView):
         if not refresh:
             return Response({"detail": "Refresh cookie is missing."}, status=401)
 
-        serializer = TokenRefreshSerializer(data={"refresh": refresh})
-        serializer.is_valid(raise_exception=True)
+        try:
+            JWTAuthentication().get_user(RefreshToken(refresh))
+            serializer = TokenRefreshSerializer(data={"refresh": refresh})
+            serializer.is_valid(raise_exception=True)
+        except (TokenError, AuthenticationFailed):
+            response = Response({"detail": "Session expired. Please sign in again."}, status=401)
+            _clear_auth_cookies(response)
+            return response
         tokens = serializer.validated_data
 
         response = Response({"detail": "Session refreshed."})

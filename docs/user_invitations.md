@@ -70,3 +70,27 @@ contraseña los invalida todos.
 Si falla el envío, la cuenta sigue creada. Corrige la configuración del correo y
 reenvía la invitación. Si no hay SMTP, puedes desactivar la invitación y crear una
 cuenta con contraseña manual; ese modo no obliga a cambiarla al iniciar sesión.
+
+## Password recovery (v0.34.1) / Recuperación de contraseña
+
+The login page now links to **Forgot password?**. An active user with an existing
+password can request a reset email. Invited accounts without a password still
+need their administrator's invitation. The setup link expires after 24 hours and
+is invalidated when the password changes. Requesting a link does not change the
+password. If delivery fails, the user can request another link or ask an admin.
+
+Recovery email runs in Celery: configure the same SMTP and OPENLIMS_PUBLIC_URL
+variables on both API and worker, and recreate both when configuration changes.
+Requests return a generic response and are limited to 10 per IP/hour and 3 per
+email/hour. Use the shared cache in deployments with multiple API processes.
+
+En el inicio de sesión, **¿Olvidaste tu contraseña?** permite solicitar un enlace
+para una cuenta activa que ya tenga contraseña. Las cuentas invitadas sin
+contraseña requieren la invitación del administrador. Configura SMTP y la URL
+pública tanto en la API como en el worker de Celery. El enlace vence en 24 horas;
+solicitarlo no cambia la contraseña. Revisa también el correo no deseado.
+
+Password changes now invalidate JWT access and refresh tokens. Existing browser
+sessions issued before v0.34.1 must sign in again after the upgrade.
+Los cambios de contraseña invalidan las sesiones; después de actualizar a
+v0.34.1 los usuarios deben volver a iniciar sesión.
