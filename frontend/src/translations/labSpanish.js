@@ -633,4 +633,13 @@ export const labSpanish = {
   "Table view": "Vista de tabla",
   "Protein alignments use the table view.": "Los alineamientos de proteínas utilizan la vista de tabla.",
   "The interactive viewer could not load. Use the table view or download FASTA.": "No se pudo cargar el visor interactivo. Utiliza la vista de tabla o descarga el FASTA.",
+  "Forgot password?": "¿Olvidaste tu contraseña?",
+  "Reset your password": "Restablece tu contraseña",
+  "Enter the email address associated with your OpenLIMS account.": "Introduce el correo asociado a tu cuenta de OpenLIMS.",
+  "Send reset link": "Enviar enlace",
+  "If an eligible account exists, you will receive a password reset email. Check your inbox and spam folder.": "Si existe una cuenta habilitada, recibirás un correo para restablecer la contraseña. Revisa tu bandeja de entrada y el correo no deseado.",
+  "Unable to request a reset link. Please wait and try again, or contact your administrator.": "No se pudo solicitar el enlace. Espera y vuelve a intentarlo, o contacta al administrador.",
+  "Unable to set password. Use a strong password or request a new link.": "No se pudo guardar la contraseña. Usa una contraseña segura o solicita otro enlace.",
+  "Invalid password link. Request a new link or contact your administrator.": "Enlace de contraseña inválido. Solicita otro enlace o contacta al administrador.",
+  "Request a new password reset link": "Solicitar otro enlace para restablecer la contraseña",
 };

@@ -28,7 +28,7 @@ export default function SetPassword() {
       setConfirmation("");
       setDone(true);
     } catch {
-      setError("Unable to set password. Use a strong password, or ask your director for a new invitation if the link has expired.");
+      setError("Unable to set password. Use a strong password or request a new link.");
     } finally {
       setBusy(false);
     }
@@ -37,7 +37,7 @@ export default function SetPassword() {
     <Card><Card.Body>
       <h1 className="h4">Set your OpenLIMS password</h1>
       {done ? <Alert variant="success">Password saved. You can now sign in.</Alert> :
-        !credentials.uid || !credentials.token ? <Alert variant="warning">Invalid invitation link. Ask your director for a new invitation.</Alert> :
+        !credentials.uid || !credentials.token ? <Alert variant="warning">Invalid password link. Request a new link or contact your administrator.</Alert> :
         <Form onSubmit={submit}>
           <p>Choose your own password to access your account.</p>
           {error && <Alert variant="danger">{error}</Alert>}
@@ -51,6 +51,7 @@ export default function SetPassword() {
           </Form.Group>
           <Button type="submit" disabled={busy}>{busy ? "Saving..." : "Save password"}</Button>
         </Form>}
+      <Link to="/forgot-password" className="d-block mt-3">Request a new password reset link</Link>
       <Link to="/login" className="d-block mt-3">Sign in</Link>
     </Card.Body></Card>
   </main>;
