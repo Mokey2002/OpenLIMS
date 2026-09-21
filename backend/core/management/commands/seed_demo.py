@@ -1955,7 +1955,18 @@ def seed_notebook_inventory_requests_demo(
 class Command(BaseCommand):
     help = "Seed OpenLIMS with realistic demo data"
 
+    def add_arguments(self, parser):
+        parser.add_argument("--showcase-only", action="store_true", help="Create only the fictional Aurora walkthrough project.")
+        parser.add_argument("--owner", help="Existing active username for the Aurora showcase.")
+
     def handle(self, *args, **options):
+        if options.get("showcase_only"):
+            from django.core.management import call_command
+            from django.core.management.base import CommandError
+            if not options.get("owner"):
+                raise CommandError("--showcase-only requires --owner with an existing active username.")
+            call_command("seed_showcase", owner=options["owner"], stdout=self.stdout)
+            return
         self.stdout.write("Seeding OpenLIMS demo data...")
 
         # --------------------------------------------------
