@@ -32,3 +32,10 @@
 .notebook-template { padding: 1rem; border: 1px solid var(--notebook-border); border-radius: .7rem; }
 .notebook-template.inactive { opacity: .65; background: #f6f7f8; }
 @media (max-width: 991.98px) { .notebook-sidebar { position: static; } .notebook-experiment-list { max-height: 360px; } }
+
+.notebook-guide { border: 1px solid var(--notebook-border); border-radius: .75rem; padding: 1rem 1.2rem; background: #f2f8f8; }
+.notebook-guide summary { cursor: pointer; font-weight: 600; color: var(--notebook-ink); }
+.notebook-guide-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; padding-top: 1rem; }
+.notebook-guide-grid p { margin: .5rem 0 0; color: #465763; }
+.notebook-context { padding: 1rem; border-radius: .75rem; background: #f2f8f8; color: #344852; }
+@media (max-width: 767.98px) { .notebook-guide-grid { grid-template-columns: 1fr; gap: 1rem; } }
