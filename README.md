@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.34.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.34.2-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -24,6 +24,10 @@
 ---
 
 ## Overview
+
+### v0.34.2 — Guided notebook workspace
+
+Electronic notebooks now include a three-step introduction, clearer experiment and linked-record tabs, and quick actions for notes, tables, method steps, and results. New experiments start with Objective, Method, Observations, Results, and Conclusion sections in English or Spanish. Existing experiment content and permissions are preserved.
 
 ### v0.34.1 — Self-service password recovery
 
@@ -147,7 +151,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.34.0 — Sequence workbench` (see release notes for validation scope).
+**Current development version:** `v0.34.2 — Guided notebook workspace`.
 
 ### Previous v0.29.0 highlights
 
