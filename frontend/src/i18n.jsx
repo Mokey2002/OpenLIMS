@@ -16,6 +16,7 @@ const SUPPORTED_LANGUAGES = new Set(["en", "es"]);
 const TRANSLATABLE_ATTRIBUTES = ["placeholder", "title", "aria-label"];
 
 const spanishText = {
+  "Write in the sections below. Changes save automatically; check the save status above before leaving.": "Escribe en las secciones de abajo. Los cambios se guardan automáticamente; revisa el estado del guardado antes de salir.",
   "Set your OpenLIMS password": "Establece tu contraseña de OpenLIMS",
   "Passwords do not match.": "Las contraseñas no coinciden.",
   "Password saved. You can now sign in.": "Contraseña guardada. Ya puedes iniciar sesión.",
