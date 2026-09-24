@@ -22,6 +22,7 @@ const FAVORITES_KEY = "openlims_favorites";
 
 const routeLabels = {
   "/": "My Work",
+  "/me": "My profile",
   "/dashboard": "Dashboard",
   "/assistant": "Assistant",
   "/projects": "Projects",
@@ -243,6 +244,7 @@ export default function Layout() {
                   <div className="text-light opacity-75" data-testid="current-user-roles">{me?.roles?.length ? me.roles.join(", ") : (identityLoadError ? "Unable to load role" : "No assigned role")}</div>
                 </div>
               )}
+              <Button as={NavLink} to="/me" variant="outline-light" size="sm">My profile</Button>
               <Button variant="outline-light" size="sm" onClick={logout}>Logout</Button>
             </div>
           </Navbar.Collapse>
