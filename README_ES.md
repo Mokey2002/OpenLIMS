@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.34.3 — Mi perfil
+
+Cada usuario puede abrir **Mi perfil**, junto a Cerrar sesión, para consultar su usuario, nombre, correo, estado, último inicio de sesión, roles y proyectos accesibles. Incluye recuperación de contraseña por correo y textos en español e inglés. Los datos y roles siguen bajo administración.
+
 ## v0.34.1 — Recuperación de contraseña
 
 Los usuarios pueden solicitar un enlace desde el inicio de sesión. El correo bilingüe incluye un enlace de un solo uso válido durante 24 horas. Las solicitudes tienen límites de frecuencia y muestran la misma confirmación para cuentas existentes y desconocidas. Requiere SMTP, la URL pública HTTPS y un worker de Celery activo. Los cambios de contraseña invalidan las sesiones; tras actualizar, los usuarios deben volver a iniciar sesión. Consulta la [configuración del correo](docs/user_invitations.md).
