@@ -675,7 +675,7 @@ export default function SamplesList() {
           </div>
 
           {samples.length === 0 ? (
-            <div className="empty-state">{emptyMessage}</div>
+            <div className="empty-state"><h5>{language === "es" ? "No hay muestras que mostrar" : "No samples to show"}</h5><p>{emptyMessage}</p><p>{language === "es" ? "Revisa los filtros. Si tienes permiso, registra una muestra con el formulario de arriba; de lo contrario, solicita acceso al administrador de tu proyecto." : "Check your filters. If you have access, register a sample using the form above; otherwise, ask your project administrator for access."}</p><Link className="btn btn-outline-dark" to="/projects">{language === "es" ? "Ver mis proyectos" : "View my projects"}</Link></div>
           ) : (
             <Table responsive hover className="app-table align-middle">
               <thead>

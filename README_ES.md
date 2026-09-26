@@ -1,121 +1,16 @@
 # OpenLIMS
 
+## v0.34.4 — Mejoras de uso diario
+
+Búsqueda de bitácoras y experimentos, enlaces directos, navegación, mensajes de acciones y permisos, páginas vacías útiles y notificaciones de asignación y revisión.
+
 ## v0.34.3 — Mi perfil
 
 Cada usuario puede abrir **Mi perfil**, junto a Cerrar sesión, para consultar su usuario, nombre, correo, estado, último inicio de sesión, roles y proyectos accesibles. Incluye recuperación de contraseña por correo y textos en español e inglés. Los datos y roles siguen bajo administración.
 
-## v0.34.1 — Recuperación de contraseña
+## v0.34.2 — Bitácoras más claras
 
-Los usuarios pueden solicitar un enlace desde el inicio de sesión. El correo bilingüe incluye un enlace de un solo uso válido durante 24 horas. Las solicitudes tienen límites de frecuencia y muestran la misma confirmación para cuentas existentes y desconocidas. Requiere SMTP, la URL pública HTTPS y un worker de Celery activo. Los cambios de contraseña invalidan las sesiones; tras actualizar, los usuarios deben volver a iniciar sesión. Consulta la [configuración del correo](docs/user_invitations.md).
-
-## Área de trabajo del proyecto
-
-Las secciones del proyecto reúnen muestras, flujos de trabajo, revisión de calidad, secuencias, equipo y actividad en vistas específicas. El resumen destaca el trabajo pendiente y la revisión de calidad, con accesos para añadir muestras y asignar flujos. Incluye búsqueda de muestras y textos en inglés y español.
-
-## Visor interactivo de alineamientos
-
-Los alineamientos de ADN y ARN completados se muestran en el visor TeselaGen Open Vector Editor alojado localmente, con vista de tabla y descargas FASTA/JSON disponibles. Los alineamientos de proteínas conservan la tabla. Clustal Omega sigue ejecutando los trabajos; las interacciones del visor no modifican los resultados guardados. Los controles del visor integrado están en inglés.
-
-## v0.34.0 — Área de trabajo de secuencias
-
-El visor ocupa la pantalla principal, con una barra para guardar, buscar, visualizar y exportar, y paneles laterales para biblioteca, configuración y características. Los espacios nuevos comienzan vacíos; el ejemplo es opcional. Se agregaron filtros por proyecto, edición de características, deshacer/rehacer con historial limitado, estado de guardado y confirmación antes de cambiar o cerrar con cambios sin guardar. Las coordenadas mostradas comienzan en 1 e incluyen el final; las coordenadas almacenadas mantienen su convención. Incluye textos en inglés y español.
-
-## v0.33.9 — Acciones sobre regiones de secuencias
-
-Selecciona un intervalo directo y haz clic derecho para crear anotaciones, cebadores, traducciones o regiones resaltadas en un diálogo, o copiar las bases. También puedes usar el botón de acciones del visor. Los cambios permanecen locales hasta guardar.
-
-## v0.33.8 — Espacios de secuencias más sencillos
-
-Busca secuencias guardadas por nombre o tipo, usa pestañas de edición y accede a las herramientas desde una región seleccionada. Los datos JSON avanzados se muestran bajo demanda. Importa un registro FASTA o de texto en un espacio nuevo, con validación del alfabeto y confirmación antes de descartar cambios sin guardar. Copia un intervalo seleccionado en sentido directo y ajusta el zoom lineal junto al visor. Incluye textos en inglés y español.
-
-## v0.33.7 — Más traducciones de la interfaz al español
-
-Se agregaron 562 entradas al diccionario en español para Mi trabajo, cuadernos, proyectos, inventario, muestras, usuarios, notificaciones, calidad, tareas, importaciones, flujos de trabajo, informes, procedimientos, controles del asistente, alineamientos y espectrometría de masas. Se utiliza la configuración de idioma existente; se amplía la cobertura, sin afirmar que toda la interfaz esté traducida. No se modifican los registros almacenados ni los identificadores científicos.
-
-## v0.33.6 — Invitaciones de usuarios
-
-La gestión de usuarios envía correos de bienvenida con el usuario y un enlace de un solo uso, válido por 24 horas, para establecer la contraseña. Los directores pueden invitar cuentas existentes y reintentar envíos fallidos. Configura SMTP y la URL HTTPS pública antes de usarlo; consulta la [guía](docs/user_invitations.md).
-
-## v0.33.5 — Eliminación de la demostración guiada
-
-Se eliminaron el recorrido de primeros pasos, el anuncio del panel y los controles flotantes del recorrido. Los enlaces antiguos a `/getting-started` redirigen a Mi trabajo. Los datos de demostración y el asistente siguen disponibles.
-
-## v0.33.4 — Carga de muestras más rápida
-
-La lista calcula permisos en una consulta y reutiliza los proyectos precargados. La búsqueda espera 250 ms, cancela solicitudes obsoletas y reutiliza los datos auxiliares al filtrar o cambiar de página. En SQLite local, 50 filas pasaron de 207 a 9 consultas (p95: 74,42 a 17,85 ms). La capacidad en producción requiere pruebas en el servidor. Consulte las [notas de versión](docs/releases/v0.33.4.md).
-
-## v0.33.3 — Pruebas de rendimiento
-
-Pruebas opcionales de API y navegador real miden latencia p50/p95, tamaño de respuestas y consultas SQL. La suite de API crea datos desechables de 100 a 500.000 muestras con tareas asignadas. Esto no certifica capacidad a gran escala. Consulte los [comandos y límites](docs/performance_testing.md).
-
-## v0.33.2 — Recuperación de navegación
-
-La navegación permanece visible mientras carga una página. Si una pestaña antigua solicita un módulo que falta después de una actualización, OpenLIMS intenta una recarga automática por versión y pestaña en la URL seleccionada. Los errores persistentes muestran opciones para recargar o volver a Mi trabajo. La navegación normal no recarga el documento.
-
-## v0.33.1 — Configuración del ayudante
-
-Los directores pueden desactivar el botón flotante en **Configuración → Configuración general → Mostrar ayudante flotante**. Al guardar se aplica a la sesión actual; los demás usuarios deben recargar la página. La página del Asistente sigue disponible. Está activado por defecto y se reactiva al restablecer los valores predeterminados. Ejecute las migraciones al actualizar.
-
-## v0.33.0 — Diseños de cuaderno e informes
-
-En **Cuaderno → Plantillas → Editar estructura**, añada, edite, duplique, reordene y elimine
-secciones de experimentos. Los cambios se aplican a nuevos experimentos, conservando las
-revisiones existentes. Los cambios se auditan y se rechazan guardados desde editores desactualizados.
-
-En **Informes**, **Comparaciones** e **Investigaciones**, seleccione una plantilla para exportar PDF.
-Los directores pueden configurar marca, papel, orientación y posición del resumen; los informes
-de análisis permiten mostrar gráficos antes o después de los datos. La vista previa utiliza datos
-ficticios del tipo de informe seleccionado. Se conservan tablas de evidencia, alcance, notas y limitaciones.
-Consulte las [notas de v0.33.0](docs/releases/v0.33.0.md).
-
-## v0.32.0 — Vistas guardadas y plantillas de impresión
-
-En **Mi trabajo → Personalizar Mi trabajo**, seleccione widgets, columnas y su orden, filtre el
-trabajo asignado y guarde vistas con nombre. Las vistas personales son privadas; la dirección
-puede compartir vistas por rol. La configuración se guarda en el servidor y la última selección
-se recuerda por usuario en el navegador. Estas opciones no cambian los permisos ni los registros.
-
-En **Informes** (PDF de auditoría) y **Etiquetas**, la dirección puede crear plantillas, descargar
-vistas previas con datos ficticios y configurar encabezados, pies, logotipos PNG, papel Carta/A4,
-orientación del informe y cuadrículas de etiquetas. Seleccione una plantilla antes de la vista
-de confirmación habitual: el trabajo conserva su revisión y configuración aunque después se
-edite o archive. La identidad, los códigos de barras, las marcas de reimpresión, el alcance y
-la procedencia de auditoría siguen siendo obligatorios. No se controlan impresoras físicas.
-
-Aplique `settings_app.0005` antes de reiniciar la API y los workers.
-Consulte las [notas de v0.32.0](docs/releases/v0.32.0.md).
-
-## v0.31.0 — Asignaciones y notificaciones del flujo
-
-En Workflow Designer, use **Cuando se activa este paso** para seleccionar un administrador o
-técnico, notificar a la persona asignada y elegir destinatarios adicionales en la aplicación.
-Las acciones respetan la condición del paso: una concentración baja puede activar la revisión,
-asignar el trabajo y notificar a las personas seleccionadas.
-
-Cada ejecución conserva su configuración original. Al activar el paso se comprueba nuevamente
-el acceso a la muestra: las asignaciones no permitidas quedan sin asignar y los destinatarios
-no disponibles se omiten; los resultados quedan auditados. Sincronizar otra vez no duplica avisos;
-un reintento explícito crea otro trabajo y otra notificación. La asignación no concede permisos
-de aprobación QC. No incluye distribución por equipos, correo ni disparadores arbitrarios.
-
-Aplique la migración `pipelines.0005` antes de iniciar la API y los workers actualizados.
-Consulte las [notas de v0.31.0](docs/releases/v0.31.0.md) para las limitaciones de validación.
-
-## v0.30.0 — Flujos de laboratorio configurables
-
-Incluye formularios bilingües con versiones, campos obligatorios, listas, límites y condiciones;
-edición auditada de valores, importación CSV con vista previa, exportación y plantillas JSON.
-Los pasos del flujo pueden utilizar formularios publicados y conservar su versión durante la ejecución.
-
-En Workflow Designer seleccione **Medición del formulario** como origen de una regla, el paso
-de origen, campo, operador y valor esperado. Pruebe una medición de ejemplo antes de guardar.
-Puede activar un paso de revisión cuando la concentración sea menor que 10 y otro de procesamiento
-cuando sea mayor o igual a 10. El origen debe ser una dependencia. Los valores ausentes no activan
-la rama; QC se sigue aplicando y las decisiones quedan auditadas.
-
-La asignación a usuarios y las notificaciones configurables se añaden en v0.31.0. La distribución
-por equipos y las actualizaciones automáticas siguen pendientes.
-Consulte las [notas de v0.30.0](docs/releases/v0.30.0.md).
+Guía de la bitácora, estructura inicial del experimento y acciones rápidas en español e inglés.
 
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
@@ -123,7 +18,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.34.0`
+**Versión de desarrollo actual:** `v0.34.4`
 
 **Demo:** http://35.164.28.250
 

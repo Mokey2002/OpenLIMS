@@ -64,7 +64,30 @@ async function refreshSession() {
   }
 }
 
+let activeMutations = 0;
+let mutationFailure = null;
 async function request(path, options = {}, retry = true) {
+  const tracked = !["GET", "HEAD", "OPTIONS"].includes((options.method || "GET").toUpperCase())
+    && !/\/(auth|assistant)\/|\/autosave\//.test(path);
+  const publish = detail => window.dispatchEvent(new CustomEvent("openlims:request", { detail }));
+  if (tracked) {
+    if (activeMutations === 0) mutationFailure = null;
+    activeMutations += 1;
+    publish({ state: "pending" });
+  }
+  try {
+    const response = await performRequest(path, options, retry);
+    if (tracked && !response.ok) mutationFailure = { state: "error", status: response.status };
+    return response;
+  } catch (error) {
+    if (tracked) mutationFailure = { state: "error" };
+    throw error;
+  } finally {
+    if (tracked && --activeMutations === 0) publish(mutationFailure || { state: "success" });
+  }
+}
+
+async function performRequest(path, options = {}, retry = true) {
   const requestPath = normalizeApiPath(path);
   const method = (options.method || "GET").toUpperCase();
   const isFormData = options.body instanceof FormData;
@@ -88,7 +111,7 @@ async function request(path, options = {}, retry = true) {
   const isAuthRequest = requestPath.startsWith("/api/v1/auth/");
   if (response.status === 401 && retry && !isAuthRequest) {
     if (await refreshSession()) {
-      return request(requestPath, options, false);
+      return performRequest(requestPath, options, false);
     }
     redirectToLogin();
     throw new Error("Session expired. Please log in again.");

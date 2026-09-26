@@ -376,6 +376,10 @@ def review_experiment(*, experiment, actor, decision, comment="", signed_name=""
         reason=comment,
         after={"decision": decision, "revision": experiment.current_revision.number, "checksum": review.content_checksum},
     )
+    notify_experiment(experiment, actor,
+                      list(experiment.assignees.all()) + [experiment.created_by, experiment.notebook.owner],
+                      f"Experiment review: {experiment.title}",
+                      "Approved / Aprobado" if decision == ExperimentReview.DECISION_APPROVED else "Changes requested / Cambios solicitados")
     return review
 
 
@@ -406,12 +410,21 @@ def lock_experiment(*, experiment, actor, reason=""):
     return experiment
 
 
+def notify_experiment(experiment, actor, recipients, title, message):
+    for user in set(recipients):
+        if user and user != actor and user.is_active and user_can_notebook(user, experiment.notebook):
+            Notification.objects.create(user=user, title=title, message=message,
+                                        link=f"/notebook?experiment={experiment.public_id}")
+
+
 def notify_comment(comment):
     recipients = set(comment.mentions.all())
     if comment.assigned_to_id:
         recipients.add(comment.assigned_to)
     recipients.discard(comment.author)
     for user in recipients:
+        if not user_can_notebook(user, comment.experiment.notebook):
+            continue
         Notification.objects.create(
             user=user,
             title=f"Experiment comment: {comment.experiment.title}",

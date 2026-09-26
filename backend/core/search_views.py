@@ -1,3 +1,5 @@
+from django.conf import settings
+from settings_app.models import SystemSettings
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from drf_spectacular.types import OpenApiTypes
@@ -12,6 +14,8 @@ from events.models import Event
 from imports.models import ImportJob, InstrumentProfile
 from projects.models import Project
 from samples.models import Sample
+from notebook.models import Experiment
+from notebook.permissions import notebooks_for_user
 from sequences.models import Sequence
 
 
@@ -43,6 +47,8 @@ class GlobalSearchView(APIView):
             "query": q,
             "total": 0,
             "results": {
+                "notebooks": [],
+                "experiments": [],
                 "samples": [],
                 "projects": [],
                 "sequences": [],
@@ -422,7 +428,22 @@ class GlobalSearchView(APIView):
             for found_user in limited(users.order_by("username"))
         ]
 
+        visible_notebooks = notebooks_for_user(user)
+        if getattr(settings, "OPENLIMS_ENFORCE_FEATURE_FLAGS", True) and not SystemSettings.load().feature_flags.get("notebook", False):
+            visible_notebooks = visible_notebooks.none()
+        notebook_results = [
+            {"id": row.id, "title": row.name, "subtitle": "Notebook", "type": "Notebook",
+             "url": f"/notebook?notebook={row.id}"}
+            for row in limited(visible_notebooks.filter(Q(name__icontains=q) | Q(description__icontains=q)).order_by("name"))
+        ]
+        experiment_results = [
+            {"id": row.id, "title": row.title, "subtitle": row.notebook.name, "type": "Experiment",
+             "url": f"/notebook?experiment={row.public_id}"}
+            for row in limited(Experiment.objects.filter(notebook__in=visible_notebooks)
+                               .filter(title__icontains=q).select_related("notebook").order_by("-updated_at"))
+        ]
         total = (
+            len(notebook_results) + len(experiment_results) +
             len(sample_results)
             + len(project_results)
             + len(sequence_results)
@@ -441,6 +462,8 @@ class GlobalSearchView(APIView):
                 "query": q,
                 "total": total,
                 "results": {
+                    "notebooks": notebook_results,
+                    "experiments": experiment_results,
                     "samples": sample_results,
                     "projects": project_results,
                     "sequences": sequence_results,

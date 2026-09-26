@@ -226,10 +226,13 @@ export default function NotebookPage() {
         apiGet("/api/me/"), apiGetAll("/api/notebooks/"), apiGetAll("/api/experiment-templates/"),
         apiGetAll("/api/experiments/?summary=1"), apiGetAll("/api/projects/"), apiGetAll("/api/notebooks/collaborators/"),
       ]);
-      const requestedNotebookId = selectNotebookId || selectedNotebookId;
+      const query = new URLSearchParams(window.location.search);
+      const linkedExperiment = !selectId && !selectNotebookId && !selected
+        ? experimentRows.find(row => String(row.public_id) === query.get("experiment") || String(row.id) === query.get("experiment")) : null;
+      const requestedNotebookId = selectNotebookId || linkedExperiment?.notebook || selectedNotebookId || query.get("notebook");
       const targetNotebook = notebookRows.find((row) => String(row.id) === String(requestedNotebookId)) || notebookRows[0] || null;
       const notebookRowsForTarget = targetNotebook ? experimentRows.filter((row) => String(row.notebook) === String(targetNotebook.id)) : [];
-      const targetSummary = notebookRowsForTarget.find((row) => String(row.id) === String(selectId || selected?.id)) || notebookRowsForTarget[0] || null;
+      const targetSummary = notebookRowsForTarget.find((row) => String(row.id) === String(selectId || linkedExperiment?.id || selected?.id)) || notebookRowsForTarget[0] || null;
       const target = targetSummary ? await apiGet(`/api/experiments/${targetSummary.id}/?compact=1`) : null;
       const hydratedExperiments = target ? experimentRows.map((row) => (
         row.id === target.id ? { ...row, ...target } : row
@@ -666,12 +669,18 @@ function ExperimentWorkspace(props) {
     <div className="notebook-context mb-3">
       <p className="mb-2">{editable
         ? say("Work through the record below, then mark it complete when you have finished documenting. Completion and review are separate steps.", "Completa el registro de abajo y márcalo como completado al terminar de documentar. Completar y revisar son pasos distintos.")
-        : say("This record is read-only in its current state. To document a repeat experiment, use Clone.", "Este registro es de solo lectura en su estado actual. Para documentar una repetición, utiliza Clonar.")}</p>
+        : say("This record is read-only. Ask the notebook owner or an administrator for editing access. Reviewed or locked records must be cloned to document a new experiment.", "Este registro es de solo lectura. Solicita acceso de edición al propietario de la bitácora o a un administrador. Clona los registros revisados o bloqueados para documentar un nuevo experimento.")}</p>
       <div className="inline-actions">
         <Button size="sm" variant="outline-dark" onClick={() => onDetailTabChange("provenance")}>{say("View samples & files", "Ver muestras y archivos")}</Button>
         <Button size="sm" variant="outline-dark" onClick={() => onDetailTabChange("discussion")}>{say("Discuss with the team", "Comentar con el equipo")}</Button>
       </div>
     </div>
+    {selected.status === "COMPLETED" && <Alert variant="info">{selected.permissions.review
+      ? say("Ready for review. Check the record, then approve it or request changes.", "Listo para revisión. Revisa el registro y apruébalo o solicita cambios.")
+      : say("Awaiting review. A notebook reviewer or owner can approve this record; ask the owner or an administrator if a reviewer needs access.", "En espera de revisión. Un revisor o propietario puede aprobar el registro; solicita al propietario o administrador acceso para un revisor.")}</Alert>}
+    {selected.status === "REVIEWED" && <Alert variant="info">{selected.permissions.lock
+      ? say("Review complete. You can lock this record to close it.", "Revisión completada. Puedes bloquear el registro para cerrarlo.")
+      : say("Review complete. Ask the notebook owner or an administrator who can lock the record.", "Revisión completada. Pregunta al propietario o administrador quién puede bloquear el registro.")}</Alert>}
     <Tab.Container activeKey={detailTab} onSelect={onDetailTabChange}>
       <Nav variant="pills" className="notebook-detail-tabs mb-3">
         <Nav.Item><Nav.Link eventKey="entry">{say("Experiment record", "Registro del experimento")}</Nav.Link></Nav.Item>

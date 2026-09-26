@@ -1,6 +1,7 @@
 import { Component, Suspense } from "react";
 import { Alert, Button } from "react-bootstrap";
 import { Link, Outlet, useLocation } from "react-router-dom";
+import WorkspaceFeedback from "./WorkspaceFeedback";
 import { useLanguage } from "../i18n";
 
 class PageErrorBoundary extends Component {
@@ -33,6 +34,7 @@ export default function RouteContent() {
   const { language } = useLanguage();
   return <PageErrorBoundary key={location.pathname + location.search} language={language}>
     <Suspense fallback={<div role="status" className="py-5 text-center text-muted">{language === "es" ? "Cargando…" : "Loading…"}</div>}>
+      <WorkspaceFeedback />
       <Outlet />
     </Suspense>
   </PageErrorBoundary>;

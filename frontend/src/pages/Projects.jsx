@@ -1,3 +1,4 @@
+import { useLanguage } from "../i18n";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
 import { Link } from "react-router-dom";
@@ -26,6 +27,7 @@ async function apiGetAllPages(basePath) {
 }
 
 export default function Projects() {
+  const { language } = useLanguage();
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [me, setMe] = useState(null);
@@ -59,6 +61,8 @@ export default function Projects() {
   }
 
   useEffect(() => {
+    // Initial data fetch also clears an earlier error.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, []);
 
@@ -274,7 +278,7 @@ export default function Projects() {
           </div>
 
           {filteredProjects.length === 0 ? (
-            <div className="empty-state">No projects found.</div>
+            <div className="empty-state"><h5>{language === "es" ? "No hay proyectos que mostrar" : "No projects to show"}</h5><p>{projectQuery ? (language === "es" ? "Prueba otra búsqueda o borra el filtro." : "Try another search or clear the filter.") : isAdmin ? (language === "es" ? "Crea un proyecto con el formulario de arriba y añade a tu equipo." : "Create a project using the form above and add your team.") : (language === "es" ? "Solicita a un administrador que te añada a un proyecto." : "Ask an administrator to add you to a project.")}</p>{projectQuery && <Button variant="outline-dark" onClick={() => setProjectQuery("")}>{language === "es" ? "Borrar búsqueda" : "Clear search"}</Button>}</div>
           ) : (
             <Table responsive hover className="app-table">
               <thead>
