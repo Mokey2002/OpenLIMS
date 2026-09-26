@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.34.3-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.34.4-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,6 +25,10 @@
 
 ## Overview
 
+### v0.34.4 — Everyday usability
+
+Notebook and experiment search, working record links, breadcrumbs, shared request feedback, helpful empty pages, clearer access guidance, and experiment assignment/review notifications.
+
 ### v0.34.3 — My profile
 
 Every signed-in user can open **My profile** beside Logout to view their username, name, email, account status, last sign-in, assigned roles, and accessible projects. The page includes English/Spanish text and links to existing email password recovery. Account details and roles remain administrator-managed.
@@ -33,229 +37,13 @@ Every signed-in user can open **My profile** beside Logout to view their usernam
 
 Electronic notebooks now include a three-step introduction, clearer experiment and linked-record tabs, and quick actions for notes, tables, method steps, and results. New experiments start with Objective, Method, Observations, Results, and Conclusion sections in English or Spanish. Existing experiment content and permissions are preserved.
 
-### v0.34.1 — Self-service password recovery
-
-Users can request a password reset from the login page. A bilingual email provides a single-use link valid for 24 hours. Requests are rate-limited and return the same confirmation for existing and unknown accounts. Requires configured SMTP, the public HTTPS URL, and a running Celery worker. Password changes invalidate sessions; users must sign in again after this upgrade. See [email setup](docs/user_invitations.md).
-
-### Project workspace
-
-Project sections bring samples, workflows, quality review, sequences, team membership, and activity into focused views. The overview highlights open work and QC items, with shortcuts to add samples and assign workflows. Includes project sample search and English/Spanish labels.
-
-### Interactive alignment viewer
-
-Completed DNA and RNA alignments open in the locally hosted TeselaGen Open Vector Editor viewer, with a table view and FASTA/JSON downloads available. Protein alignments retain the table view. Clustal Omega still runs the alignment jobs; viewer interactions do not modify saved results. The embedded viewer's controls are in English.
-
-### v0.34.0 — Sequence workbench
-
-The sequence viewer now takes the main screen, with a persistent save/search/view/export toolbar and library, setup, and feature side panels. New workspaces start empty; the example is optional. Added project filtering, feature editing, bounded undo/redo, saved-state feedback, and confirmation before switching or closing with unsaved edits. Displayed coordinates start at 1 and include the end; stored coordinates keep their existing convention. English and Spanish copy are included.
-
-### v0.33.9 — Sequence region actions
-
-Select a forward region and right-click to create an annotation, primer, translation, or highlight in a dialog, or copy the bases. A toolbar actions button provides an alternative to right-click. Features remain local until saved.
-
-### v0.33.8 — Easier sequence workspaces
-
-Search saved sequences by name or type, use focused editor tabs, and jump from a selected region to its editing tools. Advanced workspace JSON is collapsed by default. Import a single FASTA/text record as a new workspace with alphabet validation and confirmation before discarding unsaved edits. Copy a forward selected range and adjust linear zoom beside the viewer. Includes English and Spanish UI copy.
-
-### v0.33.7 — Expanded Spanish UI
-
-Added 562 Spanish dictionary entries covering My Work, notebooks, projects, inventory, samples, user management, notifications, QC, work queues, imports, workflows, reports, procedures, assistant controls, alignments, and mass spectrometry. Uses the existing language setting; this expands coverage rather than claiming a fully translated interface. Stored records and scientific identifiers are unchanged.
-
-### v0.33.6 — User invitations
-
-User Management can send welcome emails with a username and a 24-hour, single-use password-setup link. New invitations require users to choose a password before login. Directors can send invitations to existing accounts and retry failed deliveries. Configure SMTP and the exact public HTTPS URL first; see [setup instructions](docs/user_invitations.md).
-
-### v0.33.5 — Remove guided demo
-
-Removed the Getting Started walkthrough, dashboard demo prompt, and floating tour controls. Old `/getting-started` links redirect to My Work. Demo data and the assistant remain available.
-
-### v0.33.4 — Faster sample loading
-
-Sample lists batch permission checks and reuse prefetched linked projects. Search is debounced, outdated requests are cancelled, and supporting data is reused across filters and pages. Local SQLite benchmarks reduced a 50-row list from 207 to 9 queries (p95: 74.42 to 17.85 ms); production capacity requires deployment testing. See [release notes](docs/releases/v0.33.4.md).
-
-### v0.33.3 — Performance benchmarks
-
-Opt-in API and real-browser speed tests report p50/p95 latency, payload sizes and query counts. The API suite creates disposable datasets of 100–500,000 samples with assigned work items. Larger capacity remains unverified until tested on representative hardware. See [performance testing](docs/performance_testing.md) for commands, optional budgets and limitations.
-
-### v0.33.2 — Page navigation recovery
-
-Page loading now keeps the navigation shell visible. If an older open tab requests a missing page module after an update, OpenLIMS attempts one automatic reload per release and tab at the selected URL. Persistent errors show a bilingual recovery message with reload and My Work actions instead of a blank screen. Normal navigation does not reload the document.
-
-### v0.33.1 — Assistant helper setting
-
-Directors can disable the floating helper under **Settings → General Settings → Show floating assistant helper**. Save to apply immediately in the current session; other users receive the setting on page reload. The dedicated Assistant page remains available. Enabled by default and restored by Reset defaults. Run database migrations when upgrading.
-
-### v0.33.0 — Notebook and report layouts
-
-Use **Notebook → Templates → Edit structure** to add, edit, duplicate, reorder and remove
-experiment sections. Save changes for future experiments; existing experiment revisions stay intact.
-Stale editor saves are rejected and template changes are audited.
-
-On **Reports**, **Comparisons**, and **Investigations**, choose a print template for PDF exports.
-Directors can edit branding, paper, orientation and summary placement; analysis reports also
-support optional charts placed before or after the data. Synthetic previews match the report type.
-Evidence tables, scope, method notes and limitations remain part of the export.
-See [v0.33.0 release notes](docs/releases/v0.33.0.md).
-
-### v0.32.0 — Saved workspace views and print templates
-
-Use **My Work → Customize My Work** to choose visible widgets, select and order work-table
-columns, filter assigned work, and save named views. Personal views are private to their owner;
-directors can share views with a role. Saved configurations live on the server, while the last
-selected view is remembered per user in the browser. These settings only affect presentation.
-
-On **Reports** (compliance PDF) and **Barcode Labels**, directors can create named print templates,
-preview PDFs with synthetic data, and configure headings, footers, PNG logos, Letter/A4 paper,
-report orientation, and supported label grids. Select a template before the normal confirmation
-preview. Its revision and settings are captured with the job, preserving the layout if the
-template is later edited or archived. Sample identity, barcodes, reprint indicators, report
-scope, and audit provenance remain mandatory. Physical printers are not controlled by the app.
-
-Apply `settings_app.0005` before restarting the API/workers. See
-[v0.32.0 release notes](docs/releases/v0.32.0.md) for supported layouts and validation scope.
-
-### v0.31.0 — Workflow assignments and in-app notifications
-
-In Workflow Designer, each step now has **When this step activates** settings: select an
-administrator or technician as assignee, notify that person, and select additional in-app
-recipients. These actions follow the step's activation condition, so a low-concentration
-branch can activate review, assign its work, and notify the selected people.
-
-Running workflows retain their original action settings. Activation rechecks current sample
-permissions: ineligible assignments remain unassigned and unavailable recipients are skipped,
-with outcomes recorded in the audit trail. Repeated synchronization does not repeat alerts;
-an explicit retry creates a new work item and notification. Assignment does not grant QC approval
-rights. This supports named users, not team scheduling, email, or arbitrary event triggers.
-
-Apply the new `pipelines.0005` migration before starting the updated API and workers. See
-[v0.31.0 release notes](docs/releases/v0.31.0.md) for validation and deployment limitations.
-
-### v0.30.0 — Configurable laboratory workflows
-
-Directors can configure bilingual sample forms with required fields, dropdowns, numeric bounds
-and conditional visibility; preview and publish revisions; and share templates as JSON.
-Sample values support audited editing and previewed CSV intake/export. Workflow steps can
-attach a published measurement form and retain its version throughout a run, including retries.
-
-Workflow Designer now supports **Form measurement** activation rules: select a source step,
-measurement, comparison and expected value, then test an example before saving. For example,
-activate a review step when concentration is below 10, or a processing step when it is at least
-10. The source must be a dependency. Existing QC requirements remain enforced. Missing values
-never activate measurement branches, including “not equal.” Rule outcomes are audited and
-running workflows retain their original conditions.
-
-This release also includes the guided installer foundation from earlier PRs. Named-user assignment
-and in-app notifications are added in v0.31.0; team scheduling, a general rules engine, and automatic upgrades remain future work.
-Local test results do not replace PostgreSQL and browser validation; see
-[v0.30.0 release notes](docs/releases/v0.30.0.md) for scope and remaining deployment gates.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.34.3 — My profile`.
-
-### Previous v0.29.0 highlights
-
-- **My Work** moved from multi-page client aggregation to one bounded `/api/v1/my-work/` server-side summary while preserving complete counts
-- Application startup now uses one `/api/v1/session/` bootstrap request for user, feature flags, and unread-notification count instead of three separate calls
-- Normal API pagination increased from 10 to 50 rows, with intentional full-collection fetches using up to 200 rows per page to reduce request chains
-- React routes are lazy-loaded so feature pages are downloaded only when users open them instead of being bundled into the initial application load
-- Production Nginx enables gzip compression and immutable caching for content-hashed Vite assets while keeping `index.html` fresh
-- Production PostgreSQL connections can be reused with health checks through `DB_CONN_MAX_AGE`
-- Django can use the existing Redis service as an application cache through `CACHE_URL`, with Redis DB 3 reserved in the production template
-- Targeted composite indexes accelerate assigned-work and unread-notification queries used by My Work and the persistent application shell
-- Performance regression tests verify bounded dashboard payloads, complete counts, scalable pagination, authentication, and session bootstrap behavior
-
-### v0.28.1 highlights
-
-- Unified **My Work** signed-in landing page for assigned work, workflow requests, Notebook experiments when enabled, QC attention, alerts, unread notifications, and overdue work
-- Main navigation reorganized around **Plan → Receive → Execute → Review → Report**, with role-specific destinations and user-pinned favorites
-- Browser JWTs moved out of `localStorage`/`sessionStorage` into secure HttpOnly access and refresh cookies
-- CSRF protection for cookie-authenticated writes, refresh-token rotation, blacklist-after-rotation, and server-side logout invalidation
-- Browser WebSocket authentication moved to the HttpOnly session cookie while Bearer JWT support remains available for scripts/API clients
-- Frontend application traffic centralized on `/api/v1/` with legacy API compatibility retained where required
-- Notebook and Registry feature flags enforced at the backend API boundary instead of only hiding navigation links
-- Production `docker-compose.prod.yml` with Daphne, Celery, internal PostgreSQL/Redis, persistent volumes, health checks, production React/Nginx serving, and optional Ollama profile
-- Playwright Chromium E2E coverage for secure login, My Work, workflow navigation, `/api/v1/` browser requests, and logout/session invalidation
-- GitHub Actions now checks the production frontend build, production Compose configuration, backend hardening behavior, and browser E2E flows
-
-### v0.28.0 highlights
-
-- Site-to-well inventory hierarchies, generic barcodes, plate maps, and well-level sample or reagent placement
-- Scan-based receive, move, transfer, count, consume, adjust, quarantine, dispose, and return operations
-- Immutable quantity ledger with actor, reason, units, before/after values, and work/experiment/request provenance
-- Reagent/vendor/lot/cost/storage metadata, chemical safety data, SDS/COA files, and disposal guidance
-- Expiration, low-stock, reorder, and reservation alerts plus cycle-count reconciliation
-- Configurable internal assay request forms, triage, approval/rejection/cancellation, priority, due dates, and SLAs
-- Dependency-aware pipeline assignment, batch/plate run groups, resource requirements, and automatic material reservations
-- Requester-visible execution, QC, results, messages, attachments, and approved reports
-
-### v0.27.0 highlights
-
-- User-, team-, and project-scoped notebooks with granular read, write, comment, review, and lock permissions
-- Searchable Notebook workspace with personal queues, visual block editors, safe collaborative autosave, and revision comparison
-- Experiment templates and clone-template/clone-experiment workflows
-- Rich block entries for text, headings, tables, checklists, protocols, calculations, media, structured results, and sequences
-- Immutable experiment revisions with autosave, restore, exact linked-object version snapshots, and before/after audit details
-- Comments, mentions, assignments, internal sharing, review, sign-off, and immutable locking
-- Provenance-rich PDF export with authors, reviewers, timestamps, linked records, versions, and revision history
-- Regulated electronic-signature hardening remains scheduled for v1.0
-
-### v0.26.0 highlights
-
-- Configurable biological registry types with versioned JSON schemas and stable registry IDs
-- Immutable registry versions, aliases, external identifiers, tags, typed relationships, and project visibility
-- Draft, review, registration, and retirement lifecycle with director approval and common audit payloads
-- Duplicate detection across IDs, aliases, sequence checksums, catalog numbers, and configured schema fields
-- Registry CSV and legacy-database migration through the existing preview/fingerprint/commit toolkit
-- Strict DNA, RNA, and protein validation with linear/circular topology and immutable sequence revisions
-- Revision diff/restore, reverse complement, transcription, translation, ORFs, GC, molecular weight, and primer calculations
-- Restriction-site analysis, virtual digests, simple construct assembly plans, and reusable feature libraries
-- Annotation-preserving FASTA and GenBank import/export and registry-linked sequence revisions
-- English and Spanish Registry and molecular-biology interfaces
-
-### v0.25.1 highlights
-
-- Stable public UUIDs for projects, samples, sequences, inventory objects, and pipeline runs without replacing existing numeric API IDs
-- Versioned `/api/v1/` routes with an initial OpenAPI schema and interactive documentation
-- Reusable entity links and file attachments addressed by entity type and public ID
-- Shared project-scoped permission helpers and a versioned audit-event payload contract
-- Director-controlled, default-off feature flags for Notebook, Registry, Studies, and Insight
-- Build-time enforcement of English and Spanish metadata for new feature-flagged modules
-- Compatibility coverage keeping existing `/api/` routes available during the versioning transition
-
-### v0.25.0 highlights
-
-- Ask a focused clarification question instead of guessing when a request has multiple valid meanings
-- Offer semantic choices for ambiguous QC sample/result, general sample/result, failure, and inventory requests
-- Preserve the current conversation context while the user chooses a clarification option
-- Show the active investigation, comparison, BLAST setup, sample, result, batch, or inventory context in both assistant interfaces
-- Let users clear retained context before asking an unrelated follow-up
-- Keep clarification prompts rule-based so OpenAI or Ollama cannot rewrite the available choices
-
-### v0.24.3 highlights
-
-- Prevent retained investigation, comparison, and BLAST context from capturing unrelated questions
-- Distinguish samples in QC, samples needing QC review, and samples with failed QC results
-- Return concise QC worklists without automatic graphs or LLM rewriting
-- Require focused investigation follow-ups and show charts only for explicit visualization requests
-- Keep notification language, SOP questions, and analytical comparisons within their intended domains
-- Prevent LLM summaries from generalizing findings to unlisted records
-- Seed eleven realistic instrument runs with direct sample, work-item, and result provenance
-- Upgrade existing demo databases idempotently when `seed_demo` is run again
-- Link connector-created work items directly to their originating instrument import job
-- Expose instrument code, instrument name, run ID, source type, and import job on work-item and result APIs
-- Backfill legacy connector work items from the established `Import Job <id>` naming convention
-- Preserve audit/text fallback behavior for older records that cannot be linked automatically
-- Show direct instrument/run provenance beside results and work items on the sample page
-- Show linked sample, work-item, and result counts on each import job
-- Use the database relation as the highest-confidence instrument provenance in investigations
-- Keep provenance immutable through regular work-item and result APIs
-
----
+**Current development version:** `v0.34.4 — Everyday usability`.
 
 ## Deployment Access
 

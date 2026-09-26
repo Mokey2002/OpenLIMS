@@ -833,3 +833,19 @@ body {
     min-height: 240px;
   }
 }
+
+/* Keep page actions in a predictable location while allowing narrow screens to wrap. */
+.page-header > .inline-actions,
+.toolbar-row > .inline-actions {
+  margin-inline-start: auto;
+  justify-content: flex-end;
+  align-items: center;
+}
+@media (max-width: 576px) {
+  .page-header > .inline-actions,
+  .toolbar-row > .inline-actions {
+    width: 100%;
+    margin-inline-start: 0;
+    justify-content: flex-start;
+  }
+}

@@ -11,6 +11,7 @@ import {
   Spinner,
 } from "react-bootstrap";
 import { apiGet } from "../api";
+import { useLanguage } from "../i18n";
 
 function useQuery() {
   return new URLSearchParams(useLocation().search);
@@ -41,6 +42,8 @@ function resultGroups(results) {
   if (!results) return [];
 
   return [
+    ["notebooks", "Notebooks"],
+    ["experiments", "Experiments"],
     ["samples", "Samples"],
     ["projects", "Projects"],
     ["sequences", "Sequences"],
@@ -57,6 +60,7 @@ function resultGroups(results) {
 }
 
 export default function Search() {
+  const { language, t } = useLanguage();
   const query = useQuery();
   const nav = useNavigate();
 
@@ -90,9 +94,10 @@ export default function Search() {
   }
 
   useEffect(() => {
+    // Synchronize the editable field when the URL search changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearchText(initialQuery);
     runSearch(initialQuery);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery]);
 
   const groups = useMemo(() => resultGroups(data?.results), [data]);
@@ -113,8 +118,7 @@ export default function Search() {
         <div>
           <h1 className="page-title">Global Search</h1>
           <p className="page-subtitle">
-            Search across samples, projects, imports, sequences, alignments,
-            users, and audit events.
+            {language === "es" ? "Busca bitácoras, experimentos, muestras, proyectos, importaciones, secuencias, alineamientos, usuarios y eventos de auditoría." : "Search across notebooks, experiments, samples, projects, imports, sequences, alignments, users, and audit events."}
           </p>
         </div>
 
@@ -173,7 +177,7 @@ export default function Search() {
               <Card key={group.key} className="app-card">
                 <Card.Body>
                   <div className="toolbar-row mb-3">
-                    <h5 className="section-title mb-0">{group.label}</h5>
+                    <h5 className="section-title mb-0">{group.key === "notebooks" ? (language === "es" ? "Bitácoras" : "Notebooks") : group.key === "experiments" ? (language === "es" ? "Experimentos" : "Experiments") : t(group.label)}</h5>
                     <Badge bg="dark">{group.items.length}</Badge>
                   </div>
 

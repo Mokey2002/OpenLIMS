@@ -37,6 +37,7 @@ from .services import (
     create_revision,
     lock_experiment,
     notify_comment,
+    notify_experiment,
     render_experiment_pdf,
     restore_revision,
     review_experiment,
@@ -267,6 +268,7 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
             "revisions__blocks", "revisions__links", "comments__mentions", "reviews",
         )
 
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -285,10 +287,14 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
             reason="Experiment created",
         )
         experiment.refresh_from_db()
+        notify_experiment(experiment, request.user, experiment.assignees.all(),
+                          f"Experiment assigned / Experimento asignado: {experiment.title}",
+                          "Open the experiment to continue. / Abre el experimento para continuar.")
         return Response(self.get_serializer(experiment).data, status=status.HTTP_201_CREATED)
 
+    @transaction.atomic
     def perform_update(self, serializer):
-        experiment = self.get_object()
+        experiment = Experiment.objects.select_for_update().get(pk=self.get_object().pk)
         if not user_can_notebook(self.request.user, experiment.notebook, "write"):
             raise PermissionDenied("You cannot edit this experiment.")
         if experiment.status in {Experiment.STATUS_REVIEWED, Experiment.STATUS_LOCKED}:
@@ -298,6 +304,9 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
             "assignees": list(experiment.assignees.values_list("id", flat=True)),
         }
         updated = serializer.save()
+        notify_experiment(updated, self.request.user, updated.assignees.exclude(pk__in=before["assignees"]),
+                          f"Experiment assigned / Experimento asignado: {updated.title}",
+                          "Open the experiment to continue. / Abre el experimento para continuar.")
         record_audit_event(
             entity=updated,
             action="EXPERIMENT_METADATA_UPDATED",
@@ -355,8 +364,9 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
         return Response(ExperimentRevisionSerializer(restored).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"])
+    @transaction.atomic
     def transition(self, request, pk=None):
-        experiment = self.get_object()
+        experiment = Experiment.objects.select_for_update().get(pk=self.get_object().pk)
         if not user_can_notebook(request.user, experiment.notebook, "write"):
             raise PermissionDenied("You cannot change this experiment state.")
         target = str(request.data.get("status") or "").upper()
@@ -374,6 +384,15 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
                 raise ValidationError({"revision": "An experiment needs content before completion."})
             experiment.completed_at = timezone.now()
         experiment.save(update_fields=["status", "completed_at", "updated_at"])
+        if target == Experiment.STATUS_COMPLETED:
+            notebook = experiment.notebook
+            candidates = list(notebook.reviewers.all()) + [notebook.owner] + list(notebook.team_members.all())
+            if notebook.project_id:
+                candidates += list(notebook.project.members.all())
+            reviewers = [user for user in candidates if user_can_notebook(user, notebook, "review")]
+            notify_experiment(experiment, request.user, reviewers,
+                              f"Review requested / Revisión solicitada: {experiment.title}",
+                              "The experiment is complete and ready for review. / El experimento está listo para revisión.")
         record_audit_event(entity=experiment, action="EXPERIMENT_STATUS_CHANGED", actor=request.user, reason=request.data.get("reason", ""), before={"status": before}, after={"status": target})
         return Response(self.get_serializer(experiment).data)
 
