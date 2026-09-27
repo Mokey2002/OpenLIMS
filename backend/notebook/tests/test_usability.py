@@ -68,3 +68,19 @@ class UsabilityTests(TestCase):
         result = self.client.get("/api/search/?q=Aurora").data
         self.assertEqual(result["results"]["notebooks"], [])
         self.assertEqual(result["results"]["experiments"], [])
+
+    def test_metadata_save_preserves_state_changed_after_serializer_loaded(self):
+        from types import SimpleNamespace
+        from notebook.serializers import ExperimentSerializer
+        from notebook.views import ExperimentViewSet
+        stale = Experiment.objects.get(pk=self.experiment.pk)
+        serializer = ExperimentSerializer(stale, data={"title": "Updated title"}, partial=True)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        Experiment.objects.filter(pk=stale.pk).update(status=Experiment.STATUS_COMPLETED)
+        view = ExperimentViewSet()
+        view.request = SimpleNamespace(user=self.owner)
+        view.get_object = lambda: stale
+        view.perform_update(serializer)
+        self.experiment.refresh_from_db()
+        self.assertEqual(self.experiment.title, "Updated title")
+        self.assertEqual(self.experiment.status, Experiment.STATUS_COMPLETED)

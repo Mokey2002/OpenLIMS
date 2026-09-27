@@ -8,6 +8,7 @@ import BlockEditor from "../components/notebook/BlockEditor";
 import { BLOCK_CATALOG, newBlock } from "../components/notebook/blockTypes";
 import { useLanguage } from "../i18n";
 import "./Notebook.css";
+import { selectNotebookRecord } from "./notebookSelection";
 
 const EDITABLE_STATES = new Set(["DRAFT", "IN_PROGRESS"]);
 const STATUS_OPTIONS = ["DRAFT", "IN_PROGRESS", "COMPLETED", "REVIEWED", "LOCKED"];
@@ -227,12 +228,14 @@ export default function NotebookPage() {
         apiGetAll("/api/experiments/?summary=1"), apiGetAll("/api/projects/"), apiGetAll("/api/notebooks/collaborators/"),
       ]);
       const query = new URLSearchParams(window.location.search);
-      const linkedExperiment = !selectId && !selectNotebookId && !selected
-        ? experimentRows.find(row => String(row.public_id) === query.get("experiment") || String(row.id) === query.get("experiment")) : null;
-      const requestedNotebookId = selectNotebookId || linkedExperiment?.notebook || selectedNotebookId || query.get("notebook");
-      const targetNotebook = notebookRows.find((row) => String(row.id) === String(requestedNotebookId)) || notebookRows[0] || null;
-      const notebookRowsForTarget = targetNotebook ? experimentRows.filter((row) => String(row.notebook) === String(targetNotebook.id)) : [];
-      const targetSummary = notebookRowsForTarget.find((row) => String(row.id) === String(selectId || linkedExperiment?.id || selected?.id)) || notebookRowsForTarget[0] || null;
+      const initialLink = !selectId && !selectNotebookId && !selected && !selectedNotebookId;
+      const { notebook: targetNotebook, experiment: targetSummary, unavailable } = selectNotebookRecord({
+        notebooks: notebookRows, experiments: experimentRows,
+        experimentId: selectId || selected?.id || (initialLink ? query.get("experiment") : null),
+        notebookId: selectNotebookId || selectedNotebookId || (initialLink ? query.get("notebook") : null),
+        strict: initialLink,
+      });
+      if (unavailable) setError(say("This linked record is unavailable or you no longer have access. Choose a notebook to continue.", "El registro enlazado no está disponible o ya no tienes acceso. Elige una bitácora para continuar."));
       const target = targetSummary ? await apiGet(`/api/experiments/${targetSummary.id}/?compact=1`) : null;
       const hydratedExperiments = target ? experimentRows.map((row) => (
         row.id === target.id ? { ...row, ...target } : row

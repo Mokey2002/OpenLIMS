@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.34.5 — Correcciones de bitácoras
+
+Corrige la selección de registros enlazados y conserva el estado actual del experimento al guardar sus datos. Las listas de bitácoras usan paginación con orden estable.
+
 ## v0.34.4 — Mejoras de uso diario
 
 Búsqueda de bitácoras y experimentos, enlaces directos, navegación, mensajes de acciones y permisos, páginas vacías útiles y notificaciones de asignación y revisión.
@@ -8,17 +12,13 @@ Búsqueda de bitácoras y experimentos, enlaces directos, navegación, mensajes 
 
 Cada usuario puede abrir **Mi perfil**, junto a Cerrar sesión, para consultar su usuario, nombre, correo, estado, último inicio de sesión, roles y proyectos accesibles. Incluye recuperación de contraseña por correo y textos en español e inglés. Los datos y roles siguen bajo administración.
 
-## v0.34.2 — Bitácoras más claras
-
-Guía de la bitácora, estructura inicial del experimento y acciones rápidas en español e inglés.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.34.4`
+**Versión de desarrollo actual:** `v0.34.5`
 
 **Demo:** http://35.164.28.250
 
