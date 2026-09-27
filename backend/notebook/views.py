@@ -76,6 +76,7 @@ class NotebookViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
             notebooks_for_user(self.request.user, action_name)
             .select_related("owner", "project")
             .annotate(experiment_count=Count("experiments", distinct=True))
+            .order_by("-updated_at", "-pk")
             .prefetch_related(
                 "team_members", "readers", "editors", "commenters", "reviewers", "lockers"
             )
@@ -226,6 +227,7 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = (
             Experiment.objects.filter(notebook__in=notebooks_for_user(self.request.user))
+            .order_by("-updated_at", "-pk")
             .select_related(
                 "notebook", "notebook__project", "template", "created_by", "current_revision",
                 "current_revision__created_by", "current_revision__restored_from", "locked_by",
@@ -303,6 +305,7 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
             "title": experiment.title,
             "assignees": list(experiment.assignees.values_list("id", flat=True)),
         }
+        serializer.instance = experiment
         updated = serializer.save()
         notify_experiment(updated, self.request.user, updated.assignees.exclude(pk__in=before["assignees"]),
                           f"Experiment assigned / Experimento asignado: {updated.title}",
