@@ -24,3 +24,29 @@ test('switching notebooks does not retain experiment from previous notebook', ()
   const result=choose({notebookId:2, experimentId:11});
   assert.equal(result.notebook.id,2); assert.equal(result.experiment.id,22);
 });
+
+test('numeric and string IDs resolve to the same experiment', () => {
+  for (const experimentId of [22, '22', 'second']) {
+    assert.equal(choose({experimentId, strict:true}).experiment.id,22);
+  }
+});
+
+test('an experiment whose notebook is inaccessible cannot be opened', () => {
+  const result=selectNotebookRecord({notebooks:[{id:1}], experiments, experimentId:'second', strict:true});
+  assert.deepEqual(result,{notebook:null, experiment:null, unavailable:true});
+});
+
+test('empty notebook does not borrow an experiment from another notebook', () => {
+  const result=selectNotebookRecord({notebooks:[{id:3}, ...notebooks], experiments, notebookId:3, strict:true});
+  assert.equal(result.notebook.id,3);
+  assert.equal(result.experiment,null);
+  assert.equal(result.unavailable,false);
+});
+
+test('selection does not mutate cached API records', () => {
+  const frozenNotebooks=Object.freeze(notebooks.map(row=>Object.freeze({...row})));
+  const frozenExperiments=Object.freeze(experiments.map(row=>Object.freeze({...row})));
+  const before=JSON.stringify({frozenNotebooks,frozenExperiments});
+  selectNotebookRecord({notebooks:frozenNotebooks, experiments:frozenExperiments, experimentId:'second', strict:true});
+  assert.equal(JSON.stringify({frozenNotebooks,frozenExperiments}),before);
+});

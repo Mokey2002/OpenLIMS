@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.34.5-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.34.6-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,6 +25,10 @@
 
 ## Overview
 
+### v0.34.6 — Regression tests and CI gates
+
+Adds notebook permission, rollback, notification, pagination, and concurrent-save regressions; browser checks for unavailable links; and expanded frontend selection tests. CI runs frontend unit tests and explicitly requires PostgreSQL for the concurrent-save test, retaining browser failure evidence. See [testing coverage](docs/notebook-testing.md).
+
 ### v0.34.5 — Notebook fixes
 
 Fix notebook record selection and preserve current experiment state during metadata saves. Notebook lists now use deterministic pagination.
@@ -33,17 +37,13 @@ Fix notebook record selection and preserve current experiment state during metad
 
 Notebook and experiment search, working record links, breadcrumbs, shared request feedback, helpful empty pages, clearer access guidance, and experiment assignment/review notifications.
 
-### v0.34.3 — My profile
-
-Every signed-in user can open **My profile** beside Logout to view their username, name, email, account status, last sign-in, assigned roles, and accessible projects. The page includes English/Spanish text and links to existing email password recovery. Account details and roles remain administrator-managed.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.34.5 — Notebook fixes`.
+**Current development version:** `v0.34.6 — Regression tests and CI gates`.
 
 ## Deployment Access
 

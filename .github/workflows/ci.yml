@@ -51,6 +51,12 @@ jobs:
       - name: Run tests
         run: docker compose -p openlims -f deploy/docker-compose.yml run --rm api pytest -v
 
+      - name: Enforce PostgreSQL notebook concurrency regression
+        run: >-
+          docker compose -p openlims -f deploy/docker-compose.yml run --rm
+          -e REQUIRE_POSTGRES_TESTS=1 api
+          pytest -v notebook/tests/test_concurrency.py
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -67,6 +73,10 @@ jobs:
             echo "::error title=Frontend build failed::$message"
             exit "$status"
           fi
+
+      - name: Run frontend unit regressions
+        working-directory: frontend
+        run: node --test scripts/*.test.mjs
 
       - name: Validate production Compose
         run: docker compose -f deploy/docker-compose.prod.yml config >/dev/null
@@ -152,6 +162,17 @@ jobs:
         run: |
           cat /tmp/openlims-vite.log || true
           docker compose -p openlims-e2e -f deploy/docker-compose.yml logs api || true
+
+      - name: Retain browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure-evidence
+          path: |
+            frontend/e2e/test-results/
+            /tmp/openlims-vite.log
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Stop E2E services
         if: always()
