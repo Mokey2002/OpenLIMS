@@ -2,12 +2,14 @@ import { useState } from "react";
 import { Alert, Button, Form, Modal } from "react-bootstrap";
 import { apiPatch } from "../../api";
 import { useLanguage } from "../../i18n";
+import WorkflowDesigner from "./WorkflowDesigner";
 import BlockEditor from "./BlockEditor";
 import { BLOCK_CATALOG, newBlock } from "./blockTypes";
 
-export default function TemplateDesigner({ template, onClose, onSaved }) {
+export default function TemplateDesigner({ template, onClose, onSaved, users = [] }) {
   const { language } = useLanguage();
   const t = (en, es) => language === "es" ? es : en;
+  const [workflowSteps, setWorkflowSteps] = useState(template.workflow_steps || []);
   const [name, setName] = useState(template.name);
   const [description, setDescription] = useState(template.description);
   const [blocks, setBlocks] = useState(() => template.blocks.map(block => ({ ...structuredClone(block), _key: newBlock(block.block_type)._key })));
@@ -22,7 +24,7 @@ export default function TemplateDesigner({ template, onClose, onSaved }) {
     setBusy(true); setError("");
     try {
       const updated = await apiPatch(`/api/experiment-templates/${template.id}/`, {
-        name, description, expected_updated_at: template.updated_at,
+        name, description, workflow_steps: workflowSteps, expected_updated_at: template.updated_at,
         blocks: blocks.map(({ block_type, data }) => ({ block_type, data })),
       });
       onSaved(updated);
@@ -37,6 +39,7 @@ export default function TemplateDesigner({ template, onClose, onSaved }) {
       <Form.Control id="designer-name" maxLength={255} disabled={busy} value={name} onChange={e => setName(e.target.value)} />
       <Form.Label htmlFor="designer-description">{t("Description", "Descripción")}</Form.Label>
       <Form.Control id="designer-description" as="textarea" disabled={busy} value={description} onChange={e => setDescription(e.target.value)} />
+      <WorkflowDesigner steps={workflowSteps} onChange={setWorkflowSteps} users={users} disabled={busy} />
       <div className="my-3 d-flex gap-2 flex-wrap">{BLOCK_CATALOG.filter(b => !["IMAGE", "ATTACHMENT", "SEQUENCE_VIEW"].includes(b.type)).map(b => <Button key={b.type} size="sm" disabled={busy} variant="outline-dark" onClick={() => setBlocks([...blocks, newBlock(b.type)])}>{t("Add", "Añadir")} {t(b.label, ({ RICH_TEXT: "Texto enriquecido", HEADING: "Encabezado", PROTOCOL_STEP: "Paso de protocolo", CHECKLIST: "Lista de verificación", TABLE: "Tabla", STRUCTURED_RESULT: "Resultado estructurado", CALCULATION: "Cálculo" })[b.type])}</Button>)}</div>
       {blocks.map((block, index) => <BlockEditor key={block._key} block={block} index={index} count={blocks.length} editable={!busy}
         onChange={next => setBlocks(blocks.map((b, i) => i === index ? next : b))} onMove={direction => move(index, direction)}

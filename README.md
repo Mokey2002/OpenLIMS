@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.34.7-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.35.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,6 +25,10 @@
 
 ## Overview
 
+### v0.35.0 — Reusable experiment workflows
+
+Build ordered experiment workflows in notebook templates with required fields, responsible people, numeric limits, and completion criteria. Execute and complete steps inside the experiment, with audit history, immutable template snapshots, and review checksums. Existing experiments remain unchanged. Run backend migrations before upgrading the frontend. See the [English/Spanish workflow guide](docs/experiment-workflows.md).
+
 ### v0.34.7 — Daily workflow reliability
 
 My Work refreshes on return, after successful actions, and every minute while visible, preserving loaded data on refresh errors. Notebook switches keep headings and entries consistent, ignore stale responses, and protect edits made during loading. Supporting picker lists no longer block the workspace. Includes browser regressions.
@@ -33,17 +37,13 @@ My Work refreshes on return, after successful actions, and every minute while vi
 
 Adds notebook permission, rollback, notification, pagination, and concurrent-save regressions; browser checks for unavailable links; and expanded frontend selection tests. CI runs frontend unit tests and explicitly requires PostgreSQL for the concurrent-save test, retaining browser failure evidence. See [testing coverage](docs/notebook-testing.md).
 
-### v0.34.5 — Notebook fixes
-
-Fix notebook record selection and preserve current experiment state during metadata saves. Notebook lists now use deterministic pagination.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.34.7 — Daily workflow reliability`.
+**Current development version:** `v0.35.0 — Reusable experiment workflows`.
 
 ## Deployment Access
 

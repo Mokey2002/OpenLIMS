@@ -60,3 +60,42 @@ class NotebookConcurrencyTests(TransactionTestCase):
         winner = next(pk for status, pk in results if status == "saved")
         self.assertEqual(experiment.current_revision_id, winner)
         self.assertEqual(list(experiment.revisions.order_by("number").values_list("number", flat=True)), [1, 2])
+
+    def test_two_workflow_writers_cannot_overwrite_the_same_version(self):
+        from notebook.models import ExperimentWorkflowStep
+        from notebook.workflows import update_step
+        owner = get_user_model().objects.create_user(username="workflow-concurrent-owner")
+        notebook = Notebook.objects.create(name="Workflow concurrent", owner=owner)
+        experiment = Experiment.objects.create(notebook=notebook, title="Concurrent workflow", created_by=owner)
+        step = ExperimentWorkflowStep.objects.create(experiment=experiment, position=1, assignee=owner,
+            definition={"name": "Measure", "fields": [{"key": "value", "label": "Value", "type": "NUMBER", "required": True}]})
+        ready = Barrier(2, timeout=10)
+
+        def save(value):
+            close_old_connections()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET lock_timeout = '10s'")
+                    cursor.execute("SET statement_timeout = '15s'")
+                actor = get_user_model().objects.get(pk=owner.pk)
+                record = Experiment.objects.get(pk=experiment.pk)
+                ready.wait()
+                try:
+                    update_step(experiment=record, position=1, actor=actor,
+                        data={"operation": "save", "expected_version": 1, "values": {"value": value}, "note": "Recorded"})
+                    return ("saved", value)
+                except ValidationError as error:
+                    if "This step changed" not in str(error.detail):
+                        raise
+                    return ("conflict", None)
+            finally:
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(save, 10)
+            second = pool.submit(save, 20)
+            results = [first.result(timeout=30), second.result(timeout=30)]
+        self.assertCountEqual([status for status, _ in results], ["saved", "conflict"])
+        step.refresh_from_db()
+        self.assertEqual(step.version, 2)
+        self.assertEqual(step.values["value"], next(value for status, value in results if status == "saved"))

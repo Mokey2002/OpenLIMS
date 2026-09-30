@@ -22,6 +22,7 @@ from .models import (
     Notebook,
 )
 from .permissions import notebooks_for_user, user_can_notebook
+from .workflows import create_steps, update_step, WorkflowStepUpdate
 from .serializers import (
     ExperimentCommentSerializer,
     ExperimentCompactSerializer,
@@ -29,6 +30,7 @@ from .serializers import (
     ExperimentSerializer,
     ExperimentSummarySerializer,
     ExperimentTemplateSerializer,
+    ExperimentWorkflowStepSerializer,
     NotebookCollaboratorSerializer,
     NotebookSerializer,
 )
@@ -160,7 +162,7 @@ class ExperimentTemplateViewSet(viewsets.ModelViewSet):
         from hashlib import sha256
         import json
         def fingerprint(template):
-            content = {"name": template.name, "description": template.description, "blocks": template.blocks, "active": template.active}
+            content = {"name": template.name, "description": template.description, "blocks": template.blocks, "workflow_steps": template.workflow_steps, "active": template.active}
             return sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
         before = fingerprint(locked)
         serializer.instance = locked
@@ -180,6 +182,7 @@ class ExperimentTemplateViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=["post"])
+    @transaction.atomic
     def instantiate(self, request, pk=None):
         template = self.get_object()
         if not user_can_notebook(request.user, template.notebook, "write"):
@@ -193,6 +196,7 @@ class ExperimentTemplateViewSet(viewsets.ModelViewSet):
             created_by=request.user,
         )
         experiment.assignees.set(request.data.get("assignees", []))
+        create_steps(experiment, template.workflow_steps, request.user)
         create_revision(
             experiment=experiment,
             actor=request.user,
@@ -200,6 +204,10 @@ class ExperimentTemplateViewSet(viewsets.ModelViewSet):
             links=request.data.get("links", []),
             reason="Created from template",
         )
+        experiment.refresh_from_db()
+        notify_experiment(experiment, request.user, experiment.assignees.all(),
+                          f"Experiment assigned / Experimento asignado: {experiment.title}",
+                          "Open the experiment workflow to continue. / Abre el flujo del experimento para continuar.")
         return Response(ExperimentSerializer(experiment, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
@@ -240,6 +248,7 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
                 )
             ).prefetch_related("assignees")
 
+        queryset = queryset.prefetch_related("workflow_steps__assignee", "workflow_steps__completed_by")
         if self._compact_requested():
             return queryset.prefetch_related(
                 "assignees",
@@ -281,6 +290,8 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
         initial_links = serializer.validated_data.pop("initial_links", [])
         template = serializer.validated_data.get("template")
         experiment = serializer.save(created_by=request.user)
+        if template:
+            create_steps(experiment, template.workflow_steps, request.user)
         create_revision(
             experiment=experiment,
             actor=request.user,
@@ -323,6 +334,14 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         raise ValidationError({"detail": "Experiments with immutable revision history cannot be deleted."})
+
+    @extend_schema(request=WorkflowStepUpdate, responses=ExperimentWorkflowStepSerializer)
+    @action(detail=True, methods=["post"], url_path=r"workflow-steps/(?P<position>[0-9]+)")
+    def workflow_step(self, request, pk=None, position=None):
+        data = WorkflowStepUpdate(data=request.data)
+        data.is_valid(raise_exception=True)
+        step = update_step(experiment=self.get_object(), position=int(position), actor=request.user, data=data.validated_data)
+        return Response(ExperimentWorkflowStepSerializer(step).data)
 
     @action(detail=True, methods=["post"])
     def autosave(self, request, pk=None):
@@ -383,6 +402,8 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
         before = experiment.status
         experiment.status = target
         if target == Experiment.STATUS_COMPLETED:
+            if experiment.workflow_steps.exclude(status="COMPLETED").exists():
+                raise ValidationError({"workflow": "Complete every workflow step before completing the experiment."})
             if not experiment.current_revision:
                 raise ValidationError({"revision": "An experiment needs content before completion."})
             experiment.completed_at = timezone.now()
@@ -416,6 +437,7 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
         return Response(self.get_serializer(experiment).data)
 
     @action(detail=True, methods=["post"])
+    @transaction.atomic
     def clone(self, request, pk=None):
         source = self.get_object()
         if not user_can_notebook(request.user, source.notebook, "write"):
@@ -428,6 +450,7 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
             created_by=request.user,
         )
         clone.assignees.set(request.data.get("assignees", []))
+        create_steps(clone, [{**step.definition, "assignee": step.assignee_id} for step in source.workflow_steps.all()], request.user, cloning=True)
         payload = revision_payload(source.current_revision) if source.current_revision else {"blocks": [], "links": []}
         create_revision(
             experiment=clone,
