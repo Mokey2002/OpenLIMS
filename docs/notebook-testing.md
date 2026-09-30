@@ -16,7 +16,11 @@ repository setting; this change does not configure it.
 - Frontend unit suite: link selection, inaccessible parents, empty notebooks,
   mixed identifier types, and input immutability.
 - Playwright: unavailable links show an error without fetching an unrelated
-  experiment. These tests use mocked responses; they do not establish backend
+  experiment; failed switches keep the notebook and entry together; delayed
+  selections cannot overwrite a newer selection or entry edits; unavailable
+  details and slow supporting lists keep the navigator usable. My Work covers
+  initial retry, background refresh failures, focus/action refresh, and stale
+  responses. These tests use mocked responses; they do not establish backend
   authorization correctness. API/database tests cover that separately.
 
 ## Run
@@ -38,7 +42,7 @@ npm run build
 With the frontend running, from `frontend/e2e`:
 
 ```bash
-npm test -- tests/notebook-links.spec.js
+npm test -- tests/notebook-links.spec.js tests/daily-workflow.spec.js
 ```
 
 CI uploads retained browser traces, screenshots and the frontend log on failure
