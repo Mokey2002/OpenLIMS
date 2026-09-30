@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Row, Spinner, Table } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api";
@@ -38,29 +38,45 @@ export default function MyWork() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  const requestRef = useRef(null);
+  const load = useCallback(async () => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setLoading(true);
     setError("");
     try {
-      setData(await apiGet("/api/v1/my-work/"));
+      const next = await apiGet("/api/v1/my-work/", { signal: controller.signal });
+      if (!controller.signal.aborted) setData(next);
     } catch (e) {
-      setError(e.message || String(e));
+      if (!controller.signal.aborted) setError(e.message || String(e));
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
   }, []);
 
-  if (loading) {
-    return <div className="py-5 text-center"><Spinner animation="border" /></div>;
-  }
+  useEffect(() => {
+    const refreshVisible = () => { if (!document.hidden) void load(); };
+    const onMutation = (event) => { if (event.detail?.state === "success") refreshVisible(); };
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    window.addEventListener("openlims:request", onMutation);
+    const timer = setInterval(refreshVisible, 60_000);
+    return () => {
+      requestRef.current?.abort();
+      clearInterval(timer);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+      window.removeEventListener("openlims:request", onMutation);
+    };
+  }, [load]);
 
-  if (error) {
-    return <Alert variant="danger">{error}</Alert>;
+  if (!data) {
+    return error
+      ? <Alert variant="danger">{error} <Button onClick={load}>Retry</Button></Alert>
+      : <div className="py-5 text-center"><Spinner animation="border" /></div>;
   }
 
   const summary = data.summary;
@@ -69,7 +85,8 @@ export default function MyWork() {
   const columnLabels = language === "es" ? { name: "Trabajo", sample: "Muestra", status: "Estado", qc: "QC", due: "Vencimiento" } : { name: "Work", sample: "Sample", status: "Status", qc: "QC", due: "Due" };
 
   return (
-    <div data-testid="my-work-page">
+    <div data-testid="my-work-page" aria-busy={loading}>
+      {error && <Alert variant="warning">Could not refresh. Showing the last loaded data. {error}</Alert>}
       <div className="d-flex justify-content-between align-items-start gap-3 mb-4 flex-wrap">
         <div>
           <h2 className="mb-1">My Work</h2>
@@ -77,7 +94,7 @@ export default function MyWork() {
             One place for assigned work, requests, experiments, QC, alerts, and overdue items.
           </p>
         </div>
-        <Button variant="outline-dark" size="sm" onClick={load}>Refresh</Button>
+        <Button variant="outline-dark" size="sm" onClick={load} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</Button>
       </div>
 
       <WorkspacePreferences value={view} onChange={setView} />

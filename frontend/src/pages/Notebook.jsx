@@ -156,6 +156,8 @@ export default function NotebookPage() {
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const autosaveTimer = useRef(null);
   const selectionToken = useRef(0);
+  const navigationToken = useRef(0);
+  const workspaceLoadToken = useRef(0);
   const revisionRef = useRef("");
   const dirtyRef = useRef(false);
   const editVersionRef = useRef(0);
@@ -211,22 +213,26 @@ export default function NotebookPage() {
     }
   }
 
-  async function loadExperimentDetail(experiment) {
-    if (!experiment) return null;
-    const detail = await apiGet(`/api/experiments/${experiment.id}/?compact=1`);
-    setExperiments((current) => current.map((row) => (
-      row.id === detail.id ? { ...row, ...detail } : row
-    )));
-    return detail;
-  }
-
   async function load(selectId = null, selectNotebookId = null) {
+    navigationToken.current += 1;
+    const auxiliaryToken = ++workspaceLoadToken.current;
     setError("");
     try {
-      const [meData, notebookRows, templateRows, experimentRows, projectRows, userRows] = await Promise.all([
-        apiGet("/api/me/"), apiGetAll("/api/notebooks/"), apiGetAll("/api/experiment-templates/"),
-        apiGetAll("/api/experiments/?summary=1"), apiGetAll("/api/projects/"), apiGetAll("/api/notebooks/collaborators/"),
+      // Supporting pickers should not delay or hide the experiment workspace.
+      for (const [path, setter] of [
+        ["/api/experiment-templates/", setTemplates], ["/api/projects/", setProjects],
+        ["/api/notebooks/collaborators/", setUsers],
+      ]) {
+        void apiGetAll(path).then(rows => {
+          if (auxiliaryToken === workspaceLoadToken.current) setter(rows);
+        }).catch(() => {
+          if (auxiliaryToken === workspaceLoadToken.current) setError(say("Some supporting lists could not load. Refresh to retry.", "No se pudieron cargar algunas listas de apoyo. Actualiza para reintentar."));
+        });
+      }
+      const [meData, notebookRows, experimentRows] = await Promise.all([
+        apiGet("/api/me/"), apiGetAll("/api/notebooks/"), apiGetAll("/api/experiments/?summary=1"),
       ]);
+      if (auxiliaryToken !== workspaceLoadToken.current) return;
       const query = new URLSearchParams(window.location.search);
       const initialLink = !selectId && !selectNotebookId && !selected && !selectedNotebookId;
       const { notebook: targetNotebook, experiment: targetSummary, unavailable } = selectNotebookRecord({
@@ -236,28 +242,36 @@ export default function NotebookPage() {
         strict: initialLink,
       });
       if (unavailable) setError(say("This linked record is unavailable or you no longer have access. Choose a notebook to continue.", "El registro enlazado no está disponible o ya no tienes acceso. Elige una bitácora para continuar."));
-      const target = targetSummary ? await apiGet(`/api/experiments/${targetSummary.id}/?compact=1`) : null;
+      const target = targetSummary ? await apiGet(`/api/experiments/${targetSummary.id}/?compact=1`).catch(requestError => {
+        if (auxiliaryToken === workspaceLoadToken.current) setError(requestError.message || String(requestError));
+        return null;
+      }) : null;
+      if (auxiliaryToken !== workspaceLoadToken.current) return;
       const hydratedExperiments = target ? experimentRows.map((row) => (
         row.id === target.id ? { ...row, ...target } : row
       )) : experimentRows;
-      setMe(meData); setNotebooks(notebookRows); setTemplates(templateRows); setExperiments(hydratedExperiments);
-      setProjects(projectRows); setUsers(userRows);
+      setMe(meData); setNotebooks(notebookRows); setExperiments(hydratedExperiments);
       setSelectedNotebookId(targetNotebook?.id || null);
       setNotebookEditForm(targetNotebook ? notebookValues(targetNotebook) : null);
       setTemplateForm((current) => ({ ...current, notebook: targetNotebook?.permissions?.write ? String(targetNotebook.id) : "" }));
       adoptExperiment(target);
       void loadAttachments(target);
     } catch (requestError) {
-      setError(requestError.message || String(requestError));
+      if (auxiliaryToken === workspaceLoadToken.current) setError(requestError.message || String(requestError));
     } finally {
-      setLoading(false);
+      if (auxiliaryToken === workspaceLoadToken.current) setLoading(false);
     }
   }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-    return () => clearTimeout(autosaveTimer.current);
+    return () => {
+      clearTimeout(autosaveTimer.current);
+      navigationToken.current += 1;
+      selectionToken.current += 1;
+      workspaceLoadToken.current += 1;
+    };
     // The workspace loads once; subsequent refreshes are explicit or action-driven.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -319,33 +333,43 @@ export default function NotebookPage() {
     autosaveTimer.current = setTimeout(() => saveContent(nextBlocks, nextLinks, "Notebook autosave", experiment), 1400);
   }
 
-  async function selectExperiment(experiment) {
-    if (selected?.id === experiment.id) return;
-    if (dirtyRef.current && !(await saveContent(blocks, links, "Saved before switching experiments", selected))) return;
+  async function navigateToExperiment(experiment, notebook = null) {
+    const token = ++navigationToken.current;
+    if (dirtyRef.current && !(await saveContent(blocks, links, "Saved before switching records", selected))) return;
+    if (token !== navigationToken.current || dirtyRef.current) return;
+    const editVersion = editVersionRef.current;
     try {
-      const detail = await loadExperimentDetail(experiment);
+      const detail = experiment ? await apiGet(`/api/experiments/${experiment.id}/?compact=1`) : null;
+      if (token !== navigationToken.current) return;
+      // An edit made while the detail request was pending must not be discarded.
+      if (editVersion !== editVersionRef.current) {
+        setMessage(say("Selection cancelled because you edited the current experiment. Select again when ready.", "Se canceló la selección porque editaste el experimento actual. Selecciona de nuevo cuando termines."));
+        return;
+      }
+      if (detail) setExperiments(current => current.map(row => row.id === detail.id ? { ...row, ...detail } : row));
+      if (notebook) {
+        setSelectedNotebookId(notebook.id);
+        setNotebookEditForm(notebookValues(notebook));
+        setTemplateForm((current) => ({ ...current, notebook: notebook.permissions.write ? String(notebook.id) : "" }));
+      }
+      setError("");
       adoptExperiment(detail);
       void loadAttachments(detail);
       setDetailTab("entry");
     } catch (requestError) {
-      setError(requestError.message || String(requestError));
+      if (token === navigationToken.current) setError(requestError.message || String(requestError));
     }
+  }
+
+  async function selectExperiment(experiment) {
+    if (selected?.id === experiment.id) { navigationToken.current += 1; return; }
+    await navigateToExperiment(experiment);
   }
 
   async function selectNotebook(notebook) {
     if (!notebook) return;
-    if (dirtyRef.current && !(await saveContent(blocks, links, "Saved before switching notebooks", selected))) return;
-    setSelectedNotebookId(notebook.id);
-    setNotebookEditForm(notebookValues(notebook));
-    setTemplateForm((current) => ({ ...current, notebook: notebook.permissions.write ? String(notebook.id) : "" }));
     const firstExperiment = experiments.find((row) => String(row.notebook) === String(notebook.id)) || null;
-    try {
-      const detail = await loadExperimentDetail(firstExperiment);
-      adoptExperiment(detail);
-      void loadAttachments(detail);
-    } catch (requestError) {
-      setError(requestError.message || String(requestError));
-    }
+    await navigateToExperiment(firstExperiment, notebook);
   }
 
   function changeDetailTab(key) {
