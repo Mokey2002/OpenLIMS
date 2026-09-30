@@ -3,6 +3,7 @@ import {
   Alert, Badge, Button, Card, Col, Form, Modal, Nav, Row, Spinner, Tab, Table,
 } from "react-bootstrap";
 import { apiDownload, apiGet, apiGetAll, apiPatch, apiPost, apiPostForm } from "../api";
+import ExperimentWorkflow from "../components/notebook/ExperimentWorkflow";
 import TemplateDesigner from "../components/notebook/TemplateDesigner";
 import BlockEditor from "../components/notebook/BlockEditor";
 import { BLOCK_CATALOG, newBlock } from "../components/notebook/blockTypes";
@@ -130,6 +131,7 @@ export default function NotebookPage() {
   const [selected, setSelected] = useState(null);
   const [blocks, setBlocks] = useState([]);
   const [links, setLinks] = useState([]);
+  const [workflowEpoch, setWorkflowEpoch] = useState(0);
   const [experimentMeta, setExperimentMeta] = useState({ title: "", assignees: [] });
   const [notebookEditForm, setNotebookEditForm] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -168,6 +170,7 @@ export default function NotebookPage() {
   }
 
   function adoptExperiment(experiment) {
+    setWorkflowEpoch(current => current + 1);
     selectionToken.current += 1;
     clearTimeout(autosaveTimer.current);
     dirtyRef.current = false;
@@ -428,7 +431,7 @@ export default function NotebookPage() {
       const sourceBlocks = templateForm.source === "current" && selected ? serializableBlocks(blocks) : starterBlocks(language);
       const created = await apiPost("/api/experiment-templates/", { notebook: Number(templateForm.notebook), name: templateForm.name, description: templateForm.description, blocks: sourceBlocks });
       setTemplateForm((current) => ({ ...current, name: "", description: "" }));
-      setMessage(`Template ${created.name} created.`); await load(selected?.id, selectedNotebookId); setTopTab("templates");
+      setMessage(`Template ${created.name} created.`); await load(selected?.id, selectedNotebookId); setTopTab("templates"); setDesignTemplate(created);
     } catch (requestError) { setError(requestError.message || String(requestError)); }
   }
 
@@ -630,7 +633,11 @@ export default function NotebookPage() {
             </Col>
             <Col xl={9} lg={8}>
               {!selected ? <Card className="app-card"><Card.Body><div className="empty-state"><h5>No experiment selected</h5><p>{say("Choose a notebook, then create an experiment to record your work.", "Elige una bitácora y crea un experimento para documentar tu trabajo.")}</p>{!selectedNotebook && <Button variant="dark" onClick={() => setShowNotebookModal(true)}>{say("Create your first notebook", "Crea tu primera bitácora")}</Button>}{selectedNotebook?.permissions?.write && <Button variant="dark" onClick={() => setShowExperimentModal(true)}>Create experiment</Button>}</div></Card.Body></Card> : <ExperimentWorkspace
-                selected={selected} editable={editable} blocks={blocks} links={links} users={users}
+                workflowEpoch={workflowEpoch} selected={selected} editable={editable} blocks={blocks} links={links} users={users}
+                onWorkflowStepSaved={(step, operation) => setSelected(current => current?.id === selected.id ? {
+                  ...current, status: operation !== "assign" && current.status === "DRAFT" ? "IN_PROGRESS" : current.status,
+                  workflow_steps: current.workflow_steps.map(row => row.position === step.position ? step : row),
+                } : current)}
                 attachments={attachments} attachmentForm={attachmentForm} setAttachmentForm={setAttachmentForm}
                 linkTargets={linkTargets} linkForm={linkForm} setLinkForm={setLinkForm} targetOptions={targetOptions}
                 linkTargetLoading={Boolean(linkTargetLoading[linkForm.entity_type])}
@@ -669,7 +676,7 @@ export default function NotebookPage() {
           />
         </Tab.Pane>
       </Tab.Content>
-      {designTemplate && <TemplateDesigner key={designTemplate.id} template={designTemplate} onClose={() => setDesignTemplate(null)} onSaved={updated => { setTemplates(current => current.map(row => row.id === updated.id ? updated : row)); setDesignTemplate(null); }} />}
+      {designTemplate && <TemplateDesigner users={users} key={designTemplate.id} template={designTemplate} onClose={() => setDesignTemplate(null)} onSaved={updated => { setTemplates(current => current.map(row => row.id === updated.id ? updated : row)); setDesignTemplate(null); }} />}
     </Tab.Container>
 
     <NotebookCreateModal show={showNotebookModal} onHide={() => setShowNotebookModal(false)} form={notebookForm} setForm={setNotebookForm} projects={projects} onSubmit={createNotebook} />
@@ -683,7 +690,7 @@ function ExperimentWorkspace(props) {
   const say = (en, es) => language === "es" ? es : en;
   const { selected, editable, blocks, links, users, attachments, attachmentForm, setAttachmentForm,
     linkTargets, linkForm, setLinkForm, linkTargetLoading,
-    targetOptions, detailTab, onDetailTabChange, onLinkTypeChange, saveState, experimentMeta, setExperimentMeta,
+    workflowEpoch, onWorkflowStepSaved, targetOptions, detailTab, onDetailTabChange, onLinkTypeChange, saveState, experimentMeta, setExperimentMeta,
     commentForm, setCommentForm, compareForm, setCompareForm, comparison, comparisonLoading,
     onSave, onWorkflow, onDownload, onAddBlock, onSequenceFocus, onBlockChange, onBlockMove, onBlockDuplicate,
     onBlockRemove, onAddLink, onRemoveLink, onUploadAttachment, onAddComment, onResolveComment, onCompare,
@@ -691,13 +698,15 @@ function ExperimentWorkspace(props) {
   return <>
     <Card className="app-card notebook-experiment-header mb-4"><Card.Body><div className="toolbar-row">
       <div><div className="inline-actions mb-2"><Badge bg={statusColor(selected.status)}>{statusLabel(selected.status)}</Badge><span className={`notebook-save-state ${saveState.includes("failed") ? "text-danger" : ""}`}>{saveState || `Revision ${selected.current_revision_detail?.number || 0}`}</span></div><h3 className="mb-1">{selected.title}</h3><div className="feed-meta">{selected.notebook_name} · {selected.project_code || "Private/team"} · created by {selected.created_by_username}</div></div>
-      <div className="inline-actions">{editable && <Button variant="outline-primary" onClick={onSave}>Save now</Button>}{editable && <Button variant="outline-dark" onClick={() => onWorkflow("complete")}>Complete</Button>}{selected.permissions.review && selected.status === "COMPLETED" && <><Button variant="success" onClick={() => onWorkflow("approve")}>Approve</Button><Button variant="outline-warning" onClick={() => onWorkflow("changes")}>Request changes</Button></>}{selected.permissions.lock && selected.status === "REVIEWED" && <Button variant="dark" onClick={() => onWorkflow("lock")}>Lock</Button>}<Button variant="outline-secondary" onClick={() => onWorkflow("clone")}>Clone</Button><Button variant="outline-primary" onClick={onDownload}>PDF</Button></div>
+      <div className="inline-actions">{editable && <Button variant="outline-primary" onClick={onSave}>Save now</Button>}{editable && <Button variant="outline-dark" disabled={(selected.workflow_steps || []).some(step => step.status !== "COMPLETED")} onClick={() => onWorkflow("complete")}>Complete</Button>}{selected.permissions.review && selected.status === "COMPLETED" && <><Button variant="success" onClick={() => onWorkflow("approve")}>Approve</Button><Button variant="outline-warning" onClick={() => onWorkflow("changes")}>Request changes</Button></>}{selected.permissions.lock && selected.status === "REVIEWED" && <Button variant="dark" onClick={() => onWorkflow("lock")}>Lock</Button>}<Button variant="outline-secondary" onClick={() => onWorkflow("clone")}>Clone</Button><Button variant="outline-primary" onClick={onDownload}>PDF</Button></div>
     </div></Card.Body></Card>
     <div className="notebook-context mb-3">
       <p className="mb-2">{editable
         ? say("Work through the record below, then mark it complete when you have finished documenting. Completion and review are separate steps.", "Completa el registro de abajo y márcalo como completado al terminar de documentar. Completar y revisar son pasos distintos.")
         : say("This record is read-only. Ask the notebook owner or an administrator for editing access. Reviewed or locked records must be cloned to document a new experiment.", "Este registro es de solo lectura. Solicita acceso de edición al propietario de la bitácora o a un administrador. Clona los registros revisados o bloqueados para documentar un nuevo experimento.")}</p>
+      {(selected.workflow_steps || []).some(step => step.status !== "COMPLETED") && <p>{say("Finish the workflow steps before completing this experiment.", "Termina los pasos del flujo antes de completar este experimento.")}</p>}
       <div className="inline-actions">
+        {(selected.workflow_steps || []).length > 0 && <Button size="sm" variant="primary" onClick={() => onDetailTabChange("workflow")}>{say("Open workflow steps", "Abrir pasos del flujo")}</Button>}
         <Button size="sm" variant="outline-dark" onClick={() => onDetailTabChange("provenance")}>{say("View samples & files", "Ver muestras y archivos")}</Button>
         <Button size="sm" variant="outline-dark" onClick={() => onDetailTabChange("discussion")}>{say("Discuss with the team", "Comentar con el equipo")}</Button>
       </div>
@@ -711,6 +720,7 @@ function ExperimentWorkspace(props) {
     <Tab.Container activeKey={detailTab} onSelect={onDetailTabChange}>
       <Nav variant="pills" className="notebook-detail-tabs mb-3">
         <Nav.Item><Nav.Link eventKey="entry">{say("Experiment record", "Registro del experimento")}</Nav.Link></Nav.Item>
+        <Nav.Item><Nav.Link eventKey="workflow">{say("Workflow", "Flujo de trabajo")} <Badge bg="light" text="dark">{(selected.workflow_steps || []).filter(step => step.status === "COMPLETED").length}/{(selected.workflow_steps || []).length}</Badge></Nav.Link></Nav.Item>
         <Nav.Item><Nav.Link eventKey="provenance">{say("Samples & files", "Muestras y archivos")} <Badge bg="light" text="dark">{links.length}</Badge></Nav.Link></Nav.Item>
         <Nav.Item><Nav.Link eventKey="discussion">Discussion <Badge bg="light" text="dark">{(selected.comments || []).filter((row) => !row.resolved).length}</Badge></Nav.Link></Nav.Item>
         <Nav.Item><Nav.Link eventKey="history">History <Badge bg="light" text="dark">{selected.revisions?.length || 0}</Badge></Nav.Link></Nav.Item>
@@ -725,6 +735,7 @@ function ExperimentWorkspace(props) {
           {blocks.length === 0 ? <div className="empty-state py-5"><p>This experiment has no blocks.</p>{editable && <Button variant="outline-dark" onClick={() => onAddBlock("RICH_TEXT")}>Add first block</Button>}</div> : blocks.map((block, index) => <BlockEditor key={block._key} block={block} index={index} count={blocks.length} editable={editable} sequenceOptions={linkTargets.sequence || []} onSequenceFocus={onSequenceFocus} onChange={(next) => onBlockChange(index, next)} onMove={(direction) => onBlockMove(index, direction)} onDuplicate={() => onBlockDuplicate(index)} onRemove={() => onBlockRemove(index)} />)}
         </Card.Body></Card></Tab.Pane>
 
+        <Tab.Pane eventKey="workflow"><ExperimentWorkflow key={`${selected.id}-${workflowEpoch}`} experiment={selected} editable={editable} users={users} onSaved={onWorkflowStepSaved} /></Tab.Pane>
         <Tab.Pane eventKey="provenance"><Card className="app-card"><Card.Body>
           <h5 className="section-title">{say("Link existing records", "Vincula registros existentes")}</h5><p className="feed-meta">{say("Connect samples, results, or materials to this experiment without creating them again. Files can be uploaded below.", "Conecta muestras, resultados o materiales a este experimento sin crearlos de nuevo. Puedes subir archivos más abajo.")}</p>
           {editable && <Form onSubmit={onAddLink} className="notebook-link-form"><Row className="g-2"><Col md={3}><Form.Label>Record type</Form.Label><Form.Select value={linkForm.entity_type} onChange={(event) => onLinkTypeChange(event.target.value)}>{LINK_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Form.Select></Col><Col md={5}><Form.Label>Exact record</Form.Label><Form.Select required disabled={linkTargetLoading} value={linkForm.public_id} onChange={(event) => setLinkForm({ ...linkForm, public_id: event.target.value })}><option value="">{linkTargetLoading ? "Loading records..." : "Choose exact record"}</option>{targetOptions.map((target) => <option key={target.public_id} value={target.public_id}>{targetLabel(target)}</option>)}</Form.Select></Col><Col md={2}><Form.Label>Relationship</Form.Label><Form.Select value={linkForm.relation_type} onChange={(event) => setLinkForm({ ...linkForm, relation_type: event.target.value })}>{RELATION_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Form.Select></Col><Col md={2} className="d-flex align-items-end"><Button className="w-100" type="submit">Add link</Button></Col></Row></Form>}
@@ -764,7 +775,7 @@ function NotebookManagement({ filteredNotebooks, selectedNotebook, notebookSearc
 
 function TemplateManagement({ form, setForm, notebooks, selected, selectedNotebook, templates, onCreate, onToggle, onUse, onEdit }) {
   const { language } = useLanguage();
-  return <Row className="g-4"><Col lg={5}><Card className="app-card"><Card.Body><h5 className="section-title">Create reusable template</h5><Form onSubmit={onCreate}><Form.Group className="mb-3"><Form.Label>Notebook</Form.Label><Form.Select required value={form.notebook} onChange={(event) => setForm({ ...form, notebook: event.target.value })}><option value="">Choose notebook</option>{notebooks.filter((notebook) => notebook.permissions.write).map((notebook) => <option key={notebook.id} value={notebook.id}>{notebook.name}</option>)}</Form.Select></Form.Group><Form.Group className="mb-3"><Form.Label>Template name</Form.Label><Form.Control required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Form.Group><Form.Group className="mb-3"><Form.Label>Description</Form.Label><Form.Control as="textarea" rows={2} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Form.Group><Form.Group className="mb-3"><Form.Label>Starting blocks</Form.Label><Form.Select value={form.source} onChange={(event) => setForm({ ...form, source: event.target.value })}><option value="default">Standard experiment structure</option><option value="current" disabled={!selected || String(selected.notebook) !== String(form.notebook)}>Copy the currently open experiment</option></Form.Select></Form.Group><Button type="submit" variant="dark">Create template</Button></Form></Card.Body></Card></Col><Col lg={7}><Card className="app-card"><Card.Body><h5 className="section-title mb-1">Templates in {selectedNotebook?.name || "notebook"}</h5><div className="feed-meta">Clone a consistent structure without changing the source.</div>{templates.length === 0 ? <div className="empty-state py-5">No templates in this notebook.</div> : <div className="d-grid gap-3 mt-3">{templates.map((template) => <div className={`notebook-template ${!template.active ? "inactive" : ""}`} key={template.id}><div className="toolbar-row"><div><div><strong>{template.name}</strong> <Badge bg={template.active ? "success" : "secondary"}>{template.active ? "Active" : "Inactive"}</Badge></div><p className="mb-1 mt-2">{template.description || "No description"}</p><div className="feed-meta">{template.blocks.length} blocks · created by {template.created_by_username || "System"}</div></div><div className="inline-actions">{selectedNotebook?.permissions?.write && <Button size="sm" variant="outline-dark" onClick={() => onEdit(template)}>{language === "es" ? "Editar estructura" : "Edit structure"}</Button>}{selectedNotebook?.permissions?.write && <Button size="sm" variant="outline-secondary" onClick={() => onToggle(template)}>{template.active ? "Deactivate" : "Activate"}</Button>}<Button size="sm" variant="dark" disabled={!template.active} onClick={() => onUse(template)}>Use template</Button></div></div></div>)}</div>}</Card.Body></Card></Col></Row>;
+  return <Row className="g-4"><Col lg={5}><Card className="app-card"><Card.Body><h5 className="section-title">Create reusable template</h5><Form onSubmit={onCreate}><Form.Group className="mb-3"><Form.Label>Notebook</Form.Label><Form.Select required value={form.notebook} onChange={(event) => setForm({ ...form, notebook: event.target.value })}><option value="">Choose notebook</option>{notebooks.filter((notebook) => notebook.permissions.write).map((notebook) => <option key={notebook.id} value={notebook.id}>{notebook.name}</option>)}</Form.Select></Form.Group><Form.Group className="mb-3"><Form.Label>Template name</Form.Label><Form.Control required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Form.Group><Form.Group className="mb-3"><Form.Label>Description</Form.Label><Form.Control as="textarea" rows={2} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Form.Group><Form.Group className="mb-3"><Form.Label>Starting blocks</Form.Label><Form.Select value={form.source} onChange={(event) => setForm({ ...form, source: event.target.value })}><option value="default">Standard experiment structure</option><option value="current" disabled={!selected || String(selected.notebook) !== String(form.notebook)}>Copy the currently open experiment</option></Form.Select></Form.Group><Button type="submit" variant="dark">Create template</Button></Form></Card.Body></Card></Col><Col lg={7}><Card className="app-card"><Card.Body><h5 className="section-title mb-1">Templates in {selectedNotebook?.name || "notebook"}</h5><div className="feed-meta">Clone a consistent structure without changing the source.</div>{templates.length === 0 ? <div className="empty-state py-5">No templates in this notebook.</div> : <div className="d-grid gap-3 mt-3">{templates.map((template) => <div className={`notebook-template ${!template.active ? "inactive" : ""}`} key={template.id}><div className="toolbar-row"><div><div><strong>{template.name}</strong> <Badge bg={template.active ? "success" : "secondary"}>{template.active ? "Active" : "Inactive"}</Badge></div><p className="mb-1 mt-2">{template.description || "No description"}</p><div className="feed-meta">{template.blocks.length} blocks · {(template.workflow_steps || []).length} {language === "es" ? "pasos" : "workflow steps"} · created by {template.created_by_username || "System"}</div></div><div className="inline-actions">{selectedNotebook?.permissions?.write && <Button size="sm" variant="outline-dark" onClick={() => onEdit(template)}>{language === "es" ? "Editar estructura" : "Edit structure"}</Button>}{selectedNotebook?.permissions?.write && <Button size="sm" variant="outline-secondary" onClick={() => onToggle(template)}>{template.active ? "Deactivate" : "Activate"}</Button>}<Button size="sm" variant="dark" disabled={!template.active} onClick={() => onUse(template)}>Use template</Button></div></div></div>)}</div>}</Card.Body></Card></Col></Row>;
 }
 
 function NotebookCreateModal({ show, onHide, form, setForm, projects, onSubmit }) {

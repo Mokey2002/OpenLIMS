@@ -352,6 +352,9 @@ def review_experiment(*, experiment, actor, decision, comment="", signed_name=""
     decision = str(decision or "").upper()
     if decision not in {ExperimentReview.DECISION_APPROVED, ExperimentReview.DECISION_CHANGES}:
         raise ValidationError({"decision": "Choose APPROVED or CHANGES_REQUESTED."})
+    from .workflows import workflow_checksum
+    if experiment.workflow_steps.exclude(status="COMPLETED").exists():
+        raise ValidationError({"workflow": "Complete all workflow steps before review."})
     review = ExperimentReview.objects.create(
         experiment=experiment,
         revision=experiment.current_revision,
@@ -360,6 +363,7 @@ def review_experiment(*, experiment, actor, decision, comment="", signed_name=""
         comment=comment,
         signed_name=signed_name or actor.get_full_name() or actor.username,
         content_checksum=experiment.current_revision.checksum,
+        workflow_checksum=workflow_checksum(experiment),
     )
     if decision == ExperimentReview.DECISION_APPROVED:
         experiment.status = Experiment.STATUS_REVIEWED
@@ -374,7 +378,7 @@ def review_experiment(*, experiment, actor, decision, comment="", signed_name=""
         action="EXPERIMENT_REVIEWED",
         actor=actor,
         reason=comment,
-        after={"decision": decision, "revision": experiment.current_revision.number, "checksum": review.content_checksum},
+        after={"decision": decision, "revision": experiment.current_revision.number, "checksum": review.content_checksum, "workflow_checksum": review.workflow_checksum},
     )
     notify_experiment(experiment, actor,
                       list(experiment.assignees.all()) + [experiment.created_by, experiment.notebook.owner],
@@ -390,12 +394,16 @@ def lock_experiment(*, experiment, actor, reason=""):
         raise PermissionDenied("You cannot lock this experiment.")
     if experiment.status != Experiment.STATUS_REVIEWED:
         raise ValidationError({"status": "Only reviewed experiments can be locked."})
-    if not experiment.reviews.filter(
+    approvals = experiment.reviews.filter(
         revision=experiment.current_revision,
         decision=ExperimentReview.DECISION_APPROVED,
         content_checksum=experiment.current_revision.checksum,
-    ).exists():
-        raise ValidationError({"review": "The current revision has no valid approval."})
+    )
+    if experiment.workflow_steps.exists():
+        from .workflows import workflow_checksum
+        approvals = approvals.filter(workflow_checksum=workflow_checksum(experiment))
+    if not approvals.exists():
+        raise ValidationError({"review": "The current revision or workflow has no valid approval."})
     experiment.status = Experiment.STATUS_LOCKED
     experiment.locked_at = timezone.now()
     experiment.locked_by = actor
@@ -471,6 +479,19 @@ def render_experiment_pdf(experiment):
     table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.grey), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
     story.extend([table, Spacer(1, 14)])
 
+    steps = experiment.workflow_steps.select_related("assignee", "completed_by").all()
+    if steps:
+        from .workflows import workflow_checksum
+        story.append(Paragraph("Experiment workflow", styles["Heading2"]))
+        story.append(Paragraph("Workflow checksum: " + workflow_checksum(experiment), styles["BodyText"]))
+        for step in steps:
+            story.append(Paragraph(escape(f"{step.position}. {step.definition['name']} — {step.status}"), styles["Heading3"]))
+            for text in [step.definition.get("instructions", ""), step.definition.get("completion_criteria", ""),
+                         f"Assigned: {step.assignee.username if step.assignee else 'Unassigned'}",
+                         f"Completed by: {step.completed_by.username if step.completed_by else '-'} at {step.completed_at or '-'}", step.completion_note]:
+                story.append(Paragraph(escape(str(text)), styles["BodyText"]))
+            for field in step.definition["fields"]:
+                story.append(Paragraph(escape(f"{field['label']} ({field['key']}): {step.values.get(field['key'], '-')}; criteria: " + str({k: field[k] for k in ('required', 'minimum', 'maximum', 'equals') if k in field})), styles["BodyText"]))
     if current:
         for block in current.blocks.all():
             data = block.data or {}

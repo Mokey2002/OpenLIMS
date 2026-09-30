@@ -86,6 +86,7 @@ class ExperimentTemplate(PublicIDModel):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     blocks = models.JSONField(default=list, blank=True)
+    workflow_steps = models.JSONField(default=list, blank=True)
     active = models.BooleanField(default=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -401,6 +402,7 @@ class ExperimentReview(PublicIDModel):
     decision = models.CharField(max_length=24, choices=DECISION_CHOICES)
     comment = models.TextField(blank=True)
     signed_name = models.CharField(max_length=255)
+    workflow_checksum = models.CharField(max_length=64, blank=True)
     content_checksum = models.CharField(max_length=64)
     reviewed_at = models.DateTimeField(auto_now_add=True)
 
@@ -420,3 +422,20 @@ class ExperimentReview(PublicIDModel):
 
     def delete(self, *args, **kwargs):
         raise ValidationError("Experiment reviews are immutable.")
+
+
+class ExperimentWorkflowStep(models.Model):
+    experiment = models.ForeignKey(Experiment, on_delete=models.PROTECT, related_name="workflow_steps")
+    position = models.PositiveIntegerField()
+    definition = models.JSONField(default=dict)
+    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="experiment_workflow_assignments")
+    values = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=16, choices=[("PENDING", "Pending"), ("COMPLETED", "Completed")], default="PENDING")
+    version = models.PositiveIntegerField(default=1)
+    completed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="completed_experiment_steps")
+    completed_at = models.DateTimeField(null=True, blank=True)
+    completion_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["position"]
+        constraints = [models.UniqueConstraint(fields=["experiment", "position"], name="notebook_workflow_step_position_unique")]

@@ -9,6 +9,7 @@ from .models import (
     ExperimentRevision,
     ExperimentReview,
     ExperimentTemplate,
+    ExperimentWorkflowStep,
     Notebook,
 )
 from .permissions import user_can_notebook
@@ -91,9 +92,20 @@ class ExperimentTemplateSerializer(serializers.ModelSerializer):
         model = ExperimentTemplate
         fields = [
             "id", "public_id", "notebook", "notebook_name", "name", "description",
-            "blocks", "active", "expected_updated_at", "created_by", "created_by_username", "created_at", "updated_at",
+            "blocks", "workflow_steps", "active", "expected_updated_at", "created_by", "created_by_username", "created_at", "updated_at",
         ]
         read_only_fields = ["id", "public_id", "created_by", "created_by_username", "created_at", "updated_at"]
+
+    def validate_workflow_steps(self, value):
+        from .workflows import validate_definition
+        return validate_definition(value)
+
+    def validate(self, attrs):
+        from .workflows import validate_assignee
+        notebook = attrs.get("notebook", getattr(self.instance, "notebook", None))
+        for step in attrs.get("workflow_steps", []):
+            validate_assignee(step.get("assignee"), notebook)
+        return attrs
 
     def validate_blocks(self, value):
         from .services import validate_blocks
@@ -133,7 +145,7 @@ class ExperimentReviewSerializer(serializers.ModelSerializer):
         fields = [
             "id", "public_id", "revision", "revision_number", "reviewer",
             "reviewer_username", "decision", "comment", "signed_name",
-            "content_checksum", "reviewed_at",
+            "content_checksum", "workflow_checksum", "reviewed_at",
         ]
         read_only_fields = fields
 
@@ -197,7 +209,18 @@ class ExperimentCommentSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class ExperimentWorkflowStepSerializer(serializers.ModelSerializer):
+    assignee_username = serializers.CharField(source="assignee.username", read_only=True, default="")
+    completed_by_username = serializers.CharField(source="completed_by.username", read_only=True, default="")
+
+    class Meta:
+        model = ExperimentWorkflowStep
+        fields = ["position", "definition", "assignee", "assignee_username", "values", "status", "version", "completed_by", "completed_by_username", "completed_at", "completion_note"]
+        read_only_fields = fields
+
+
 class ExperimentSerializer(serializers.ModelSerializer):
+    workflow_steps = ExperimentWorkflowStepSerializer(many=True, read_only=True)
     notebook_name = serializers.CharField(source="notebook.name", read_only=True)
     project = serializers.IntegerField(source="notebook.project_id", read_only=True)
     project_code = serializers.CharField(source="notebook.project.code", read_only=True)
@@ -220,7 +243,7 @@ class ExperimentSerializer(serializers.ModelSerializer):
             "created_by_username", "assignees", "assignee_usernames", "current_revision",
             "current_revision_detail", "revisions", "comments", "reviews", "permissions",
             "completed_at", "reviewed_at", "locked_at", "locked_by", "locked_by_username",
-            "created_at", "updated_at", "initial_blocks", "initial_links",
+            "created_at", "updated_at", "initial_blocks", "initial_links", "workflow_steps",
         ]
         read_only_fields = [
             "id", "public_id", "cloned_from", "status", "created_by", "created_by_username",
@@ -242,6 +265,8 @@ class ExperimentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"template": "This template is inactive."})
         if template and notebook and template.notebook_id != notebook.pk:
             raise serializers.ValidationError({"template": "The template belongs to a different notebook."})
+        if self.instance and template != self.instance.template:
+            raise serializers.ValidationError({"template": "The template is fixed at creation. Create a new experiment to use another workflow."})
         if self.instance and notebook and notebook.pk != self.instance.notebook_id:
             raise serializers.ValidationError({"notebook": "Experiments cannot be moved between notebooks; clone the experiment instead."})
         return attrs
