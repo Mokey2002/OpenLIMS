@@ -16,6 +16,16 @@ const SUPPORTED_LANGUAGES = new Set(["en", "es"]);
 const TRANSLATABLE_ATTRIBUTES = ["placeholder", "title", "aria-label"];
 
 const spanishText = {
+  "Getting started": "Primeros pasos",
+  "Account setup": "Configuración de cuenta",
+  "Password ready": "Contraseña configurada",
+  "Password setup pending": "Contraseña pendiente",
+  "Invitation submitted to email service": "Invitación enviada al servicio de correo",
+  "Invitation email failed — resend needed": "Falló el correo de invitación — es necesario reenviarlo",
+  "Password setup completed": "Configuración de contraseña completada",
+  "No invitation recorded": "No hay invitaciones registradas",
+  "Unable to refresh invitation status. Reload the page to check it.": "No se pudo actualizar el estado de la invitación. Recarga la página para comprobarlo.",
+  "Password saved. Sign in, then open Getting started to begin your lab’s workflow.": "Contraseña guardada. Inicia sesión y abre Primeros pasos para comenzar el flujo de tu laboratorio.",
   "Write in the sections below. Changes save automatically; check the save status above before leaving.": "Escribe en las secciones de abajo. Los cambios se guardan automáticamente; revisa el estado del guardado antes de salir.",
   "Set your OpenLIMS password": "Establece tu contraseña de OpenLIMS",
   "Passwords do not match.": "Las contraseñas no coinciden.",

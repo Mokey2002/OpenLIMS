@@ -36,7 +36,7 @@ export default function SetPassword() {
   return <main className="container py-5" style={{ maxWidth: 520 }}>
     <Card><Card.Body>
       <h1 className="h4">Set your OpenLIMS password</h1>
-      {done ? <Alert variant="success">Password saved. You can now sign in.</Alert> :
+      {done ? <Alert variant="success">Password saved. Sign in, then open Getting started to begin your lab’s workflow.</Alert> :
         !credentials.uid || !credentials.token ? <Alert variant="warning">Invalid password link. Request a new link or contact your administrator.</Alert> :
         <Form onSubmit={submit}>
           <p>Choose your own password to access your account.</p>

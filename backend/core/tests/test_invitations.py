@@ -6,6 +6,7 @@ from django.core import mail
 from django.test import override_settings
 from django.core.cache import cache
 from rest_framework.test import APITestCase, APIClient
+from notifications.models import Notification
 
 User = get_user_model()
 
@@ -45,6 +46,11 @@ class InvitationTests(APITestCase):
         user.refresh_from_db()
         self.assertTrue(user.check_password(data['password']))
         self.assertEqual(anonymous.post('/api/v1/auth/set-password/', data).status_code, 400)
+        self.assertEqual(Notification.objects.filter(user=user, link='/getting-started').count(), 2)
+        account = self.client.get(f'/api/v1/admin-users/{user.pk}/').data
+        self.assertTrue(account['password_ready'])
+        self.assertEqual(account['invitation_event'], 'USER_PASSWORD_SET')
+        self.assertIsNotNone(account['invitation_updated_at'])
 
     def test_existing_account_invitation_does_not_replace_password(self):
         user = User.objects.create_user('existing', 'existing@example.org', 'original-password')
@@ -61,7 +67,13 @@ class InvitationTests(APITestCase):
         self.assertEqual(response.data['invitation_status'], 'failed')
         self.assertNotIn('sensitive', str(response.data))
         self.assertFalse(user.has_usable_password())
+        self.assertEqual(self.client.get(f'/api/v1/admin-users/{user.pk}/').data['invitation_event'], 'USER_INVITATION_FAILED')
+        self.assertTrue(Notification.objects.filter(user=self.admin, link='/users').exists())
         self.assertEqual(self.client.post(f'/api/v1/admin-users/{user.pk}/invite/').status_code, 200)
+        account = self.client.get(f'/api/v1/admin-users/{user.pk}/').data
+        self.assertEqual(account['invitation_event'], 'USER_INVITATION_SENT')
+        self.assertFalse(account['password_ready'])
+        self.assertNotIn('token', str(account))
 
     @override_settings(OPENLIMS_EMAIL_ENABLED=False)
     def test_unconfigured_email_rejected_before_account_creation(self):
@@ -99,3 +111,4 @@ class InvitationTests(APITestCase):
             'username': 'manual', 'role': 'tech', 'password': 'manual-password', 'send_invitation': False})
         self.assertEqual(result.status_code, 201)
         self.assertTrue(User.objects.get(username='manual').check_password('manual-password'))
+        self.assertTrue(Notification.objects.filter(user__username='manual', link='/getting-started').exists())

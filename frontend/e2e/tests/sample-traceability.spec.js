@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const version = require("node:fs").readFileSync(require("node:path").resolve(__dirname, "../../../VERSION"), "utf8").trim();
 
 async function mockRecord(page, { failHistory = false, empty = false } = {}) {
   const requests = [];
@@ -45,7 +46,7 @@ test("sample joins experiments, paginated results, shared files and old/new hist
   await expect(page.getByRole("link", { name: "Extraction report.pdf" })).toHaveAttribute("href", "/media/report.pdf");
   await expect(page.getByRole("link", { name: "History (2)" })).toBeVisible();
   await expect(page.getByText("Sample created", { exact: true })).toBeVisible();
-  await expect(page.getByText("OpenLIMS v0.36.0", { exact: false })).toBeVisible();
+  await expect(page.getByText(`OpenLIMS ${version}`, { exact: false })).toBeVisible();
   expect(requests).not.toContain("/api/events/");
 });
 

@@ -26,6 +26,7 @@ from custom_fields.forms import SampleFormViewSet
 from results.views import WorkItemViewSet, ResultViewSet, SampleAttachmentViewSet
 from projects.views import ProjectViewSet, ProjectPostViewSet
 from core.views import UserLiteViewSet, UserAdminViewSet
+from notebook.onboarding import OnboardingView
 from imports.views import InstrumentProfileViewSet,InstrumentColumnMappingViewSet,ImportJobViewSet
 from notifications.views import NotificationViewSet
 from sequences.views import (
@@ -201,6 +202,7 @@ router.register(
 )
 
 urlpatterns = router.urls + [
+    path("onboarding/", OnboardingView.as_view(), name="onboarding"),
     path("ui-settings/", PublicUISettingsView.as_view(), name="public-ui-settings"),
     path("feature-flags/", FeatureFlagsView.as_view(), name="feature-flags"),
     path(

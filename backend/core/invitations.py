@@ -21,6 +21,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from events.models import Event
+from notifications.models import Notification
 from .authentication import enforce_csrf
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,8 @@ def send_invitation(user, actor):
         f'Este enlace vence en {settings.PASSWORD_RESET_TIMEOUT // 3600} horas y solo puede usarse una vez.\n'
         'If you did not expect this invitation, contact your lab administrator.\n'
         'Si no esperabas esta invitación, contacta al administrador del laboratorio.\n'
+        '\nAfter signing in, open Getting started to begin your first lab workflow.\n'
+        'Después de iniciar sesión, abre Primeros pasos para comenzar el flujo de tu laboratorio.\n'
     )
     try:
         sent = send_mail('OpenLIMS — Set your password / Establece tu contraseña', body,
@@ -66,6 +69,10 @@ def send_invitation(user, actor):
     Event.objects.create(entity_type='User', entity_id=str(user.pk),
                          action='USER_INVITATION_SENT' if status == 'sent' else 'USER_INVITATION_FAILED',
                          actor=actor, payload={'user_id': user.pk, 'status': status})
+    if status == 'failed' and actor:
+        Notification.objects.create(user=actor, title='Invitation email failed / Falló el correo de invitación',
+                                    message=f'Check email settings and resend the invitation for {user.username}. / Revisa el correo y reenvía la invitación.',
+                                    link='/users')
     return status
 
 
@@ -115,4 +122,7 @@ class AcceptInvitationView(APIView):
             Event.objects.create(entity_type='User', entity_id=str(user.pk),
                                  action='USER_PASSWORD_SET', actor=user,
                                  payload={'user_id': user.pk})
+            Notification.objects.create(user=user, title='Password saved / Contraseña guardada',
+                                        message='Your account password was set. Contact your administrator if this was not you. / Se guardó tu contraseña. Contacta al administrador si no fuiste tú.',
+                                        link='/getting-started')
         return Response({'detail': 'Password saved. You can now sign in.'})

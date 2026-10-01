@@ -67,6 +67,18 @@ class UserListSerializer(serializers.ModelSerializer):
         return obj.get_full_name()
 
 
+class AdminUserListSerializer(UserListSerializer):
+    invitation_event = serializers.CharField(read_only=True, allow_null=True)
+    invitation_updated_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    password_ready = serializers.SerializerMethodField()
+
+    class Meta(UserListSerializer.Meta):
+        fields = UserListSerializer.Meta.fields + ["invitation_event", "invitation_updated_at", "password_ready"]
+
+    def get_password_ready(self, obj):
+        return obj.has_usable_password()
+
+
 class UserCreateSerializer(serializers.ModelSerializer):
     is_active = serializers.BooleanField(default=True)
     password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)

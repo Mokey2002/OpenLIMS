@@ -188,6 +188,13 @@ class Experiment(PublicIDModel):
         return self.title
 
 
+class ExperimentOnboarding(models.Model):
+    """One resumable first experiment per account; progress lives in the experiment."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    experiment = models.ForeignKey(Experiment, null=True, blank=True, on_delete=models.SET_NULL)
+
+
 class ExperimentRevision(PublicIDModel):
     experiment = models.ForeignKey(
         Experiment,
