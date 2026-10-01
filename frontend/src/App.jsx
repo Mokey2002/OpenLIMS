@@ -11,6 +11,7 @@ const ForgotPassword = lazyPage(() => import("./pages/ForgotPassword"));
 const SetPassword = lazyPage(() => import("./pages/SetPassword"));
 const MyProfile = lazyPage(() => import("./pages/MyProfile"));
 const MyWork = lazyPage(() => import("./pages/MyWork"));
+const GettingStarted = lazyPage(() => import("./pages/GettingStarted"));
 const SamplesList = lazyPage(() => import("./pages/SamplesList"));
 const SampleDetail = lazyPage(() => import("./pages/SampleDetail"));
 const Inventory = lazyPage(() => import("./pages/Inventory"));
@@ -65,7 +66,7 @@ export default function App() {
             <Route index element={<MyWork />} />
             <Route path="me" element={<MyProfile />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="getting-started" element={<Navigate to="/" replace />} />
+            <Route path="getting-started" element={<GettingStarted />} />
             <Route path="assistant" element={<Assistant />} />
             <Route path="samples" element={<SamplesList />} />
             <Route path="samples/:id" element={<SampleDetail />} />

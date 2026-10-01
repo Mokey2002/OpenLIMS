@@ -101,6 +101,7 @@ export default function Users() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, []);
 
@@ -170,6 +171,12 @@ export default function Users() {
       setErr("Invitation could not be sent. Check the account email and server email settings, then try again.");
     } finally {
       setInvitingId(null);
+      try {
+        const refreshed = await apiGet("/api/admin-users/");
+        setUsers(refreshed.results || refreshed || []);
+      } catch {
+        setErr(current => current || "Unable to refresh invitation status. Reload the page to check it.");
+      }
     }
   }
 
@@ -476,6 +483,7 @@ export default function Users() {
                   <th>Contact</th>
                   <th>Role</th>
                   <th>Status</th>
+                  <th>Account setup</th>
                   <th>Last Login</th>
                   <th>Joined</th>
                   <th style={{ width: "280px" }}>Actions</th>
@@ -581,6 +589,11 @@ export default function Users() {
                         )}
                       </td>
 
+                      <td>
+                        <div>{user.password_ready ? "Password ready" : "Password setup pending"}</div>
+                        <div className="small text-muted">{{ USER_INVITATION_SENT: "Invitation submitted to email service", USER_INVITATION_FAILED: "Invitation email failed — resend needed", USER_PASSWORD_SET: "Password setup completed" }[user.invitation_event] || "No invitation recorded"}</div>
+                        {user.invitation_updated_at && <div className="small text-muted">{formatTimestamp(user.invitation_updated_at)}</div>}
+                      </td>
                       <td>{formatTimestamp(user.last_login)}</td>
                       <td>{formatTimestamp(user.date_joined)}</td>
 

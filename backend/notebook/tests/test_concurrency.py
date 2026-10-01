@@ -22,6 +22,37 @@ class NotebookConcurrencyTests(TransactionTestCase):
             raise SkipTest("Requires PostgreSQL row locking")
         super().setUpClass()
 
+    def test_two_onboarding_requests_create_one_experiment(self):
+        from rest_framework.test import APIClient
+        from notebook.models import ExperimentTemplate, ExperimentOnboarding
+        owner = get_user_model().objects.create_user(username="onboarding-owner")
+        notebook = Notebook.objects.create(name="Onboarding", owner=owner)
+        template = ExperimentTemplate.objects.create(notebook=notebook, name="Measure", created_by=owner,
+            workflow_steps=[{"name": "Measure", "fields": []}])
+        ready = Barrier(2, timeout=10)
+
+        def start():
+            close_old_connections()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET lock_timeout = '10s'")
+                    cursor.execute("SET statement_timeout = '15s'")
+                client = APIClient()
+                client.force_authenticate(get_user_model().objects.get(pk=owner.pk))
+                ready.wait()
+                response = client.post("/api/onboarding/", {"template": template.pk, "title": "First"})
+                return response.status_code, response.data["experiment"]["public_id"]
+            finally:
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(start), pool.submit(start)]
+            results = [future.result(timeout=30) for future in futures]
+        self.assertCountEqual([code for code, _ in results], [200, 201])
+        self.assertEqual(results[0][1], results[1][1])
+        self.assertEqual(Experiment.objects.count(), 1)
+        self.assertEqual(ExperimentOnboarding.objects.count(), 1)
+
     def test_two_writers_with_same_base_revision_cannot_both_succeed(self):
         owner = get_user_model().objects.create_user(username="concurrent-owner")
         notebook = Notebook.objects.create(name="Concurrent", scope="USER", owner=owner)

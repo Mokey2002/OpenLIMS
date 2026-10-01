@@ -98,6 +98,7 @@ export default function MyWork() {
       </div>
 
       <WorkspacePreferences value={view} onChange={setView} />
+      <p><Link to="/getting-started">{language === "es" ? "Primeros pasos: tu primer experimento" : "Getting started: your first experiment"}</Link></p>
       {view.widgets.includes("summary") && <Row className="g-3 mb-4">
         <Col sm={6} xl={2}><SummaryCard label="Assigned" value={summary.assigned} hint="Active work items" to="/work-queue" /></Col>
         <Col sm={6} xl={2}><SummaryCard label="Requests" value={summary.requests} hint="Visible active requests" to="/workflow-requests" /></Col>

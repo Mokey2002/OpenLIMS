@@ -2,6 +2,9 @@ from rest_framework.decorators import action
 from .invitations import send_invitation, InvitationSendThrottle
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.db.models import CharField, OuterRef, Subquery
+from django.db.models.functions import Cast
 from django.middleware.csrf import get_token
 from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -23,6 +26,7 @@ from .serializers import (
     UserAdminUpdateSerializer,
     UserCreateSerializer,
     UserLiteSerializer,
+    AdminUserListSerializer,
 )
 
 User = get_user_model()
@@ -156,14 +160,22 @@ class UserAdminViewSet(ModelViewSet):
     permission_classes = [IsAdminOnly]
 
     def get_queryset(self):
+        invitation_events = Event.objects.filter(
+            entity_type="User", entity_id=Cast(OuterRef("pk"), CharField()),
+            action__in=["USER_INVITATION_SENT", "USER_INVITATION_FAILED", "USER_PASSWORD_SET"],
+        ).order_by("-timestamp", "-pk")
         return (
             User.objects
+            .annotate(invitation_event=Subquery(invitation_events.values("action")[:1]),
+                      invitation_updated_at=Subquery(invitation_events.values("timestamp")[:1]))
             .prefetch_related("groups")
             .all()
             .order_by("username")
         )
 
     def get_serializer_class(self):
+        if self.action in ["list", "retrieve"]:
+            return AdminUserListSerializer
         if self.action in ["partial_update", "update"]:
             return UserAdminUpdateSerializer
 
@@ -185,9 +197,15 @@ class UserAdminViewSet(ModelViewSet):
         status = send_invitation(self.get_object(), request.user)
         return Response({"invitation_status": status}, status=200 if status == "sent" else 503)
 
+    @transaction.atomic
     def perform_create(self, serializer):
         invite = serializer.validated_data.get("send_invitation", False)
         user = serializer.save()
+
+        from notifications.models import Notification
+        Notification.objects.create(user=user, title="Welcome to OpenLIMS / Bienvenido a OpenLIMS",
+                                    message="Start your first experiment with your lab's workflow. / Inicia tu primer experimento con el flujo de tu laboratorio.",
+                                    link="/getting-started")
 
         Event.objects.create(
             entity_type="User",

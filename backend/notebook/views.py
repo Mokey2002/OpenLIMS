@@ -142,7 +142,10 @@ class ExperimentTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = ExperimentTemplateSerializer
 
     def get_queryset(self):
-        return ExperimentTemplate.objects.filter(notebook__in=notebooks_for_user(self.request.user)).select_related("notebook", "created_by")
+        queryset = ExperimentTemplate.objects.filter(notebook__in=notebooks_for_user(self.request.user)).select_related("notebook", "created_by")
+        if self.request.query_params.get("for_onboarding") == "1":
+            queryset = queryset.filter(notebook__in=notebooks_for_user(self.request.user, "write"), active=True).exclude(workflow_steps=[])
+        return queryset.order_by("name", "pk")
 
     def perform_create(self, serializer):
         notebook = serializer.validated_data["notebook"]
@@ -184,30 +187,10 @@ class ExperimentTemplateViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     @transaction.atomic
     def instantiate(self, request, pk=None):
+        from .services import instantiate_template
         template = self.get_object()
-        if not user_can_notebook(request.user, template.notebook, "write"):
-            raise PermissionDenied("You cannot create experiments in this notebook.")
-        if not template.active:
-            raise ValidationError("This template is inactive.")
-        experiment = Experiment.objects.create(
-            notebook=template.notebook,
-            template=template,
-            title=request.data.get("title") or template.name,
-            created_by=request.user,
-        )
-        experiment.assignees.set(request.data.get("assignees", []))
-        create_steps(experiment, template.workflow_steps, request.user)
-        create_revision(
-            experiment=experiment,
-            actor=request.user,
-            blocks=template.blocks or [],
-            links=request.data.get("links", []),
-            reason="Created from template",
-        )
-        experiment.refresh_from_db()
-        notify_experiment(experiment, request.user, experiment.assignees.all(),
-                          f"Experiment assigned / Experimento asignado: {experiment.title}",
-                          "Open the experiment workflow to continue. / Abre el flujo del experimento para continuar.")
+        experiment = instantiate_template(template, request.user, title=request.data.get("title"),
+                                          assignees=request.data.get("assignees", []), links=request.data.get("links", []))
         return Response(ExperimentSerializer(experiment, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 

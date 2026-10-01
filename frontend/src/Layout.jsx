@@ -23,6 +23,7 @@ const FAVORITES_KEY = "openlims_favorites";
 const routeLabels = {
   "/": "My Work",
   "/me": "My profile",
+  "/getting-started": "Getting started",
   "/dashboard": "Dashboard",
   "/assistant": "Assistant",
   "/projects": "Projects",
@@ -245,6 +246,7 @@ export default function Layout() {
                 </div>
               )}
               <Button as={NavLink} to="/me" variant="outline-light" size="sm">My profile</Button>
+              <Button as={NavLink} to="/getting-started" variant="outline-light" size="sm">Getting started</Button>
               <Button variant="outline-light" size="sm" onClick={logout}>Logout</Button>
             </div>
           </Navbar.Collapse>

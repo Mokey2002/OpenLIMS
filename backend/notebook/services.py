@@ -25,6 +25,30 @@ from .permissions import user_can_notebook
 BLOCK_TYPES = {choice[0] for choice in ExperimentBlock.TYPE_CHOICES}
 
 
+@transaction.atomic
+def instantiate_template(template, actor, *, title=None, assignees=None, links=None):
+    """Shared creation path for notebook templates and guided onboarding."""
+    from .workflows import create_steps
+
+    if not user_can_notebook(actor, template.notebook, "write"):
+        raise PermissionDenied("You cannot create experiments in this notebook.")
+    if not template.active:
+        raise ValidationError("This template is inactive.")
+    experiment = Experiment.objects.create(
+        notebook=template.notebook, template=template,
+        title=title or template.name, created_by=actor,
+    )
+    experiment.assignees.set(assignees or [])
+    create_steps(experiment, template.workflow_steps, actor)
+    create_revision(experiment=experiment, actor=actor, blocks=template.blocks or [],
+                    links=links or [], reason="Created from template")
+    experiment.refresh_from_db()
+    notify_experiment(experiment, actor, experiment.assignees.all(),
+                      f"Experiment assigned / Experimento asignado: {experiment.title}",
+                      "Open the experiment workflow to continue. / Abre el flujo del experimento para continuar.")
+    return experiment
+
+
 def canonical_content(blocks, links):
     return json.dumps(
         {"blocks": blocks, "links": links},
