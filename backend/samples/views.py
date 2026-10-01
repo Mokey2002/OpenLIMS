@@ -178,6 +178,52 @@ class SampleViewSet(ModelViewSet):
 
         return with_sample_modify_permission(get_sample_access_queryset(queryset, self.request.user), self.request.user)
 
+    @action(detail=True, methods=["get"], url_path="history")
+    def history(self, request, pk=None):
+        """Sample-scoped audit history, including legacy numeric identifiers."""
+        from events.serializers import EventSerializer
+
+        sample = self.get_object()
+        events = Event.objects.filter(
+            entity_type__iexact="sample",
+            entity_id__in=[str(sample.pk), str(sample.public_id)],
+        ).select_related("actor").order_by("-timestamp", "-pk")
+        page = self.paginate_queryset(events)
+        serializer = EventSerializer(page if page is not None else events, many=True)
+        return self.get_paginated_response(serializer.data) if page is not None else Response(serializer.data)
+
+    @action(detail=True, methods=["get"], url_path="experiments")
+    def experiments(self, request, pk=None):
+        """Only current revision links in notebooks the caller can read."""
+        from django.conf import settings
+        from django.db.models import Count
+        from notebook.models import Experiment
+        from notebook.permissions import notebooks_for_user
+        from settings_app.models import SystemSettings
+
+        sample = self.get_object()
+        queryset = Experiment.objects.none()
+        if not getattr(settings, "OPENLIMS_ENFORCE_FEATURE_FLAGS", True) or SystemSettings.load().feature_flags.get("notebook", False):
+            queryset = Experiment.objects.filter(
+                notebook__in=notebooks_for_user(request.user),
+                current_revision__links__entity_type="sample",
+                current_revision__links__entity_public_id=sample.public_id,
+            ).select_related("notebook").annotate(
+                step_count=Count("workflow_steps", distinct=True),
+                completed_steps=Count("workflow_steps", filter=Q(workflow_steps__status="COMPLETED"), distinct=True),
+            ).order_by("-updated_at", "-pk")
+        page = self.paginate_queryset(queryset)
+        data = [{
+            "public_id": str(experiment.public_id),
+            "title": experiment.title,
+            "notebook_name": experiment.notebook.name,
+            "status": experiment.status,
+            "updated_at": experiment.updated_at,
+            "step_count": experiment.step_count,
+            "completed_steps": experiment.completed_steps,
+        } for experiment in (page if page is not None else queryset)]
+        return self.get_paginated_response(data) if page is not None else Response(data)
+
     @action(detail=True, methods=["post"], url_path="derive")
     def derive(self, request, pk=None):
         source = self.get_object()

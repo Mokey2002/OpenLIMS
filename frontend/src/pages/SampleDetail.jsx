@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   Alert,
@@ -10,7 +10,7 @@ import {
   Row,
   Table,
 } from "react-bootstrap";
-import { apiGet, apiPatch, apiPost, apiPostForm } from "../api";
+import { apiGet, apiGetAll, apiPatch, apiPost, apiPostForm } from "../api";
 import { canWrite, readOnlyMessage } from "../authz";
 import SampleValuesEditor from "../components/SampleValuesEditor";
 import WorkflowStepForm from "../components/WorkflowStepForm";
@@ -372,6 +372,9 @@ export default function SampleDetail() {
   const [reviewNotes, setReviewNotes] = useState({});
 
   const [selectedAttachmentFile, setSelectedAttachmentFile] = useState(null);
+  const [experiments, setExperiments] = useState([]);
+  const [sharedAttachments, setSharedAttachments] = useState([]);
+  const loadGeneration = useRef(0);
   const [selectedContainer, setSelectedContainer] = useState("");
   const [linkedProjectId, setLinkedProjectId] = useState("");
   const [selectedPipelineTemplate, setSelectedPipelineTemplate] = useState("");
@@ -381,6 +384,7 @@ export default function SampleDetail() {
   const [statusChangeReason, setStatusChangeReason] = useState("");
 
   async function load() {
+    const generation = ++loadGeneration.current;
     setErr("");
 
     try {
@@ -397,20 +401,27 @@ export default function SampleDetail() {
         pipelineRunData,
         pipelineTemplateData,
         meData,
+        experimentData,
       ] = await Promise.all([
         apiGet(`/api/samples/${id}/`),
         apiGet(`/api/samples/${id}/allowed-transitions/`),
-        apiGet(`/api/events/`),
-        apiGet(`/api/work-items/?sample=${id}`),
+        apiGetAll(`/api/samples/${id}/history/`, Infinity),
+        apiGetAll(`/api/work-items/?sample=${id}`, Infinity),
         apiGet("/api/containers/"),
         apiGet("/api/projects/"),
-        apiGet(`/api/sample-attachments/?sample=${id}`),
-        apiGet(`/api/sequences/?sample=${id}`),
-        apiGet(`/api/mass-spec-runs/?sample=${id}`),
-        apiGet(`/api/pipeline-runs/?sample=${id}`),
+        apiGetAll(`/api/sample-attachments/?sample=${id}`, Infinity),
+        apiGetAll(`/api/sequences/?sample=${id}`, Infinity),
+        apiGetAll(`/api/mass-spec-runs/?sample=${id}`, Infinity),
+        apiGetAll(`/api/pipeline-runs/?sample=${id}`, Infinity),
         apiGet("/api/pipeline-templates/"),
         apiGet("/api/me/"),
+        apiGetAll(`/api/samples/${id}/experiments/`, Infinity),
       ]);
+
+      const sharedFiles = await apiGetAll(`/api/shared-attachments/?target_type=sample&target_public_id=${sampleData.public_id}`, Infinity);
+      if (generation !== loadGeneration.current) return;
+      setSharedAttachments(sharedFiles);
+      setExperiments(experimentData);
 
       const eventList = eventsData.results || eventsData || [];
       const workItemList = workItemsData.results || workItemsData || [];
@@ -443,25 +454,18 @@ export default function SampleDetail() {
       setPipelineTemplates(pipelineTemplateList.filter((template) => template.active));
       setMe(meData);
 
-      const sampleEvents = eventList.filter((event) => {
-        const payload = event.payload || {};
-
-        return (
-          event.entity_type === "Sample" &&
-          (String(event.entity_id) === String(id) ||
-            String(payload.sample_id) === String(id))
-        );
-      });
-
-      setEvents(sampleEvents);
+      setEvents(eventList);
     } catch (e) {
+      if (generation !== loadGeneration.current) return;
       setErr(e.message || String(e));
     }
   }
 
   useEffect(() => {
+    setSample(null);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
+    return () => { loadGeneration.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -504,6 +508,8 @@ export default function SampleDetail() {
           key: result.key,
           value: resultDisplayValue(result),
           valueType: result.value_type,
+          workStatus: workItem.status,
+          qcStatus: workItem.qc_status,
         });
       }
     }
@@ -851,6 +857,13 @@ export default function SampleDetail() {
       {err && <Alert variant="danger">{err}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
       {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
+
+      <nav aria-label="Sample record sections" className="d-flex gap-3 flex-wrap mb-4">
+        <a href="#sample-experiments">Experiments ({experiments.length})</a>
+        <a href="#sample-results">Results ({resultRows.length})</a>
+        <a href="#sample-files">Files ({sampleAttachments.length + sharedAttachments.length})</a>
+        <a href="#sample-history">History ({events.length})</a>
+      </nav>
 
       <div className="stat-grid mb-4">
         {sample.form_schema?.fields?.length > 0 && <Card className="app-card"><Card.Body>
@@ -1286,7 +1299,25 @@ export default function SampleDetail() {
         </div>
       </div>
 
-      <Card className="app-card mb-4">
+      <Card className="app-card mb-4" id="sample-experiments">
+        <Card.Body>
+          <h5 className="section-title">Linked Experiments</h5>
+          <p className="text-muted">Experiments whose current revision links to this sample. Only notebooks you can access are shown. Open an experiment to see its procedure, results, files, and revision history.</p>
+          {experiments.length === 0 ? <div className="empty-state">No accessible linked experiments. Add this sample using Links in an experiment and save a revision.</div> : (
+            <Table responsive className="app-table">
+              <thead><tr><th>Experiment</th><th>Notebook</th><th>Status</th><th>Workflow</th><th>Updated</th></tr></thead>
+              <tbody>{experiments.map(experiment => <tr key={experiment.public_id}>
+                <td><Link to={`/notebook?experiment=${experiment.public_id}`}>{experiment.title}</Link></td>
+                <td>{experiment.notebook_name}</td><td>{experiment.status}</td>
+                <td>{experiment.step_count ? `${experiment.completed_steps} / ${experiment.step_count} steps complete` : "No workflow"}</td>
+                <td>{formatTimestamp(experiment.updated_at)}</td>
+              </tr>)}</tbody>
+            </Table>
+          )}
+        </Card.Body>
+      </Card>
+
+      <Card className="app-card mb-4" id="sample-results">
         <Card.Body>
           <div className="toolbar-row mb-3">
             <h5 className="section-title mb-0">Result Values</h5>
@@ -1300,6 +1331,7 @@ export default function SampleDetail() {
               <thead>
                 <tr>
                   <th>Work Item</th>
+                  <th>Work / QC status</th>
                   <th>Instrument Source</th>
                   <th>Key</th>
                   <th>Value</th>
@@ -1310,7 +1342,8 @@ export default function SampleDetail() {
               <tbody>
                 {resultRows.map((result) => (
                   <tr key={`${result.workItemId}-${result.id}`}>
-                    <td>{result.workItemName}</td>
+                    <td><a href={`#work-item-${result.workItemId}`}>{result.workItemName}</a></td>
+                    <td>{result.workStatus} / {result.qcStatus || "Not reviewed"}</td>
                     <td>
                       {result.sourceImportJob ? (
                         <Link to={`/imports/${result.sourceImportJob}`}>
@@ -1446,7 +1479,7 @@ export default function SampleDetail() {
         <div className="col-lg-5">
           <Card className="app-card h-100">
             <Card.Body>
-              <h5 className="section-title">Sample Attachments</h5>
+              <h5 className="section-title" id="sample-files">Sample Attachments</h5>
 
               {userCanWrite && (
                 <Form onSubmit={uploadSampleAttachment} className="mb-4">
@@ -1469,7 +1502,7 @@ export default function SampleDetail() {
                 </Form>
               )}
 
-              {sampleAttachments.length === 0 ? (
+              {sampleAttachments.length === 0 && sharedAttachments.length === 0 ? (
                 <div className="empty-state">No attachments yet.</div>
               ) : (
                 <Table responsive hover className="app-table">
@@ -1495,6 +1528,13 @@ export default function SampleDetail() {
                         </td>
                         <td>{attachment.uploaded_by_username || "-"}</td>
                         <td>{formatTimestamp(attachment.uploaded_at)}</td>
+                      </tr>
+                    ))}
+                    {sharedAttachments.map(attachment => (
+                      <tr key={`shared-${attachment.public_id}`}>
+                        <td><a href={attachment.file} target="_blank" rel="noreferrer">{attachment.display_name || attachment.filename || "Attachment"}</a> <Badge bg="secondary">Shared</Badge></td>
+                        <td>{attachment.uploaded_by_username || "-"}</td>
+                        <td>{formatTimestamp(attachment.created_at)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1556,7 +1596,7 @@ export default function SampleDetail() {
                     };
 
                     return (
-                      <div key={workItem.id} className="feed-item">
+                      <div key={workItem.id} id={`work-item-${workItem.id}`} className="feed-item">
                         <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
                           <div>
                             <div className="fw-semibold">{workItem.name}</div>
@@ -1798,7 +1838,7 @@ export default function SampleDetail() {
         </div>
       </div>
 
-      <Card className="app-card">
+      <Card className="app-card" id="sample-history">
         <Card.Body>
           <div className="toolbar-row mb-3">
             <h5 className="section-title mb-0">Chain of Custody Timeline</h5>

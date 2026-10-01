@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.36.0 — Trazabilidad de muestras y resultados
+
+La ficha de muestra incluye experimentos vinculados accesibles y su progreso, archivos compartidos, enlaces desde resultados a sus trabajos y estado de trabajo/control de calidad. El historial consulta solo la muestra y admite identificadores antiguos y públicos; las colecciones relacionadas recorren todas las páginas. Consulta la [guía de trazabilidad](docs/sample-traceability.md).
+
 ## v0.35.0 — Flujos de experimentos reutilizables
 
 Define pasos ordenados en las plantillas de bitácora con campos obligatorios, responsables, límites numéricos y criterios de finalización. Ejecuta los pasos dentro del experimento con historial de auditoría, copias de las definiciones y sumas de verificación para revisión. Los experimentos existentes se conservan. Ejecuta las migraciones del backend antes de actualizar la interfaz. Consulta la [guía en español e inglés](docs/experiment-workflows.md).
@@ -8,17 +12,13 @@ Define pasos ordenados en las plantillas de bitácora con campos obligatorios, r
 
 Mi trabajo se actualiza al volver, después de acciones exitosas y cada minuto mientras está visible, conservando los datos si falla la actualización. La selección de bitácoras mantiene coherencia, ignora respuestas antiguas y protege cambios durante la carga. Las listas auxiliares ya no bloquean el espacio de trabajo. Incluye pruebas de navegador.
 
-## v0.34.6 — Pruebas de regresión e integración continua
-
-Añade pruebas de permisos, reversión de transacciones, notificaciones, paginación y guardados concurrentes; pruebas de navegador para enlaces no disponibles; y más pruebas de selección. CI ejecuta pruebas de interfaz, exige PostgreSQL para la concurrencia y conserva evidencia de errores del navegador.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.35.0`
+**Versión de desarrollo actual:** `v0.36.0`
 
 **Demo:** http://35.164.28.250
 
