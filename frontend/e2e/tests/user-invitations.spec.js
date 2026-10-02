@@ -37,7 +37,12 @@ test('invitation creation and public password setup', async ({ page }) => {
   expect(submitted).toBeUndefined();
   await page.getByLabel('Confirm password', { exact: true }).fill('Long-private-password-927!');
   await page.getByRole('button', { name: 'Save password' }).click();
-  await expect(page.getByText('Password saved. You can now sign in.')).toBeVisible();
+  const confirmation = page.getByRole('alert');
+  await expect(confirmation).toContainText('Password saved.');
+  await expect(confirmation).toContainText('Getting started');
+  await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toHaveAttribute('href', '/login');
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save password' })).toHaveCount(0);
   expect(submitted.uid).toBe('Mg');
   expect(submitted.token).toBe('one-time-link');
   await expect(page).toHaveURL('/set-password');
