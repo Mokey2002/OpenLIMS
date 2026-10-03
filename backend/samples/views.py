@@ -28,7 +28,7 @@ from .serializers import (
     SampleSerializer,
     SingleSampleAttachmentSerializer,
 )
-from .workflows import get_allowed_transitions
+from .workflows import get_allowed_transitions, get_status_transitions
 from .access import (
     get_sample_access_queryset,
     with_sample_modify_permission,
@@ -692,6 +692,7 @@ class SampleViewSet(ModelViewSet):
         updated_count = 0
         skipped = []
         updated_ids = []
+        status_transitions = get_status_transitions() if new_status is not None else None
 
         for sample in samples:
             try:
@@ -712,7 +713,7 @@ class SampleViewSet(ModelViewSet):
                 if new_status == sample.status:
                     pass
                 else:
-                    allowed = get_allowed_transitions(sample.status)
+                    allowed = get_allowed_transitions(sample.status, status_transitions)
 
                     if new_status in allowed:
                         sample.status = new_status

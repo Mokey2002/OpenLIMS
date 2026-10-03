@@ -8,8 +8,16 @@ ALLOWED_TRANSITIONS = {
 }
 
 
-def get_allowed_transitions(current_status: str) -> list[str]:
-    return ALLOWED_TRANSITIONS.get(current_status, [])
+def get_status_transitions() -> dict:
+    from settings_app.models import SampleStatusPolicy
+    policy = SampleStatusPolicy.objects.filter(pk=1).first()
+    return policy.transitions if policy and policy.transitions else ALLOWED_TRANSITIONS
+
+
+def get_allowed_transitions(current_status: str, transitions=None) -> list[str]:
+    if transitions is None:
+        transitions = get_status_transitions()
+    return transitions.get(current_status, [])
 
 
 def can_transition(current_status: str, new_status: str) -> bool:

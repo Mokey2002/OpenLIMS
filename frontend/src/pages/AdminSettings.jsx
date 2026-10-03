@@ -14,6 +14,7 @@ import { isAdmin, readOnlyMessage } from "../authz";
 import { useLanguage } from "../i18n";
 import { featureDefinitions, featureFlagCopy } from "../featureFlags";
 import LabFormBuilder from "../components/LabFormBuilder";
+import LabConfiguration from "../components/LabConfiguration";
 
 function formatTimestamp(value, locale) {
   if (!value) return "-";
@@ -214,6 +215,8 @@ export default function AdminSettings() {
       {err && <Alert variant="danger">{err}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
       {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
+
+      <LabConfiguration canEdit={userIsAdmin} notebookEnabled={settings.notebook_enabled} />
 
       <Form onSubmit={saveSettings}>
         <Row className="g-4">
@@ -514,7 +517,7 @@ export default function AdminSettings() {
           </Card.Body>
         </Card>
       </Form>
-      {userIsAdmin && <LabFormBuilder />}
+      {userIsAdmin && <div id="sample-form-builder"><LabFormBuilder /></div>}
     </div>
   );
 }

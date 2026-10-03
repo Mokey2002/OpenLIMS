@@ -27,6 +27,7 @@ from results.views import WorkItemViewSet, ResultViewSet, SampleAttachmentViewSe
 from projects.views import ProjectViewSet, ProjectPostViewSet
 from core.views import UserLiteViewSet, UserAdminViewSet
 from notebook.onboarding import OnboardingView
+from settings_app.status_policy import SampleStatusPolicyView
 from imports.views import InstrumentProfileViewSet,InstrumentColumnMappingViewSet,ImportJobViewSet
 from notifications.views import NotificationViewSet
 from sequences.views import (
@@ -202,6 +203,7 @@ router.register(
 )
 
 urlpatterns = router.urls + [
+    path("sample-status-policy/", SampleStatusPolicyView.as_view(), name="sample-status-policy"),
     path("onboarding/", OnboardingView.as_view(), name="onboarding"),
     path("ui-settings/", PublicUISettingsView.as_view(), name="public-ui-settings"),
     path("feature-flags/", FeatureFlagsView.as_view(), name="feature-flags"),
