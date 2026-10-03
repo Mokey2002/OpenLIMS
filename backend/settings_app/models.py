@@ -2,6 +2,11 @@ from django.conf import settings
 from django.db import models
 
 
+class SampleStatusPolicy(models.Model):
+    transitions = models.JSONField(default=dict)
+    revision = models.PositiveIntegerField(default=1)
+
+
 class WorkspaceView(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE)
     role = models.CharField(max_length=20, blank=True)

@@ -51,11 +51,11 @@ jobs:
       - name: Run tests
         run: docker compose -p openlims -f deploy/docker-compose.yml run --rm api pytest -v
 
-      - name: Enforce PostgreSQL notebook concurrency regression
+      - name: Enforce PostgreSQL concurrency regressions
         run: >-
           docker compose -p openlims -f deploy/docker-compose.yml run --rm
           -e REQUIRE_POSTGRES_TESTS=1 api
-          pytest -v notebook/tests/test_concurrency.py
+          pytest -v notebook/tests/test_concurrency.py settings_app/tests/test_status_policy_concurrency.py
 
       - name: Install frontend dependencies
         working-directory: frontend
