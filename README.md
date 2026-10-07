@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.38.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.38.2-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,6 +25,10 @@
 
 ## Overview
 
+### v0.38.2 — One sample, five-user demo
+
+Adds `seed_demo --connected-only` to create DEMO-360-001 with an active pipeline, independent QC, team notebook, sequences, synthetic analysis fixtures, inventory, files and a role-by-role walkthrough. Requires the five existing demo accounts and preserves credentials and edits on rerun. See the [English/Spanish walkthrough](docs/connected-demo.md).
+
 ### v0.38.1 — Complete lab workflow regression tests
 
 Adds API integration journeys spanning sample registration, extraction, sequencing QC, linked sequences and files, storage custody, notebook editing and PDF export. Tests also cover rejected QC, read-only access, outsiders and revoked project membership using real views and database records. See the [workflow testing guide](docs/workflow-testing.md).
@@ -33,17 +37,13 @@ Adds API integration journeys spanning sample registration, extraction, sequenci
 
 Settings now brings together the existing field, workflow/template, role and sharing editors. Administrators can restrict supported manual sample-status transitions with required audit reasons, revision conflict protection, validation against QC bypasses/dead ends, and a saved-defaults restore flow. Read-only users can inspect the policy. Run backend migrations before upgrading. See the [English/Spanish configuration guide](docs/lab-configuration.md).
 
-### v0.37.1 — Invitation browser regression fix
-
-Update the invitation browser test for the new password-success guidance. Verify the Getting started instructions, sign-in link, removed password form, and cleared invitation token after successful setup.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.38.1 — Complete lab workflow regression tests`.
+**Current development version:** `v0.38.2 — One sample, five-user demo`.
 
 ## Deployment Access
 

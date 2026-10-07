@@ -1956,10 +1956,18 @@ class Command(BaseCommand):
     help = "Seed OpenLIMS with realistic demo data"
 
     def add_arguments(self, parser):
+        parser.add_argument("--connected-only", action="store_true", help="Create only DEMO-360-001 for the five existing demo users; preserve other demos.")
         parser.add_argument("--showcase-only", action="store_true", help="Create only the fictional Aurora walkthrough project.")
         parser.add_argument("--owner", help="Existing active username for the Aurora showcase.")
 
     def handle(self, *args, **options):
+        if options.get("connected_only"):
+            from django.core.management import call_command
+            from django.core.management.base import CommandError
+            if options.get("showcase_only") or options.get("owner"):
+                raise CommandError("--connected-only cannot be combined with --showcase-only or --owner.")
+            call_command("seed_connected_demo", stdout=self.stdout)
+            return
         if options.get("showcase_only"):
             from django.core.management import call_command
             from django.core.management.base import CommandError
