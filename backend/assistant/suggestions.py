@@ -137,6 +137,7 @@ def assistant_starter_suggestions(user):
     ).exists()
     return without_empty(
         "What needs attention?",
+        sample_prompt(user, "What next for sample"),
         "Group samples by project",
         "Which instrument has the highest QC failure rate?"
         if has_instrument_results
