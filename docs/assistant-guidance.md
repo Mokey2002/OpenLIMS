@@ -1,5 +1,34 @@
 # Ask what comes next
 
+## Conversational follow-ups (v0.39.1)
+
+Example conversation:
+
+1. `What's holding this up?` → asks for a sample ID.
+2. `DEMO-360-001` → reads its current workflow and missing requirements.
+3. `What about step 2?` → narrows guidance to that numbered step, if unambiguous.
+4. `Who is assigned?` → rereads that step's recorded work assignee. An assignee is not necessarily a QC reviewer; the assistant does not invent a reviewer.
+5. `What next?` → returns to the sample's full workflow.
+6. `Start over` → clears the sample conversation context.
+
+Spanish: `¿Qué falta?` → `DEMO-360-001` → `¿Y el paso 2?` →
+`¿Quién está asignado?` → `Empezar de nuevo`.
+
+An explicit sample ID overrides the previous one and resets step focus. If a step
+number occurs in multiple retained runs, open the linked sample to choose the run;
+the assistant does not guess. Topic changes are not automatically treated as sample
+follow-ups. Supported action requests continue through their existing routes.
+
+This is a bounded rules-based conversation handler, not nearest-match search or
+unrestricted language understanding. It recognizes supported question patterns,
+retains a sample/step reference in chat context, checks access, and generates answers
+from fresh records. It never fuzzy-matches sample identifiers. Other assistant
+routes can optionally use OpenAI/Ollama for intent classification and tool-result
+summarization; this workflow guidance bypasses external models. It does not add
+cross-record semantic search, autonomous execution, or persistent chat memory.
+
+## Supported workflow questions
+
 In Assistant, try:
 
 - `What next for sample DEMO-360-001?`
