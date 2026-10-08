@@ -2,6 +2,7 @@ import re
 
 
 ALLOWED_CONTEXT_KEYS = {
+    "guidance",
     "analytics",
     "batch_code",
     "comparison",
@@ -56,6 +57,8 @@ def sanitize_context(context):
 def update_conversation_context(message, previous, result):
     previous = sanitize_context(previous)
     supplied = sanitize_context((result or {}).get("context") or {})
+    if (result or {}).get("replace_context"):
+        return supplied
     if supplied:
         return supplied
     if FOLLOW_UP_PATTERN.search(str(message or "")) and previous:

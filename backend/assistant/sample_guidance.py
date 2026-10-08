@@ -1,5 +1,4 @@
 """Read-only workflow guidance, grounded in accessible records on every request."""
-import re
 
 from django.utils import timezone
 
@@ -8,30 +7,27 @@ from pipelines.services import missing_required_fields
 from samples.access import user_can_modify_sample
 
 from .sample_operations import _sample_queryset
-
-
-INTENT = re.compile(r"what(?:'s| is)? next|what should I do|next steps?|why.*blocked|explain.*(?:workflow|pipeline)|qué sigue|qu[eé].*hacer|pr[oó]ximo.*paso|por qu[eé].*bloquead|explica.*(?:flujo|pipeline)", re.I)
-REFERENCE = re.compile(r"\b(?:sample|muestra)\s+([\w][\w./-]*)", re.I)
+from .guidance_conversation import interpret
 
 
 def route_sample_guidance(message, user, context=None):
-    if not INTENT.search(str(message or "")):
-        return None
     context = context or {}
-    spanish = bool(re.search(r"\b(?:muestra|qué|que|sigue|hacer|paso|bloquead\w*|explica)\b", message, re.I))
+    parsed = interpret(message, context)
+    if not parsed:
+        return None
+    base = {"skip_llm": True, "links": [], "suggestions": [], "context": {}, "replace_context": True}
+    if parsed.get("reset"):
+        return {**base, "answer": "Sample context cleared. / Contexto de muestra borrado."}
+    spanish = parsed["language"] == "es"
     def t(en, es):
         return es if spanish else en
-    base = {"skip_llm": True, "links": [], "suggestions": [], "context": {}}
-    codes = [code for code in REFERENCE.findall(message) if code.lower() not in {"is", "the", "this", "está", "esta"}]
-    if not codes:
-        # Hyphenated IDs can be mentioned without the word sample.
-        codes = re.findall(r"\b[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+\b", message)
-    codes = list(dict.fromkeys(code.rstrip(".").casefold() for code in codes))
+    codes = parsed["codes"]
+    pending = {"guidance": {"awaiting_sample": True, "language": parsed["language"], "focus": parsed["focus"], "steps": parsed["steps"]}}
     if len(codes) > 1:
-        return {**base, "answer": t("Choose one sample ID so I can explain its next steps.", "Elige un ID de muestra para explicar sus próximos pasos."), "clarification": {"required": True}}
+        return {**base, "context": pending, "answer": t("Choose one sample ID so I can explain its next steps.", "Elige un ID de muestra para explicar sus próximos pasos."), "clarification": {"required": True}}
     code = codes[0] if codes else context.get("sample_code")
     if not isinstance(code, str) or not code:
-        return {**base, "answer": t("Which sample? Include its exact ID, for example: What next for sample DEMO-360-001?", "¿Qué muestra? Incluye su ID exacto, por ejemplo: ¿Qué sigue para muestra DEMO-360-001?"), "clarification": {"required": True}}
+        return {**base, "context": pending, "answer": t("Which sample? Reply with its exact ID, for example DEMO-360-001.", "¿Qué muestra? Responde con su ID exacto, por ejemplo DEMO-360-001."), "clarification": {"required": True}}
     matches = list(_sample_queryset(user).filter(sample_id__iexact=code)[:2])
     if len(matches) != 1:
         return {**base, "answer": t("That sample was not found, is ambiguous, or is not accessible. Provide its exact ID.", "La muestra no se encontró, es ambigua o no es accesible. Indica su ID exacto."), "clarification": {"required": True}}
@@ -44,6 +40,20 @@ def route_sample_guidance(message, user, context=None):
         lines.append(t("You have read-only access to this sample. An authorized team member must make changes.", "Tienes acceso de lectura a esta muestra. Un miembro autorizado debe realizar los cambios."))
     runs = list(PipelineRun.objects.filter(sample=sample).prefetch_related(
         "steps__work_item__results", "steps__work_item__assigned_to").order_by("-id")[:6])
+    new_sample = bool(codes) and code != str(context.get("sample_code", "")).casefold()
+    selected = parsed["steps"]
+    if not selected and not new_sample and parsed["focus"] == "owner":
+        prior_step = parsed["state"].get("step")
+        if type(prior_step) is int:
+            selected = [prior_step]
+    conversation = {"language": parsed["language"]}
+    response_context = {"sample_code": sample.sample_id, "sample_id": sample.pk, "guidance": conversation}
+    if selected:
+        candidates = [(run, step) for run in runs[:5] for step in run.steps.all() if step.position in selected]
+        if len(selected) != 1 or len(candidates) != 1 or len(runs) > 5:
+            return {**base, "context": response_context, "answer": t("That step is missing or ambiguous across pipeline runs. Open the sample to select the correct step.", "Ese paso no existe o es ambiguo entre pipelines. Abre la muestra para elegir el paso correcto."),
+                    "links": [{"label": sample.sample_id, "url": f"/samples/{sample.pk}", "kind": "sample"}], "clarification": {"required": True}}
+        conversation["step"] = selected[0]
     evidence = []
     if not runs:
         lines.append(t("No pipeline is linked. Open the sample and choose the appropriate pipeline with your project team.", "No hay un pipeline vinculado. Abre la muestra y elige el pipeline adecuado con tu equipo."))
@@ -51,7 +61,8 @@ def route_sample_guidance(message, user, context=None):
         lines.append(f"Pipeline #{run.pk}: {run.status}")
         steps = list(run.steps.all())
         by_position = {step.position: step for step in steps}
-        for step in steps[:50]:
+        shown_steps = [step for step in steps if step.position in selected] if selected else steps[:50]
+        for step in shown_steps:
             work = step.work_item
             missing = missing_required_fields(work, step) if work else []
             waiting = [str(pos) for pos in step.dependency_positions if pos not in by_position or by_position[pos].status not in {"COMPLETED", "SKIPPED"}]
@@ -74,16 +85,20 @@ def route_sample_guidance(message, user, context=None):
             else:
                 instruction = t("Review this step in the sample for its current execution state.", "Revisa este paso en la muestra para conocer su estado actual.")
             owner = work.assigned_to.username if work and work.assigned_to else t("Unassigned", "Sin asignar")
+            if parsed["focus"] == "owner":
+                instruction = t("Recorded work assignee: ", "Responsable registrado del trabajo: ") + owner + ". " + instruction
+                if step.requires_qc:
+                    instruction += t(" The assignee is not necessarily the QC reviewer; no reviewer is inferred.", " El responsable no es necesariamente el revisor de QC; no se infiere un revisor.")
             lines.append(f"{step.position}. {step.name} — {step.status} ({owner}): {instruction}")
             evidence.append({"run_id": run.pk, "step": step.position, "status": step.status,
                              "work_item_id": work.pk if work else None, "qc_status": work.qc_status if work else None,
                              "missing_fields": missing, "waiting_for": waiting, "next_action": instruction})
-        if len(steps) > 50:
+        if len(steps) > 50 and not selected:
             lines.append(t("Only the first 50 steps are shown; open the sample for the full run.", "Solo se muestran los primeros 50 pasos; abre la muestra para verlos todos."))
     if len(runs) > 5:
         lines.append(t("Showing the latest five runs. Open the sample for full history.", "Se muestran las últimas cinco ejecuciones. Abre la muestra para ver el historial completo."))
     lines.append(t("Read from current records. No results, statuses or approvals were changed.", "Consulta de registros actuales. No se cambiaron resultados, estados ni aprobaciones."))
     return {**base, "answer": "\n".join(lines), "links": [{"label": sample.sample_id, "url": f"/samples/{sample.pk}", "kind": "sample"}],
-            "context": {"sample_code": sample.sample_id, "sample_id": sample.pk},
+            "context": response_context,
             "sample_guidance": {"sample_id": sample.pk, "as_of": timezone.now().isoformat(), "steps": evidence, "read_only": True},
-            "suggestions": [t(f"What next for sample {sample.sample_id}?", f"¿Qué sigue para muestra {sample.sample_id}?")]}
+            "suggestions": [t("What's holding this up?", "¿Qué falta?"), t("Who is assigned?", "¿Quién está asignado?"), t("What next?", "¿Qué sigue?")]}
