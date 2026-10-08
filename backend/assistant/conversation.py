@@ -132,7 +132,9 @@ def route_conversation_utility(message, user=None):
             "samples, projects, results, QC work, "
             "inventory, migrations, sequences, SOPs, notifications, and system status. "
             "I can compare or investigate records, create charts when requested, and "
-            "preview supported actions for explicit confirmation. I can also answer "
+            "preview supported actions for explicit confirmation, including assigning a "
+            "sample pipeline step and adding an unreviewed result. Try: Assign step 1 "
+            "for sample DEMO-360-001 to maria. I can also answer "
             "basic conversational and general-knowledge questions when an LLM is enabled.",
             suggestions=without_empty(
                 "What needs my attention?",

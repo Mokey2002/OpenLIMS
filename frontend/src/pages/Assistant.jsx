@@ -232,12 +232,14 @@ export default function Assistant() {
       <Alert variant="info">
         The assistant can investigate QC failures; compare samples, projects, and batches; graph result
         trends; find outliers and workflow bottlenecks; and preview sample, QC,
-        inventory, work assignment,
+        inventory, work assignment, unreviewed result entry,
         barcode-label, compliance-report, and notification operations. It can
         also answer from approved SOPs and show read-only admin monitoring. A
         proposal expires after 15 minutes and never runs until you select Confirm.
         Ambiguous requests show clarification choices, and retained context is
-        always visible and removable.
+        always visible and removable. After asking about a sample, try “Assign the next
+        step to maria” or “Add result concentration = 43 to step 1”. Use your actual
+        measurement; new results still require QC review.
       </Alert>
 
       <Alert variant="secondary">

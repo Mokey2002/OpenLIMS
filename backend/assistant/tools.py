@@ -634,6 +634,11 @@ def route_assistant_message(message, user, context=None, route_hint=None):
     query = clean_query(message)
     lower = query.lower()
 
+    from .guided_actions import route_guided_action
+    guided = route_guided_action(message, user, context)
+    if guided:
+        return _routed(guided, "work_items")
+
     from .sample_guidance import route_sample_guidance
     guidance = route_sample_guidance(message, user, context)
     if guidance:

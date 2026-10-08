@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.40.0 — Acciones de laboratorio con confirmación
+
+Asigna un paso disponible y agrega resultados tipados sin revisar desde el asistente. La vista previa requiere confirmación y vuelve a validar permisos y registros; los cambios posteriores invalidan la propuesta. Los pasos paralelos requieren una selección explícita. Agregar resultados no completa el trabajo ni aprueba QC. Consulta los [ejemplos y controles](docs/assistant-guided-actions.md).
+
 ## v0.39.1 — Orientación conversacional de muestras
 
 Pregunta “¿Qué falta?”, responde una aclaración con solo el ID de muestra y continúa preguntando por un paso numerado o su responsable. El asistente consulta registros actuales, verifica permisos y pide aclaración si el paso es ambiguo. “Empezar de nuevo” borra el contexto de la muestra. Las acciones conservan su confirmación existente. Consulta los [ejemplos de conversación](docs/assistant-guidance.md).
@@ -8,9 +12,6 @@ Pregunta “¿Qué falta?”, responde una aclaración con solo el ID de muestra
 
 Pregunta qué sigue para una muestra en español o inglés. El asistente consulta pipelines accesibles y actuales, explica campos pendientes, dependencias y aprobaciones de QC, y enlaza la muestra. Las preguntas posteriores vuelven a verificar permisos y estado. Funciona sin proveedor externo de IA y no modifica registros. Consulta la [guía del asistente](docs/assistant-guidance.md).
 
-## v0.38.2 — Una muestra, cinco usuarios
-
-Agrega `seed_demo --connected-only` para crear DEMO-360-001 con pipeline activo, QC independiente, bitácora compartida, secuencias, análisis ficticios, inventario y archivos. Requiere las cinco cuentas de demostración existentes y conserva contraseñas y cambios al volver a ejecutarlo. Consulta el [recorrido en español e inglés](docs/connected-demo.md).
 
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
@@ -18,7 +19,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.39.1`
+**Versión de desarrollo actual:** `v0.40.0`
 
 **Demo:** http://35.164.28.250
 
