@@ -324,6 +324,9 @@ def execute_workitem_operation(action):
         raise WorkItemOperationError(
             "Only Tech or Director users can create or assign work items."
         )
+    if operation in {"GUIDED_ASSIGN", "GUIDED_RESULT"}:
+        from .guided_actions import execute_guided_action
+        return execute_guided_action(action)
     succeeded = []
     failed = []
 

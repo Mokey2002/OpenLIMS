@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.39.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.40.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,6 +25,10 @@
 
 ## Overview
 
+### v0.40.0 — Confirmed lab actions
+
+Assign a specific or next available pipeline step and add typed, unreviewed results through the assistant. Exact previews require confirmation, recheck access and current records, and reject stale proposals. Parallel steps require a choice; new results do not complete work or approve QC. See [examples and safeguards](docs/assistant-guided-actions.md).
+
 ### v0.39.1 — Conversational sample guidance
 
 Ask “What's holding this up?”, reply to a clarification with just a sample ID, and follow up about a numbered step or its assignee in English or Spanish. The assistant rereads accessible records, clears stale context after access denial or an explicit reset, and asks when step references are ambiguous. Action requests keep their existing confirmation flow. See the [conversation examples](docs/assistant-guidance.md).
@@ -33,9 +37,6 @@ Ask “What's holding this up?”, reply to a clarification with just a sample I
 
 Ask what comes next for a sample in English or Spanish. The assistant reads current accessible pipeline records, explains missing fields, dependencies and QC gates, and links to the sample. Follow-ups recheck access and state; ambiguous references require clarification. This read-only guidance works without an external AI provider and is not rewritten by one. See the [assistant guidance guide](docs/assistant-guidance.md).
 
-### v0.38.2 — One sample, five-user demo
-
-Adds `seed_demo --connected-only` to create DEMO-360-001 with an active pipeline, independent QC, team notebook, sequences, synthetic analysis fixtures, inventory, files and a role-by-role walkthrough. Requires the five existing demo accounts and preserves credentials and edits on rerun. See the [English/Spanish walkthrough](docs/connected-demo.md).
 
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
@@ -43,7 +44,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.39.1 — Conversational sample guidance`.
+**Current development version:** `v0.40.0 — Confirmed lab actions`.
 
 ## Deployment Access
 
