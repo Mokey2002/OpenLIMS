@@ -1,0 +1,89 @@
+"""Read-only workflow guidance, grounded in accessible records on every request."""
+import re
+
+from django.utils import timezone
+
+from pipelines.models import PipelineRun
+from pipelines.services import missing_required_fields
+from samples.access import user_can_modify_sample
+
+from .sample_operations import _sample_queryset
+
+
+INTENT = re.compile(r"what(?:'s| is)? next|what should I do|next steps?|why.*blocked|explain.*(?:workflow|pipeline)|qué sigue|qu[eé].*hacer|pr[oó]ximo.*paso|por qu[eé].*bloquead|explica.*(?:flujo|pipeline)", re.I)
+REFERENCE = re.compile(r"\b(?:sample|muestra)\s+([\w][\w./-]*)", re.I)
+
+
+def route_sample_guidance(message, user, context=None):
+    if not INTENT.search(str(message or "")):
+        return None
+    context = context or {}
+    spanish = bool(re.search(r"\b(?:muestra|qué|que|sigue|hacer|paso|bloquead\w*|explica)\b", message, re.I))
+    def t(en, es):
+        return es if spanish else en
+    base = {"skip_llm": True, "links": [], "suggestions": [], "context": {}}
+    codes = [code for code in REFERENCE.findall(message) if code.lower() not in {"is", "the", "this", "está", "esta"}]
+    if not codes:
+        # Hyphenated IDs can be mentioned without the word sample.
+        codes = re.findall(r"\b[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+\b", message)
+    codes = list(dict.fromkeys(code.rstrip(".").casefold() for code in codes))
+    if len(codes) > 1:
+        return {**base, "answer": t("Choose one sample ID so I can explain its next steps.", "Elige un ID de muestra para explicar sus próximos pasos."), "clarification": {"required": True}}
+    code = codes[0] if codes else context.get("sample_code")
+    if not isinstance(code, str) or not code:
+        return {**base, "answer": t("Which sample? Include its exact ID, for example: What next for sample DEMO-360-001?", "¿Qué muestra? Incluye su ID exacto, por ejemplo: ¿Qué sigue para muestra DEMO-360-001?"), "clarification": {"required": True}}
+    matches = list(_sample_queryset(user).filter(sample_id__iexact=code)[:2])
+    if len(matches) != 1:
+        return {**base, "answer": t("That sample was not found, is ambiguous, or is not accessible. Provide its exact ID.", "La muestra no se encontró, es ambigua o no es accesible. Indica su ID exacto."), "clarification": {"required": True}}
+    sample = matches[0]
+    lines = [f"{sample.sample_id} — {sample.status}"]
+    if sample.container:
+        lines.append(t("Storage: ", "Almacenamiento: ") + sample.container.container_id)
+    editable = user_can_modify_sample(user, sample)
+    if not editable:
+        lines.append(t("You have read-only access to this sample. An authorized team member must make changes.", "Tienes acceso de lectura a esta muestra. Un miembro autorizado debe realizar los cambios."))
+    runs = list(PipelineRun.objects.filter(sample=sample).prefetch_related(
+        "steps__work_item__results", "steps__work_item__assigned_to").order_by("-id")[:6])
+    evidence = []
+    if not runs:
+        lines.append(t("No pipeline is linked. Open the sample and choose the appropriate pipeline with your project team.", "No hay un pipeline vinculado. Abre la muestra y elige el pipeline adecuado con tu equipo."))
+    for run in runs[:5]:
+        lines.append(f"Pipeline #{run.pk}: {run.status}")
+        steps = list(run.steps.all())
+        by_position = {step.position: step for step in steps}
+        for step in steps[:50]:
+            work = step.work_item
+            missing = missing_required_fields(work, step) if work else []
+            waiting = [str(pos) for pos in step.dependency_positions if pos not in by_position or by_position[pos].status not in {"COMPLETED", "SKIPPED"}]
+            if run.status in {"COMPLETED", "CANCELLED"}:
+                instruction = t("Historical run; no next action proposed.", "Ejecución histórica; no se propone una acción.")
+            elif step.status in {"COMPLETED", "SKIPPED", "CANCELLED"}:
+                instruction = t("No action needed for this step.", "Este paso no requiere acción.")
+            elif step.status == "FAILED":
+                instruction = t("Review the recorded failure and retry options in the sample.", "Revisa el fallo registrado y las opciones de reintento en la muestra.")
+            elif waiting:
+                instruction = t("Waiting for steps: ", "Espera los pasos: ") + ", ".join(waiting)
+            elif step.status == "BLOCKED":
+                instruction = t("Review the activation condition and run status in the sample; do not skip the gate.", "Revisa la condición de activación y el estado del pipeline; no omitas el requisito.")
+            elif missing:
+                instruction = t("Enter or correct required fields: ", "Completa o corrige los campos obligatorios: ") + ", ".join(missing)
+            elif work and work.status != "COMPLETED":
+                instruction = t("Required fields are present. Review the work and mark it COMPLETED when finished. QC approval alone does not complete work.", "Los campos obligatorios están presentes. Revisa el trabajo y márcalo COMPLETED al terminar. Aprobar QC no completa el trabajo.")
+            elif work and step.requires_qc and work.qc_status != "APPROVED":
+                instruction = t("Work is complete; an authorized QC reviewer must review it. It is not yet QC-approved.", "El trabajo está completo; un revisor autorizado debe revisar QC. Aún no tiene aprobación de QC.")
+            else:
+                instruction = t("Review this step in the sample for its current execution state.", "Revisa este paso en la muestra para conocer su estado actual.")
+            owner = work.assigned_to.username if work and work.assigned_to else t("Unassigned", "Sin asignar")
+            lines.append(f"{step.position}. {step.name} — {step.status} ({owner}): {instruction}")
+            evidence.append({"run_id": run.pk, "step": step.position, "status": step.status,
+                             "work_item_id": work.pk if work else None, "qc_status": work.qc_status if work else None,
+                             "missing_fields": missing, "waiting_for": waiting, "next_action": instruction})
+        if len(steps) > 50:
+            lines.append(t("Only the first 50 steps are shown; open the sample for the full run.", "Solo se muestran los primeros 50 pasos; abre la muestra para verlos todos."))
+    if len(runs) > 5:
+        lines.append(t("Showing the latest five runs. Open the sample for full history.", "Se muestran las últimas cinco ejecuciones. Abre la muestra para ver el historial completo."))
+    lines.append(t("Read from current records. No results, statuses or approvals were changed.", "Consulta de registros actuales. No se cambiaron resultados, estados ni aprobaciones."))
+    return {**base, "answer": "\n".join(lines), "links": [{"label": sample.sample_id, "url": f"/samples/{sample.pk}", "kind": "sample"}],
+            "context": {"sample_code": sample.sample_id, "sample_id": sample.pk},
+            "sample_guidance": {"sample_id": sample.pk, "as_of": timezone.now().isoformat(), "steps": evidence, "read_only": True},
+            "suggestions": [t(f"What next for sample {sample.sample_id}?", f"¿Qué sigue para muestra {sample.sample_id}?")]}

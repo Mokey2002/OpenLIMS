@@ -634,6 +634,11 @@ def route_assistant_message(message, user, context=None, route_hint=None):
     query = clean_query(message)
     lower = query.lower()
 
+    from .sample_guidance import route_sample_guidance
+    guidance = route_sample_guidance(message, user, context)
+    if guidance:
+        return _routed(guidance, "samples")
+
     if route_hint:
         query, route_hint, entity_question = _resolve_plan_entities(
             query,
