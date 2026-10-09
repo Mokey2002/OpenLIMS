@@ -1,4 +1,6 @@
 from unittest.mock import patch
+from datetime import timedelta
+from django.utils import timezone
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -140,14 +142,14 @@ class ProjectWorkflowTests(APITestCase):
         self.assertNotIn("project_workflows", self.chat("Next page", data["context"]))
 
     @patch("assistant.project_workflows.PAGE_SIZE", 1)
-    def test_empty_match_page_does_not_claim_project_has_no_matches(self):
+    def test_pagination_skips_nonmatches_to_find_useful_results(self):
         Result.objects.create(work_item=self.work, key="concentration", value_type="NUMBER", value_number=43)
         second, _, _ = self.make_sample("SAMPLE-002")
         first = self.query("missing results")
-        self.assertEqual(self.rows(first), [])
-        self.assertTrue(first["project_workflows"]["has_more"])
-        data = self.chat("Next page", first["context"])
-        self.assertEqual(self.rows(data)[0]["sample_id"], second.pk)
+        self.assertEqual(self.rows(first)[0]["sample_id"], second.pk)
+        self.assertEqual(first["project_workflows"]["checked_on_page"], 2)
+        self.assertFalse(first["project_workflows"]["has_more"])
+        self.assertEqual(first["project_workflows"]["matching_sample_count"], 1)
 
     def test_project_switch_and_reset_clear_selection(self):
         other = Project.objects.create(code="OTHER", name="Other project")
@@ -200,3 +202,108 @@ class ProjectWorkflowTests(APITestCase):
             data = self.query()
         provider.assert_not_called()
         self.assertTrue(data["project_workflows"]["read_only"])
+
+    def test_failed_qc_excludes_pending_reviews(self):
+        for index, status in enumerate(("PENDING_REVIEW", "REJECTED", "RERUN_REQUIRED")):
+            sample, _, work = self.make_sample(f"QC-{index}")
+            Result.objects.create(work_item=work, key="concentration", value_type="NUMBER", value_number=43)
+            work.status = "COMPLETED"
+            work.qc_status = status
+            work.save()
+        data = self.query("failed QC")
+        self.assertEqual({row["sample_code"] for row in self.rows(data)}, {"QC-1", "QC-2"})
+        self.assertEqual(data["project_workflows"]["filter"], "qc_failed")
+        self.assertTrue(all(r["kind"] == "qc" for row in self.rows(data) for r in row["reasons"]))
+
+    def test_overdue_and_unassigned_followups_refresh_current_work(self):
+        self.work.due_at = timezone.now() - timedelta(days=1)
+        self.work.save()
+        overdue = self.query("overdue")
+        self.assertEqual(len(self.rows(overdue)), 1)
+        reason = self.rows(overdue)[0]["reasons"][0]
+        self.assertTrue(reason["due_at"])
+        self.assertIn("due date", reason["next_action"])
+        self.work.due_at = timezone.now() + timedelta(days=1)
+        self.work.save()
+        self.assertEqual(self.rows(self.chat("Refresh results", overdue["context"])), [])
+        unassigned = self.chat("Only unassigned", overdue["context"])
+        self.assertEqual(len(self.rows(unassigned)), 1)
+        self.work.assigned_to = self.tech
+        self.work.save()
+        self.assertEqual(self.rows(self.chat("Refresh results", unassigned["context"])), [])
+        self.assertFalse(AssistantAction.objects.exists())
+
+    @patch("assistant.project_workflows.MAX_SCAN", 1)
+    def test_scan_cap_is_explicit_and_next_page_resumes_after_nonmatch(self):
+        Result.objects.create(work_item=self.work, key="concentration", value_type="NUMBER", value_number=43)
+        second, _, _ = self.make_sample("LATER-001")
+        first = self.query("missing results")
+        self.assertEqual(self.rows(first), [])
+        self.assertTrue(first["project_workflows"]["scan_limit_reached"])
+        self.assertIsNone(first["project_workflows"]["matching_sample_count"])
+        self.assertEqual(first["project_workflows"]["remaining_to_check"], 1)
+        data = self.chat("Next page", first["context"])
+        self.assertEqual(self.rows(data)[0]["sample_id"], second.pk)
+        self.assertFalse(data["project_workflows"]["complete_project_scan"])
+        self.assertIsNone(data["project_workflows"]["matching_sample_count"])
+
+    def test_spanish_filter_switches_and_refresh(self):
+        data = self.chat("¿Qué muestras en proyecto DEMO-360 están bloqueadas?")
+        unassigned = self.chat("Solo sin asignar", data["context"])
+        self.assertEqual(unassigned["project_workflows"]["language"], "es")
+        self.assertEqual(unassigned["project_workflows"]["filter"], "unassigned")
+        self.assertIn("responsable", unassigned["answer"])
+        failed = self.chat("Solo QC rechazado", data["context"])
+        self.assertEqual(failed["project_workflows"]["filter"], "qc_failed")
+        refreshed = self.chat("Actualizar resultados", unassigned["context"])
+        self.assertEqual(refreshed["project_workflows"]["language"], "es")
+        self.assertEqual(refreshed["project_workflows"]["matching_sample_count"], 1)
+
+    def test_actionable_reasons_are_prioritized_before_dependencies(self):
+        self.work.due_at = timezone.now() - timedelta(days=1)
+        self.work.save()
+        overview = self.chat("Show samples in project DEMO-360 workflow overview")
+        reasons = self.rows(overview)[0]["reasons"]
+        self.assertEqual(reasons[0]["kind"], "overdue")
+        self.assertEqual(reasons[-1]["kind"], "dependency")
+        self.assertTrue(all(r["next_action"] for r in reasons))
+        blocked = self.query()
+        self.assertNotIn("overdue", {r["kind"] for r in self.rows(blocked)[0]["reasons"]})
+
+    def test_project_codes_do_not_change_the_requested_filter(self):
+        project = Project.objects.create(code="OVERDUE-QC", name="Keyword project")
+        project.members.add(self.tech)
+        self.make_sample("KEYWORD-001", project)
+        data = self.chat("Which samples in project OVERDUE-QC are blocked?")
+        self.assertEqual(data["project_workflows"]["filter"], "blocked")
+        self.assertEqual(len(self.rows(data)), 1)
+
+    def test_uncreated_blocked_work_is_not_reported_as_unassigned(self):
+        self.work.assigned_to = self.tech
+        self.work.save()
+        self.assertEqual(self.rows(self.query("unassigned")), [])
+        self.assertEqual(self.rows(self.query("overdue")), [])
+
+    def test_no_match_total_is_exact_only_after_complete_scan(self):
+        data = self.query("overdue")
+        self.assertTrue(data["project_workflows"]["complete_project_scan"])
+        self.assertEqual(data["project_workflows"]["matching_sample_count"], 0)
+        self.assertIn("Complete project scan", data["project_workflows"]["summary"])
+
+    @patch("assistant.project_workflows.SCAN_BATCH_SIZE", 2)
+    @patch("assistant.project_workflows.PAGE_SIZE", 2)
+    def test_matching_pages_cross_scan_batches_without_losing_candidates(self):
+        Result.objects.create(work_item=self.work, key="concentration", value_type="NUMBER", value_number=43)
+        expected = []
+        for index in range(4):
+            sample, _, work = self.make_sample(f"SCAN-{index}")
+            if index == 0:
+                Result.objects.create(work_item=work, key="concentration", value_type="NUMBER", value_number=43)
+            else:
+                expected.append(sample.pk)
+        first = self.query("missing results")
+        self.assertEqual([r["sample_id"] for r in self.rows(first)], expected[:2])
+        self.assertEqual(first["project_workflows"]["checked_on_page"], 4)
+        second = self.chat("Next page", first["context"])
+        self.assertEqual([r["sample_id"] for r in self.rows(second)], expected[2:])
+        self.assertFalse(second["project_workflows"]["has_more"])
