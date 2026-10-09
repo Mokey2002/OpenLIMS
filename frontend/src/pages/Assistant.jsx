@@ -10,6 +10,7 @@ import {
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import AssistantChart from "../components/AssistantChart";
+import ProjectWorkflowTable from "../components/ProjectWorkflowTable";
 import ComparisonTable from "../components/ComparisonTable";
 import InvestigationPanel from "../components/InvestigationPanel";
 import AssistantActionPreview from "../components/AssistantActionPreview";
@@ -110,7 +111,8 @@ export default function Assistant() {
         ...nextHistory,
         {
           role: "assistant",
-          content: data.answer || "No answer returned.",
+          content: data.project_workflows?.summary || data.answer || "No answer returned.",
+          projectWorkflows: data.project_workflows || null,
           links: data.links || [],
           suggestions: data.suggestions || [],
           chart: data.chart || null,
@@ -239,7 +241,8 @@ export default function Assistant() {
         Ambiguous requests show clarification choices, and retained context is
         always visible and removable. After asking about a sample, try “Assign the next
         step to maria” or “Add result concentration = 43 to step 1”. Use your actual
-        measurement; new results still require QC review.
+        measurement; new results still require QC review. You can also ask “Which samples
+        in project DEMO-360 are blocked, and why?” to review linked samples together.
       </Alert>
 
       <Alert variant="secondary">
@@ -297,6 +300,8 @@ export default function Assistant() {
                   )}
 
                   {item.chart && <AssistantChart chart={item.chart} />}
+
+                  {item.projectWorkflows && <ProjectWorkflowTable data={item.projectWorkflows} />}
 
                   {item.comparison && (
                     <ComparisonTable comparison={item.comparison} />
@@ -378,7 +383,7 @@ export default function Assistant() {
                     </Card>
                   )}
 
-                  {item.links?.length > 0 && (
+                  {!item.projectWorkflows && item.links?.length > 0 && (
                     <div className="assistant-links">
                       {item.links.map((link, linkIndex) => (
                         <Link

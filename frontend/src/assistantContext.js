@@ -20,6 +20,15 @@ export function describeAssistantContext(context) {
     return null;
   }
 
+  const projectWorkflows = context.project_workflows;
+  if (projectWorkflows?.project_code) {
+    return {
+      kind: "project_workflows",
+      label: `Project workflows · ${projectWorkflows.project_code}`,
+      detail: `${titleCase(projectWorkflows.filter)} · Current records checked on each question`,
+    };
+  }
+
   const investigation = context.investigation;
   if (investigation?.identifier) {
     return {

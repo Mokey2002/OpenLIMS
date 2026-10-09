@@ -3,6 +3,7 @@ import re
 
 ALLOWED_CONTEXT_KEYS = {
     "guidance",
+    "project_workflows",
     "analytics",
     "batch_code",
     "comparison",
