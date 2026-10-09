@@ -2,7 +2,7 @@
 
 ## v0.41.1 — Consultas por proyecto más útiles
 
-Las consultas buscan coincidencias más allá de la primera página de muestras y muestran límites y conteos completos solo cuando se revisó todo el proyecto. Agrega filtros de QC rechazado, trabajo vencido y sin asignar, actualización del filtro, motivos priorizados, fechas límite y próximas acciones sugeridas. Consulta la [guía actualizada](docs/assistant-project-workflows.md).
+Las consultas buscan coincidencias más allá de la primera página de muestras y muestran límites y conteos completos solo cuando se revisó todo el proyecto. Agrega filtros de QC rechazado, trabajo vencido y sin asignar, actualización del filtro, motivos priorizados, fechas límite y próximas acciones sugeridas. Consulta la [guía actualizada](docs/assistant-project-workflows.md). CI utiliza Docker Official Images de ECR Public para evitar fallos por límites de descargas anónimas de Docker Hub; conserva las imágenes predeterminadas locales.
 
 ## v0.41.0 — Preguntas sobre muestras de un proyecto
 

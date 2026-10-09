@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   db:
-    image: postgres:16
+    image: ${POSTGRES_IMAGE:-postgres:16}
     container_name: openlims-db
     restart: unless-stopped
     env_file:
@@ -13,7 +13,7 @@ services:
       - "5433:5432"   # avoid local 5432 conflicts
 
   redis:
-    image: redis:7
+    image: ${REDIS_IMAGE:-redis:7}
     container_name: openlims-redis
     restart: unless-stopped
     ports:
@@ -22,6 +22,8 @@ services:
   api:
     build:
       context: ../backend
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim}
     container_name: openlims-api
     command: >
       sh -c "
@@ -46,6 +48,8 @@ services:
   worker:
     build:
       context: ../backend
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim}
     container_name: openlims-worker
     command: celery -A config worker -l info
     volumes:

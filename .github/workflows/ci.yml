@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+# Docker Official Images published on ECR Public avoid Docker Hub's shared
+# anonymous runner pull quota. Local deployments retain their default images.
+env:
+  PYTHON_IMAGE: public.ecr.aws/docker/library/python:3.12-slim
+  POSTGRES_IMAGE: public.ecr.aws/docker/library/postgres:16
+  REDIS_IMAGE: public.ecr.aws/docker/library/redis:7
+
 jobs:
   backend-tests:
     runs-on: ubuntu-latest

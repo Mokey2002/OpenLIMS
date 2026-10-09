@@ -27,7 +27,7 @@
 
 ### v0.41.1 — More useful project workflow answers
 
-Project queries scan past nonmatching samples to fill result pages, with an explicit scan limit and complete counts only when the full project was checked. Add failed-QC, overdue and unassigned-work filters, English/Spanish follow-ups and refresh, prioritized reasons, due dates and suggested next actions. See the [updated guide](docs/assistant-project-workflows.md).
+Project queries scan past nonmatching samples to fill result pages, with an explicit scan limit and complete counts only when the full project was checked. Add failed-QC, overdue and unassigned-work filters, English/Spanish follow-ups and refresh, prioritized reasons, due dates and suggested next actions. See the [updated guide](docs/assistant-project-workflows.md). CI uses Docker Official Images from ECR Public to avoid Docker Hub anonymous pull-limit failures; local image defaults are unchanged.
 
 ### v0.41.0 — Questions across project samples
 
