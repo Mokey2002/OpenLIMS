@@ -639,6 +639,11 @@ def route_assistant_message(message, user, context=None, route_hint=None):
     if guided:
         return _routed(guided, "work_items")
 
+    from .project_workflows import route_project_workflows
+    project_workflows = route_project_workflows(message, user, context)
+    if project_workflows:
+        return _routed(project_workflows, "samples")
+
     from .sample_guidance import route_sample_guidance
     guidance = route_sample_guidance(message, user, context)
     if guidance:

@@ -131,6 +131,8 @@ def route_conversation_utility(message, user=None):
             "I can use permission-filtered tools to find and summarize accessible "
             "samples, projects, results, QC work, "
             "inventory, migrations, sequences, SOPs, notifications, and system status. "
+            "I can list project samples with missing fields, workflow blockers, QC gates "
+            "or available work: Which samples in project DEMO-360 are blocked, and why? "
             "I can compare or investigate records, create charts when requested, and "
             "preview supported actions for explicit confirmation, including assigning a "
             "sample pipeline step and adding an unreviewed result. Try: Assign step 1 "

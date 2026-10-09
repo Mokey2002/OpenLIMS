@@ -3,6 +3,7 @@ import { Alert, Badge, Button, Form, Spinner } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import AssistantChart from "./AssistantChart";
+import ProjectWorkflowTable from "./ProjectWorkflowTable";
 import ComparisonTable from "./ComparisonTable";
 import InvestigationPanel from "./InvestigationPanel";
 import AssistantActionPreview from "./AssistantActionPreview";
@@ -119,7 +120,8 @@ export default function AssistantWidget() {
         ...nextHistory,
         {
           role: "assistant",
-          content: data.answer || "No answer returned.",
+          content: data.project_workflows?.summary || data.answer || "No answer returned.",
+          projectWorkflows: data.project_workflows || null,
           links: data.links || [],
           suggestions: data.suggestions || [],
           chart: data.chart || null,
@@ -266,6 +268,8 @@ export default function AssistantWidget() {
 
                   {item.chart && <AssistantChart chart={item.chart} />}
 
+                  {item.projectWorkflows && <ProjectWorkflowTable data={item.projectWorkflows} />}
+
                   {item.comparison && (
                     <ComparisonTable comparison={item.comparison} />
                   )}
@@ -332,7 +336,7 @@ export default function AssistantWidget() {
                     </Alert>
                   )}
 
-                  {item.links?.length > 0 && (
+                  {!item.projectWorkflows && item.links?.length > 0 && (
                     <div className="assistant-widget-links">
                       {item.links.map((link, linkIndex) => (
                         <Link

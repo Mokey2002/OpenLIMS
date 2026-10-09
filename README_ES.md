@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.41.0 — Preguntas sobre muestras de un proyecto
+
+Consulta muestras con bloqueos, campos faltantes, requisitos de QC o trabajo disponible. Una tabla muestra enlaces y motivos registrados, verifica permisos y actualiza los datos en cada consulta. Los proyectos grandes se dividen en páginas con conteos explícitos. Funciona en español e inglés sin proveedor externo. Consulta la [guía de consultas por proyecto](docs/assistant-project-workflows.md).
+
 ## v0.40.0 — Acciones de laboratorio con confirmación
 
 Asigna un paso disponible y agrega resultados tipados sin revisar desde el asistente. La vista previa requiere confirmación y vuelve a validar permisos y registros; los cambios posteriores invalidan la propuesta. Los pasos paralelos requieren una selección explícita. Agregar resultados no completa el trabajo ni aprueba QC. Consulta los [ejemplos y controles](docs/assistant-guided-actions.md).
@@ -8,18 +12,13 @@ Asigna un paso disponible y agrega resultados tipados sin revisar desde el asist
 
 Pregunta “¿Qué falta?”, responde una aclaración con solo el ID de muestra y continúa preguntando por un paso numerado o su responsable. El asistente consulta registros actuales, verifica permisos y pide aclaración si el paso es ambiguo. “Empezar de nuevo” borra el contexto de la muestra. Las acciones conservan su confirmación existente. Consulta los [ejemplos de conversación](docs/assistant-guidance.md).
 
-## v0.39.0 — Orientación del asistente basada en registros
-
-Pregunta qué sigue para una muestra en español o inglés. El asistente consulta pipelines accesibles y actuales, explica campos pendientes, dependencias y aprobaciones de QC, y enlaza la muestra. Las preguntas posteriores vuelven a verificar permisos y estado. Funciona sin proveedor externo de IA y no modifica registros. Consulta la [guía del asistente](docs/assistant-guidance.md).
-
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.40.0`
+**Versión de desarrollo actual:** `v0.41.0`
 
 **Demo:** http://35.164.28.250
 
