@@ -15,6 +15,20 @@ function titleCase(value) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+export function describeWorkflowFilters(workflow) {
+  const spanish = workflow.language === "es";
+  const labels = {
+    blocked: ["Blocked", "Bloqueadas"], missing: ["Missing fields", "Campos faltantes"],
+    qc: ["QC", "QC"], qc_failed: ["Failed QC", "QC rechazado"],
+    overdue: ["Overdue", "Vencidas"], unassigned: ["Unassigned", "Sin asignar"],
+    ready: ["Available work", "Trabajo disponible"], all: ["Workflow overview", "Resumen del flujo"],
+  };
+  const filters = Array.isArray(workflow.filters) ? workflow.filters : [workflow.filter];
+  const names = filters.map(filter => labels[filter]?.[spanish ? 1 : 0] || titleCase(filter));
+  const join = workflow.match === "any" ? (spanish ? " O " : " OR ") : (spanish ? " Y " : " AND ");
+  return names.join(join);
+}
+
 export function describeAssistantContext(context) {
   if (!context || typeof context !== "object" || !Object.keys(context).length) {
     return null;
@@ -25,7 +39,7 @@ export function describeAssistantContext(context) {
     return {
       kind: "project_workflows",
       label: `Project workflows · ${projectWorkflows.project_code}`,
-      detail: `${titleCase(projectWorkflows.filter)} · Current records checked on each question`,
+      detail: `${describeWorkflowFilters(projectWorkflows)} · ${projectWorkflows.language === "es" ? "Registros actuales revisados en cada consulta" : "Current records checked on each question"}`,
     };
   }
 

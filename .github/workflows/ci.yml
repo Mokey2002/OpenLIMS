@@ -7,6 +7,7 @@ on:
 
 # Docker Official Images published on ECR Public avoid Docker Hub's shared
 # anonymous runner pull quota. Local deployments retain their default images.
+# ECR can also throttle: pre-pull sequentially with bounded transient retries.
 env:
   PYTHON_IMAGE: public.ecr.aws/docker/library/python:3.12-slim
   POSTGRES_IMAGE: public.ecr.aws/docker/library/postgres:16
@@ -39,6 +40,12 @@ jobs:
           CSRF_COOKIE_SECURE=false
           SESSION_COOKIE_SECURE=false
           EOF
+
+      - name: Verify CI image pull retries
+        run: python3 -m unittest discover -s scripts -p 'test_ci_pull_images.py'
+
+      - name: Pull CI images with transient retries
+        run: python3 scripts/ci_pull_images.py
 
       - name: Build Docker services
         run: docker compose -p openlims -f deploy/docker-compose.yml build
@@ -115,6 +122,9 @@ jobs:
           CSRF_COOKIE_SECURE=false
           SESSION_COOKIE_SECURE=false
           EOF
+
+      - name: Pull CI images with transient retries
+        run: python3 scripts/ci_pull_images.py
 
       - name: Start OpenLIMS backend
         run: |

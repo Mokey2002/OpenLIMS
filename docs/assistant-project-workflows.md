@@ -1,4 +1,4 @@
-# Questions across project samples (v0.41.1)
+# Questions across project samples (v0.42.0)
 
 Ask about several samples together in the Assistant page or floating widget:
 
@@ -16,7 +16,20 @@ Ask about several samples together in the Assistant page or floating widget:
 
 Use an exact project **code**, not a name or approximate spelling. Multiple project references ask for a single choice. The table links each sample and shows its pipeline run, step, reason and recorded work assignee where available. Assignees are not inferred to be QC reviewers. Reasons are prioritized within each sample, with recorded failures and QC gates before routine dependencies. Each reason has a suggested next action; overdue work shows its recorded due date. No suggested action is executed.
 
-After selecting a project, `Which are ready?`, `Which are missing results?`, or `And QC?` switches the filter and refreshes the first page. `Only failed QC`, `Only overdue`, `Only unassigned`, `Solo QC rechazado`, `Solo vencidas` and `Solo sin asignar` also switch filters. These are replacements, not combinations. `Refresh results` / `Actualizar resultados` rereads the current filter from the first page. `Next page` / `Siguiente página` continues the same filter. A full question naming a different project switches projects. The context bar shows the selected project and filter; Clear or `Start over` removes it. Questions about an individual sample still use the existing sample-guidance route.
+After selecting a project, `Which are ready?`, `Which are missing results?`, or `And QC?` switches the filter and refreshes the first page. `Only failed QC`, `Only overdue`, `Only unassigned`, `Solo QC rechazado`, `Solo vencidas` and `Solo sin asignar` also **replace** the current filters. `Refresh results` / `Actualizar resultados` rereads the current filters from the first page. `Next page` / `Siguiente página` continues the same query. A full question naming a different project switches projects. The context bar shows the selected project and filters; Clear or `Start over` removes them. Questions about an individual sample still use the existing sample-guidance route.
+
+## Combined conditions and refinement
+
+- `Which samples in project DEMO-360 are overdue and unassigned?` requires both conditions.
+- `Which samples in project DEMO-360 failed QC or are missing results?` requires either condition.
+- `¿Qué muestras en proyecto DEMO-360 están vencidas y sin asignar?`
+- `¿Qué muestras en proyecto DEMO-360 tienen QC rechazado o campos faltantes?`
+- After an AND or single-filter query, `Also unassigned`, `And only unassigned`, or `También sin asignar` adds an AND condition and restarts at page one.
+- `Only unassigned` replaces the full query, whereas `Also unassigned` narrows it.
+
+Conditions apply **per sample** and may be satisfied by different active steps or runs. They do not promise that the same work item satisfies every condition. Answers explicitly state this distinction and show the matching step evidence without duplicates. The context bar and table caption spell out AND/OR (Y/O in Spanish), including a retained context label when no rows match.
+
+The grammar is intentionally bounded: use the supported filters with explicit AND or OR connectors. Mixed AND/OR, parentheses, negation, assignee/date/threshold constraints, and same-step requests require clarification, rather than silently returning a broader answer. Refining an OR expression also asks for a fresh full query; nested expressions are not inferred. Clarification clears the old context, so repeat the project code. Existing exact-code access checks, scan limits, live pagination and read-only behavior still apply. This is not unrestricted natural-language reasoning or a new model integration.
 
 ## Meaning of the filters
 
@@ -45,7 +58,7 @@ These queries are read-only, use batched ORM retrieval, and work without a provi
 
 ## Verification
 
-`backend/assistant/tests/test_project_workflows.py` covers project/sample permissions, linked samples, viewers, revocation, forged context, pagination across scan batches, scan caps, exact versus partial counts, failed-QC/overdue/unassigned filters, refresh, current QC/field evidence, excluded historical records, Spanish input, ambiguity, provider bypass, no mutation and bounded query counts as sample counts grow.
+`backend/assistant/tests/test_project_workflows.py` covers project/sample permissions, linked samples, viewers, revocation, forged context, pagination across scan batches, scan caps, exact versus partial counts, failed-QC/overdue/unassigned filters, combined AND/OR, refinement versus replacement, refresh, current QC/field evidence, excluded historical records, Spanish input, ambiguity, provider bypass, no mutation and bounded query counts as sample counts grow. `test_workflow_query.py` checks the bounded grammar and malformed context. `frontend/scripts/assistant-workflow-context.test.mjs` checks interpreted filter labels and compatibility with older messages.
 
 ```bash
 cd backend
