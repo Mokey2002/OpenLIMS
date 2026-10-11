@@ -307,3 +307,94 @@ class ProjectWorkflowTests(APITestCase):
         second = self.chat("Next page", first["context"])
         self.assertEqual([r["sample_id"] for r in self.rows(second)], expected[2:])
         self.assertFalse(second["project_workflows"]["has_more"])
+
+    def make_overdue(self, work, assigned=False):
+        work.due_at = timezone.now() - timedelta(days=1)
+        work.assigned_to = self.tech if assigned else None
+        work.save()
+
+    def test_combined_and_or_return_distinct_matching_samples_and_evidence(self):
+        self.make_overdue(self.work)
+        _, _, assigned = self.make_sample("OVERDUE-ASSIGNED")
+        self.make_overdue(assigned, assigned=True)
+        self.make_sample("UNASSIGNED-ONLY")
+        both = self.query("overdue and unassigned")
+        self.assertEqual([r["sample_code"] for r in self.rows(both)], ["SAMPLE-001"])
+        self.assertEqual(both["project_workflows"]["filters"], ["overdue", "unassigned"])
+        self.assertEqual({r["kind"] for r in self.rows(both)[0]["reasons"]}, {"overdue", "unassigned"})
+        self.assertIn("different steps", both["answer"])
+        either = self.query("overdue or unassigned")
+        self.assertEqual(len(self.rows(either)), 3)
+        self.assertEqual(either["project_workflows"]["match"], "any")
+        self.assertEqual(either["project_workflows"]["matching_sample_count"], 3)
+        self.assertFalse(AssistantAction.objects.exists())
+
+    def test_refinement_replacement_and_refresh(self):
+        self.make_overdue(self.work, assigned=True)
+        first = self.query("overdue")
+        refined = self.chat("Also unassigned", first["context"])
+        self.assertEqual(self.rows(refined), [])
+        self.assertEqual(refined["project_workflows"]["filters"], ["overdue", "unassigned"])
+        self.work.assigned_to = None
+        self.work.save()
+        refreshed = self.chat("Refresh results", refined["context"])
+        self.assertEqual(len(self.rows(refreshed)), 1)
+        replaced = self.chat("Only unassigned", refreshed["context"])
+        self.assertEqual(replaced["project_workflows"]["filters"], ["unassigned"])
+
+    @patch("assistant.project_workflows.PAGE_SIZE", 1)
+    def test_combined_pagination_and_project_switch(self):
+        self.make_overdue(self.work)
+        _, _, second = self.make_sample("SECOND")
+        self.make_overdue(second)
+        first = self.query("overdue and unassigned")
+        following = self.chat("Next page", first["context"])
+        self.assertEqual(self.rows(following)[0]["sample_code"], "SECOND")
+        self.assertEqual(following["project_workflows"]["filters"], ["overdue", "unassigned"])
+        self.assertIsNone(following["project_workflows"]["matching_sample_count"])
+        other = Project.objects.create(code="OTHER", name="Other")
+        other.members.add(self.tech)
+        self.make_sample("OTHER-SAMPLE", other)
+        switched = self.chat("Which samples in project OTHER are unassigned?", first["context"])
+        self.assertEqual(self.rows(switched)[0]["sample_code"], "OTHER-SAMPLE")
+        self.assertEqual(switched["project_workflows"]["filters"], ["unassigned"])
+
+    def test_combined_filters_can_match_different_steps(self):
+        # Step 1 is missing fields; step 2 has an unmet dependency. The query
+        # is sample-level, not an assertion that one step meets every condition.
+        data = self.query("missing results and blocked")
+        self.assertEqual(len(self.rows(data)), 1)
+        reasons = self.rows(data)[0]["reasons"]
+        self.assertEqual(len(reasons), 2)  # missing evidence isn't duplicated
+        self.assertEqual({r["step"] for r in reasons}, {1, 2})
+
+    def test_spanish_combination_and_refinement(self):
+        self.make_overdue(self.work)
+        data = self.chat("¿Qué muestras en proyecto DEMO-360 están vencidas y sin asignar?")
+        self.assertEqual(data["project_workflows"]["language"], "es")
+        self.assertEqual(len(self.rows(data)), 1)
+        refined = self.chat("También campos faltantes", data["context"])
+        self.assertEqual(refined["project_workflows"]["filters"], ["overdue", "unassigned", "missing"])
+        self.assertEqual(refined["project_workflows"]["language"], "es")
+
+    def test_ambiguous_or_unsupported_queries_ask_without_actions(self):
+        first = self.query("overdue or unassigned")
+        for message in ("Also missing results", "Which samples in project DEMO-360 are not ready?",
+                        "Which samples in project DEMO-360 are overdue and unassigned or ready?",
+                        "Which samples in project DEMO-360 are overdue assigned to maria?"):
+            with self.subTest(message=message):
+                data = self.chat(message, first["context"])
+                self.assertTrue(data["clarification"]["required"])
+                self.assertNotIn("project_workflows", data)
+                self.assertEqual(data["context"], {})
+                self.assertEqual(data["links"], [])
+        self.assertFalse(AssistantAction.objects.exists())
+
+    def test_combined_context_rechecks_permissions_and_rejects_forgery(self):
+        first = self.query("overdue and unassigned")
+        bad = {"project_workflows": {**first["context"]["project_workflows"], "filters": [{}]}}
+        self.assertTrue(self.chat("Refresh results", bad)["clarification"]["required"])
+        self.project.members.remove(self.tech)
+        denied = self.chat("Refresh results", first["context"])
+        self.assertNotIn("project_workflows", denied)
+        self.assertEqual(denied["context"], {})

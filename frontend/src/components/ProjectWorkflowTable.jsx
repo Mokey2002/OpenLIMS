@@ -1,5 +1,6 @@
 import { Badge, Table } from "react-bootstrap";
 import { Link } from "react-router-dom";
+import { describeWorkflowFilters } from "../assistantContext";
 
 export default function ProjectWorkflowTable({ data }) {
   const spanish = data.language === "es";
@@ -15,6 +16,7 @@ export default function ProjectWorkflowTable({ data }) {
     <Table size="sm" bordered responsive className="mt-3">
       <caption>
         {t("Current workflow evidence", "Registros actuales del flujo")} · {data.project_code}
+        {data.filters?.length > 1 && ` · ${t("Match", "Coincidir")}: ${describeWorkflowFilters(data)}`}
         {data.as_of && ` · ${new Date(data.as_of).toLocaleString()}`}
       </caption>
       <thead>
