@@ -27,7 +27,7 @@
 
 ### v0.42.0 — Combined AI workflow questions
 
-Ask for samples matching multiple conditions with AND or OR, in English or Spanish. Refine the current search with “Also unassigned,” replace it with “Only unassigned,” and preserve the full query across refresh and pagination. Explicit filter labels and recorded step evidence explain the interpretation. Unsupported conditions and mixed AND/OR expressions request clarification instead of silently dropping criteria. Queries remain read-only and permission-checked. See the [workflow query guide](docs/assistant-project-workflows.md).
+Ask for samples matching multiple conditions with AND or OR, in English or Spanish. Refine the current search with “Also unassigned,” replace it with “Only unassigned,” and preserve the full query across refresh and pagination. Explicit filter labels and recorded step evidence explain the interpretation. Unsupported conditions and mixed AND/OR expressions request clarification instead of silently dropping criteria. Queries remain read-only and permission-checked. See the [workflow query guide](docs/assistant-project-workflows.md). CI pre-pulls its images sequentially with bounded retries for temporary registry errors; persistent failures still stop the checks.
 
 ### v0.41.1 — More useful project workflow answers
 

@@ -2,7 +2,7 @@
 
 ## v0.42.0 — Preguntas de IA con filtros combinados
 
-Consulta muestras que cumplan varias condiciones con Y u O, en español o inglés. “También sin asignar” refina la consulta; “Solo sin asignar” reemplaza sus filtros. La actualización y paginación conservan la consulta completa. Los filtros explícitos y registros de los pasos explican la interpretación. Las condiciones no compatibles y mezclas de Y/O solicitan aclaración en lugar de omitir criterios. Las consultas siguen siendo de solo lectura y verifican permisos. Consulta la [guía de consultas](docs/assistant-project-workflows.md).
+Consulta muestras que cumplan varias condiciones con Y u O, en español o inglés. “También sin asignar” refina la consulta; “Solo sin asignar” reemplaza sus filtros. La actualización y paginación conservan la consulta completa. Los filtros explícitos y registros de los pasos explican la interpretación. Las condiciones no compatibles y mezclas de Y/O solicitan aclaración en lugar de omitir criterios. Las consultas siguen siendo de solo lectura y verifican permisos. Consulta la [guía de consultas](docs/assistant-project-workflows.md). CI descarga sus imágenes secuencialmente con reintentos limitados ante errores temporales del registro; los fallos persistentes detienen las verificaciones.
 
 ## v0.41.1 — Consultas por proyecto más útiles
 
