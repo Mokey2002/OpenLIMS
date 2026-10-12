@@ -386,7 +386,11 @@ class ProjectWorkflowTests(APITestCase):
                 data = self.chat(message, first["context"])
                 self.assertTrue(data["clarification"]["required"])
                 self.assertNotIn("project_workflows", data)
-                self.assertEqual(data["context"], {})
+                if message == "Also missing results":
+                    self.assertTrue(data["clarification"]["previous_query_retained"])
+                    self.assertEqual(data["context"]["project_workflows"]["filters"], ["overdue", "unassigned"])
+                else:
+                    self.assertEqual(data["context"], {})
                 self.assertEqual(data["links"], [])
         self.assertFalse(AssistantAction.objects.exists())
 
@@ -468,3 +472,121 @@ class ProjectWorkflowTests(APITestCase):
             denied = self.chat(message, data["context"])
             self.assertNotIn("project_workflows", denied)
             self.assertEqual(denied["context"], {})
+
+
+    def test_edit_match_and_remove_filter_preserve_scope_and_restart(self):
+        data = self.query("overdue and unassigned on the same step")
+        self.assertEqual(self.rows(data), [])
+        context = data["context"]
+        context["project_workflows"]["after"] = self.sample.pk
+        either = self.chat("Match any condition", context)
+        self.assertEqual(len(self.rows(either)), 1)
+        self.assertEqual(either["project_workflows"]["scope"], "step")
+        self.assertEqual(either["project_workflows"]["match"], "any")
+        both = self.chat("Require all conditions", either["context"])
+        self.assertEqual(self.rows(both), [])
+        removed = self.chat("Remove the overdue filter", both["context"])
+        self.assertEqual(removed["project_workflows"]["filters"], ["unassigned"])
+        self.assertEqual(len(self.rows(removed)), 1)
+        self.assertFalse(AssistantAction.objects.exists())
+
+    def test_spanish_query_edits_and_live_permission_recheck(self):
+        data = self.query("overdue and unassigned")
+        either = self.chat("Cumplir cualquier condición", data["context"])
+        self.assertEqual(either["project_workflows"]["language"], "es")
+        self.assertEqual(len(self.rows(either)), 1)
+        removed = self.chat("Quitar el filtro de vencidas", either["context"])
+        self.assertEqual(removed["project_workflows"]["filters"], ["unassigned"])
+        self.project.members.remove(self.tech)
+        denied = self.chat("Match any condition", either["context"])
+        self.assertNotIn("project_workflows", denied)
+        self.assertEqual(denied["context"], {})
+
+    def test_invalid_edits_do_not_broaden_to_all_samples(self):
+        data = self.query("overdue")
+        for phrase, context in [
+            ("Remove the overdue filter", data["context"]),
+            ("Remove the missing results filter", data["context"]),
+            ("Match any condition", {}),
+            ("Match any condition", {"project_workflows": {"filters": ["secret"]}}),
+            ("Remove the not overdue filter", data["context"]),
+        ]:
+            with self.subTest(phrase=phrase, context=context):
+                reply = self.chat(phrase, context)
+                self.assertTrue(reply["clarification"]["required"])
+                self.assertNotIn("project_workflows", reply)
+
+    def test_unclear_followup_preserves_query_without_executing(self):
+        initial = self.query("overdue or unassigned on the same step")
+        initial["context"]["project_workflows"].update(after=999, has_more=True, sample_ids=[self.sample.pk])
+        before = Event.objects.count()
+        with patch("assistant.project_workflows._evidence") as evidence, patch("assistant.llm.OpenAI") as provider:
+            reply = self.chat("Also missing results", initial["context"])
+        evidence.assert_not_called()
+        provider.assert_not_called()
+        self.assertTrue(reply["clarification"]["previous_query_retained"])
+        saved = reply["context"]["project_workflows"]
+        self.assertEqual(saved["filters"], ["overdue", "unassigned"])
+        self.assertEqual(saved["match"], "any")
+        self.assertEqual(saved["scope"], "step")
+        self.assertEqual(saved["after"], 0)
+        self.assertFalse(saved["has_more"])
+        self.assertNotIn("sample_ids", saved)
+        self.assertNotIn("project_workflows", reply)
+        self.assertEqual(reply["links"], [])
+        self.assertIn("haven't applied", reply["answer"])
+        self.assertIn("AND or OR", reply["answer"])
+        self.assertIn("Require all conditions", reply["suggestions"])
+        self.assertEqual(Event.objects.count(), before)
+        self.assertFalse(AssistantAction.objects.exists())
+        self.work.assigned_to = self.tech
+        self.work.save()
+        refreshed = self.chat("Refresh results", reply["context"])
+        self.assertEqual(self.rows(refreshed), [])
+        self.assertEqual(refreshed["project_workflows"]["checked_on_page"], 1)
+
+    def test_recovery_suggestions_work_in_both_languages(self):
+        for question, followup in [
+            ("Which samples in project DEMO-360 are overdue or unassigned?", "Also missing results"),
+            ("¿Qué muestras en proyecto DEMO-360 están vencidas o sin asignar?", "También campos faltantes"),
+        ]:
+            initial = self.chat(question)
+            recovery = self.chat(followup, initial["context"])
+            self.assertTrue(recovery["clarification"]["previous_query_retained"])
+            for suggestion in recovery["suggestions"]:
+                with self.subTest(suggestion=suggestion):
+                    reply = self.chat(suggestion, recovery["context"])
+                    if suggestion in {"Start over", "Empezar de nuevo"}:
+                        self.assertEqual(reply["context"], {})
+                    else:
+                        self.assertIn("project_workflows", reply)
+                        self.assertEqual(reply["project_workflows"]["project_code"], "DEMO-360")
+
+    def test_recovery_drops_revoked_and_invalid_context(self):
+        initial = self.query("overdue or unassigned")
+        original = initial["context"]["project_workflows"]
+        for field, bad in [("filters", ["private"]), ("scope", []), ("match", "none"), ("project_code", [])]:
+            reply = self.chat("Also missing results", {"project_workflows": {**original, field: bad}})
+            self.assertEqual(reply["context"], {})
+        self.project.members.remove(self.tech)
+        reply = self.chat("Also missing results", initial["context"])
+        self.assertEqual(reply["context"], {})
+        self.assertEqual(reply["suggestions"], [])
+        self.assertNotIn("DEMO-360", reply["answer"])
+
+    def test_recovery_choice_rechecks_permissions_again(self):
+        initial = self.query("overdue or unassigned")
+        recovery = self.chat("Also missing results", initial["context"])
+        self.project.members.remove(self.tech)
+        reply = self.chat("Refresh results", recovery["context"])
+        self.assertEqual(reply["context"], {})
+        self.assertNotIn("project_workflows", reply)
+
+    def test_failed_filter_removal_keeps_previous_filter(self):
+        initial = self.query("overdue on the same step")
+        reply = self.chat("Remove the overdue filter", initial["context"])
+        self.assertTrue(reply["clarification"]["previous_query_retained"])
+        self.assertEqual(reply["context"]["project_workflows"]["filters"], ["overdue"])
+        self.assertEqual(reply["context"]["project_workflows"]["scope"], "step")
+        self.assertNotIn("project_workflows", reply)
+        self.assertEqual(reply["suggestions"], ["Refresh results", "Start over"])
