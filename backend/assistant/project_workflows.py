@@ -275,6 +275,9 @@ def route_project_workflows(message, user, context=None):
     # Scan past nonmatches, but bound work per request for large projects.
     rows = []
     checked = 0
+    filter_counts = {mode: 0 for mode in modes}
+    across_sample_count = 0
+    without_pipeline = 0
     cursor = after
     while len(rows) < PAGE_SIZE and checked < MAX_SCAN:
         batch = list(samples.filter(pk__gt=cursor).order_by("pk").prefetch_related(
@@ -285,6 +288,12 @@ def route_project_workflows(message, user, context=None):
             cursor = sample.pk
             checked += 1
             evidence = _evidence(sample.current_runs, spanish)
+            without_pipeline += not bool(sample.current_runs)
+            for condition in modes:
+                condition_matches, _ = _match_scoped_reasons(evidence, [condition], "all", scope)
+                filter_counts[condition] += condition_matches
+            if scope == "step":
+                across_sample_count += _match_reasons(evidence, modes, match)[0]
             accepted, selected = _match_scoped_reasons(evidence, modes, match, scope)
             if accepted:
                 rows.append({"sample_id": sample.pk, "sample_code": sample.sample_id, "status": sample.status,
@@ -305,6 +314,43 @@ def route_project_workflows(message, user, context=None):
                f"{project.code}: {len(rows)} muestras coincidentes ({mode}). Se revisaron {checked} en esta consulta; quedan {remaining} por revisar. Alcance: {total} muestras accesibles no finalizadas.")]
     if complete_scan:
         lines.append(t(f"Complete project scan: {match_total} matching samples.", f"Revisión completa del proyecto: {match_total} muestras coincidentes."))
+    diagnostics = None
+    diagnostic_suggestions = []
+    if not rows:
+        diagnostics = {
+            "coverage": "complete_project" if complete_scan else "current_scan",
+            "checked_samples": checked,
+            "filter_counts": filter_counts,
+            "samples_without_active_pipeline": without_pipeline,
+            "across_sample_matches": across_sample_count if scope == "step" else None,
+        }
+        lines.append(t("No matches for the current query; filters have not been changed.",
+                       "Sin coincidencias para la consulta actual; no se cambiaron los filtros."))
+        if checked:
+            labels = {"overdue": t("overdue", "vencidas"), "unassigned": t("unassigned", "sin asignar"),
+                      "missing": t("missing results", "campos faltantes"), "qc": "QC",
+                      "qc_failed": t("failed QC", "QC rechazado"), "blocked": t("blocked", "bloqueadas"),
+                      "ready": t("ready", "listas"), "all": t("workflow overview", "resumen del flujo")}
+            counts = "; ".join(f"{labels[condition]}: {count}" for condition, count in filter_counts.items())
+            lines.append(t(f"Individual conditions among the {checked} samples checked in this request: {counts}. Counts overlap; do not add them together.",
+                           f"Condiciones individuales entre las {checked} muestras revisadas en esta consulta: {counts}. Los conteos pueden solaparse; no los sumes."))
+            if not complete_scan:
+                lines.append(t("These diagnostic counts cover this scan only, not the whole project or previous pages.",
+                               "Estos conteos cubren solo esta revisión, no todo el proyecto ni páginas anteriores."))
+            if without_pipeline:
+                lines.append(t(f"{without_pipeline} checked samples have no active or blocked pipeline run; this does not mean their work is complete.",
+                               f"{without_pipeline} muestras revisadas no tienen ejecuciones de pipeline activas o bloqueadas; esto no significa que su trabajo esté completo."))
+            if scope == "step" and across_sample_count:
+                lines.append(t(f"{across_sample_count} checked samples satisfy the query across the sample, but not on the same step. Choose Across the sample to inspect them; the scope is unchanged until you choose.",
+                               f"{across_sample_count} muestras revisadas cumplen la consulta en toda la muestra, pero no en el mismo paso. Elige En toda la muestra para revisarlas; el alcance no cambia hasta que lo elijas."))
+                diagnostic_suggestions.append(t("Across the sample", "En toda la muestra"))
+            if match == "all" and len(modes) > 1 and any(filter_counts.values()):
+                lines.append(t("Some checked samples match individual conditions. Match any condition uses OR instead of AND; it is a different query.",
+                               "Algunas muestras revisadas cumplen condiciones individuales. Cumplir cualquier condición usa O en lugar de Y; es una consulta diferente."))
+                diagnostic_suggestions.append(t("Match any condition", "Cumplir cualquier condición"))
+        elif total == 0:
+            lines.append(t("There are no accessible, non-final samples in this project scope.",
+                           "No hay muestras accesibles no finalizadas en este alcance del proyecto."))
     header_lines = list(lines)
     for row in rows:
         details = [f"Run #{r['run_id']}" + (f" / {t('step', 'paso')} {r['step']}" if r.get("step") is not None else "") + ": " + r["reason"] for r in row["reasons"]]
@@ -335,6 +381,7 @@ def route_project_workflows(message, user, context=None):
         suggestions.append(t("Across the sample", "En toda la muestra") if scope == "step" else t("On the same step", "En el mismo paso"))
     if len(modes) > 1:
         suggestions.append(t("Match any condition", "Cumplir cualquier condición") if match == "all" else t("Require all conditions", "Cumplir todas las condiciones"))
+    suggestions = list(dict.fromkeys(([t("Next page", "Siguiente página")] if has_more else []) + diagnostic_suggestions + suggestions))
     return _response("\n".join(lines), context={"project_workflows": next_state}, suggestions=suggestions,
                      links=[{"label": row["sample_code"], "url": row["url"], "kind": "sample"} for row in rows],
                      project_workflows={"project_code": project.code, "filter": mode, "filters": modes, "match": match, "scope": scope, "rows": rows,
@@ -343,4 +390,5 @@ def route_project_workflows(message, user, context=None):
                                         "checked_on_page": checked, "accessible_sample_count": total,
                                         "remaining_to_check": remaining, "matching_sample_count": match_total,
                                         "complete_project_scan": complete_scan, "scan_limit_reached": scan_limit_reached,
+                                        "empty_result_diagnostics": diagnostics,
                                         "has_more": has_more, "as_of": timezone.now().isoformat(), "read_only": True})

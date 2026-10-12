@@ -590,3 +590,86 @@ class ProjectWorkflowTests(APITestCase):
         self.assertEqual(reply["context"]["project_workflows"]["scope"], "step")
         self.assertNotIn("project_workflows", reply)
         self.assertEqual(reply["suggestions"], ["Refresh results", "Start over"])
+
+    def test_empty_results_explain_individual_conditions_without_relaxing(self):
+        before = Event.objects.count()
+        with patch("assistant.llm.OpenAI") as provider:
+            data = self.query("overdue and unassigned")
+        provider.assert_not_called()
+        report = data["project_workflows"]
+        self.assertEqual(report["rows"], [])
+        self.assertEqual(report["filters"], ["overdue", "unassigned"])
+        self.assertEqual(report["match"], "all")
+        self.assertEqual(report["empty_result_diagnostics"]["filter_counts"], {"overdue": 0, "unassigned": 1})
+        self.assertEqual(report["empty_result_diagnostics"]["coverage"], "complete_project")
+        self.assertIn("Counts overlap", report["summary"])
+        self.assertEqual(data["suggestions"][0], "Match any condition")
+        self.assertEqual(Event.objects.count(), before)
+        self.assertFalse(AssistantAction.objects.exists())
+        relaxed = self.chat(data["suggestions"][0], data["context"])
+        self.assertEqual(len(self.rows(relaxed)), 1)
+        self.assertIsNone(relaxed["project_workflows"]["empty_result_diagnostics"])
+
+    @patch("assistant.project_workflows.MAX_SCAN", 1)
+    @patch("assistant.project_workflows.SCAN_BATCH_SIZE", 1)
+    def test_empty_diagnostics_are_scan_local_even_on_last_page(self):
+        self.make_sample("SECOND-DIAGNOSTIC")
+        first = self.query("overdue and unassigned")
+        diag = first["project_workflows"]["empty_result_diagnostics"]
+        self.assertEqual(diag["coverage"], "current_scan")
+        self.assertEqual(diag["checked_samples"], 1)
+        self.assertEqual(diag["filter_counts"]["unassigned"], 1)
+        self.assertEqual(first["suggestions"][0], "Next page")
+        following = self.chat("Next page", first["context"])
+        diag = following["project_workflows"]["empty_result_diagnostics"]
+        self.assertFalse(following["project_workflows"]["has_more"])
+        self.assertIsNone(following["project_workflows"]["matching_sample_count"])
+        self.assertEqual(diag["coverage"], "current_scan")
+        self.assertEqual(diag["filter_counts"]["unassigned"], 1)
+        self.assertIn("not the whole project or previous pages", following["answer"])
+
+    def test_empty_scope_diagnostics_identify_real_cross_step_matches(self):
+        self.make_overdue(self.work, assigned=True)
+        parallel = WorkItem.objects.create(sample=self.sample, name="Parallel", work_type="PARALLEL")
+        step = self.run.steps.get(position=2)
+        step.dependency_positions = []
+        step.status = "READY"
+        step.work_item = parallel
+        step.save()
+        data = self.query("overdue and unassigned on the same step")
+        diag = data["project_workflows"]["empty_result_diagnostics"]
+        self.assertEqual(diag["across_sample_matches"], 1)
+        self.assertEqual(diag["filter_counts"], {"overdue": 1, "unassigned": 1})
+        self.assertEqual(data["suggestions"][0], "Across the sample")
+        self.assertEqual(data["context"]["project_workflows"]["scope"], "step")
+        self.assertEqual(len(self.rows(self.chat("Across the sample", data["context"]))), 1)
+
+    def test_empty_diagnostics_spanish_and_no_pipeline(self):
+        self.run.status = "COMPLETED"
+        self.run.save()
+        data = self.chat("¿Qué muestras en proyecto DEMO-360 están vencidas y sin asignar?")
+        diag = data["project_workflows"]["empty_result_diagnostics"]
+        self.assertEqual(diag["samples_without_active_pipeline"], 1)
+        self.assertEqual(diag["filter_counts"], {"overdue": 0, "unassigned": 0})
+        self.assertIn("no significa que su trabajo esté completo", data["answer"])
+        self.assertIn("vencidas: 0; sin asignar: 0", data["answer"])
+        self.sample.status = "ARCHIVED"
+        self.sample.save()
+        empty = self.chat("Actualizar resultados", data["context"])
+        self.assertEqual(empty["project_workflows"]["empty_result_diagnostics"]["checked_samples"], 0)
+        self.assertIn("No hay muestras accesibles", empty["answer"])
+
+    def test_empty_diagnostics_do_not_count_inaccessible_or_final_samples(self):
+        private = Project.objects.create(code="HIDDEN-DIAG", name="Hidden")
+        _, _, private_work = self.make_sample("PRIVATE-DIAG", project=private)
+        self.make_overdue(private_work)
+        final_sample, _, final_work = self.make_sample("FINAL-DIAG")
+        self.make_overdue(final_work)
+        final_sample.status = "ARCHIVED"
+        final_sample.save()
+        data = self.query("overdue and unassigned")
+        self.assertEqual(data["project_workflows"]["empty_result_diagnostics"]["filter_counts"], {"overdue": 0, "unassigned": 1})
+        self.project.members.remove(self.tech)
+        denied = self.chat("Refresh results", data["context"])
+        self.assertNotIn("project_workflows", denied)
+        self.assertEqual(denied["context"], {})
