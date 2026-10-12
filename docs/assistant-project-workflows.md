@@ -77,3 +77,36 @@ CELERY_BROKER_URL=memory:// CELERY_RESULT_BACKEND=cache+memory:// python -m pyte
 ```
 
 No database migration is needed.
+
+### Edit a combined question
+
+After asking about `overdue and unassigned` samples, use:
+
+- `Match any condition` / `Cumplir cualquier condición` to use OR.
+- `Require all conditions` / `Cumplir todas las condiciones` to use AND.
+- `Remove the overdue filter` / `Quitar el filtro de vencidas` to keep only the other filters.
+
+These follow-ups preserve the project and sample/same-step scope, restart at page
+one, and reread live records with current permissions. Combined answers suggest
+the opposite match mode. Removing a filter does not negate it: samples meeting
+the removed condition may still appear. At least one active filter must remain;
+unknown filters, unsupported constraints, and invalid context ask for clarification.
+No lab records are changed. These exact, bounded commands work without an external
+AI provider.
+
+### Recover from an unclear follow-up
+
+If an edit or follow-up cannot be interpreted, the assistant explains the issue
+and retains the previous valid query when its project is still accessible. For
+example, after an `overdue OR unassigned` question, `Also missing results` needs
+clarification because it would mix AND and OR. The assistant does not apply that
+change or return new results. It shows the previous filters and scope, with
+English/Spanish choices to refresh, switch matching mode, remove an active
+filter, or start over.
+
+Recovery resets the cursor, discards extra client context, and checks project
+access. Selecting a choice rereads current records and permissions. Invalid
+prior filters/scopes, revoked access, and explicit new project questions do not
+retain the old query. Removing a filter relaxes a query; it never means excluding
+samples with that condition. Recovery suggestions refer to the previous query,
+not to the rejected edit.
