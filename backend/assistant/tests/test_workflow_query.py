@@ -89,3 +89,31 @@ def test_scoped_matching_does_not_mix_steps_or_runs():
     assert reasons == [overdue, same_step]
     assert _match_scoped_reasons([overdue, other_step], ["overdue", "unassigned"], "any", "step")[1] == [overdue, other_step]
     assert not _match_scoped_reasons([{"kind": "run_blocked", "run_id": 1, "step": None}], ["blocked"], "all", "step")[0]
+
+
+@pytest.mark.parametrize("text,match", [
+    ("Match any condition", "any"), ("Match all conditions!", "all"),
+    ("Require all conditions", "all"),
+    ("Cumplir cualquier condición", "any"),
+    ("Cumplir todas las condiciones", "all"),
+])
+def test_edit_match_mode(text, match):
+    from assistant.workflow_query import edit_filters
+    assert edit_filters(text, {"filters": ["overdue", "unassigned"]}) == (["overdue", "unassigned"], match, None)
+
+
+@pytest.mark.parametrize("text", [
+    "Remove the overdue filter", "Remove overdue filter!", "Quitar el filtro de vencidas",
+])
+def test_remove_filter_preserves_existing_operator(text):
+    from assistant.workflow_query import edit_filters
+    assert edit_filters(text, {"filters": ["overdue", "unassigned"], "match": "any"}) == (["unassigned"], "any", None)
+
+
+def test_edits_are_complete_commands_and_do_not_modify_input():
+    from assistant.workflow_query import edit_filters
+    state = {"filters": ["overdue", "unassigned"]}
+    for text in ("Remove the overdue filter and delete samples", "Match any condition in project OTHER", "assign work item 1"):
+        assert edit_filters(text, state) is None
+    assert edit_filters("Remove the not overdue filter", state)[2]
+    assert state == {"filters": ["overdue", "unassigned"]}

@@ -468,3 +468,46 @@ class ProjectWorkflowTests(APITestCase):
             denied = self.chat(message, data["context"])
             self.assertNotIn("project_workflows", denied)
             self.assertEqual(denied["context"], {})
+
+
+    def test_edit_match_and_remove_filter_preserve_scope_and_restart(self):
+        data = self.query("overdue and unassigned on the same step")
+        self.assertEqual(self.rows(data), [])
+        context = data["context"]
+        context["project_workflows"]["after"] = self.sample.pk
+        either = self.chat("Match any condition", context)
+        self.assertEqual(len(self.rows(either)), 1)
+        self.assertEqual(either["project_workflows"]["scope"], "step")
+        self.assertEqual(either["project_workflows"]["match"], "any")
+        both = self.chat("Require all conditions", either["context"])
+        self.assertEqual(self.rows(both), [])
+        removed = self.chat("Remove the overdue filter", both["context"])
+        self.assertEqual(removed["project_workflows"]["filters"], ["unassigned"])
+        self.assertEqual(len(self.rows(removed)), 1)
+        self.assertFalse(AssistantAction.objects.exists())
+
+    def test_spanish_query_edits_and_live_permission_recheck(self):
+        data = self.query("overdue and unassigned")
+        either = self.chat("Cumplir cualquier condición", data["context"])
+        self.assertEqual(either["project_workflows"]["language"], "es")
+        self.assertEqual(len(self.rows(either)), 1)
+        removed = self.chat("Quitar el filtro de vencidas", either["context"])
+        self.assertEqual(removed["project_workflows"]["filters"], ["unassigned"])
+        self.project.members.remove(self.tech)
+        denied = self.chat("Match any condition", either["context"])
+        self.assertNotIn("project_workflows", denied)
+        self.assertEqual(denied["context"], {})
+
+    def test_invalid_edits_do_not_broaden_to_all_samples(self):
+        data = self.query("overdue")
+        for phrase, context in [
+            ("Remove the overdue filter", data["context"]),
+            ("Remove the missing results filter", data["context"]),
+            ("Match any condition", {}),
+            ("Match any condition", {"project_workflows": {"filters": ["secret"]}}),
+            ("Remove the not overdue filter", data["context"]),
+        ]:
+            with self.subTest(phrase=phrase, context=context):
+                reply = self.chat(phrase, context)
+                self.assertTrue(reply["clarification"]["required"])
+                self.assertNotIn("project_workflows", reply)

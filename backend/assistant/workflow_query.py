@@ -88,3 +88,30 @@ def context_filters(state):
             or ("all" in modes and len(modes) > 1)):
         return [], "all", "context"
     return list(dict.fromkeys(modes)), match, None
+
+
+def edit_filters(text, state):
+    """Recognize complete query-edit commands, never lab-record mutations.
+
+    Return None for other routes; invalid edits leave no executable query.
+    Removing a filter broadens the query, it does not negate that condition.
+    """
+    switch = re.fullmatch(
+        r"(?:match (any|all) conditions?|require (all) conditions?|"
+        r"cumplir (cualquier|todas las) condici[oó]n(?:es)?)[.!?]*", text, re.I)
+    remove = re.fullmatch(
+        r"(?:remove (?:the )?(.+?) filter|quitar (?:el )?filtro (?:de )?(.+?))[.!?]*",
+        text, re.I)
+    if not switch and not remove:
+        return None
+    modes, match, error = context_filters(state)
+    if error:
+        return [], match, error
+    if switch:
+        choice = next(value for value in switch.groups() if value).lower()
+        return modes, "any" if choice in {"any", "cualquier"} else "all", None
+    phrase = next(value for value in remove.groups() if value)
+    removed, _, error = parse_filters(phrase)
+    if error or len(removed) != 1 or removed[0] not in modes or len(modes) == 1:
+        return [], match, "edit"
+    return [mode for mode in modes if mode != removed[0]], match, None
