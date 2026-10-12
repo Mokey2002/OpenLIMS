@@ -77,3 +77,19 @@ CELERY_BROKER_URL=memory:// CELERY_RESULT_BACKEND=cache+memory:// python -m pyte
 ```
 
 No database migration is needed.
+
+### Edit a combined question
+
+After asking about `overdue and unassigned` samples, use:
+
+- `Match any condition` / `Cumplir cualquier condición` to use OR.
+- `Require all conditions` / `Cumplir todas las condiciones` to use AND.
+- `Remove the overdue filter` / `Quitar el filtro de vencidas` to keep only the other filters.
+
+These follow-ups preserve the project and sample/same-step scope, restart at page
+one, and reread live records with current permissions. Combined answers suggest
+the opposite match mode. Removing a filter does not negate it: samples meeting
+the removed condition may still appear. At least one active filter must remain;
+unknown filters, unsupported constraints, and invalid context ask for clarification.
+No lab records are changed. These exact, bounded commands work without an external
+AI provider.

@@ -10,7 +10,7 @@ from pipelines.services import missing_required_fields
 from projects.models import Project
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
-from .workflow_query import context_filters, context_scope, extract_scope, parse_filters
+from .workflow_query import context_filters, context_scope, edit_filters, extract_scope, parse_filters
 
 PAGE_SIZE = 25
 SCAN_BATCH_SIZE = 25
@@ -130,6 +130,7 @@ def route_project_workflows(message, user, context=None):
     text = str(message or "").strip().lstrip("¿¡")
     state = (context or {}).get("project_workflows")
     state = state if isinstance(state, dict) else {}
+    edit = edit_filters(text, state)
     if state and RESET.fullmatch(text):
         return _response("Project context cleared. / Contexto de proyecto borrado.")
     if WRITE.search(text):
@@ -140,12 +141,14 @@ def route_project_workflows(message, user, context=None):
     scope_only = bool(explicit_scope and re.fullmatch(r"(?:(?:only|solo)\s*)?[.!?]*", query_text, re.I))
     intent_text = re.sub(r"\b(?:in|en)\s+(?:(?:project|proyecto)\s+)?[\w./-]+|\b(?:project|proyecto)\s+[\w./-]+", "", query_text, flags=re.I)
     modes, match, parse_error = context_filters(state) if more or refresh or scope_only else parse_filters(intent_text)
+    if edit is not None:
+        modes, match, parse_error = edit
     plural = bool(re.search(r"\b(?:samples|muestras)\b", text, re.I))
     followup = bool(state and re.match(
         r"(?:which (?:ones )?are|and|what about|only|show|also|y|solo|muestra|adem[aá]s|tambi[eé]n)\b",
         text, re.I))
     refine = bool(followup and re.match(r"(?:also|and only|adem[aá]s|tambi[eé]n)\b", text, re.I))
-    if not (more or refresh or scope_only or conflicting_scope) and not (modes and (plural or followup)):
+    if not (more or refresh or scope_only or conflicting_scope or edit is not None) and not (modes and (plural or followup)):
         return None
     # "in QC" is an existing sample-status query, not a project named QC.
     if not re.search(r"project|proyecto", text, re.I) and re.search(r"\b(?:in|en)\s+(?:QC|IN_PROGRESS|RECEIVED|REPORTED|ARCHIVED|CANCELLED)\b", text, re.I):
@@ -154,13 +157,13 @@ def route_project_workflows(message, user, context=None):
     references = re.findall(r"\b(?:in|en)\s+(?:(?:project|proyecto)\s+)?([\w./-]+)|\b(?:project|proyecto)\s+([\w./-]+)", reference_text, re.I)
     codes = list(dict.fromkeys((a or b).rstrip(".?!").casefold() for a, b in references
                               if (a or b).casefold() not in {"this", "that", "este", "ese"}))
-    if not codes and not state and not (scope_only or conflicting_scope) and "blocked" not in modes and not re.search(r"project|proyecto", text, re.I):
+    if not codes and not state and not (scope_only or conflicting_scope or edit is not None) and "blocked" not in modes and not re.search(r"project|proyecto", text, re.I):
         return None  # Keep existing generic QC and sample searches.
-    inherited_scope = context_scope(state) if (more or refresh or scope_only or followup) and not codes else "sample"
+    inherited_scope = context_scope(state) if (more or refresh or scope_only or followup or edit is not None) and not codes else "sample"
     scope = explicit_scope or inherited_scope
     if conflicting_scope or inherited_scope is None or (scope == "step" and "all" in modes):
         parse_error = "scope"
-    spanish = bool(re.search(r"muestras|proyecto|bloquead|faltan|listas|siguiente|m[aá]s|vencid|atrasad|sin asignar|rechazado|campos|tambi[eé]n|adem[aá]s|solo|mismo paso|toda la muestra", text, re.I)) or ((more or refresh) and state.get("language") == "es")
+    spanish = bool(re.search(r"muestras|proyecto|bloquead|faltan|listas|siguiente|m[aá]s|vencid|atrasad|sin asignar|rechazado|campos|tambi[eé]n|adem[aá]s|solo|mismo paso|toda la muestra|cumplir|quitar", text, re.I)) or ((more or refresh) and state.get("language") == "es")
     def t(en, es):
         return es if spanish else en
     if scope_only and not state:
@@ -179,6 +182,9 @@ def route_project_workflows(message, user, context=None):
             if "all" in modes and len(modes) > 1:
                 parse_error = "mixed"
     if parse_error:
+        if edit is not None:
+            return _response(t("Ask a project question first. You can then match any/all conditions or remove one active filter, keeping at least one. Removing a filter does not exclude those samples. Repeat the project code and filters to reset an invalid query.",
+                               "Primero consulta un proyecto. Después puedes cumplir cualquier/todas las condiciones o quitar un filtro activo, conservando al menos uno. Quitar un filtro no excluye esas muestras. Repite el código y los filtros para reiniciar una consulta inválida."), clarification={"required": True})
         if parse_error == "scope":
             return _response(t("Choose one scope: on the same step, or across the sample. Same-step scope requires specific filters, not workflow overview. Repeat the project code and filters.",
                                "Elige un alcance: en el mismo paso o en toda la muestra. El mismo paso requiere filtros específicos, no un resumen del flujo. Repite el código del proyecto y los filtros."), clarification={"required": True})
@@ -267,6 +273,8 @@ def route_project_workflows(message, user, context=None):
         suggestions.append(t("Also unassigned", "También sin asignar"))
     if "all" not in modes:
         suggestions.append(t("Across the sample", "En toda la muestra") if scope == "step" else t("On the same step", "En el mismo paso"))
+    if len(modes) > 1:
+        suggestions.append(t("Match any condition", "Cumplir cualquier condición") if match == "all" else t("Require all conditions", "Cumplir todas las condiciones"))
     return _response("\n".join(lines), context={"project_workflows": next_state}, suggestions=suggestions,
                      links=[{"label": row["sample_code"], "url": row["url"], "kind": "sample"} for row in rows],
                      project_workflows={"project_code": project.code, "filter": mode, "filters": modes, "match": match, "scope": scope, "rows": rows,
