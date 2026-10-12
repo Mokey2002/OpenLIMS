@@ -110,3 +110,20 @@ prior filters/scopes, revoked access, and explicit new project questions do not
 retain the old query. Removing a filter relaxes a query; it never means excluding
 samples with that condition. Recovery suggestions refer to the previous query,
 not to the rejected edit.
+
+### Understand an empty result
+
+An empty answer reports per-condition sample counts from the current scan using
+the requested scope. Counts overlap; never add them. If same-step scope finds no
+matches but whole-sample scope would, the answer reports that measured difference
+and offers `Across the sample`. If individual conditions match an AND query, it
+prioritizes `Match any condition`. These suggestions change the query only when
+selected. `Next page` remains first when more candidates remain.
+
+Diagnostics reuse current, permission-filtered evidence and add no database
+queries. They exclude final and inaccessible samples. Missing active/blocked
+pipeline runs are counted separately and do not imply completed work. Counts
+cover the complete project only when one request scans the entire accessible,
+non-final set. Later pages never accumulate earlier counts or claim a complete
+project total. Responses with matches omit diagnostics (the structured field is
+null); no client-provided diagnostic values are reused.

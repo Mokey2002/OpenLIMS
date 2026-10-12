@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.44.0 — Resultados vacíos útiles y recuperación de consultas
+
+Las consultas sin coincidencias muestran conteos por condición para las muestras realmente revisadas e identifican cuándo las condiciones se cumplen en toda la muestra, pero no en el mismo paso. Las sugerencias permiten ampliar la consulta de forma explícita; los filtros nunca cambian automáticamente. Los conteos parciales se distinguen de los totales completos. Los seguimientos en español e inglés permiten alternar Y/O, quitar filtros y recuperar la consulta válida anterior tras una solicitud poco clara. Consulta la [guía de consultas](docs/assistant-project-workflows.md).
+
 ## v0.43.0 — Preguntas de IA sobre el mismo paso
 
 Consulta muestras con trabajo vencido y sin asignar **en el mismo paso**, sin mezclar condiciones de pasos distintos. Alterna entre el mismo paso y toda la muestra en español o inglés; conserva el alcance al refinar, actualizar y paginar. Los registros se agrupan por ejecución y paso, con números exactos de trabajo. Las consultas siguen siendo de solo lectura y verifican permisos. Consulta los [ejemplos de alcance](docs/assistant-project-workflows.md#same-step-scope).
@@ -8,17 +12,13 @@ Consulta muestras con trabajo vencido y sin asignar **en el mismo paso**, sin me
 
 Consulta muestras que cumplan varias condiciones con Y u O, en español o inglés. “También sin asignar” refina la consulta; “Solo sin asignar” reemplaza sus filtros. La actualización y paginación conservan la consulta completa. Los filtros explícitos y registros de los pasos explican la interpretación. Las condiciones no compatibles y mezclas de Y/O solicitan aclaración en lugar de omitir criterios. Las consultas siguen siendo de solo lectura y verifican permisos. Consulta la [guía de consultas](docs/assistant-project-workflows.md). CI descarga sus imágenes secuencialmente con reintentos limitados ante errores temporales del registro; los fallos persistentes detienen las verificaciones.
 
-## v0.41.1 — Consultas por proyecto más útiles
-
-Las consultas buscan coincidencias más allá de la primera página de muestras y muestran límites y conteos completos solo cuando se revisó todo el proyecto. Agrega filtros de QC rechazado, trabajo vencido y sin asignar, actualización del filtro, motivos priorizados, fechas límite y próximas acciones sugeridas. Consulta la [guía actualizada](docs/assistant-project-workflows.md). CI utiliza Docker Official Images de ECR Public para evitar fallos por límites de descargas anónimas de Docker Hub; conserva las imágenes predeterminadas locales.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.43.0`
+**Versión de desarrollo actual:** `v0.44.0`
 
 **Demo:** http://35.164.28.250
 
@@ -304,6 +304,29 @@ Ollama u OpenAI son opciones del asistente de lenguaje natural, no dependencias 
 ---
 
 ## 9. Asistente de OpenLIMS
+
+### Consultas de flujo y seguimiento
+
+| Pregunta | Comportamiento |
+|---|---|
+| `¿Qué muestras en proyecto DEMO-360 están vencidas y sin asignar en el mismo paso?` | Ambas condiciones deben cumplirse en un paso de una ejecución. |
+| `Cumplir cualquier condición` | Cambia Y por O conservando proyecto y alcance. |
+| `Quitar el filtro de vencidas` | Quita ese requisito; no excluye las muestras vencidas. |
+| `En toda la muestra` | Permite coincidencias entre distintos pasos o ejecuciones de una muestra. |
+| `Actualizar resultados` | Consulta registros y permisos actuales desde la primera página. |
+
+Sin coincidencias, la respuesta muestra conteos individuales entre las muestras
+revisadas en esa consulta. Pueden solaparse y no deben sumarse. Una revisión
+parcial, incluso la última página de una búsqueda paginada, no equivale al total
+del proyecto. Si quedan muestras, utiliza `Siguiente página`. La ausencia de un
+pipeline activo no demuestra que el trabajo esté completo.
+
+Un seguimiento poco claro conserva la consulta anterior solo si sus filtros,
+alcance y acceso al proyecto siguen siendo válidos. Las opciones de recuperación
+se aplican a esa consulta anterior, no al cambio rechazado. Las mezclas de Y/O,
+negaciones, restricciones de responsable/fecha y condiciones anidadas no están
+admitidas. Estas rutas son de solo lectura y funcionan sin OpenAI ni Ollama.
+
 
 El asistente combina rutas determinísticas, herramientas seguras y, opcionalmente, un modelo de lenguaje.
 
