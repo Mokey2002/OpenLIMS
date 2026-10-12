@@ -29,6 +29,21 @@ export function describeWorkflowFilters(workflow) {
   return names.join(join);
 }
 
+export function describeWorkflowScope(workflow) {
+  if (workflow.language === "es") return workflow.scope === "step" ? "Mismo paso" : "Toda la muestra";
+  return workflow.scope === "step" ? "Same step" : "Across sample";
+}
+
+export function groupWorkflowReasons(reasons = []) {
+  const groups = new Map();
+  for (const reason of reasons) {
+    const key = `${reason.run_id}:${reason.step ?? "run"}`;
+    if (!groups.has(key)) groups.set(key, { ...reason, key, reasons: [] });
+    groups.get(key).reasons.push(reason);
+  }
+  return [...groups.values()];
+}
+
 export function describeAssistantContext(context) {
   if (!context || typeof context !== "object" || !Object.keys(context).length) {
     return null;
@@ -39,7 +54,7 @@ export function describeAssistantContext(context) {
     return {
       kind: "project_workflows",
       label: `Project workflows · ${projectWorkflows.project_code}`,
-      detail: `${describeWorkflowFilters(projectWorkflows)} · ${projectWorkflows.language === "es" ? "Registros actuales revisados en cada consulta" : "Current records checked on each question"}`,
+      detail: `${describeWorkflowFilters(projectWorkflows)} · ${describeWorkflowScope(projectWorkflows)} · ${projectWorkflows.language === "es" ? "Registros actuales revisados en cada consulta" : "Current records checked on each question"}`,
     };
   }
 

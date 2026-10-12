@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.43.0 — Preguntas de IA sobre el mismo paso
+
+Consulta muestras con trabajo vencido y sin asignar **en el mismo paso**, sin mezclar condiciones de pasos distintos. Alterna entre el mismo paso y toda la muestra en español o inglés; conserva el alcance al refinar, actualizar y paginar. Los registros se agrupan por ejecución y paso, con números exactos de trabajo. Las consultas siguen siendo de solo lectura y verifican permisos. Consulta los [ejemplos de alcance](docs/assistant-project-workflows.md#same-step-scope).
+
 ## v0.42.0 — Preguntas de IA con filtros combinados
 
 Consulta muestras que cumplan varias condiciones con Y u O, en español o inglés. “También sin asignar” refina la consulta; “Solo sin asignar” reemplaza sus filtros. La actualización y paginación conservan la consulta completa. Los filtros explícitos y registros de los pasos explican la interpretación. Las condiciones no compatibles y mezclas de Y/O solicitan aclaración en lugar de omitir criterios. Las consultas siguen siendo de solo lectura y verifican permisos. Consulta la [guía de consultas](docs/assistant-project-workflows.md). CI descarga sus imágenes secuencialmente con reintentos limitados ante errores temporales del registro; los fallos persistentes detienen las verificaciones.
@@ -8,17 +12,13 @@ Consulta muestras que cumplan varias condiciones con Y u O, en español o inglé
 
 Las consultas buscan coincidencias más allá de la primera página de muestras y muestran límites y conteos completos solo cuando se revisó todo el proyecto. Agrega filtros de QC rechazado, trabajo vencido y sin asignar, actualización del filtro, motivos priorizados, fechas límite y próximas acciones sugeridas. Consulta la [guía actualizada](docs/assistant-project-workflows.md). CI utiliza Docker Official Images de ECR Public para evitar fallos por límites de descargas anónimas de Docker Hub; conserva las imágenes predeterminadas locales.
 
-## v0.41.0 — Preguntas sobre muestras de un proyecto
-
-Consulta muestras con bloqueos, campos faltantes, requisitos de QC o trabajo disponible. Una tabla muestra enlaces y motivos registrados, verifica permisos y actualiza los datos en cada consulta. Los proyectos grandes se dividen en páginas con conteos explícitos. Funciona en español e inglés sin proveedor externo. Consulta la [guía de consultas por proyecto](docs/assistant-project-workflows.md).
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.42.0`
+**Versión de desarrollo actual:** `v0.43.0`
 
 **Demo:** http://35.164.28.250
 

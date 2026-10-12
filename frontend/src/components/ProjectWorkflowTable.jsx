@@ -1,6 +1,6 @@
 import { Badge, Table } from "react-bootstrap";
 import { Link } from "react-router-dom";
-import { describeWorkflowFilters } from "../assistantContext";
+import { describeWorkflowFilters, describeWorkflowScope, groupWorkflowReasons } from "../assistantContext";
 
 export default function ProjectWorkflowTable({ data }) {
   const spanish = data.language === "es";
@@ -16,6 +16,7 @@ export default function ProjectWorkflowTable({ data }) {
     <Table size="sm" bordered responsive className="mt-3">
       <caption>
         {t("Current workflow evidence", "Registros actuales del flujo")} · {data.project_code}
+        {` · ${describeWorkflowScope(data)}`}
         {data.filters?.length > 1 && ` · ${t("Match", "Coincidir")}: ${describeWorkflowFilters(data)}`}
         {data.as_of && ` · ${new Date(data.as_of).toLocaleString()}`}
       </caption>
@@ -33,19 +34,24 @@ export default function ProjectWorkflowTable({ data }) {
               <div className="small text-muted">{row.status}</div>
             </td>
             <td>
-              {row.reasons.map((reason, index) => (
-                <div key={`${reason.run_id}-${reason.step}-${index}`} className="mb-2">
+              {groupWorkflowReasons(row.reasons).map(group => (
+                <div key={group.key} className="mb-3">
                   <strong>
-                    Run #{reason.run_id}
-                    {reason.step != null && ` · ${t("Step", "Paso")} ${reason.step}: ${reason.step_name}`}
+                    Run #{group.run_id}
+                    {group.step != null && ` · ${t("Step", "Paso")} ${group.step}: ${group.step_name}`}
+                    {group.work_item_id != null && ` · ${t("Work", "Trabajo")} #${group.work_item_id}`}
                   </strong>
-                  <Badge bg={reason.kind === "failed" || (reason.kind === "qc" && ["REJECTED", "RERUN_REQUIRED"].includes(reason.qc_status)) ? "danger" : "secondary"} className="me-2">
-                    {t(...(labels[reason.kind] || [reason.kind, reason.kind]))}
-                  </Badge>
-                  <div>{reason.reason}</div>
-                  {reason.due_at && <div className="small">{t("Due", "Vence")}: {new Date(reason.due_at).toLocaleString()}</div>}
-                  {reason.next_action && <div className="small mt-1"><strong>{t("Next action", "Próxima acción")}:</strong> {reason.next_action}</div>}
-                  {reason.assignee && <div className="small text-muted">{t("Work assignee", "Responsable del trabajo")}: {reason.assignee}</div>}
+                  {group.reasons.map((reason, index) => (
+                    <div key={`${reason.kind}-${index}`} className="mb-2">
+                      <Badge bg={reason.kind === "failed" || (reason.kind === "qc" && ["REJECTED", "RERUN_REQUIRED"].includes(reason.qc_status)) ? "danger" : "secondary"} className="me-2">
+                        {t(...(labels[reason.kind] || [reason.kind, reason.kind]))}
+                      </Badge>
+                      <div>{reason.reason}</div>
+                      {reason.due_at && <div className="small">{t("Due", "Vence")}: {new Date(reason.due_at).toLocaleString()}</div>}
+                      {reason.next_action && <div className="small mt-1"><strong>{t("Next action", "Próxima acción")}:</strong> {reason.next_action}</div>}
+                      {reason.assignee && <div className="small text-muted">{t("Work assignee", "Responsable del trabajo")}: {reason.assignee}</div>}
+                    </div>
+                  ))}
                 </div>
               ))}
               {!row.reasons.length && t("No active pipeline or unfinished step evidence.", "Sin pipeline activo o pasos pendientes registrados.")}

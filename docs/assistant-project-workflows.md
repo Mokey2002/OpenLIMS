@@ -1,4 +1,4 @@
-# Questions across project samples (v0.42.0)
+# Questions across project samples (v0.43.0)
 
 Ask about several samples together in the Assistant page or floating widget:
 
@@ -27,9 +27,20 @@ After selecting a project, `Which are ready?`, `Which are missing results?`, or 
 - After an AND or single-filter query, `Also unassigned`, `And only unassigned`, or `También sin asignar` adds an AND condition and restarts at page one.
 - `Only unassigned` replaces the full query, whereas `Also unassigned` narrows it.
 
-Conditions apply **per sample** and may be satisfied by different active steps or runs. They do not promise that the same work item satisfies every condition. Answers explicitly state this distinction and show the matching step evidence without duplicates. The context bar and table caption spell out AND/OR (Y/O in Spanish), including a retained context label when no rows match.
+By default, conditions apply **per sample** and may be satisfied by different active steps or runs. They do not promise that the same work item satisfies every condition. Answers explicitly state this distinction and show the matching step evidence without duplicates. The context bar and table caption spell out AND/OR (Y/O in Spanish) and the scope, including a retained context label when no rows match.
 
-The grammar is intentionally bounded: use the supported filters with explicit AND or OR connectors. Mixed AND/OR, parentheses, negation, assignee/date/threshold constraints, and same-step requests require clarification, rather than silently returning a broader answer. Refining an OR expression also asks for a fresh full query; nested expressions are not inferred. Clarification clears the old context, so repeat the project code. Existing exact-code access checks, scan limits, live pagination and read-only behavior still apply. This is not unrestricted natural-language reasoning or a new model integration.
+The grammar is intentionally bounded: use the supported filters with explicit AND or OR connectors. Mixed AND/OR, parentheses, negation and assignee/date/threshold constraints require clarification, rather than silently returning a broader answer. Refining an OR expression also asks for a fresh full query; nested expressions are not inferred. Clarification clears the old context, so repeat the project code. Existing exact-code access checks, scan limits, live pagination and read-only behavior still apply. This is not unrestricted natural-language reasoning or a new model integration.
+
+## Same-step scope
+
+- `Which samples in project DEMO-360 are overdue and unassigned on the same step?`
+- `¿Qué muestras en proyecto DEMO-360 están vencidas y sin asignar en el mismo paso?`
+- After a filtered project query: `On the same step` / `En el mismo paso` narrows its scope.
+- `Across the sample` / `En toda la muestra` restores sample-level matching.
+
+Same-step scope evaluates each step **within its own pipeline run**. Step 1 in one run cannot supply a condition for step 1 in another run. AND requires all filters on one step; OR requires at least one. Only reasons from qualifying steps are returned. Run-level blockers without a step are excluded. Workflow overview has no specific conditions, so combining it with same-step scope asks for clarification.
+
+Scope changes restart at page one. Filter-only follow-ups (`Only unassigned`, `Also missing results`), refresh and pagination retain scope. A full question with an explicit project code starts from sample-level scope unless it explicitly requests same-step scope. Conflicting or malformed scopes ask for clarification. Older saved query contexts default to sample scope. The evidence table groups reasons by run/step and displays the linked work-item number; those numbers do not grant modification rights or execute actions.
 
 ## Meaning of the filters
 

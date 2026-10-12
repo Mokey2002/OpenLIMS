@@ -1,6 +1,6 @@
 import pytest
 
-from assistant.workflow_query import context_filters, parse_filters
+from assistant.workflow_query import context_filters, context_scope, extract_scope, parse_filters
 
 
 @pytest.mark.parametrize("text,modes,match", [
@@ -53,3 +53,39 @@ def test_and_is_sample_level_with_evidence_from_separate_steps():
     assert _match_reasons(evidence, ["overdue", "unassigned"], "all") == (True, evidence)
     assert _match_reasons(evidence[:1], ["overdue", "unassigned"], "all")[0] is False
     assert _match_reasons(evidence[:1], ["overdue", "unassigned"], "any")[0] is True
+
+
+@pytest.mark.parametrize("phrase,scope", [
+    ("on the same step", "step"), ("in the same step", "step"),
+    ("en el mismo paso", "step"), ("across the sample", "sample"),
+    ("en toda la muestra", "sample"),
+])
+def test_scope_extraction(phrase, scope):
+    text, result, conflict = extract_scope(f"overdue and unassigned {phrase}")
+    assert text == "overdue and unassigned"
+    assert result == scope
+    assert not conflict
+    assert parse_filters(text) == (["overdue", "unassigned"], "all", None)
+
+
+def test_conflicting_scope_is_not_guessed():
+    assert extract_scope("on the same step across the sample")[2]
+    assert context_scope({}) == "sample"
+    for scope in (None, [], {}, "anything", True):
+        assert context_scope({"scope": scope}) is None
+
+
+def test_scoped_matching_does_not_mix_steps_or_runs():
+    from assistant.project_workflows import _match_scoped_reasons
+    overdue = {"kind": "overdue", "run_id": 1, "step": 1}
+    other_step = {"kind": "unassigned", "run_id": 1, "step": 2}
+    other_run = {"kind": "unassigned", "run_id": 2, "step": 1}
+    same_step = {"kind": "unassigned", "run_id": 1, "step": 1}
+    for other in (other_step, other_run):
+        assert not _match_scoped_reasons([overdue, other], ["overdue", "unassigned"], "all", "step")[0]
+        assert _match_scoped_reasons([overdue, other], ["overdue", "unassigned"], "all", "sample")[0]
+    accepted, reasons = _match_scoped_reasons([overdue, other_step, same_step], ["overdue", "unassigned"], "all", "step")
+    assert accepted
+    assert reasons == [overdue, same_step]
+    assert _match_scoped_reasons([overdue, other_step], ["overdue", "unassigned"], "any", "step")[1] == [overdue, other_step]
+    assert not _match_scoped_reasons([{"kind": "run_blocked", "run_id": 1, "step": None}], ["blocked"], "all", "step")[0]

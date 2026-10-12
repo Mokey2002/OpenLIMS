@@ -10,7 +10,7 @@ from pipelines.services import missing_required_fields
 from projects.models import Project
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
-from .workflow_query import context_filters, parse_filters
+from .workflow_query import context_filters, context_scope, extract_scope, parse_filters
 
 PAGE_SIZE = 25
 SCAN_BATCH_SIZE = 25
@@ -106,8 +106,24 @@ def _match_reasons(evidence, modes, match):
     matches = [bool(group) or mode == "all" for group, mode in zip(groups, modes)]
     accepted = all(matches) if match == "all" else any(matches)
     # Preserve priority order and never duplicate overlapping evidence.
-    selected = [reason for reason in evidence if any(reason in group for group in groups)]
+    selected_ids = {id(reason) for group in groups for reason in group}
+    selected = [reason for reason in evidence if id(reason) in selected_ids]
     return accepted, selected
+
+
+def _match_scoped_reasons(evidence, modes, match, scope):
+    if scope == "sample":
+        return _match_reasons(evidence, modes, match)
+    steps = {}
+    for reason in evidence:
+        if reason.get("step") is not None and reason.get("run_id") is not None:
+            steps.setdefault((reason["run_id"], reason["step"]), []).append(reason)
+    selected_ids = set()
+    for reasons in steps.values():
+        accepted, selected = _match_reasons(reasons, modes, match)
+        if accepted:
+            selected_ids.update(id(reason) for reason in selected)
+    return bool(selected_ids), [r for r in evidence if id(r) in selected_ids]
 
 
 def route_project_workflows(message, user, context=None):
@@ -120,27 +136,36 @@ def route_project_workflows(message, user, context=None):
         return None
     more = bool(state and NEXT_PAGE.fullmatch(text))
     refresh = bool(state and re.fullmatch(r"(?:refresh(?: results)?|actualizar(?: resultados)?)[.!?]*", text, re.I))
-    intent_text = re.sub(r"\b(?:in|en)\s+(?:(?:project|proyecto)\s+)?[\w./-]+|\b(?:project|proyecto)\s+[\w./-]+", "", text, flags=re.I)
-    modes, match, parse_error = context_filters(state) if more or refresh else parse_filters(intent_text)
+    query_text, explicit_scope, conflicting_scope = extract_scope(text)
+    scope_only = bool(explicit_scope and re.fullmatch(r"(?:(?:only|solo)\s*)?[.!?]*", query_text, re.I))
+    intent_text = re.sub(r"\b(?:in|en)\s+(?:(?:project|proyecto)\s+)?[\w./-]+|\b(?:project|proyecto)\s+[\w./-]+", "", query_text, flags=re.I)
+    modes, match, parse_error = context_filters(state) if more or refresh or scope_only else parse_filters(intent_text)
     plural = bool(re.search(r"\b(?:samples|muestras)\b", text, re.I))
     followup = bool(state and re.match(
         r"(?:which (?:ones )?are|and|what about|only|show|also|y|solo|muestra|adem[aá]s|tambi[eé]n)\b",
         text, re.I))
     refine = bool(followup and re.match(r"(?:also|and only|adem[aá]s|tambi[eé]n)\b", text, re.I))
-    if not (more or refresh) and not (modes and (plural or followup)):
+    if not (more or refresh or scope_only or conflicting_scope) and not (modes and (plural or followup)):
         return None
     # "in QC" is an existing sample-status query, not a project named QC.
     if not re.search(r"project|proyecto", text, re.I) and re.search(r"\b(?:in|en)\s+(?:QC|IN_PROGRESS|RECEIVED|REPORTED|ARCHIVED|CANCELLED)\b", text, re.I):
         return None
-    reference_text = re.sub(r"\b(?:in|en)\s+(?:this|that|este|ese)\s+(?:project|proyecto)\b", "", text, flags=re.I)
+    reference_text = re.sub(r"\b(?:in|en)\s+(?:this|that|este|ese)\s+(?:project|proyecto)\b", "", query_text, flags=re.I)
     references = re.findall(r"\b(?:in|en)\s+(?:(?:project|proyecto)\s+)?([\w./-]+)|\b(?:project|proyecto)\s+([\w./-]+)", reference_text, re.I)
     codes = list(dict.fromkeys((a or b).rstrip(".?!").casefold() for a, b in references
                               if (a or b).casefold() not in {"this", "that", "este", "ese"}))
-    if not codes and not state and "blocked" not in modes and not re.search(r"project|proyecto", text, re.I):
+    if not codes and not state and not (scope_only or conflicting_scope) and "blocked" not in modes and not re.search(r"project|proyecto", text, re.I):
         return None  # Keep existing generic QC and sample searches.
-    spanish = bool(re.search(r"muestras|proyecto|bloquead|faltan|listas|siguiente|m[aá]s|vencid|atrasad|sin asignar|rechazado|campos|tambi[eé]n|adem[aá]s|solo", text, re.I)) or ((more or refresh) and state.get("language") == "es")
+    inherited_scope = context_scope(state) if (more or refresh or scope_only or followup) and not codes else "sample"
+    scope = explicit_scope or inherited_scope
+    if conflicting_scope or inherited_scope is None or (scope == "step" and "all" in modes):
+        parse_error = "scope"
+    spanish = bool(re.search(r"muestras|proyecto|bloquead|faltan|listas|siguiente|m[aá]s|vencid|atrasad|sin asignar|rechazado|campos|tambi[eé]n|adem[aá]s|solo|mismo paso|toda la muestra", text, re.I)) or ((more or refresh) and state.get("language") == "es")
     def t(en, es):
         return es if spanish else en
+    if scope_only and not state:
+        return _response(t("First ask a project question with its exact code and filters, then choose the scope.",
+                           "Primero consulta un proyecto con su código exacto y filtros; después elige el alcance."), clarification={"required": True})
     if refine and not parse_error:
         previous_modes, previous_match, parse_error = context_filters(state)
         if codes:
@@ -154,6 +179,9 @@ def route_project_workflows(message, user, context=None):
             if "all" in modes and len(modes) > 1:
                 parse_error = "mixed"
     if parse_error:
+        if parse_error == "scope":
+            return _response(t("Choose one scope: on the same step, or across the sample. Same-step scope requires specific filters, not workflow overview. Repeat the project code and filters.",
+                               "Elige un alcance: en el mismo paso o en toda la muestra. El mismo paso requiere filtros específicos, no un resumen del flujo. Repite el código del proyecto y los filtros."), clarification={"required": True})
         return _response(t(
             "Please use supported filters joined by AND or OR, not both: blocked, missing results, QC, failed QC, overdue, unassigned, ready. Negation, assignee/date constraints and nested conditions are not supported here. Repeat the project code and desired filters.",
             "Usa filtros compatibles unidos por Y o por O, no ambos: bloqueadas, campos faltantes, QC, QC rechazado, vencidas, sin asignar, listas. Aquí no se admiten negaciones, responsables/fechas ni condiciones anidadas. Repite el código del proyecto y los filtros."), clarification={"required": True})
@@ -191,7 +219,7 @@ def route_project_workflows(message, user, context=None):
             cursor = sample.pk
             checked += 1
             evidence = _evidence(sample.current_runs, spanish)
-            accepted, selected = _match_reasons(evidence, modes, match)
+            accepted, selected = _match_scoped_reasons(evidence, modes, match, scope)
             if accepted:
                 rows.append({"sample_id": sample.pk, "sample_code": sample.sample_id, "status": sample.status,
                              "url": f"/samples/{sample.pk}", "reasons": selected[:MAX_REASONS],
@@ -218,7 +246,10 @@ def route_project_workflows(message, user, context=None):
         if row["additional_reasons"]:
             lines.append(t(f"{row['additional_reasons']} more reasons: open the sample.", f"{row['additional_reasons']} motivos adicionales: abre la muestra."))
     summary_start = len(lines)
-    if len(modes) > 1:
+    if scope == "step":
+        lines.append(t("Conditions must match the same step within the same pipeline run. Only matching step evidence is shown.",
+                       "Las condiciones deben coincidir en el mismo paso de la misma ejecución. Solo se muestran registros de pasos coincidentes."))
+    elif len(modes) > 1:
         lines.append(t(
             f"Matching {'ALL' if match == 'all' else 'ANY'} listed conditions per sample. Evidence may come from different steps; this is not a same-step filter.",
             f"Coincidencia con {'TODAS las' if match == 'all' else 'CUALQUIERA de las'} condiciones por muestra. Los registros pueden provenir de pasos distintos; no se exige el mismo paso."))
@@ -228,15 +259,17 @@ def route_project_workflows(message, user, context=None):
     if has_more:
         lines.append(t("More samples remain to check. Ask Next page; page counts are not project-wide match totals.", "Faltan muestras por revisar. Pide Siguiente página; los conteos son de esta página."))
     lines.append(t("Read from current records; no lab records changed.", "Consulta de registros actuales; no se modificaron registros del laboratorio."))
-    next_state = {"project_code": project.code, "filter": mode, "filters": modes, "match": match, "after": cursor,
+    next_state = {"project_code": project.code, "filter": mode, "filters": modes, "match": match, "scope": scope, "after": cursor,
                   "has_more": has_more, "language": "es" if spanish else "en"}
     suggestions = ([t("Next page", "Siguiente página")] if has_more else []) + [t(f"Which samples in project {project.code} are missing results?", f"¿Qué muestras en proyecto {project.code} tienen campos faltantes?"), t(f"Which samples in project {project.code} need QC?", f"¿Qué muestras en proyecto {project.code} necesitan QC?")]
     suggestions += [t("Only failed QC", "Solo QC rechazado"), t("Only overdue", "Solo vencidas"), t("Only unassigned", "Solo sin asignar"), t("Refresh results", "Actualizar resultados")]
     if match == "all" and "unassigned" not in modes:
         suggestions.append(t("Also unassigned", "También sin asignar"))
+    if "all" not in modes:
+        suggestions.append(t("Across the sample", "En toda la muestra") if scope == "step" else t("On the same step", "En el mismo paso"))
     return _response("\n".join(lines), context={"project_workflows": next_state}, suggestions=suggestions,
                      links=[{"label": row["sample_code"], "url": row["url"], "kind": "sample"} for row in rows],
-                     project_workflows={"project_code": project.code, "filter": mode, "filters": modes, "match": match, "rows": rows,
+                     project_workflows={"project_code": project.code, "filter": mode, "filters": modes, "match": match, "scope": scope, "rows": rows,
                                         "language": "es" if spanish else "en",
                                         "summary": "\n".join([*header_lines, *lines[summary_start:]]),
                                         "checked_on_page": checked, "accessible_sample_count": total,
