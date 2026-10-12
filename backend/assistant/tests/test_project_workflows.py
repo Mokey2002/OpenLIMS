@@ -15,7 +15,7 @@ from events.models import Event
 from pipelines.models import AnalysisDefinition, ProcedureDefinition, PipelineTemplate, PipelineTemplateStep
 from pipelines.services import start_pipeline
 from projects.models import Project
-from results.models import Result
+from results.models import Result, WorkItem
 from samples.models import Sample
 
 
@@ -398,3 +398,73 @@ class ProjectWorkflowTests(APITestCase):
         denied = self.chat("Refresh results", first["context"])
         self.assertNotIn("project_workflows", denied)
         self.assertEqual(denied["context"], {})
+
+    def test_same_step_eliminates_cross_step_false_match_and_refreshes(self):
+        self.make_overdue(self.work, assigned=True)
+        second_work = WorkItem.objects.create(sample=self.sample, name="Parallel work", work_type="PARALLEL")
+        step = self.run.steps.get(position=2)
+        step.dependency_positions = []
+        step.status = "READY"
+        step.work_item = second_work
+        step.save()
+        initial = self.query("overdue and unassigned")
+        self.assertEqual(len(self.rows(initial)), 1)
+        narrow = self.chat("On the same step", initial["context"])
+        self.assertEqual(self.rows(narrow), [])
+        self.assertEqual(narrow["project_workflows"]["scope"], "step")
+        self.work.assigned_to = None
+        self.work.save()
+        refreshed = self.chat("Refresh results", narrow["context"])
+        self.assertEqual(len(self.rows(refreshed)), 1)
+        self.assertEqual({r["step"] for r in self.rows(refreshed)[0]["reasons"]}, {1})
+        self.assertIn("same pipeline run", refreshed["answer"])
+        self.assertFalse(AssistantAction.objects.exists())
+
+    @patch("assistant.project_workflows.PAGE_SIZE", 1)
+    def test_same_step_pagination_refinement_and_replacement_keep_scope(self):
+        self.make_overdue(self.work)
+        _, _, work = self.make_sample("SECOND-SCOPED")
+        self.make_overdue(work)
+        first = self.query("overdue and unassigned on the same step")
+        second = self.chat("Next page", first["context"])
+        self.assertEqual(self.rows(second)[0]["sample_code"], "SECOND-SCOPED")
+        self.assertEqual(second["project_workflows"]["scope"], "step")
+        for message in ("Also missing results", "Only unassigned"):
+            data = self.chat(message, second["context"])
+            self.assertEqual(data["project_workflows"]["scope"], "step")
+            self.assertEqual(self.rows(data)[0]["sample_code"], "SAMPLE-001")
+        wide = self.chat("Across the sample", second["context"])
+        self.assertEqual(wide["project_workflows"]["scope"], "sample")
+        # A new full question uses the default scope, not an invisible old one.
+        self.assertEqual(self.query("unassigned", second["context"])["project_workflows"]["scope"], "sample")
+
+    def test_spanish_scope_and_negation(self):
+        self.make_overdue(self.work)
+        data = self.chat("¿Qué muestras en proyecto DEMO-360 están vencidas y sin asignar en el mismo paso?")
+        self.assertEqual(data["project_workflows"]["scope"], "step")
+        self.assertEqual(data["project_workflows"]["language"], "es")
+        self.assertEqual(len(self.rows(data)), 1)
+        wide = self.chat("En toda la muestra", data["context"])
+        self.assertEqual(wide["project_workflows"]["scope"], "sample")
+        self.assertEqual(wide["project_workflows"]["language"], "es")
+        denied = self.query("overdue and unassigned not on the same step")
+        self.assertTrue(denied["clarification"]["required"])
+
+    def test_scope_requires_query_and_rejects_invalid_or_conflicting_context(self):
+        self.assertTrue(self.chat("On the same step")["clarification"]["required"])
+        data = self.query("unassigned")
+        for message in ("On the same step across the sample", "Show samples in project DEMO-360 workflow overview on the same step"):
+            self.assertTrue(self.chat(message, data["context"])["clarification"]["required"])
+        for bad in ([], {}, True, "other"):
+            context = {"project_workflows": {**data["context"]["project_workflows"], "scope": bad}}
+            self.assertTrue(self.chat("Refresh results", context)["clarification"]["required"])
+
+    def test_scoped_followup_rechecks_access_and_skips_external_provider(self):
+        with patch("assistant.llm.OpenAI") as provider:
+            data = self.query("unassigned on the same step")
+        provider.assert_not_called()
+        self.project.members.remove(self.tech)
+        for message in ("On the same step", "Refresh results", "Only unassigned"):
+            denied = self.chat(message, data["context"])
+            self.assertNotIn("project_workflows", denied)
+            self.assertEqual(denied["context"], {})

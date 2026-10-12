@@ -13,6 +13,24 @@ FILTER_PATTERNS = (
     ("all", r"\b(?:workflow(?: overview)?|pipeline|flujo)\b"),
 )
 FILTERS = {kind for kind, _ in FILTER_PATTERNS}
+SCOPES = {
+    "step": r"\b(?:on|in) (?:the )?same step\b|\ben el mismo paso\b",
+    "sample": r"\bacross (?:the )?sample\b|\ben toda la muestra\b",
+}
+
+
+def extract_scope(text):
+    """Remove explicit scope phrases before interpreting project references."""
+    found = [scope for scope, pattern in SCOPES.items() if re.search(pattern, text, re.I)]
+    for pattern in SCOPES.values():
+        text = re.sub(pattern, "", text, flags=re.I)
+    return text.strip(), found[0] if len(found) == 1 else None, len(found) > 1
+
+
+def context_scope(state):
+    scope = state.get("scope", "sample")
+    return scope if isinstance(scope, str) and scope in SCOPES else None
+
 # Anything outside this small grammar asks for clarification instead of silently
 # ignoring an assignee, date, negation, threshold, or unsupported condition.
 FILLER = re.compile(
