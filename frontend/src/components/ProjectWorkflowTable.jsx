@@ -8,6 +8,7 @@ export default function ProjectWorkflowTable({ data }) {
   const labels = {
     failed: ["Failed", "Fallido"], qc: ["QC", "QC"], missing: ["Missing fields", "Campos faltantes"],
     overdue: ["Overdue", "Vencido"], unassigned: ["Unassigned", "Sin asignar"],
+    assigned: ["Assigned work", "Trabajo asignado"],
     dependency: ["Dependency", "Dependencia"], activation: ["Activation", "Activación"],
     run_blocked: ["Blocked pipeline", "Pipeline bloqueado"], ready: ["Available work", "Trabajo disponible"],
   };
@@ -17,7 +18,7 @@ export default function ProjectWorkflowTable({ data }) {
       <caption>
         {t("Current workflow evidence", "Registros actuales del flujo")} · {data.project_code}
         {` · ${describeWorkflowScope(data)}`}
-        {data.filters?.length > 1 && ` · ${t("Match", "Coincidir")}: ${describeWorkflowFilters(data)}`}
+        {data.filters?.length > 0 && ` · ${t("Match", "Coincidir")}: ${describeWorkflowFilters(data)}`}
         {data.as_of && ` · ${new Date(data.as_of).toLocaleString()}`}
       </caption>
       <thead>

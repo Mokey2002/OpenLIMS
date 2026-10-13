@@ -21,6 +21,7 @@ export function describeWorkflowFilters(workflow) {
     blocked: ["Blocked", "Bloqueadas"], missing: ["Missing fields", "Campos faltantes"],
     qc: ["QC", "QC"], qc_failed: ["Failed QC", "QC rechazado"],
     overdue: ["Overdue", "Vencidas"], unassigned: ["Unassigned", "Sin asignar"],
+    assigned: [`Assigned to ${workflow.assignee || "?"}`, `Asignadas a ${workflow.assignee || "?"}`],
     ready: ["Available work", "Trabajo disponible"], all: ["Workflow overview", "Resumen del flujo"],
   };
   const filters = Array.isArray(workflow.filters) ? workflow.filters : [workflow.filter];

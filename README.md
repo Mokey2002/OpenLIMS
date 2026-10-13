@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.44.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.45.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,6 +25,10 @@
 
 ## Overview
 
+### v0.45.0 — Ask who owns the work
+
+Ask which project samples have work **assigned to you or an exact project username**, combine ownership with overdue, missing-field or QC filters, and require the conditions on the same step. Ownership is shown in the context and evidence, survives follow-ups and pagination, and is checked against current assignments and access. English/Spanish recovery and empty-result diagnostics support this filter. Queries do not assign work or infer QC approval. See the [assignee guide](docs/assistant-project-workflows.md#assigned-work).
+
 ### v0.44.0 — Helpful empty results and conversational recovery
 
 Empty workflow answers now explain individual filter counts for the samples actually checked, and identify when conditions match across a sample but not on the same step. Suggestions let you explicitly broaden the query; filters never change automatically. Partial-scan counts are clearly separated from complete project totals. English/Spanish follow-ups can switch AND/OR, remove a filter, and recover the previous valid query after an unclear request. See the [workflow query guide](docs/assistant-project-workflows.md).
@@ -33,17 +37,13 @@ Empty workflow answers now explain individual filter counts for the samples actu
 
 Ask which samples have work that is overdue and unassigned **on the same step**, rather than matching conditions across different steps. Switch between same-step and whole-sample scope in English or Spanish, retain scope across follow-ups and pagination, and inspect evidence grouped by pipeline run and step with exact work-item numbers. Queries remain read-only and recheck access. See the [scope examples](docs/assistant-project-workflows.md#same-step-scope).
 
-### v0.42.0 — Combined AI workflow questions
-
-Ask for samples matching multiple conditions with AND or OR, in English or Spanish. Refine the current search with “Also unassigned,” replace it with “Only unassigned,” and preserve the full query across refresh and pagination. Explicit filter labels and recorded step evidence explain the interpretation. Unsupported conditions and mixed AND/OR expressions request clarification instead of silently dropping criteria. Queries remain read-only and permission-checked. See the [workflow query guide](docs/assistant-project-workflows.md). CI pre-pulls its images sequentially with bounded retries for temporary registry errors; persistent failures still stop the checks.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.44.0 — Helpful empty results and conversational recovery`.
+**Current development version:** `v0.45.0 — Ask who owns the work`.
 
 ## Deployment Access
 
@@ -299,6 +299,9 @@ Start with an exact project code, then refine the question:
 | Ask | Behavior |
 |---|---|
 | `Which samples in project DEMO-360 are overdue and unassigned on the same step?` | Both conditions must match one step of one pipeline run. |
+| `Which samples in project DEMO-360 are assigned to me and overdue on the same step?` | Finds your assigned work with an overdue condition on that same step. |
+| `Only assigned to maria` | Replaces the filters with one exact, active project username. |
+| `Also assigned to me` | Adds your ownership to an AND query while preserving scope. |
 | `Match any condition` | Explicitly switches AND to OR while keeping the project and scope. |
 | `Remove the overdue filter` | Removes that requirement; it does not exclude overdue samples. |
 | `Across the sample` | Allows the conditions to match different steps or runs of a sample. |
@@ -312,8 +315,12 @@ are no matches in the project. No active pipeline does not prove work is complet
 
 An unclear follow-up keeps the previous query only when its filters, scope and
 project access remain valid. Recovery choices apply to that previous query, not
-the rejected edit. Mixed AND/OR, negation, assignee/date constraints and nested
-conditions remain unsupported. These bounded workflow routes work with OpenLIMS
+the rejected edit. Named assignees use exact, case-sensitive usernames of active
+project members; `me` means the authenticated user. Only one assignee is supported
+per query. Assigned work belongs to unfinished steps in active/blocked runs,
+including QC-waiting work; it is not a claim that the assignee is a QC reviewer.
+Use same-step scope when overdue/QC must apply to that person’s step. Mixed
+AND/OR, negation, date constraints and nested conditions remain unsupported. These bounded workflow routes work with OpenLIMS
 Rules and do not require OpenAI or Ollama.
 
 ### Assistant Modes

@@ -49,3 +49,13 @@ test("evidence groups never merge different runs or mutate the original reasons"
   assert.deepEqual(reasons, before);
   assert.deepEqual(groupWorkflowReasons(), []);
 });
+
+test("assignee names are visible for single and combined filters in both languages", () => {
+  assert.equal(describeWorkflowFilters({ filters: ["assigned"], assignee: "maria" }), "Assigned to maria");
+  assert.equal(describeWorkflowFilters({ filters: ["assigned", "overdue"], assignee: "maria", match: "all", language: "es" }), "Asignadas a maria Y Vencidas");
+  const result = describeAssistantContext({ project_workflows: {
+    project_code: "DEMO-360", filters: ["assigned", "overdue"], assignee: "peter", match: "any", scope: "step",
+  } });
+  assert.match(result.detail, /Assigned to peter OR Overdue/);
+  assert.match(result.detail, /Same step/);
+});
