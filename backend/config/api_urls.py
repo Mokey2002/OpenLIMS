@@ -1,3 +1,4 @@
+from assistant.saved_queries import SavedWorkflowQueriesView, SavedWorkflowQueryDetailView
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 from samples.views import (
@@ -212,6 +213,8 @@ urlpatterns = router.urls + [
         EntityReferenceView.as_view(),
         name="entity-reference",
     ),
+    path("assistant/saved-queries/", SavedWorkflowQueriesView.as_view(), name="assistant-saved-queries"),
+    path("assistant/saved-queries/<int:pk>/", SavedWorkflowQueryDetailView.as_view(), name="assistant-saved-query-detail"),
     path("assistant/chat/", AssistantChatView.as_view(), name="assistant-chat"),
     path(
         "assistant/interactions/<uuid:interaction_id>/feedback/",

@@ -399,3 +399,15 @@ class AssistantFeedback(models.Model):
                 name="assistant_feedback_user_unique",
             )
         ]
+
+
+class SavedWorkflowQuery(models.Model):
+    """Personal query settings, never results or action-confirmation context."""
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_workflow_queries")
+    name = models.CharField(max_length=80)
+    query = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name", "pk"]
+        constraints = [models.UniqueConstraint(fields=["owner", "name"], name="unique_saved_workflow_query_name")]

@@ -209,3 +209,13 @@ Quick starts select **My overdue work**, **Due soon, unassigned**, or **QC probl
 To reuse an existing question without opening the builder, type **Use the same filters in project SECOND** or **Usa los mismos filtros en proyecto SECOND**. This keeps the filters, AND/OR logic, scope and exact owner. It verifies the source query, source access, destination access and owner availability, resets pagination, and recalculates deadlines from the server clock. The response identifies both projects; subsequent pages and explanations belong to the destination. It does not compare projects or reuse old counts.
 
 Use one exact destination code without extra conditions. An ambiguous command asks for clarification and retains the validated previous query, reset to page one. Invalid or revoked source context, inaccessible destinations and unavailable owners clear the workflow context without scanning samples. No laboratory records are modified and no language model is required.
+
+## Personal saved questions
+
+Open the workflow builder and configure a valid question. Under **My saved questions**, enter a unique name and choose **Save builder settings**. Saved questions belong to your account and are available in the full assistant and floating chat, including after a page reload. They are not shared with other users, including administrators through this API. Maximum: 20 per account; delete a question to free a slot.
+
+Choose a saved question and **Load saved question** to fill the builder. Review or edit it, then explicitly click **Run question**. Loading and saving never run a question or modify laboratory records. Relative deadlines are recalculated when running; access and assignees are checked again. A saved question cannot restore revoked project access. Existing saved settings can still be loaded for editing after access changes.
+
+Only the exact project code, filters, AND/OR, scope, language and canonical assignee are stored. `me` / `mí` resolves to your username when saved. Results, pagination, conversation history and approval tokens are never saved. To revise a saved question, load and edit it, save under a new name, then delete the old version if desired. Deletion asks for confirmation and does not remove the current draft or any laboratory records.
+
+Deployment: run the normal Django migrations; this release adds the personal saved-query table. The authenticated API is `/api/v1/assistant/saved-queries/` (GET/POST) and `/api/v1/assistant/saved-queries/<id>/` (DELETE). Session-authenticated writes require CSRF protection.

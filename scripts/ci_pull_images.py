@@ -1,4 +1,4 @@
-"""Warm CI's local Docker cache sequentially; retry only transient pull errors."""
+"""Warm CI images with bounded retries and explicitly configured fallbacks."""
 import os
 import re
 import subprocess
@@ -12,6 +12,10 @@ TRANSIENT = re.compile(
     r"\b(?:500|502|503|504)\b|i/o timeout|tls handshake timeout|"
     r"connection reset|temporary failure|service unavailable", re.I
 )
+
+
+class TransientPullError(RuntimeError):
+    """The configured registry remained unavailable after bounded retries."""
 
 
 def pull(image):
@@ -30,20 +34,37 @@ def pull(image):
         if status == 0:
             return
         if not transient or attempt == len(RETRY_DELAYS):
-            raise RuntimeError(f"Image pull failed: {image}; CI cannot continue (exit {status}).")
+            error = TransientPullError if transient else RuntimeError
+            raise error(f"Image pull failed: {image}; CI cannot continue (exit {status}).")
         delay = RETRY_DELAYS[attempt]
         print(f"Temporary registry/network error; retrying in {delay}s.", flush=True)
         time.sleep(delay)
 
 
+def pull_with_fallback(image, fallback):
+    try:
+        pull(image)
+    except TransientPullError:
+        print(f"Primary registry retries exhausted. Explicit fallback: {fallback} -> {image}", flush=True)
+        pull(fallback)
+        # Compose and Dockerfile build arguments retain their configured names.
+        # Tag only after a successful pull; neither pull nor tag errors are hidden.
+        subprocess.run(["docker", "tag", fallback, image], check=True, timeout=30)
+        print(f"Cached {image} from {fallback} for subsequent CI steps.", flush=True)
+
+
 def main():
-    # Validate all inputs before downloading. Images stay in the configured
-    # registry; there is no silent fallback or suppression of exhausted retries.
+    # Validate all required inputs before downloading. Fallbacks are opt-in,
+    # visible in logs, and used only after transient failures exhaust retries.
     images = [os.environ.get(key, "").strip() for key in IMAGE_KEYS]
     if not all(images):
         raise RuntimeError("Set PYTHON_IMAGE, POSTGRES_IMAGE and REDIS_IMAGE for CI.")
-    for image in images:
-        pull(image)
+    for key, image in zip(IMAGE_KEYS, images):
+        fallback = os.environ.get(f"{key}_FALLBACK", "").strip()
+        if fallback and fallback != image:
+            pull_with_fallback(image, fallback)
+        else:
+            pull(image)
 
 
 if __name__ == "__main__":
