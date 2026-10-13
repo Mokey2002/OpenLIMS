@@ -7,11 +7,15 @@ on:
 
 # Docker Official Images published on ECR Public avoid Docker Hub's shared
 # anonymous runner pull quota. Local deployments retain their default images.
-# ECR can also throttle: pre-pull sequentially with bounded transient retries.
+# ECR can also throttle. After bounded transient retries, explicitly fall back
+# to the same Docker Official Image/version on Docker Hub and cache it locally.
 env:
   PYTHON_IMAGE: public.ecr.aws/docker/library/python:3.12-slim
   POSTGRES_IMAGE: public.ecr.aws/docker/library/postgres:16
   REDIS_IMAGE: public.ecr.aws/docker/library/redis:7
+  PYTHON_IMAGE_FALLBACK: docker.io/library/python:3.12-slim
+  POSTGRES_IMAGE_FALLBACK: docker.io/library/postgres:16
+  REDIS_IMAGE_FALLBACK: docker.io/library/redis:7
 
 jobs:
   backend-tests:
