@@ -191,3 +191,11 @@ a request. Every refresh/page recomputes relative windows; pages are live, not a
 snapshot. Client-supplied window timestamps are ignored and are not retained in
 query context. Partial scan counts and permission checks work as before. Explicit
 other dates, timezones, times of day and custom day counts require clarification.
+
+## Query explanations
+
+After a project workflow question, choose **Explain this query** or type **Explica esta consulta**. Both chat views explain each filter, AND/OR matching, whether conditions may span steps or must match one step in one pipeline run, exact work ownership, and scan limits. The API also returns the complete plain-text answer and a `query_explanation` object.
+
+Explanations recheck project access and active assignees, validate the saved query, and retain only supported context fields. Invalid or revoked context is cleared. They do not scan sample records, invoke a language model, or modify laboratory records. A valid page cursor is preserved: **Next page** continues; **Refresh results** restarts from page one with live data.
+
+Relative deadline windows are resolved from the server clock at explanation time. They describe the query **if run now**, not the windows or counts of an earlier result. Today/tomorrow use the active Django timezone; next seven days means 168 hours. The start is inclusive and the end exclusive. Explanations distinguish work ownership from QC review and required-field readiness from QC approval.

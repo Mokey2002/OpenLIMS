@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.47.0 — Entiende tu consulta de IA
+
+Usa **Explica esta consulta** para ver el significado de los filtros, la lógica Y/O, el alcance, el responsable y las ventanas actuales de vencimiento. La explicación bilingüe verifica permisos, conserva la paginación y no revisa muestras. Disponible en ambas vistas del chat. Consulta la [guía de explicaciones](docs/assistant-project-workflows.md#query-explanations).
+
 ## v0.46.0 — Consultas de IA con fechas de vencimiento
 
 Consulta trabajo que **vence hoy, mañana o en los próximos siete días**, incluido el asignado a ti. Combina vencimiento, responsable y condiciones del flujo en el mismo paso o en toda la muestra. Cada respuesta muestra la ventana exacta y zona horaria; actualizar recalcula las fechas desde el reloj del servidor. Se distinguen días naturales, ventanas de 168 horas y revisiones parciales. Otros rangos requieren aclaración. Consulta la [guía de vencimientos](docs/assistant-project-workflows.md#deadline-questions).
@@ -8,17 +12,13 @@ Consulta trabajo que **vence hoy, mañana o en los próximos siete días**, incl
 
 Consulta muestras con trabajo **asignado a ti o a un usuario exacto del proyecto**, combina responsable con filtros de vencimiento, campos faltantes o QC y exige coincidencias en el mismo paso. El responsable aparece en el contexto y los registros, se conserva al refinar y paginar, y se verifica con asignaciones y permisos actuales. La recuperación y los diagnósticos sin coincidencias funcionan en español e inglés. Estas consultas no asignan trabajo ni implican aprobación de QC. Consulta la [guía de responsables](docs/assistant-project-workflows.md#assigned-work).
 
-## v0.44.0 — Resultados vacíos útiles y recuperación de consultas
-
-Las consultas sin coincidencias muestran conteos por condición para las muestras realmente revisadas e identifican cuándo las condiciones se cumplen en toda la muestra, pero no en el mismo paso. Las sugerencias permiten ampliar la consulta de forma explícita; los filtros nunca cambian automáticamente. Los conteos parciales se distinguen de los totales completos. Los seguimientos en español e inglés permiten alternar Y/O, quitar filtros y recuperar la consulta válida anterior tras una solicitud poco clara. Consulta la [guía de consultas](docs/assistant-project-workflows.md).
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.46.0`
+**Versión de desarrollo actual:** `v0.47.0`
 
 **Demo:** http://35.164.28.250
 

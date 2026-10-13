@@ -10,6 +10,7 @@ from pipelines.services import missing_required_fields
 from projects.models import Project
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
+from .workflow_explanations import explain_query
 from .workflow_dates import DEADLINE_LABELS, deadline_windows, describe_deadlines
 from .workflow_query import context_filters, context_scope, edit_filters, extract_assignee, extract_scope, normalize_deadline_phrases, parse_filters, valid_assignee
 
@@ -214,6 +215,22 @@ def route_project_workflows(message, user, context=None):
     text = str(message or "").strip().lstrip("¿¡")
     state = (context or {}).get("project_workflows")
     state = state if isinstance(state, dict) else {}
+    if re.fullmatch(r"(?:explain (?:this query|my filters)|explica (?:esta consulta|estos filtros))[.!?]*", text, re.I):
+        spanish = text.casefold().startswith("explica")
+        after = state.get("after", 0)
+        has_more = state.get("has_more", False)
+        valid_page = type(after) is int and 0 <= after <= 9223372036854775807 and type(has_more) is bool
+        # Reuse recovery validation and its context whitelist; restore only a validated cursor.
+        recovered = _recover_query(state, user, spanish, "explain") if state and valid_page else None
+        if recovered is None:
+            return _response("Primero consulta un proyecto accesible con su código exacto y filtros." if spanish else
+                             "First ask about an accessible project with its exact code and filters.", clarification={"required": True})
+        saved = recovered["context"]["project_workflows"]
+        saved.update(after=after, has_more=has_more)
+        answer, details = explain_query(saved, timezone.now(), PAGE_SIZE, MAX_SCAN)
+        suggestions = (["Siguiente página" if spanish else "Next page"] if has_more else [])
+        suggestions += ["Actualizar resultados" if spanish else "Refresh results", "Empezar de nuevo" if spanish else "Start over"]
+        return _response(answer, query_explanation=details, context={"project_workflows": saved}, suggestions=suggestions)
     protected_text, explicit_assignee, conflicting_assignees = extract_assignee(text)
     protected_text = normalize_deadline_phrases(protected_text)
     edit = edit_filters(protected_text, state)
@@ -452,7 +469,7 @@ def route_project_workflows(message, user, context=None):
         controls.append(t("Also due today", "También vencen hoy"))
     if match == "all" and "assigned" not in modes:
         controls.append(t("Also assigned to me", "También asignadas a mí"))
-    suggestions = list(dict.fromkeys(([t("Next page", "Siguiente página")] if has_more else []) + diagnostic_suggestions + controls + suggestions))[:8]
+    suggestions = list(dict.fromkeys(([t("Next page", "Siguiente página")] if has_more else []) + diagnostic_suggestions + [t("Explain this query", "Explica esta consulta")] + controls + suggestions))[:8]
     return _response("\n".join(lines), context={"project_workflows": next_state}, suggestions=suggestions,
                      links=[{"label": row["sample_code"], "url": row["url"], "kind": "sample"} for row in rows],
                      project_workflows={"project_code": project.code, "filter": mode, "filters": modes, "match": match, "scope": scope, "rows": rows,
