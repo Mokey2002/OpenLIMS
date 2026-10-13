@@ -31,6 +31,8 @@ def explain_query(state, now, page_size, scan_limit):
         t(f"Each request shows up to {page_size} matching samples and checks up to {scan_limit} samples. Partial scans are not project totals.", f"Cada consulta muestra hasta {page_size} coincidencias y revisa hasta {scan_limit} muestras. Las revisiones parciales no son totales del proyecto."),
         t("Read-only explanation: no sample scan was run. Your page position is preserved. Refresh results restarts from page one; Next page continues with live records.", "Explicación de solo lectura: no se revisaron muestras. Se conserva la posición de página. Actualizar resultados reinicia desde la primera página; Siguiente página continúa con registros actuales."),
     ]
+    notes.append(t("To reuse these filters elsewhere, ask: Use the same filters in project CODE. This starts a fresh query and rechecks access and the assignee.",
+                   "Para reutilizar estos filtros, pide: Usa los mismos filtros en proyecto CODIGO. Inicia una consulta nueva y verifica permisos y responsable."))
     if records:
         notes.append(t("These are the deadline windows if run now, not the windows of an earlier result.", "Estas son las ventanas si se ejecuta ahora, no las de un resultado anterior."))
         notes.append(window_text)
