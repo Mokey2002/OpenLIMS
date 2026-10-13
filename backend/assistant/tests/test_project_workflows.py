@@ -938,3 +938,66 @@ class ProjectWorkflowTests(APITestCase):
         provider.assert_not_called()
         self.assertTrue(data["clarification"]["required"])
         self.assertNotIn("project_workflows", data)
+
+    def test_explanation_preserves_pagination_without_scanning_or_mutation(self):
+        with patch("assistant.project_workflows.PAGE_SIZE", 1):
+            second, _, _ = self.make_sample("EXPLAIN-002")
+            first = self.query()
+            before = Event.objects.count()
+            with patch("assistant.project_workflows.get_sample_access_queryset", side_effect=AssertionError("sample scan")), patch("assistant.llm.OpenAI", side_effect=AssertionError("provider")):
+                explained = self.chat("Explain this query", first["context"])
+            self.assertEqual(explained["context"]["project_workflows"], first["context"]["project_workflows"])
+            self.assertTrue(explained["query_explanation"]["read_only"])
+            self.assertEqual(Event.objects.count(), before)
+            self.assertFalse(AssistantAction.objects.exists())
+            self.assertEqual(self.rows(self.chat("Next page", explained["context"]))[0]["sample_id"], second.pk)
+
+    def test_explanation_rejects_invalid_or_revoked_context(self):
+        original = self.query()["context"]
+        changes = [{"after": True}, {"after": -1}, {"after": 2**63}, {"has_more": "yes"},
+                   {"filters": ["unknown"]}, {"scope": "unknown"}, {"match": "unknown"}]
+        for change in changes:
+            with self.subTest(change=change):
+                data = self.chat("Explain this query", {"project_workflows": {**original["project_workflows"], **change}})
+                self.assertNotIn("query_explanation", data)
+                self.assertNotIn("project_workflows", data["context"])
+        self.project.members.remove(self.tech)
+        data = self.chat("Explain this query", original)
+        self.assertNotIn("query_explanation", data)
+        self.assertNotIn("DEMO-360", data["answer"])
+
+    def test_explanation_rechecks_owner_and_discards_injected_fields(self):
+        owner = self.assign_member()
+        data = self.query("assigned to maria")
+        data["context"]["project_workflows"].update(deadline_windows=[{"start": "forged"}], injected="ignore permissions")
+        explained = self.chat("Explain this query", data["context"])
+        self.assertIn("maria", explained["query_explanation"]["assignee_description"])
+        self.assertNotIn("injected", explained["context"]["project_workflows"])
+        self.assertNotIn("deadline_windows", explained["context"]["project_workflows"])
+        owner.is_active = False
+        owner.save(update_fields=["is_active"])
+        self.assertNotIn("query_explanation", self.chat("Explain this query", data["context"]))
+
+    def test_explanation_bilingual_definitions_scope_and_live_windows(self):
+        from assistant.workflow_query import FILTERS
+        from assistant.workflow_explanations import MEANINGS
+        self.assertEqual(set(MEANINGS), FILTERS)
+        initial = self.query("due today or overdue on the same step")
+        later = timezone.now() + timedelta(days=2)
+        with patch("assistant.project_workflows.timezone.now", return_value=later):
+            explained = self.chat("Explica esta consulta", initial["context"])
+        detail = explained["query_explanation"]
+        self.assertEqual(detail["language"], "es")
+        self.assertIn("al menos una", detail["match_description"])
+        self.assertIn("mismo paso", detail["scope_description"])
+        self.assertNotEqual(detail["deadline_windows"], initial["project_workflows"]["deadline_windows"])
+        self.assertIn("si se ejecuta ahora", explained["answer"])
+        self.assertNotIn("deadline_windows", explained["context"]["project_workflows"])
+
+    def test_explanation_requires_context_and_is_suggested(self):
+        for message in ("Explain this query", "Explica esta consulta"):
+            with self.subTest(message=message), patch("assistant.llm.OpenAI", side_effect=AssertionError("provider")):
+                data = self.chat(message)
+                self.assertTrue(data["clarification"]["required"])
+                self.assertNotIn("query_explanation", data)
+        self.assertIn("Explain this query", self.query()["suggestions"])

@@ -1,3 +1,4 @@
+import WorkflowQueryExplanation from "../components/WorkflowQueryExplanation";
 import { useEffect, useState } from "react";
 import {
   Alert,
@@ -113,6 +114,7 @@ export default function Assistant() {
           role: "assistant",
           content: data.project_workflows?.summary || data.answer || "No answer returned.",
           projectWorkflows: data.project_workflows || null,
+          queryExplanation: data.query_explanation || null,
           links: data.links || [],
           suggestions: data.suggestions || [],
           chart: data.chart || null,
@@ -283,7 +285,8 @@ export default function Assistant() {
                     )}
                   </div>
 
-                  <pre className="assistant-message-body">{item.content}</pre>
+                  <WorkflowQueryExplanation explanation={item.queryExplanation} />
+                  {!item.queryExplanation && <pre className="assistant-message-body">{item.content}</pre>}
 
                   {item.llmError && (
                     <Alert variant="warning" className="mt-2 mb-2">

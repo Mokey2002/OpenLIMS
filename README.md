@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.46.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.47.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,6 +25,10 @@
 
 ## Overview
 
+### v0.47.0 — Understand your AI query
+
+Use **Explain this query** to see filter meanings, AND/OR logic, scope, work ownership and current deadline windows. The bilingual explanation rechecks access, preserves pagination and performs no sample scan. Available in both chat views. See the [query explanation guide](docs/assistant-project-workflows.md#query-explanations).
+
 ### v0.46.0 — Deadline-aware AI workflow questions
 
 Ask for work **due today, tomorrow, or within the next seven days**, including work assigned to you. Combine deadline, ownership and workflow filters on the same step or across a sample. Answers show the exact time window and timezone; refresh recalculates relative dates from the server clock. Calendar days, rolling 168-hour windows and partial scans are kept explicit. Unsupported ranges ask for clarification. See the [deadline guide](docs/assistant-project-workflows.md#deadline-questions).
@@ -33,17 +37,13 @@ Ask for work **due today, tomorrow, or within the next seven days**, including w
 
 Ask which project samples have work **assigned to you or an exact project username**, combine ownership with overdue, missing-field or QC filters, and require the conditions on the same step. Ownership is shown in the context and evidence, survives follow-ups and pagination, and is checked against current assignments and access. English/Spanish recovery and empty-result diagnostics support this filter. Queries do not assign work or infer QC approval. See the [assignee guide](docs/assistant-project-workflows.md#assigned-work).
 
-### v0.44.0 — Helpful empty results and conversational recovery
-
-Empty workflow answers now explain individual filter counts for the samples actually checked, and identify when conditions match across a sample but not on the same step. Suggestions let you explicitly broaden the query; filters never change automatically. Partial-scan counts are clearly separated from complete project totals. English/Spanish follow-ups can switch AND/OR, remove a filter, and recover the previous valid query after an unclear request. See the [workflow query guide](docs/assistant-project-workflows.md).
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.46.0 — Deadline-aware AI workflow questions`.
+**Current development version:** `v0.47.0 — Query explanations`.
 
 ## Deployment Access
 

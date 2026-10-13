@@ -57,7 +57,7 @@ export function describeAssistantContext(context) {
     return {
       kind: "project_workflows",
       label: `Project workflows · ${projectWorkflows.project_code}`,
-      detail: `${describeWorkflowFilters(projectWorkflows)} · ${describeWorkflowScope(projectWorkflows)} · ${projectWorkflows.language === "es" ? "Registros actuales revisados en cada consulta" : "Current records checked on each question"}`,
+      detail: `${describeWorkflowFilters(projectWorkflows)} · ${describeWorkflowScope(projectWorkflows)} · ${projectWorkflows.language === "es" ? "Actualizar o paginar revisa registros actuales" : "Refresh or paginate to check current records"}`,
     };
   }
 

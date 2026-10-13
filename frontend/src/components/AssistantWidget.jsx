@@ -1,3 +1,4 @@
+import WorkflowQueryExplanation from "./WorkflowQueryExplanation";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Badge, Button, Form, Spinner } from "react-bootstrap";
 import { Link } from "react-router-dom";
@@ -122,6 +123,7 @@ export default function AssistantWidget() {
           role: "assistant",
           content: data.project_workflows?.summary || data.answer || "No answer returned.",
           projectWorkflows: data.project_workflows || null,
+          queryExplanation: data.query_explanation || null,
           links: data.links || [],
           suggestions: data.suggestions || [],
           chart: data.chart || null,
@@ -248,9 +250,10 @@ export default function AssistantWidget() {
                     )}
                   </div>
 
-                  <div className="assistant-widget-message-text">
+                  <WorkflowQueryExplanation explanation={item.queryExplanation} />
+                  {!item.queryExplanation && <div className="assistant-widget-message-text">
                     {item.content}
-                  </div>
+                  </div>}
 
                   {item.llmError && (
                     <Alert variant="warning" className="mt-2 mb-1 py-2">
