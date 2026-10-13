@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.48.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.49.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,6 +25,10 @@
 
 ## Overview
 
+### v0.49.0 — Personal saved AI questions
+
+Save named workflow questions to your account and reopen them from either chat view. Load a question into the builder, adjust it, then explicitly run it against current records. Only query settings are saved; permissions are checked again when running. Includes a 20-question limit and confirmed deletion. See the [saved questions guide](docs/assistant-project-workflows.md#personal-saved-questions).
+
 ### v0.48.0 — Build and reuse AI workflow questions
 
 Use the **visual workflow query builder** in either chat view: choose a project, filters, AND/OR, assignee and scope, preview the question, then run it. Quick starts cover your overdue work, unassigned work due soon and QC problems. **Use the same filters in project CODE** transfers an existing query with fresh access checks and results from page one. English and Spanish supported. See the [builder and reuse guide](docs/assistant-project-workflows.md#build-and-reuse-workflow-questions).
@@ -33,17 +37,13 @@ Use the **visual workflow query builder** in either chat view: choose a project,
 
 Use **Explain this query** to see filter meanings, AND/OR logic, scope, work ownership and current deadline windows. The bilingual explanation rechecks access, preserves pagination and performs no sample scan. Available in both chat views. See the [query explanation guide](docs/assistant-project-workflows.md#query-explanations).
 
-### v0.46.0 — Deadline-aware AI workflow questions
-
-Ask for work **due today, tomorrow, or within the next seven days**, including work assigned to you. Combine deadline, ownership and workflow filters on the same step or across a sample. Answers show the exact time window and timezone; refresh recalculates relative dates from the server clock. Calendar days, rolling 168-hour windows and partial scans are kept explicit. Unsupported ranges ask for clarification. See the [deadline guide](docs/assistant-project-workflows.md#deadline-questions).
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.48.0 — Build and reuse workflow questions`.
+**Current development version:** `v0.49.0 — Personal saved questions`.
 
 ## Deployment Access
 

@@ -1,3 +1,4 @@
+import SavedWorkflowQueries from "./SavedWorkflowQueries";
 import { useId, useState } from "react";
 import { buildWorkflowQuestion, WORKFLOW_FILTERS } from "../workflowQuestion.js";
 
@@ -20,6 +21,7 @@ export default function WorkflowQueryBuilder({ context, onRun, disabled = false 
       <summary className="fw-semibold">{t("Build a workflow question", "Crear una consulta de flujo")}</summary>
       <fieldset disabled={disabled} className="mt-2">
         <legend className="visually-hidden">{t("Workflow query options", "Opciones de consulta")}</legend>
+        <SavedWorkflowQueries draft={draft} onLoad={query => setDraft({ assignee: query.language === "es" ? "mí" : "me", ...query })} disabled={disabled} valid={!preview.error} />
         <div className="d-flex gap-2 flex-wrap mb-2">
           <label className="flex-grow-1">{t("Project code", "Código del proyecto")}
             <input className="form-control form-control-sm" value={draft.project_code} maxLength={64} onChange={e => set("project_code", e.target.value)} placeholder="DEMO-360" />

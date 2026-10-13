@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.49.0 — Consultas de IA guardadas por usuario
+
+Guarda consultas de flujo con nombre en tu cuenta y ábrelas desde ambas vistas del chat. Carga una consulta en el constructor, ajústala y ejecútala con registros actuales. Solo se guardan los ajustes; los permisos se verifican al ejecutar. Incluye límite de 20 consultas y eliminación confirmada. Consulta la [guía](docs/assistant-project-workflows.md#personal-saved-questions).
+
 ## v0.48.0 — Crea y reutiliza consultas de IA
 
 Usa el **constructor visual de consultas** en ambas vistas del chat: elige proyecto, filtros, Y/O, responsable y alcance, revisa la pregunta y ejecútala. Los accesos rápidos incluyen tu trabajo vencido, trabajo próximo a vencer sin asignar y problemas de QC. **Usa los mismos filtros en proyecto CODIGO** reutiliza una consulta con permisos actualizados y resultados desde la primera página. Disponible en español e inglés. Consulta la [guía](docs/assistant-project-workflows.md#build-and-reuse-workflow-questions).
@@ -8,17 +12,13 @@ Usa el **constructor visual de consultas** en ambas vistas del chat: elige proye
 
 Usa **Explica esta consulta** para ver el significado de los filtros, la lógica Y/O, el alcance, el responsable y las ventanas actuales de vencimiento. La explicación bilingüe verifica permisos, conserva la paginación y no revisa muestras. Disponible en ambas vistas del chat. Consulta la [guía de explicaciones](docs/assistant-project-workflows.md#query-explanations).
 
-## v0.46.0 — Consultas de IA con fechas de vencimiento
-
-Consulta trabajo que **vence hoy, mañana o en los próximos siete días**, incluido el asignado a ti. Combina vencimiento, responsable y condiciones del flujo en el mismo paso o en toda la muestra. Cada respuesta muestra la ventana exacta y zona horaria; actualizar recalcula las fechas desde el reloj del servidor. Se distinguen días naturales, ventanas de 168 horas y revisiones parciales. Otros rangos requieren aclaración. Consulta la [guía de vencimientos](docs/assistant-project-workflows.md#deadline-questions).
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.48.0`
+**Versión de desarrollo actual:** `v0.49.0`
 
 **Demo:** http://35.164.28.250
 
