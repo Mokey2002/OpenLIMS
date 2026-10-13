@@ -199,3 +199,13 @@ After a project workflow question, choose **Explain this query** or type **Expli
 Explanations recheck project access and active assignees, validate the saved query, and retain only supported context fields. Invalid or revoked context is cleared. They do not scan sample records, invoke a language model, or modify laboratory records. A valid page cursor is preserved: **Next page** continues; **Refresh results** restarts from page one with live data.
 
 Relative deadline windows are resolved from the server clock at explanation time. They describe the query **if run now**, not the windows or counts of an earlier result. Today/tomorrow use the active Django timezone; next seven days means 168 hours. The start is inclusive and the end exclusive. Explanations distinguish work ownership from QC review and required-field readiness from QC approval.
+
+## Build and reuse workflow questions
+
+Open **Build a workflow question** in the assistant page or floating chat. Enter an exact project code, select conditions, choose AND/OR and same-step/sample scope, then inspect the question before clicking **Run question**. The builder supports English and Spanish and uses the same read-only, permission-checked rules as typed questions. Nothing runs while editing. **Load current query** fills the controls from the current workflow context; changing the project runs a new query from page one.
+
+Quick starts select **My overdue work**, **Due soon, unassigned**, or **QC problems**. A work owner requires one exact username or `me` / `mí`. Workflow overview cannot be combined with other filters or same-step scope. The question preview explains validation problems before submission.
+
+To reuse an existing question without opening the builder, type **Use the same filters in project SECOND** or **Usa los mismos filtros en proyecto SECOND**. This keeps the filters, AND/OR logic, scope and exact owner. It verifies the source query, source access, destination access and owner availability, resets pagination, and recalculates deadlines from the server clock. The response identifies both projects; subsequent pages and explanations belong to the destination. It does not compare projects or reuse old counts.
+
+Use one exact destination code without extra conditions. An ambiguous command asks for clarification and retains the validated previous query, reset to page one. Invalid or revoked source context, inaccessible destinations and unavailable owners clear the workflow context without scanning samples. No laboratory records are modified and no language model is required.

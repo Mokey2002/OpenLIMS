@@ -1,3 +1,4 @@
+import WorkflowQueryBuilder from "./WorkflowQueryBuilder";
 import WorkflowQueryExplanation from "./WorkflowQueryExplanation";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Badge, Button, Form, Spinner } from "react-bootstrap";
@@ -215,6 +216,7 @@ export default function AssistantWidget() {
           </div>
 
           <div className="assistant-widget-body">
+            <WorkflowQueryBuilder context={conversationContext} onRun={sendMessage} disabled={loading} />
             <AssistantContextBar
               context={conversationContext}
               compact

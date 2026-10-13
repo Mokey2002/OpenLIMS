@@ -1001,3 +1001,123 @@ class ProjectWorkflowTests(APITestCase):
                 self.assertTrue(data["clarification"]["required"])
                 self.assertNotIn("query_explanation", data)
         self.assertIn("Explain this query", self.query()["suggestions"])
+
+    def transfer_project(self, code="SECOND"):
+        project = Project.objects.create(code=code, name=f"Project {code}")
+        project.members.add(self.tech)
+        sample, run, work = self.make_sample(f"{code}-SAMPLE", project)
+        return project, sample, run, work
+
+    def test_project_transfer_preserves_filters_logic_scope_and_restarts_cursor(self):
+        project, sample, _, _ = self.transfer_project()
+        initial = self.query("missing results or overdue on the same step")
+        initial["context"]["project_workflows"].update(after=sample.pk + 500, has_more=True, injected="discard me")
+        before = Event.objects.count()
+        with patch("assistant.llm.OpenAI", side_effect=AssertionError("provider")):
+            data = self.chat("Use the same filters in project SECOND", initial["context"])
+        workflow = data["project_workflows"]
+        self.assertEqual([row["sample_id"] for row in workflow["rows"]], [sample.pk])
+        self.assertEqual(workflow["filters"], ["missing", "overdue"])
+        self.assertEqual(workflow["match"], "any")
+        self.assertEqual(workflow["scope"], "step")
+        self.assertEqual(workflow["query_transfer"], {"from_project": "DEMO-360", "to_project": "SECOND"})
+        self.assertIn("fresh results from page one", workflow["summary"])
+        self.assertNotIn("injected", data["context"]["project_workflows"])
+        self.assertEqual(Event.objects.count(), before)
+        self.assertFalse(AssistantAction.objects.exists())
+
+    def test_project_transfer_paginates_only_destination_and_can_be_explained(self):
+        _, sample, _, _ = self.transfer_project()
+        next_sample, _, _ = self.make_sample("SECOND-NEXT", sample.project)
+        initial = self.query()
+        with patch("assistant.project_workflows.PAGE_SIZE", 1):
+            moved = self.chat("Same filters in project SECOND", initial["context"])
+            self.assertEqual(self.rows(moved)[0]["sample_id"], sample.pk)
+            explained = self.chat("Explain this query", moved["context"])
+            self.assertEqual(explained["query_explanation"]["project_code"], "SECOND")
+            page = self.chat("Next page", explained["context"])
+            self.assertEqual(self.rows(page)[0]["sample_id"], next_sample.pk)
+            self.assertNotIn("query_transfer", page["project_workflows"])
+
+    def test_project_transfer_rejects_inaccessible_source_or_destination_before_scan(self):
+        project, _, _, _ = self.transfer_project()
+        initial = self.query()
+        project.members.remove(self.tech)
+        with patch("assistant.project_workflows.get_sample_access_queryset", side_effect=AssertionError("scan")):
+            for code in ("SECOND", "UNKNOWN"):
+                data = self.chat(f"Same filters in project {code}", initial["context"])
+                self.assertNotIn("project_workflows", data)
+                self.assertNotIn("project_workflows", data["context"])
+            project.members.add(self.tech)
+            self.project.members.remove(self.tech)
+            data = self.chat("Same filters in project SECOND", initial["context"])
+            self.assertNotIn("project_workflows", data)
+            self.assertNotIn("DEMO-360", data["answer"])
+
+    def test_project_transfer_checks_exact_owner_in_destination(self):
+        owner = self.assign_member()
+        project, sample, _, work = self.transfer_project()
+        initial = self.query("assigned to maria")
+        work.assigned_to = owner
+        work.save(update_fields=["assigned_to"])
+        rejected = self.chat("Same filters in project SECOND", initial["context"])
+        self.assertNotIn("project_workflows", rejected)
+        self.assertIn("Assignee not found", rejected["answer"])
+        project.members.add(owner)
+        accepted = self.chat("Same filters in project SECOND", initial["context"])
+        self.assertEqual(self.rows(accepted)[0]["sample_id"], sample.pk)
+        self.assertEqual(accepted["context"]["project_workflows"]["assignee"], "maria")
+
+    def test_project_transfer_preserves_self_assignment_and_recalculates_deadlines(self):
+        _, sample, _, work = self.transfer_project()
+        initial = self.query("assigned to me and due today")
+        later = timezone.now() + timedelta(days=2)
+        work.assigned_to = self.tech
+        work.due_at = later
+        work.save(update_fields=["assigned_to", "due_at"])
+        initial["context"]["project_workflows"]["deadline_windows"] = [{"start": "forged"}]
+        with patch("assistant.project_workflows.timezone.now", return_value=later):
+            data = self.chat("Usa los mismos filtros en proyecto SECOND", initial["context"])
+        workflow = data["project_workflows"]
+        self.assertEqual(workflow["language"], "es")
+        self.assertEqual(workflow["assignee"], self.tech.username)
+        self.assertEqual(workflow["rows"][0]["sample_id"], sample.pk)
+        self.assertNotEqual(workflow["deadline_windows"], initial["project_workflows"]["deadline_windows"])
+        self.assertIn("Consulta reutilizada", workflow["summary"])
+
+    def test_project_transfer_clarifies_unsupported_changes_without_scanning(self):
+        initial = self.query()
+        for text in ("Same filters", "Same filters in project SECOND and project THIRD", "Same filters in project SECOND and overdue", "Usa los mismos filtros en proyecto", "Same filters in project " + "X" * 65):
+            with self.subTest(text=text), patch("assistant.project_workflows.get_sample_access_queryset", side_effect=AssertionError("scan")), patch("assistant.llm.OpenAI", side_effect=AssertionError("provider")):
+                data = self.chat(text, initial["context"])
+                self.assertTrue(data["clarification"]["previous_query_retained"])
+                self.assertEqual(data["context"]["project_workflows"]["project_code"], "DEMO-360")
+                self.assertNotIn("project_workflows", data)
+
+    def test_project_transfer_missing_or_invalid_context_never_runs_a_query(self):
+        for context in ({}, {"project_workflows": {"project_code": "DEMO-360", "filters": ["invalid"]}}, {"project_workflows": {"project_code": "DEMO-360", "filters": ["blocked"], "scope": "invalid"}}):
+            with self.subTest(context=context), patch("assistant.project_workflows.get_sample_access_queryset", side_effect=AssertionError("scan")), patch("assistant.llm.OpenAI", side_effect=AssertionError("provider")):
+                data = self.chat("Same filters in project SECOND", context)
+                self.assertTrue(data["clarification"]["required"])
+                self.assertNotIn("project_workflows", data["context"])
+
+    def test_project_transfer_treats_keyword_codes_as_data(self):
+        _, sample, _, _ = self.transfer_project("OVERDUE")
+        data = self.chat("Same filters in project overdue!", self.query()["context"])
+        self.assertEqual(data["project_workflows"]["filters"], ["blocked"])
+        self.assertEqual(self.rows(data)[0]["sample_id"], sample.pk)
+
+    def test_visual_builder_questions_round_trip_through_live_router(self):
+        import json
+        from pathlib import Path
+        cases = json.loads((Path(__file__).parent / "fixtures" / "workflow_builder_cases.json").read_text())
+        with patch("assistant.llm.OpenAI", side_effect=AssertionError("provider")):
+            for case in cases:
+                with self.subTest(question=case["question"]):
+                    response = self.chat(case["question"])
+                    workflow = response["project_workflows"]
+                    draft = case["draft"]
+                    for key in ("project_code", "filters", "match", "scope", "language"):
+                        self.assertEqual(workflow[key], draft[key])
+                    if "assigned" in draft["filters"]:
+                        self.assertEqual(workflow["assignee"], self.tech.username)

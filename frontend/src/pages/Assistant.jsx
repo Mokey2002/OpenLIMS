@@ -1,3 +1,4 @@
+import WorkflowQueryBuilder from "../components/WorkflowQueryBuilder";
 import WorkflowQueryExplanation from "../components/WorkflowQueryExplanation";
 import { useEffect, useState } from "react";
 import {
@@ -435,6 +436,7 @@ export default function Assistant() {
             )}
           </div>
 
+          <WorkflowQueryBuilder context={conversationContext} onRun={sendMessage} disabled={loading} />
           <Form onSubmit={submit} className="mt-3">
             <div className="d-flex gap-2">
               <Form.Control

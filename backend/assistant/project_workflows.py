@@ -12,7 +12,7 @@ from samples.access import get_sample_access_queryset
 from samples.models import Sample
 from .workflow_explanations import explain_query
 from .workflow_dates import DEADLINE_LABELS, deadline_windows, describe_deadlines
-from .workflow_query import context_filters, context_scope, edit_filters, extract_assignee, extract_scope, normalize_deadline_phrases, parse_filters, valid_assignee
+from .workflow_query import context_filters, context_scope, edit_filters, extract_assignee, extract_scope, normalize_deadline_phrases, parse_filters, project_switch, valid_assignee
 
 PAGE_SIZE = 25
 SCAN_BATCH_SIZE = 25
@@ -215,6 +215,32 @@ def route_project_workflows(message, user, context=None):
     text = str(message or "").strip().lstrip("¿¡")
     state = (context or {}).get("project_workflows")
     state = state if isinstance(state, dict) else {}
+    destination = project_switch(text)
+    if destination is not None:
+        spanish = bool(re.match(r"(?:usa\b|mismos\b)", text, re.I))
+        recovered = _recover_query(state, user, spanish, "project_switch") if state else None
+        if recovered is None:
+            return _response("Primero consulta un proyecto accesible con su código exacto y filtros." if spanish else
+                             "First ask about an accessible project with its exact code and filters.", clarification={"required": True})
+        if not destination:
+            recovered["answer"] = ("Usa: Usa los mismos filtros en proyecto CODIGO. Elige un código exacto sin agregar condiciones. Se conservó la consulta anterior; actualizar reinicia desde la primera página." if spanish else
+                                   "Use: Use the same filters in project CODE. Choose one exact code without adding conditions. Your previous query was retained; refresh restarts from page one.")
+            return recovered
+        saved = recovered["context"]["project_workflows"]
+        source = saved["project_code"]
+        saved["project_code"] = destination
+        # The regular refresh path rechecks destination access/owner and scans
+        # live records from page one. Do not interpolate project codes into text.
+        result = route_project_workflows("Actualizar resultados" if spanish else "Refresh results", user,
+                                         {"project_workflows": saved})
+        if "project_workflows" in result:
+            actual = result["project_workflows"]["project_code"]
+            notice = (f"Consulta reutilizada: {source} → {actual}. Mismos filtros y alcance; resultados actuales desde la primera página." if spanish else
+                      f"Query reused: {source} → {actual}. Same filters and scope; fresh results from page one.")
+            result["answer"] = notice + "\n" + result["answer"]
+            result["project_workflows"]["summary"] = notice + "\n" + result["project_workflows"]["summary"]
+            result["project_workflows"]["query_transfer"] = {"from_project": source, "to_project": actual}
+        return result
     if re.fullmatch(r"(?:explain (?:this query|my filters)|explica (?:esta consulta|estos filtros))[.!?]*", text, re.I):
         spanish = text.casefold().startswith("explica")
         after = state.get("after", 0)

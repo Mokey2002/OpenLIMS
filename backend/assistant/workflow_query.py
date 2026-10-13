@@ -142,3 +142,17 @@ def edit_filters(text, state):
     if error or len(removed) != 1 or removed[0] not in modes or len(modes) == 1:
         return [], match, "edit"
     return [mode for mode in modes if mode != removed[0]], match, None
+
+
+def project_switch(text):
+    """Recognize an explicit query transfer, never infer a destination or edits.
+
+    None means another intent; an empty target means clarification is needed.
+    Project codes are consumed as data, including words that are also filters.
+    """
+    prefix = r"(?:(?:use (?:the )?)?same filters|(?:usa (?:los )?)?mismos filtros)"
+    if not re.match(prefix + r"\b", text, re.I):
+        return None
+    match = re.fullmatch(prefix + r"\s+(?:in project|en (?:el )?proyecto)\s+([\w./-]+)[!?]*", text, re.I)
+    target = match.group(1).rstrip(".") if match else ""
+    return target if len(target) <= 64 else ""
