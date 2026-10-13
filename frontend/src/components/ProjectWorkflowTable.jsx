@@ -8,6 +8,8 @@ export default function ProjectWorkflowTable({ data }) {
   const labels = {
     failed: ["Failed", "Fallido"], qc: ["QC", "QC"], missing: ["Missing fields", "Campos faltantes"],
     overdue: ["Overdue", "Vencido"], unassigned: ["Unassigned", "Sin asignar"],
+    due_today: ["Due today", "Vence hoy"], due_tomorrow: ["Due tomorrow", "Vence mañana"],
+    due_soon: ["Due within 7 days", "Vence en los próximos 7 días"],
     assigned: ["Assigned work", "Trabajo asignado"],
     dependency: ["Dependency", "Dependencia"], activation: ["Activation", "Activación"],
     run_blocked: ["Blocked pipeline", "Pipeline bloqueado"], ready: ["Available work", "Trabajo disponible"],

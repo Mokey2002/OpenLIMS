@@ -21,6 +21,8 @@ export function describeWorkflowFilters(workflow) {
     blocked: ["Blocked", "Bloqueadas"], missing: ["Missing fields", "Campos faltantes"],
     qc: ["QC", "QC"], qc_failed: ["Failed QC", "QC rechazado"],
     overdue: ["Overdue", "Vencidas"], unassigned: ["Unassigned", "Sin asignar"],
+    due_today: ["Due today", "Vencen hoy"], due_tomorrow: ["Due tomorrow", "Vencen mañana"],
+    due_soon: ["Due within 7 days", "Vencen en los próximos 7 días"],
     assigned: [`Assigned to ${workflow.assignee || "?"}`, `Asignadas a ${workflow.assignee || "?"}`],
     ready: ["Available work", "Trabajo disponible"], all: ["Workflow overview", "Resumen del flujo"],
   };

@@ -1,4 +1,4 @@
-# Questions across project samples (v0.43.0)
+# Questions across project samples (v0.46.0)
 
 Ask about several samples together in the Assistant page or floating widget:
 
@@ -29,7 +29,7 @@ After selecting a project, `Which are ready?`, `Which are missing results?`, or 
 
 By default, conditions apply **per sample** and may be satisfied by different active steps or runs. They do not promise that the same work item satisfies every condition. Answers explicitly state this distinction and show the matching step evidence without duplicates. The context bar and table caption spell out AND/OR (Y/O in Spanish) and the scope, including a retained context label when no rows match.
 
-The grammar is intentionally bounded: use the supported filters with explicit AND or OR connectors. Mixed AND/OR, parentheses, negation and date/threshold constraints require clarification, rather than silently returning a broader answer. Refining an OR expression also asks for a fresh full query; nested expressions are not inferred. An unclear follow-up can retain a validated, accessible previous query; explicit new project questions and invalid context clear it. Existing exact-code access checks, scan limits, live pagination and read-only behavior still apply. This is not unrestricted natural-language reasoning or a new model integration.
+The grammar is intentionally bounded: use the supported filters with explicit AND or OR connectors. Mixed AND/OR, parentheses, negation and arbitrary date/threshold constraints require clarification, rather than silently returning a broader answer. Refining an OR expression also asks for a fresh full query; nested expressions are not inferred. An unclear follow-up can retain a validated, accessible previous query; explicit new project questions and invalid context clear it. Existing exact-code access checks, scan limits, live pagination and read-only behavior still apply. This is not unrestricted natural-language reasoning or a new model integration.
 
 ## Same-step scope
 
@@ -51,6 +51,8 @@ Scope changes restart at page one. Filter-only follow-ups (`Only unassigned`, `A
 | QC | Completed work awaiting required QC, including rejected/re-run review states. Pending work is not automatically treated as ready for QC. |
 | Failed QC | Required work-item QC gates marked REJECTED or RERUN_REQUIRED; excludes pending reviews. This is work-item gate status, not individual result-level QC. |
 | Overdue | Ready/in-progress steps with active work whose recorded due date has passed and whose dependencies are satisfied. |
+| Due today/tomorrow/within 7 days | Available active work on ready/in-progress steps with satisfied dependencies and a recorded deadline inside the explicit window. See deadline rules below. |
+| Assigned | One exact active project username or the authenticated user; unfinished steps with non-cancelled work, including work awaiting QC. |
 | Unassigned | Ready/in-progress steps with active work, satisfied dependencies and no assignee. Not-yet-created blocked work is not counted. |
 | Ready | A ready/in-progress step has its required fields, satisfied dependencies and active work awaiting review. Review and complete that work through the existing controls. This does **not** mean the sample is QC-approved or sequencing-ready. |
 | Workflow overview | Current step evidence for all samples on the page, including samples with no active pipeline. |
@@ -140,7 +142,7 @@ null); no client-provided diagnostic values are reused.
 
 Use one exact, case-sensitive username of an active project member, or `me` /
 `mí` for the authenticated user. First names, approximate names, several owners,
-negation and date constraints are not resolved automatically. The canonical
+negation and arbitrary date constraints are not resolved automatically. The canonical
 username appears in query context and the evidence table. Unknown, inactive or
 out-of-project users return the same unavailable response without user suggestions.
 
@@ -158,3 +160,34 @@ new project query must specify its own assignee. Attempting to add a different
 owner asks for clarification; use `Only assigned to ...` to replace it. These
 read-only queries never create assignments, confirm actions, or call an external
 provider. Scan limits and partial-count rules remain unchanged.
+
+
+### Deadline questions
+
+- `Which samples in project DEMO-360 are due today?`
+- `Which samples in project DEMO-360 are assigned to me and due tomorrow on the same step?`
+- `Which samples in project DEMO-360 are due in the next 7 days?`
+- `¿Qué muestras en proyecto DEMO-360 están asignadas a mí y vencen mañana en el mismo paso?`
+- `Also due today` / `También vencen hoy` adds a deadline to an AND query.
+- `Only due within 7 days` / `Solo vencen en los próximos 7 días` replaces the filters.
+- `Remove the due today filter` / `Quitar el filtro de vencen hoy` removes that condition if another remains.
+
+Today/tomorrow mean calendar days in Django's active timezone (UTC in the default
+configuration), not a timezone inferred from the browser or user message. Day
+length follows daylight-saving changes. The next seven days mean exactly 168
+hours from the request time, not seven midnight boundaries. Answers and structured
+`deadline_windows` include exact start/end timestamps and timezone. Start is
+inclusive and end is exclusive. Today may overlap overdue; the seven-day window
+excludes past deadlines. `Due soon` is an alias for the same 168-hour window.
+
+Only active PENDING/IN_PROGRESS work on READY/IN_PROGRESS steps with satisfied
+dependencies matches these filters. No due date, completed/cancelled work,
+terminal steps/runs or dependency-blocked work do not match. These filters describe
+recorded deadlines, not expected completion or QC approval. Assignee and same-step
+rules remain unchanged; OR may match a different condition.
+
+A single server timestamp is used for all deadline and overdue comparisons within
+a request. Every refresh/page recomputes relative windows; pages are live, not a
+snapshot. Client-supplied window timestamps are ignored and are not retained in
+query context. Partial scan counts and permission checks work as before. Explicit
+other dates, timezones, times of day and custom day counts require clarification.

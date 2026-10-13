@@ -35,7 +35,7 @@ def test_unsupported_conditions_are_not_silently_ignored(text):
 
 @pytest.mark.parametrize("state", [
     {}, {"filters": []}, {"filters": "overdue"}, {"filters": [None]},
-    {"filters": [{}]}, {"filters": ["secret"]}, {"filters": ["overdue"] * 10},
+    {"filters": [{}]}, {"filters": ["secret"]}, {"filters": ["overdue"] * 20},
     {"filters": ["overdue"], "match": []}, {"filters": ["overdue"], "match": "none"},
     {"filters": ["all", "overdue"]},
 ])

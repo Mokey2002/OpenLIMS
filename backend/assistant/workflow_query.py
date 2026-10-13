@@ -3,6 +3,9 @@ import re
 
 
 FILTER_PATTERNS = (
+    ("due_today", r"\b(?:due today|venc(?:e|en) hoy|vencimiento hoy)\b"),
+    ("due_tomorrow", r"\b(?:due tomorrow|venc(?:e|en) ma[nñ]ana|vencimiento ma[nñ]ana)\b"),
+    ("due_soon", r"\b(?:due soon|vencen pronto)\b"),
     ("qc_failed", r"\b(?:(?:failed|rejected|rerun|re-run|rechazad\w*|fallid\w*)\s+qc|qc\s+(?:failed|rejected|rerun|re-run|rechazad\w*|fallid\w*))\b"),
     ("overdue", r"\b(?:overdue|vencid\w*|atrasad\w*)\b"),
     ("unassigned", r"\b(?:unassigned|sin asignar|sin responsable)\b"),
@@ -35,6 +38,12 @@ def valid_assignee(value):
     return isinstance(value, str) and 1 <= len(value) <= 150 and bool(re.fullmatch(r"[\w@.+-]+", value))
 
 
+def normalize_deadline_phrases(text):
+    # Protect 'in/en' within supported date phrases from project-code parsing.
+    text = re.sub(r"\bdue (?:within|in (?:the )?next) 7 days\b", "due soon", text, flags=re.I)
+    return re.sub(r"\bvenc(?:e|en) en (?:los )?pr[oó]ximos 7 d[ií]as\b", "vencen pronto", text, flags=re.I)
+
+
 def extract_scope(text):
     """Remove explicit scope phrases before interpreting project references."""
     found = [scope for scope, pattern in SCOPES.items() if re.search(pattern, text, re.I)]
@@ -59,6 +68,7 @@ FILLER = re.compile(
 
 def parse_filters(text):
     """Return (filters, all/any, error). Matches are ordered as spoken."""
+    text = normalize_deadline_phrases(text)
     remaining = text
     found = []
     for kind, pattern in FILTER_PATTERNS:
