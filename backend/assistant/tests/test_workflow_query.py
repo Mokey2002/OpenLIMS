@@ -35,7 +35,7 @@ def test_unsupported_conditions_are_not_silently_ignored(text):
 
 @pytest.mark.parametrize("state", [
     {}, {"filters": []}, {"filters": "overdue"}, {"filters": [None]},
-    {"filters": [{}]}, {"filters": ["secret"]}, {"filters": ["overdue"] * 9},
+    {"filters": [{}]}, {"filters": ["secret"]}, {"filters": ["overdue"] * 10},
     {"filters": ["overdue"], "match": []}, {"filters": ["overdue"], "match": "none"},
     {"filters": ["all", "overdue"]},
 ])
@@ -117,3 +117,29 @@ def test_edits_are_complete_commands_and_do_not_modify_input():
         assert edit_filters(text, state) is None
     assert edit_filters("Remove the not overdue filter", state)[2]
     assert state == {"filters": ["overdue", "unassigned"]}
+
+
+@pytest.mark.parametrize("phrase,target", [
+    ("assigned to maria", "maria"), ("assigned to me", "me"),
+    ("asignadas a mí", "mí"), ("asignado a maria", "maria"),
+    ("assigned to overdue", "overdue"), ("assigned to qc.user+lab@example.org", "qc.user+lab@example.org"),
+])
+def test_assignee_extraction_protects_names(phrase, target):
+    from assistant.workflow_query import extract_assignee
+    text, name, conflict = extract_assignee(f"{phrase} and overdue")
+    assert (name, conflict) == (target, False)
+    assert parse_filters(text) == (["assigned", "overdue"], "all", None)
+
+
+def test_multiple_assignees_and_forged_context_fail_closed():
+    from assistant.workflow_query import extract_assignee
+    assert extract_assignee("assigned to maria or assigned to peter")[2]
+    for assignee in (None, [], {}, "", "two names", "x" * 151):
+        assert context_filters({"filters": ["assigned"], "assignee": assignee})[2]
+    assert context_filters({"filters": ["assigned"], "assignee": "maria"}) == (["assigned"], "all", None)
+
+
+def test_assignee_punctuation_never_silently_changes_identity():
+    from assistant.workflow_query import extract_assignee
+    assert extract_assignee("assigned to maria.")[1] == "maria."
+    assert extract_assignee("assigned to maria?")[1] == "maria"

@@ -6,6 +6,7 @@ FILTER_PATTERNS = (
     ("qc_failed", r"\b(?:(?:failed|rejected|rerun|re-run|rechazad\w*|fallid\w*)\s+qc|qc\s+(?:failed|rejected|rerun|re-run|rechazad\w*|fallid\w*))\b"),
     ("overdue", r"\b(?:overdue|vencid\w*|atrasad\w*)\b"),
     ("unassigned", r"\b(?:unassigned|sin asignar|sin responsable)\b"),
+    ("assigned", r"\b(?:assigned|asignad[oa]s?)\b"),
     ("blocked", r"\b(?:blocked|blockers?|bloquead\w*|qu[eé] impide)\b"),
     ("missing", r"\b(?:missing(?: results| fields)?|faltan\w*|incomplet\w*|campos faltantes)\b"),
     ("qc", r"\b(?:qc|quality review|revisi[oó]n)\b"),
@@ -17,6 +18,21 @@ SCOPES = {
     "step": r"\b(?:on|in) (?:the )?same step\b|\ben el mismo paso\b",
     "sample": r"\bacross (?:the )?sample\b|\ben toda la muestra\b",
 }
+
+
+def extract_assignee(text):
+    """Protect exact usernames from filter/project keyword parsing."""
+    targets = []
+    def replace(match):
+        targets.append(match.group(1))
+        return "assigned"
+    text = re.sub(r"\b(?:assigned\s+to|asignad[oa]s?\s+a)\s+([\w@.+-]+)", replace, text, flags=re.I)
+    targets = list(dict.fromkeys(targets))
+    return text, targets[0] if len(targets) == 1 else None, len(targets) > 1
+
+
+def valid_assignee(value):
+    return isinstance(value, str) and 1 <= len(value) <= 150 and bool(re.fullmatch(r"[\w@.+-]+", value))
 
 
 def extract_scope(text):
@@ -32,7 +48,7 @@ def context_scope(state):
     return scope if isinstance(scope, str) and scope in SCOPES else None
 
 # Anything outside this small grammar asks for clarification instead of silently
-# ignoring an assignee, date, negation, threshold, or unsupported condition.
+# ignoring a date, negation, threshold, or unsupported condition.
 FILLER = re.compile(
     r"\b(?:which|what|samples|are|is|have|has|with|need|needs|needing|show|me|the|"
     r"ones|those|that|only|also|and|or|why|about|both|either|please|all|"
@@ -85,6 +101,7 @@ def context_filters(state):
     if (not isinstance(modes, list) or not 1 <= len(modes) <= len(FILTERS)
             or any(not isinstance(mode, str) or mode not in FILTERS for mode in modes)
             or not isinstance(match, str) or match not in {"all", "any"}
+            or ("assigned" in modes and not valid_assignee(state.get("assignee")))
             or ("all" in modes and len(modes) > 1)):
         return [], "all", "context"
     return list(dict.fromkeys(modes)), match, None

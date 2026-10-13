@@ -29,7 +29,7 @@ After selecting a project, `Which are ready?`, `Which are missing results?`, or 
 
 By default, conditions apply **per sample** and may be satisfied by different active steps or runs. They do not promise that the same work item satisfies every condition. Answers explicitly state this distinction and show the matching step evidence without duplicates. The context bar and table caption spell out AND/OR (Y/O in Spanish) and the scope, including a retained context label when no rows match.
 
-The grammar is intentionally bounded: use the supported filters with explicit AND or OR connectors. Mixed AND/OR, parentheses, negation and assignee/date/threshold constraints require clarification, rather than silently returning a broader answer. Refining an OR expression also asks for a fresh full query; nested expressions are not inferred. Clarification clears the old context, so repeat the project code. Existing exact-code access checks, scan limits, live pagination and read-only behavior still apply. This is not unrestricted natural-language reasoning or a new model integration.
+The grammar is intentionally bounded: use the supported filters with explicit AND or OR connectors. Mixed AND/OR, parentheses, negation and date/threshold constraints require clarification, rather than silently returning a broader answer. Refining an OR expression also asks for a fresh full query; nested expressions are not inferred. An unclear follow-up can retain a validated, accessible previous query; explicit new project questions and invalid context clear it. Existing exact-code access checks, scan limits, live pagination and read-only behavior still apply. This is not unrestricted natural-language reasoning or a new model integration.
 
 ## Same-step scope
 
@@ -127,3 +127,34 @@ cover the complete project only when one request scans the entire accessible,
 non-final set. Later pages never accumulate earlier counts or claim a complete
 project total. Responses with matches omit diagnostics (the structured field is
 null); no client-provided diagnostic values are reused.
+
+
+### Assigned work
+
+- `Which samples in project DEMO-360 are assigned to me?`
+- `Which samples in project DEMO-360 are assigned to maria and overdue on the same step?`
+- `¿Qué muestras en proyecto DEMO-360 están asignadas a mí y vencidas en el mismo paso?`
+- `Only assigned to maria` / `Solo asignadas a maria` replaces the filters.
+- `Also assigned to me` / `También asignadas a mí` adds ownership to an AND query.
+- `Remove the assigned to maria filter` / `Quitar el filtro de asignadas a maria` removes ownership if another filter remains.
+
+Use one exact, case-sensitive username of an active project member, or `me` /
+`mí` for the authenticated user. First names, approximate names, several owners,
+negation and date constraints are not resolved automatically. The canonical
+username appears in query context and the evidence table. Unknown, inactive or
+out-of-project users return the same unavailable response without user suggestions.
+
+Assigned means a non-cancelled work item on an unfinished step of an active or
+blocked run. This includes completed work awaiting a step's QC gate; it does not
+mean the user can approve QC or that the work is ready. Terminal steps and runs
+are excluded. Whole-sample AND can combine different steps/runs; choose same-step
+scope when all conditions must describe that person's step. OR can include
+samples matching another condition even if not assigned to that person.
+
+Refresh, pagination, recovery and scope changes retain the username and recheck
+current membership, activity, sample permissions and assignment evidence. Removing
+or replacing the assigned filter clears the username from context. An explicit
+new project query must specify its own assignee. Attempting to add a different
+owner asks for clarification; use `Only assigned to ...` to replace it. These
+read-only queries never create assignments, confirm actions, or call an external
+provider. Scan limits and partial-count rules remain unchanged.

@@ -1,5 +1,9 @@
 # OpenLIMS
 
+## v0.45.0 — Consulta quién tiene el trabajo asignado
+
+Consulta muestras con trabajo **asignado a ti o a un usuario exacto del proyecto**, combina responsable con filtros de vencimiento, campos faltantes o QC y exige coincidencias en el mismo paso. El responsable aparece en el contexto y los registros, se conserva al refinar y paginar, y se verifica con asignaciones y permisos actuales. La recuperación y los diagnósticos sin coincidencias funcionan en español e inglés. Estas consultas no asignan trabajo ni implican aprobación de QC. Consulta la [guía de responsables](docs/assistant-project-workflows.md#assigned-work).
+
 ## v0.44.0 — Resultados vacíos útiles y recuperación de consultas
 
 Las consultas sin coincidencias muestran conteos por condición para las muestras realmente revisadas e identifican cuándo las condiciones se cumplen en toda la muestra, pero no en el mismo paso. Las sugerencias permiten ampliar la consulta de forma explícita; los filtros nunca cambian automáticamente. Los conteos parciales se distinguen de los totales completos. Los seguimientos en español e inglés permiten alternar Y/O, quitar filtros y recuperar la consulta válida anterior tras una solicitud poco clara. Consulta la [guía de consultas](docs/assistant-project-workflows.md).
@@ -8,17 +12,13 @@ Las consultas sin coincidencias muestran conteos por condición para las muestra
 
 Consulta muestras con trabajo vencido y sin asignar **en el mismo paso**, sin mezclar condiciones de pasos distintos. Alterna entre el mismo paso y toda la muestra en español o inglés; conserva el alcance al refinar, actualizar y paginar. Los registros se agrupan por ejecución y paso, con números exactos de trabajo. Las consultas siguen siendo de solo lectura y verifican permisos. Consulta los [ejemplos de alcance](docs/assistant-project-workflows.md#same-step-scope).
 
-## v0.42.0 — Preguntas de IA con filtros combinados
-
-Consulta muestras que cumplan varias condiciones con Y u O, en español o inglés. “También sin asignar” refina la consulta; “Solo sin asignar” reemplaza sus filtros. La actualización y paginación conservan la consulta completa. Los filtros explícitos y registros de los pasos explican la interpretación. Las condiciones no compatibles y mezclas de Y/O solicitan aclaración en lugar de omitir criterios. Las consultas siguen siendo de solo lectura y verifican permisos. Consulta la [guía de consultas](docs/assistant-project-workflows.md). CI descarga sus imágenes secuencialmente con reintentos limitados ante errores temporales del registro; los fallos persistentes detienen las verificaciones.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.44.0`
+**Versión de desarrollo actual:** `v0.45.0`
 
 **Demo:** http://35.164.28.250
 
@@ -310,6 +310,9 @@ Ollama u OpenAI son opciones del asistente de lenguaje natural, no dependencias 
 | Pregunta | Comportamiento |
 |---|---|
 | `¿Qué muestras en proyecto DEMO-360 están vencidas y sin asignar en el mismo paso?` | Ambas condiciones deben cumplirse en un paso de una ejecución. |
+| `¿Qué muestras en proyecto DEMO-360 están asignadas a mí y vencidas en el mismo paso?` | Busca tu trabajo con vencimiento en ese mismo paso. |
+| `Solo asignadas a maria` | Reemplaza los filtros por un usuario activo exacto del proyecto. |
+| `También asignadas a mí` | Añade tu asignación a una consulta Y conservando el alcance. |
 | `Cumplir cualquier condición` | Cambia Y por O conservando proyecto y alcance. |
 | `Quitar el filtro de vencidas` | Quita ese requisito; no excluye las muestras vencidas. |
 | `En toda la muestra` | Permite coincidencias entre distintos pasos o ejecuciones de una muestra. |
@@ -324,8 +327,12 @@ pipeline activo no demuestra que el trabajo esté completo.
 Un seguimiento poco claro conserva la consulta anterior solo si sus filtros,
 alcance y acceso al proyecto siguen siendo válidos. Las opciones de recuperación
 se aplican a esa consulta anterior, no al cambio rechazado. Las mezclas de Y/O,
-negaciones, restricciones de responsable/fecha y condiciones anidadas no están
-admitidas. Estas rutas son de solo lectura y funcionan sin OpenAI ni Ollama.
+negaciones, restricciones de fecha y condiciones anidadas no están admitidas.
+Se admite un responsable por consulta: un nombre de usuario exacto, sensible a
+mayúsculas, de un miembro activo del proyecto; `mí` identifica al usuario
+autenticado. El trabajo asignado corresponde a pasos pendientes de ejecuciones
+activas/bloqueadas, incluso pasos que esperan QC. No identifica al revisor de QC.
+Usa el mismo paso si el vencimiento o QC debe corresponder al trabajo de esa persona. Estas rutas son de solo lectura y funcionan sin OpenAI ni Ollama.
 
 
 El asistente combina rutas determinísticas, herramientas seguras y, opcionalmente, un modelo de lenguaje.

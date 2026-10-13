@@ -10,7 +10,7 @@ from pipelines.services import missing_required_fields
 from projects.models import Project
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
-from .workflow_query import context_filters, context_scope, edit_filters, extract_scope, parse_filters
+from .workflow_query import context_filters, context_scope, edit_filters, extract_assignee, extract_scope, parse_filters, valid_assignee
 
 PAGE_SIZE = 25
 SCAN_BATCH_SIZE = 25
@@ -25,6 +25,17 @@ WRITE = re.compile(r"\b(?:assign|approve|complete|delete|cancel|create|update|ad
 def _response(answer, **kwargs):
     return {"answer": answer, "links": [], "suggestions": [], "skip_llm": True,
             "context": {}, "replace_context": True, **kwargs}
+
+
+def _resolve_assignee(project, target, user, allow_self=False):
+    if not valid_assignee(target):
+        return None
+    if allow_self and target.casefold() in {"me", "mi", "mí"}:
+        return user if user.is_active else None
+    if target == user.username and user.is_active:
+        return user
+    # Never look up or suggest users outside this accessible project's members.
+    return project.members.filter(username=target, is_active=True).first()
 
 
 def _recover_query(state, user, spanish, error):
@@ -43,6 +54,9 @@ def _recover_query(state, user, spanish, error):
     projects = list(projects.filter(code__iexact=code).distinct()[:2])
     if len(projects) != 1:
         return None
+    assignee = _resolve_assignee(projects[0], state.get("assignee"), user) if "assigned" in modes else None
+    if "assigned" in modes and assignee is None:
+        return None
     def t(en, es):
         return es if spanish else en
     labels = {
@@ -52,6 +66,7 @@ def _recover_query(state, user, spanish, error):
         "qc": "QC", "qc_failed": t("failed QC", "QC rechazado"),
         "blocked": t("blocked", "bloqueadas"), "ready": t("ready", "listas"),
         "all": t("workflow overview", "resumen del flujo"),
+        "assigned": t(f"assigned to {assignee.username if assignee else ''}", f"asignadas a {assignee.username if assignee else ''}"),
     }
     joiner = t(" AND ", " Y ") if match == "all" else t(" OR ", " O ")
     description = joiner.join(labels[mode] for mode in modes)
@@ -60,6 +75,8 @@ def _recover_query(state, user, spanish, error):
              "filter": (" and " if match == "all" else " or ").join(modes),
              "scope": scope, "after": 0, "has_more": False,
              "language": "es" if spanish else "en"}
+    if assignee:
+        saved["assignee"] = assignee.username
     suggestions = [t("Refresh results", "Actualizar resultados")]
     if len(modes) > 1:
         suggestions.append(t("Match any condition", "Cumplir cualquier condición") if match == "all" else t("Require all conditions", "Cumplir todas las condiciones"))
@@ -72,8 +89,8 @@ def _recover_query(state, user, spanish, error):
         "edit": t("Remove one active filter and keep at least one filter.", "Quita un filtro activo y conserva al menos uno."),
     }
     explanation = explanations.get(error, t(
-        "That condition is unsupported here. Negation, assignee/date constraints and nested conditions need a different question.",
-        "Esa condición no es compatible aquí. Las negaciones, responsables/fechas y condiciones anidadas requieren otra pregunta."))
+        "That condition is unsupported here. Use one exact assignee; negation, date constraints and nested conditions need a different question.",
+        "Esa condición no es compatible aquí. Usa un responsable exacto; las negaciones, fechas y condiciones anidadas requieren otra pregunta."))
     answer = t(
         f"I haven't applied that change. Kept your previous query: {projects[0].code} — {description}, {scope_label}. Choose an option below or restate the filters. Refresh results reruns the previous query from page one; removing a filter does not exclude those samples.",
         f"No apliqué ese cambio. Conservé la consulta anterior: {projects[0].code} — {description}, {scope_label}. Elige una opción o vuelve a indicar los filtros. Actualizar resultados repite la consulta anterior desde la primera página; quitar un filtro no excluye esas muestras.")
@@ -90,7 +107,7 @@ def _reason(step, kind, text):
             "qc_status": work.qc_status if work else None, "reason": text}
 
 
-def _evidence(runs, spanish):
+def _evidence(runs, spanish, assignee=None):
     def t(en, es):
         return es if spanish else en
     reasons = []
@@ -101,6 +118,8 @@ def _evidence(runs, spanish):
             if step.status in {"COMPLETED", "SKIPPED", "CANCELLED"}:
                 continue
             work = step.work_item
+            if assignee and work and work.assigned_to_id == assignee.pk and work.status != "CANCELLED":
+                reasons.append(_reason(step, "assigned", t(f"Unfinished pipeline step has work assigned to {assignee.username}.", f"El paso pendiente tiene trabajo asignado a {assignee.username}.")))
             waiting = [str(p) for p in step.dependency_positions
                        if p not in by_position or by_position[p].status not in {"COMPLETED", "SKIPPED"}]
             if step.status == "FAILED":
@@ -136,12 +155,13 @@ def _evidence(runs, spanish):
         "overdue": t("Review the due date and work assignment with the team.", "Revisa la fecha límite y la asignación con el equipo."),
         "unassigned": t("Have an authorized team member assign this work.", "Pide a un miembro autorizado que asigne este trabajo."),
         "ready": t("Review the work before marking it complete; QC remains separate.", "Revisa el trabajo antes de completarlo; QC es independiente."),
+        "assigned": t("Review this assigned work and its current step requirements.", "Revisa este trabajo asignado y los requisitos actuales del paso."),
     }
     for reason in reasons:
         reason["next_action"] = actions[reason["kind"]]
     # Prioritize recorded failures and QC problems before routine dependencies.
     priority = {"failed": 0, "qc": 1, "overdue": 2, "missing": 3, "unassigned": 4,
-                "activation": 5, "run_blocked": 5, "dependency": 6, "ready": 7}
+                "assigned": 4, "activation": 5, "run_blocked": 5, "dependency": 6, "ready": 7}
     return sorted(reasons, key=lambda r: priority[r["kind"]])
 
 
@@ -184,14 +204,15 @@ def route_project_workflows(message, user, context=None):
     text = str(message or "").strip().lstrip("¿¡")
     state = (context or {}).get("project_workflows")
     state = state if isinstance(state, dict) else {}
-    edit = edit_filters(text, state)
+    protected_text, explicit_assignee, conflicting_assignees = extract_assignee(text)
+    edit = edit_filters(protected_text, state)
     if state and RESET.fullmatch(text):
         return _response("Project context cleared. / Contexto de proyecto borrado.")
-    if WRITE.search(text):
+    if WRITE.search(protected_text):
         return None
     more = bool(state and NEXT_PAGE.fullmatch(text))
     refresh = bool(state and re.fullmatch(r"(?:refresh(?: results)?|actualizar(?: resultados)?)[.!?]*", text, re.I))
-    query_text, explicit_scope, conflicting_scope = extract_scope(text)
+    query_text, explicit_scope, conflicting_scope = extract_scope(protected_text)
     scope_only = bool(explicit_scope and re.fullmatch(r"(?:(?:only|solo)\s*)?[.!?]*", query_text, re.I))
     intent_text = re.sub(r"\b(?:in|en)\s+(?:(?:project|proyecto)\s+)?[\w./-]+|\b(?:project|proyecto)\s+[\w./-]+", "", query_text, flags=re.I)
     modes, match, parse_error = context_filters(state) if more or refresh or scope_only else parse_filters(intent_text)
@@ -235,6 +256,17 @@ def route_project_workflows(message, user, context=None):
             match = "all"
             if "all" in modes and len(modes) > 1:
                 parse_error = "mixed"
+    assignee_target = None
+    if "assigned" in modes:
+        assignee_target = explicit_assignee or (state.get("assignee") if not codes and (more or refresh or scope_only or followup or edit is not None) else None)
+        if not valid_assignee(assignee_target):
+            parse_error = "assignee"
+        # Adding a second owner is ambiguous; use Only assigned to ... to replace.
+        refined_target = user.username if explicit_assignee and explicit_assignee.casefold() in {"me", "mi", "mí"} else explicit_assignee
+        if refine and explicit_assignee and "assigned" in context_filters(state)[0] and refined_target != state.get("assignee"):
+            parse_error = "assignee"
+    if conflicting_assignees:
+        parse_error = "assignee"
     if parse_error:
         # A failed follow-up must not silently replace the last valid query.
         # Explicit project questions and invalid/revoked contexts still clear it.
@@ -245,13 +277,16 @@ def route_project_workflows(message, user, context=None):
         if edit is not None:
             return _response(t("Ask a project question first. You can then match any/all conditions or remove one active filter, keeping at least one. Removing a filter does not exclude those samples. Repeat the project code and filters to reset an invalid query.",
                                "Primero consulta un proyecto. Después puedes cumplir cualquier/todas las condiciones o quitar un filtro activo, conservando al menos uno. Quitar un filtro no excluye esas muestras. Repite el código y los filtros para reiniciar una consulta inválida."), clarification={"required": True})
+        if parse_error == "assignee":
+            return _response(t("Use one exact username: assigned to maria, or assigned to me. Use Only assigned to ... to replace the filter; multiple assignees are not supported.",
+                               "Usa un nombre de usuario exacto: asignadas a maria, o asignadas a mí. Usa Solo asignadas a ... para reemplazar el filtro; no se admiten varios responsables."), clarification={"required": True})
         if parse_error == "scope":
             return _response(t("Choose one scope: on the same step, or across the sample. Same-step scope requires specific filters, not workflow overview. Repeat the project code and filters.",
                                "Elige un alcance: en el mismo paso o en toda la muestra. El mismo paso requiere filtros específicos, no un resumen del flujo. Repite el código del proyecto y los filtros."), clarification={"required": True})
         return _response(t(
-            "Please use supported filters joined by AND or OR, not both: blocked, missing results, QC, failed QC, overdue, unassigned, ready. Negation, assignee/date constraints and nested conditions are not supported here. Repeat the project code and desired filters.",
-            "Usa filtros compatibles unidos por Y o por O, no ambos: bloqueadas, campos faltantes, QC, QC rechazado, vencidas, sin asignar, listas. Aquí no se admiten negaciones, responsables/fechas ni condiciones anidadas. Repite el código del proyecto y los filtros."), clarification={"required": True})
-    if len(codes) > 1 or re.search(r"\b(?:projects|proyectos)\b", text, re.I):
+            "Use supported filters joined by AND or OR: blocked, missing results, QC, failed QC, overdue, unassigned, assigned to one exact username, ready. Negation, dates and nested conditions are not supported. Repeat the project code and filters.",
+            "Usa filtros unidos por Y o por O: bloqueadas, campos faltantes, QC, QC rechazado, vencidas, sin asignar, asignadas a un usuario exacto, listas. No se admiten negaciones, fechas ni condiciones anidadas. Repite el código y los filtros."), clarification={"required": True})
+    if len(codes) > 1 or re.search(r"\b(?:projects|proyectos)\b", protected_text, re.I):
         return _response(t("Choose one exact project code.", "Elige un solo código exacto de proyecto."), clarification={"required": True})
     code = codes[0] if codes else state.get("project_code")
     if not isinstance(code, str) or not code or not modes:
@@ -261,6 +296,10 @@ def route_project_workflows(message, user, context=None):
     if len(matches) != 1:
         return _response(t("Project not found, ambiguous, or inaccessible.", "Proyecto no encontrado, ambiguo o sin acceso."))
     project = matches[0]
+    assignee = _resolve_assignee(project, assignee_target, user, allow_self=bool(explicit_assignee)) if "assigned" in modes else None
+    if "assigned" in modes and assignee is None:
+        return _response(t("Assignee not found or unavailable in this project. Use an exact active project username or assigned to me.",
+                           "Responsable no encontrado o no disponible en este proyecto. Usa un usuario activo exacto del proyecto o asignadas a mí."), clarification={"required": True})
     after = state.get("after", 0) if more else 0
     if type(after) is not int or after < 0 or after > 9223372036854775807:
         return _response(t("Invalid page context. Ask the project question again.", "Contexto de página inválido. Repite la pregunta del proyecto."))
@@ -287,7 +326,7 @@ def route_project_workflows(message, user, context=None):
         for sample in batch:
             cursor = sample.pk
             checked += 1
-            evidence = _evidence(sample.current_runs, spanish)
+            evidence = _evidence(sample.current_runs, spanish, assignee)
             without_pipeline += not bool(sample.current_runs)
             for condition in modes:
                 condition_matches, _ = _match_scoped_reasons(evidence, [condition], "all", scope)
@@ -309,7 +348,7 @@ def route_project_workflows(message, user, context=None):
     scan_limit_reached = checked >= MAX_SCAN and has_more and len(rows) < PAGE_SIZE
     complete_scan = after == 0 and not has_more
     match_total = len(rows) if complete_scan else None
-    mode = (" and " if match == "all" else " or ").join(modes)
+    mode = (" and " if match == "all" else " or ").join(f"assigned to {assignee.username}" if item == "assigned" else item for item in modes)
     lines = [t(f"{project.code}: {len(rows)} matching samples shown ({mode}). Checked {checked} samples in this request; {remaining} remain to check. Project scope: {total} accessible, non-final samples.",
                f"{project.code}: {len(rows)} muestras coincidentes ({mode}). Se revisaron {checked} en esta consulta; quedan {remaining} por revisar. Alcance: {total} muestras accesibles no finalizadas.")]
     if complete_scan:
@@ -331,6 +370,7 @@ def route_project_workflows(message, user, context=None):
                       "missing": t("missing results", "campos faltantes"), "qc": "QC",
                       "qc_failed": t("failed QC", "QC rechazado"), "blocked": t("blocked", "bloqueadas"),
                       "ready": t("ready", "listas"), "all": t("workflow overview", "resumen del flujo")}
+            labels["assigned"] = t(f"assigned to {assignee.username if assignee else ''}", f"asignadas a {assignee.username if assignee else ''}")
             counts = "; ".join(f"{labels[condition]}: {count}" for condition, count in filter_counts.items())
             lines.append(t(f"Individual conditions among the {checked} samples checked in this request: {counts}. Counts overlap; do not add them together.",
                            f"Condiciones individuales entre las {checked} muestras revisadas en esta consulta: {counts}. Los conteos pueden solaparse; no los sumes."))
@@ -373,18 +413,27 @@ def route_project_workflows(message, user, context=None):
     lines.append(t("Read from current records; no lab records changed.", "Consulta de registros actuales; no se modificaron registros del laboratorio."))
     next_state = {"project_code": project.code, "filter": mode, "filters": modes, "match": match, "scope": scope, "after": cursor,
                   "has_more": has_more, "language": "es" if spanish else "en"}
+    if assignee:
+        next_state["assignee"] = assignee.username
     suggestions = ([t("Next page", "Siguiente página")] if has_more else []) + [t(f"Which samples in project {project.code} are missing results?", f"¿Qué muestras en proyecto {project.code} tienen campos faltantes?"), t(f"Which samples in project {project.code} need QC?", f"¿Qué muestras en proyecto {project.code} necesitan QC?")]
     suggestions += [t("Only failed QC", "Solo QC rechazado"), t("Only overdue", "Solo vencidas"), t("Only unassigned", "Solo sin asignar"), t("Refresh results", "Actualizar resultados")]
     if match == "all" and "unassigned" not in modes:
         suggestions.append(t("Also unassigned", "También sin asignar"))
+    # The response contract displays at most eight choices. Keep query controls
+    # ahead of generic examples so scope/owner refinements are actually visible.
+    controls = [t("Refresh results", "Actualizar resultados")]
     if "all" not in modes:
-        suggestions.append(t("Across the sample", "En toda la muestra") if scope == "step" else t("On the same step", "En el mismo paso"))
+        controls.append(t("Across the sample", "En toda la muestra") if scope == "step" else t("On the same step", "En el mismo paso"))
     if len(modes) > 1:
-        suggestions.append(t("Match any condition", "Cumplir cualquier condición") if match == "all" else t("Require all conditions", "Cumplir todas las condiciones"))
-    suggestions = list(dict.fromkeys(([t("Next page", "Siguiente página")] if has_more else []) + diagnostic_suggestions + suggestions))
+        controls.append(t("Match any condition", "Cumplir cualquier condición") if match == "all" else t("Require all conditions", "Cumplir todas las condiciones"))
+    controls.append(t("Only assigned to me", "Solo asignadas a mí"))
+    if match == "all" and "assigned" not in modes:
+        controls.append(t("Also assigned to me", "También asignadas a mí"))
+    suggestions = list(dict.fromkeys(([t("Next page", "Siguiente página")] if has_more else []) + diagnostic_suggestions + controls + suggestions))[:8]
     return _response("\n".join(lines), context={"project_workflows": next_state}, suggestions=suggestions,
                      links=[{"label": row["sample_code"], "url": row["url"], "kind": "sample"} for row in rows],
                      project_workflows={"project_code": project.code, "filter": mode, "filters": modes, "match": match, "scope": scope, "rows": rows,
+                                        "assignee": assignee.username if assignee else None,
                                         "language": "es" if spanish else "en",
                                         "summary": "\n".join([*header_lines, *lines[summary_start:]]),
                                         "checked_on_page": checked, "accessible_sample_count": total,

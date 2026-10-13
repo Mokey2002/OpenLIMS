@@ -673,3 +673,171 @@ class ProjectWorkflowTests(APITestCase):
         denied = self.chat("Refresh results", data["context"])
         self.assertNotIn("project_workflows", denied)
         self.assertEqual(denied["context"], {})
+
+    def assign_member(self, username="maria"):
+        person = get_user_model().objects.create_user(username)
+        self.project.members.add(person)
+        self.work.assigned_to = person
+        self.work.save()
+        return person
+
+    def test_assignee_self_named_and_spanish_queries_are_grounded(self):
+        maria = self.assign_member()
+        self.make_overdue(self.work)
+        self.work.assigned_to = maria
+        self.work.save()
+        with patch("assistant.llm.OpenAI") as provider:
+            named = self.query("assigned to maria and overdue on the same step")
+        provider.assert_not_called()
+        self.assertEqual(len(self.rows(named)), 1)
+        self.assertEqual(named["context"]["project_workflows"]["assignee"], "maria")
+        self.assertEqual({r["kind"] for r in self.rows(named)[0]["reasons"]}, {"assigned", "overdue"})
+        self.assertIn("assigned to maria", named["project_workflows"]["summary"])
+        mine = self.query("assigned to me")
+        self.assertEqual(self.rows(mine), [])
+        self.assertEqual(mine["project_workflows"]["assignee"], self.tech.username)
+        self.work.assigned_to = self.tech
+        self.work.save()
+        spanish = self.chat("¿Qué muestras en proyecto DEMO-360 están asignadas a mí y vencidas en el mismo paso?")
+        self.assertEqual(len(self.rows(spanish)), 1)
+        self.assertEqual(spanish["project_workflows"]["language"], "es")
+        self.assertEqual(spanish["project_workflows"]["assignee"], self.tech.username)
+        self.assertFalse(AssistantAction.objects.exists())
+
+    def test_assignee_refinement_edit_recovery_and_removal(self):
+        self.assign_member()
+        initial = self.query("assigned to maria on the same step")
+        refined = self.chat("Also overdue", initial["context"])
+        self.assertEqual(refined["project_workflows"]["assignee"], "maria")
+        self.assertEqual(self.rows(refined), [])
+        either = self.chat("Match any condition", refined["context"])
+        self.assertEqual(len(self.rows(either)), 1)
+        recovery = self.chat("Also missing results", either["context"])
+        self.assertTrue(recovery["clarification"]["previous_query_retained"])
+        self.assertEqual(recovery["context"]["project_workflows"]["assignee"], "maria")
+        for suggestion in recovery["suggestions"]:
+            with self.subTest(suggestion=suggestion):
+                reply = self.chat(suggestion, recovery["context"])
+                if suggestion != "Start over":
+                    self.assertIn("project_workflows", reply)
+        removed = self.chat("Remove the assigned to maria filter", refined["context"])
+        self.assertEqual(removed["project_workflows"]["filters"], ["overdue"])
+        self.assertNotIn("assignee", removed["context"]["project_workflows"])
+        replacement = self.chat("Only assigned to me", initial["context"])
+        self.assertEqual(replacement["project_workflows"]["assignee"], self.tech.username)
+
+    def test_assignee_permission_membership_and_activity_rechecked(self):
+        maria = self.assign_member()
+        initial = self.query("assigned to maria")
+        self.project.members.remove(maria)
+        removed = self.chat("Refresh results", initial["context"])
+        self.assertNotIn("project_workflows", removed)
+        self.assertEqual(removed["context"], {})
+        self.project.members.add(maria)
+        maria.is_active = False
+        maria.save()
+        self.assertNotIn("project_workflows", self.chat("Refresh results", initial["context"]))
+        maria.is_active = True
+        maria.save()
+        self.project.members.remove(self.tech)
+        denied = self.chat("Refresh results", initial["context"])
+        self.assertNotIn("project_workflows", denied)
+        self.assertEqual(denied["context"], {})
+
+    def test_assignee_unknown_outside_project_and_forgery_do_not_broaden(self):
+        get_user_model().objects.create_user("outsider")
+        for name in ("outsider", "does-not-exist"):
+            reply = self.query(f"assigned to {name}")
+            self.assertTrue(reply["clarification"]["required"])
+            self.assertNotIn("project_workflows", reply)
+            self.assertEqual(reply["context"], {})
+        initial = self.query("overdue")
+        for forged in (None, [], {}, "bad user", "x" * 151):
+            state = {**initial["context"]["project_workflows"], "filters": ["assigned"], "assignee": forged}
+            reply = self.chat("Refresh results", {"project_workflows": state})
+            self.assertNotIn("project_workflows", reply)
+            self.assertEqual(reply["context"], {})
+
+    def test_assignee_ambiguity_never_silently_picks_one(self):
+        self.assign_member()
+        for phrase in ("assigned", "assigned to maria or assigned to me", "not assigned to maria", "assigned to Maria", "assigned to maria today"):
+            reply = self.query(phrase)
+            self.assertTrue(reply["clarification"]["required"])
+            self.assertNotIn("project_workflows", reply)
+        initial = self.query("assigned to maria")
+        reply = self.chat("Also assigned to me", initial["context"])
+        self.assertTrue(reply["clarification"]["previous_query_retained"])
+        self.assertEqual(reply["context"]["project_workflows"]["assignee"], "maria")
+
+    def test_assignee_scope_requires_same_step_when_requested(self):
+        self.assign_member()
+        other = WorkItem.objects.create(sample=self.sample, name="Other work", work_type="OTHER")
+        self.make_overdue(other)
+        step = self.run.steps.get(position=2)
+        step.dependency_positions = []
+        step.status = "READY"
+        step.work_item = other
+        step.save()
+        broad = self.query("assigned to maria and overdue")
+        self.assertEqual(len(self.rows(broad)), 1)
+        narrow = self.chat("On the same step", broad["context"])
+        self.assertEqual(self.rows(narrow), [])
+        self.assertEqual(narrow["project_workflows"]["empty_result_diagnostics"]["across_sample_matches"], 1)
+
+    @patch("assistant.project_workflows.PAGE_SIZE", 1)
+    def test_assignee_pagination_live_reassignment_and_project_reset(self):
+        maria = self.assign_member()
+        _, _, second = self.make_sample("SECOND-ASSIGNED")
+        second.assigned_to = maria
+        second.save()
+        initial = self.query("assigned to maria")
+        following = self.chat("Next page", initial["context"])
+        self.assertEqual(len(self.rows(following)), 1)
+        self.assertEqual(following["project_workflows"]["assignee"], "maria")
+        second.assigned_to = None
+        second.save()
+        self.assertEqual(self.rows(self.chat("Next page", initial["context"])), [])
+        reset = self.query("overdue", initial["context"])
+        self.assertNotIn("assignee", reset["context"]["project_workflows"])
+        missing = self.query("assigned", initial["context"])
+        self.assertNotIn("project_workflows", missing)
+
+    def test_assignee_keywords_are_not_filters_or_write_commands(self):
+        for name in ("overdue", "projects", "delete", "qc.user+lab@example.org"):
+            person = self.assign_member(name)
+            reply = self.query(f"assigned to {person.username}")
+            self.assertEqual(reply["project_workflows"]["filters"], ["assigned"])
+            self.assertEqual(reply["project_workflows"]["assignee"], name)
+            self.assertEqual(len(self.rows(reply)), 1)
+
+    def test_assigned_evidence_excludes_terminal_steps_runs_and_cancelled_work(self):
+        self.assign_member()
+        step = self.run.steps.get(position=1)
+        step.status = "COMPLETED"
+        step.save()
+        self.assertEqual(self.rows(self.query("assigned to maria")), [])
+        step.status = "AWAITING_QC"
+        step.save()
+        self.work.status = "COMPLETED"
+        self.work.save()
+        self.assertEqual(len(self.rows(self.query("assigned to maria"))), 1)
+        self.work.status = "CANCELLED"
+        self.work.save()
+        self.assertEqual(self.rows(self.query("assigned to maria")), [])
+
+    def test_assignee_personal_suggestions_keep_or_replace_filters_explicitly(self):
+        initial = self.query("overdue")
+        self.assertIn("Also assigned to me", initial["suggestions"])
+        refined = self.chat("Also assigned to me", initial["context"])
+        self.assertEqual(refined["project_workflows"]["filters"], ["overdue", "assigned"])
+        replaced = self.chat("Only assigned to me", refined["context"])
+        self.assertEqual(replaced["project_workflows"]["filters"], ["assigned"])
+        self.assertEqual(replaced["project_workflows"]["assignee"], self.tech.username)
+
+    def test_assignee_recovery_drops_no_longer_accessible_owner(self):
+        maria = self.assign_member()
+        initial = self.query("assigned to maria or overdue")
+        self.project.members.remove(maria)
+        reply = self.chat("Also missing results", initial["context"])
+        self.assertEqual(reply["context"], {})
+        self.assertNotIn("previous_query_retained", reply["clarification"])
