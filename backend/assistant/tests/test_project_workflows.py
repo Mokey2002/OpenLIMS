@@ -841,3 +841,100 @@ class ProjectWorkflowTests(APITestCase):
         reply = self.chat("Also missing results", initial["context"])
         self.assertEqual(reply["context"], {})
         self.assertNotIn("previous_query_retained", reply["clarification"])
+
+    def test_deadlines_use_calendar_boundaries_and_include_overdue_today(self):
+        from datetime import datetime, timezone as dt_timezone
+        now = datetime(2026, 10, 13, 12, tzinfo=dt_timezone.utc)
+        cases = [
+            (now.replace(hour=0), True, False, False),
+            (now, True, False, True),
+            (now.replace(hour=0) + timedelta(days=1), False, True, True),
+            (now.replace(hour=0) + timedelta(days=2), False, False, True),
+            (now + timedelta(days=7), False, False, False),
+            (None, False, False, False),
+        ]
+        with patch("assistant.project_workflows.timezone.now", return_value=now):
+            for due, today, tomorrow, soon in cases:
+                self.work.due_at = due
+                self.work.save()
+                for phrase, expected in [("due today", today), ("due tomorrow", tomorrow), ("due within 7 days", soon)]:
+                    with self.subTest(due=due, phrase=phrase):
+                        data = self.query(phrase)
+                        self.assertEqual(bool(self.rows(data)), expected)
+                        window = data["project_workflows"]["deadline_windows"][0]
+                        self.assertEqual(window["timezone"], "UTC")
+                        self.assertTrue(window["end_exclusive"])
+                        self.assertIn("Due-date windows (UTC)", data["project_workflows"]["summary"])
+                        self.assertEqual(data["project_workflows"]["as_of"], now.isoformat())
+
+    def test_deadline_refresh_recomputes_dates_and_discards_forged_windows(self):
+        from datetime import datetime, timezone as dt_timezone
+        now = datetime(2026, 10, 13, 12, tzinfo=dt_timezone.utc)
+        self.work.due_at = now + timedelta(hours=1)
+        self.work.save()
+        with patch("assistant.project_workflows.timezone.now", return_value=now):
+            initial = self.query("due today")
+        state = initial["context"]["project_workflows"]
+        state["deadline_windows"] = [{"start": "1900-01-01", "end": "9999-01-01"}]
+        with patch("assistant.project_workflows.timezone.now", return_value=now + timedelta(days=1)):
+            refreshed = self.chat("Refresh results", initial["context"])
+        self.assertEqual(self.rows(refreshed), [])
+        self.assertTrue(refreshed["project_workflows"]["deadline_windows"][0]["start"].startswith("2026-10-14"))
+        self.assertNotIn("deadline_windows", refreshed["context"]["project_workflows"])
+
+    def test_deadlines_compose_with_assignee_and_bilingual_recovery(self):
+        self.work.assigned_to = self.tech
+        self.work.due_at = timezone.now()
+        self.work.save()
+        with patch("assistant.llm.OpenAI") as provider:
+            initial = self.query("assigned to me and due today on the same step")
+        provider.assert_not_called()
+        self.assertEqual(len(self.rows(initial)), 1)
+        self.assertEqual({r["kind"] for r in self.rows(initial)[0]["reasons"]}, {"assigned", "due_today"})
+        spanish = self.chat("¿Qué muestras en proyecto DEMO-360 están asignadas a mí y vencen en los próximos 7 días en el mismo paso?")
+        self.assertEqual(spanish["project_workflows"]["language"], "es")
+        self.assertIn("Ventanas de vencimiento", spanish["answer"])
+        either = self.chat("Cumplir cualquier condición", spanish["context"])
+        recovery = self.chat("También campos faltantes", either["context"])
+        self.assertTrue(recovery["clarification"]["previous_query_retained"])
+        removed = self.chat("Quitar el filtro de vencen en los próximos 7 días", recovery["context"])
+        self.assertEqual(removed["project_workflows"]["filters"], ["assigned"])
+        self.assertEqual(removed["project_workflows"]["deadline_windows"], [])
+        self.assertFalse(AssistantAction.objects.exists())
+
+    @patch("assistant.project_workflows.PAGE_SIZE", 1)
+    def test_deadline_pagination_permissions_and_active_work(self):
+        self.work.due_at = timezone.now()
+        self.work.save()
+        _, _, second = self.make_sample("SECOND-DUE")
+        second.due_at = self.work.due_at
+        second.save()
+        initial = self.query("due today")
+        self.assertEqual(len(self.rows(self.chat("Next page", initial["context"]))), 1)
+        second.status = "COMPLETED"
+        second.save()
+        self.assertEqual(self.rows(self.chat("Next page", initial["context"])), [])
+        self.project.members.remove(self.tech)
+        denied = self.chat("Refresh results", initial["context"])
+        self.assertNotIn("project_workflows", denied)
+        self.assertEqual(denied["context"], {})
+
+    def test_deadline_timezone_is_explicit_and_not_browser_assumed(self):
+        from datetime import datetime, timezone as dt_timezone
+        now = datetime(2026, 10, 13, 1, tzinfo=dt_timezone.utc)
+        self.work.due_at = now
+        self.work.save()
+        with timezone.override("America/Los_Angeles"), patch("assistant.project_workflows.timezone.now", return_value=now):
+            data = self.query("due today")
+        self.assertEqual(len(self.rows(data)), 1)
+        window = data["project_workflows"]["deadline_windows"][0]
+        self.assertEqual(window["timezone"], "America/Los_Angeles")
+        self.assertTrue(window["start"].startswith("2026-10-12T00:00:00-07:00"))
+        self.assertIn("not the browser timezone", data["answer"])
+
+    def test_unsupported_deadline_only_question_asks_instead_of_using_provider(self):
+        with patch("assistant.llm.OpenAI") as provider:
+            data = self.query("due within 3 days")
+        provider.assert_not_called()
+        self.assertTrue(data["clarification"]["required"])
+        self.assertNotIn("project_workflows", data)

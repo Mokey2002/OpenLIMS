@@ -59,3 +59,8 @@ test("assignee names are visible for single and combined filters in both languag
   assert.match(result.detail, /Assigned to peter OR Overdue/);
   assert.match(result.detail, /Same step/);
 });
+
+test("deadline filters are readable in English and Spanish", () => {
+  assert.equal(describeWorkflowFilters({ filters: ["assigned", "due_today"], assignee: "maria", match: "all" }), "Assigned to maria AND Due today");
+  assert.equal(describeWorkflowFilters({ filters: ["due_tomorrow", "due_soon"], match: "any", language: "es" }), "Vencen mañana O Vencen en los próximos 7 días");
+});

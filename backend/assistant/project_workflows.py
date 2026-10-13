@@ -10,7 +10,8 @@ from pipelines.services import missing_required_fields
 from projects.models import Project
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
-from .workflow_query import context_filters, context_scope, edit_filters, extract_assignee, extract_scope, parse_filters, valid_assignee
+from .workflow_dates import DEADLINE_LABELS, deadline_windows, describe_deadlines
+from .workflow_query import context_filters, context_scope, edit_filters, extract_assignee, extract_scope, normalize_deadline_phrases, parse_filters, valid_assignee
 
 PAGE_SIZE = 25
 SCAN_BATCH_SIZE = 25
@@ -68,6 +69,7 @@ def _recover_query(state, user, spanish, error):
         "all": t("workflow overview", "resumen del flujo"),
         "assigned": t(f"assigned to {assignee.username if assignee else ''}", f"asignadas a {assignee.username if assignee else ''}"),
     }
+    labels.update({mode: names[int(spanish)] for mode, names in DEADLINE_LABELS.items()})
     joiner = t(" AND ", " Y ") if match == "all" else t(" OR ", " O ")
     description = joiner.join(labels[mode] for mode in modes)
     scope_label = t("on the same step", "en el mismo paso") if scope == "step" else t("across the sample", "en toda la muestra")
@@ -89,8 +91,8 @@ def _recover_query(state, user, spanish, error):
         "edit": t("Remove one active filter and keep at least one filter.", "Quita un filtro activo y conserva al menos uno."),
     }
     explanation = explanations.get(error, t(
-        "That condition is unsupported here. Use one exact assignee; negation, date constraints and nested conditions need a different question.",
-        "Esa condición no es compatible aquí. Usa un responsable exacto; las negaciones, fechas y condiciones anidadas requieren otra pregunta."))
+        "That condition is unsupported here. Use one exact assignee and supported deadlines (today, tomorrow, next 7 days); negation, other dates and nested conditions need a different question.",
+        "Esa condición no es compatible aquí. Usa un responsable exacto y vencimientos compatibles (hoy, mañana, próximos 7 días); las negaciones, otras fechas y condiciones anidadas requieren otra pregunta."))
     answer = t(
         f"I haven't applied that change. Kept your previous query: {projects[0].code} — {description}, {scope_label}. Choose an option below or restate the filters. Refresh results reruns the previous query from page one; removing a filter does not exclude those samples.",
         f"No apliqué ese cambio. Conservé la consulta anterior: {projects[0].code} — {description}, {scope_label}. Elige una opción o vuelve a indicar los filtros. Actualizar resultados repite la consulta anterior desde la primera página; quitar un filtro no excluye esas muestras.")
@@ -107,7 +109,9 @@ def _reason(step, kind, text):
             "qc_status": work.qc_status if work else None, "reason": text}
 
 
-def _evidence(runs, spanish, assignee=None):
+def _evidence(runs, spanish, assignee=None, now=None, windows=None):
+    now = now or timezone.now()
+    windows = windows or {}
     def t(en, es):
         return es if spanish else en
     reasons = []
@@ -130,10 +134,14 @@ def _evidence(runs, spanish, assignee=None):
             if step.status == "BLOCKED" and not waiting:
                 reasons.append(_reason(step, "activation", t("Activation condition or pipeline gate is not satisfied; open the sample.", "Falta cumplir una condición de activación o requisito; abre la muestra.")))
             if work and not waiting and work.status in {"PENDING", "IN_PROGRESS"} and step.status in {"READY", "IN_PROGRESS"}:
-                if work.due_at and work.due_at < timezone.now():
+                if work.due_at and work.due_at < now:
                     reasons.append({**_reason(step, "overdue", t("Work is past its due date.", "El trabajo está vencido.")), "due_at": work.due_at.isoformat()})
                 if not work.assigned_to_id:
                     reasons.append(_reason(step, "unassigned", t("Available work has no assignee.", "El trabajo disponible no tiene responsable.")))
+                for mode, (start, end) in windows.items():
+                    if work.due_at and start <= work.due_at < end:
+                        label = DEADLINE_LABELS[mode][int(spanish)]
+                        reasons.append({**_reason(step, mode, t(f"Recorded work deadline matches: {label}.", f"La fecha registrada coincide: {label}.")), "due_at": work.due_at.isoformat()})
             missing = missing_required_fields(work, step) if work else []
             if missing:
                 reasons.append({**_reason(step, "missing", t("Missing or invalid required fields: ", "Campos obligatorios faltantes o inválidos: ") + ", ".join(missing)), "missing_fields": missing})
@@ -157,11 +165,13 @@ def _evidence(runs, spanish, assignee=None):
         "ready": t("Review the work before marking it complete; QC remains separate.", "Revisa el trabajo antes de completarlo; QC es independiente."),
         "assigned": t("Review this assigned work and its current step requirements.", "Revisa este trabajo asignado y los requisitos actuales del paso."),
     }
+    actions.update({mode: t("Review the deadline, assignee and remaining step requirements.", "Revisa la fecha límite, el responsable y los requisitos pendientes del paso.") for mode in DEADLINE_LABELS})
     for reason in reasons:
         reason["next_action"] = actions[reason["kind"]]
     # Prioritize recorded failures and QC problems before routine dependencies.
     priority = {"failed": 0, "qc": 1, "overdue": 2, "missing": 3, "unassigned": 4,
                 "assigned": 4, "activation": 5, "run_blocked": 5, "dependency": 6, "ready": 7}
+    priority.update({mode: 2 for mode in DEADLINE_LABELS})
     return sorted(reasons, key=lambda r: priority[r["kind"]])
 
 
@@ -205,6 +215,7 @@ def route_project_workflows(message, user, context=None):
     state = (context or {}).get("project_workflows")
     state = state if isinstance(state, dict) else {}
     protected_text, explicit_assignee, conflicting_assignees = extract_assignee(text)
+    protected_text = normalize_deadline_phrases(protected_text)
     edit = edit_filters(protected_text, state)
     if state and RESET.fullmatch(text):
         return _response("Project context cleared. / Contexto de proyecto borrado.")
@@ -223,7 +234,10 @@ def route_project_workflows(message, user, context=None):
         r"(?:which (?:ones )?are|and|what about|only|show|also|y|solo|muestra|adem[aá]s|tambi[eé]n)\b",
         text, re.I))
     refine = bool(followup and re.match(r"(?:also|and only|adem[aá]s|tambi[eé]n)\b", text, re.I))
-    if not (more or refresh or scope_only or conflicting_scope or edit is not None) and not (modes and (plural or followup)):
+    unsupported_deadline = not modes and bool(re.search(r"\b(?:due|vencen|vence|vencimiento)\b", protected_text, re.I)) and (plural or followup)
+    if unsupported_deadline:
+        parse_error = "deadline"
+    if not (more or refresh or scope_only or conflicting_scope or edit is not None or unsupported_deadline) and not (modes and (plural or followup)):
         return None
     # "in QC" is an existing sample-status query, not a project named QC.
     if not re.search(r"project|proyecto", text, re.I) and re.search(r"\b(?:in|en)\s+(?:QC|IN_PROGRESS|RECEIVED|REPORTED|ARCHIVED|CANCELLED)\b", text, re.I):
@@ -238,7 +252,7 @@ def route_project_workflows(message, user, context=None):
     scope = explicit_scope or inherited_scope
     if conflicting_scope or inherited_scope is None or (scope == "step" and "all" in modes):
         parse_error = "scope"
-    spanish = bool(re.search(r"muestras|proyecto|bloquead|faltan|listas|siguiente|m[aá]s|vencid|atrasad|sin asignar|rechazado|campos|tambi[eé]n|adem[aá]s|solo|mismo paso|toda la muestra|cumplir|quitar", text, re.I)) or ((more or refresh) and state.get("language") == "es")
+    spanish = bool(re.search(r"muestras|proyecto|bloquead|faltan|listas|siguiente|m[aá]s|venc|atrasad|sin asignar|rechazado|campos|tambi[eé]n|adem[aá]s|solo|mismo paso|toda la muestra|cumplir|quitar", text, re.I)) or ((more or refresh) and state.get("language") == "es")
     def t(en, es):
         return es if spanish else en
     if scope_only and not state:
@@ -284,8 +298,8 @@ def route_project_workflows(message, user, context=None):
             return _response(t("Choose one scope: on the same step, or across the sample. Same-step scope requires specific filters, not workflow overview. Repeat the project code and filters.",
                                "Elige un alcance: en el mismo paso o en toda la muestra. El mismo paso requiere filtros específicos, no un resumen del flujo. Repite el código del proyecto y los filtros."), clarification={"required": True})
         return _response(t(
-            "Use supported filters joined by AND or OR: blocked, missing results, QC, failed QC, overdue, unassigned, assigned to one exact username, ready. Negation, dates and nested conditions are not supported. Repeat the project code and filters.",
-            "Usa filtros unidos por Y o por O: bloqueadas, campos faltantes, QC, QC rechazado, vencidas, sin asignar, asignadas a un usuario exacto, listas. No se admiten negaciones, fechas ni condiciones anidadas. Repite el código y los filtros."), clarification={"required": True})
+            "Use filters joined by AND or OR: blocked, missing results, QC, failed QC, overdue, due today/tomorrow/within 7 days, unassigned, assigned to one exact username, ready. Negation, other dates and nested conditions are unsupported. Repeat the project code and filters.",
+            "Usa filtros unidos por Y o por O: bloqueadas, campos faltantes, QC, QC rechazado, vencidas, vencen hoy/mañana/en los próximos 7 días, sin asignar, asignadas a un usuario exacto, listas. No se admiten negaciones, otras fechas ni condiciones anidadas. Repite el código y los filtros."), clarification={"required": True})
     if len(codes) > 1 or re.search(r"\b(?:projects|proyectos)\b", protected_text, re.I):
         return _response(t("Choose one exact project code.", "Elige un solo código exacto de proyecto."), clarification={"required": True})
     code = codes[0] if codes else state.get("project_code")
@@ -312,6 +326,8 @@ def route_project_workflows(message, user, context=None):
     runs = PipelineRun.objects.filter(status__in=["ACTIVE", "BLOCKED"]).prefetch_related(
         Prefetch("steps", queryset=PipelineStepRun.objects.select_related("work_item__assigned_to").prefetch_related("work_item__results")))
     # Scan past nonmatches, but bound work per request for large projects.
+    observed_at = timezone.now()
+    windows = deadline_windows(observed_at, modes)
     rows = []
     checked = 0
     filter_counts = {mode: 0 for mode in modes}
@@ -326,7 +342,7 @@ def route_project_workflows(message, user, context=None):
         for sample in batch:
             cursor = sample.pk
             checked += 1
-            evidence = _evidence(sample.current_runs, spanish, assignee)
+            evidence = _evidence(sample.current_runs, spanish, assignee, observed_at, windows)
             without_pipeline += not bool(sample.current_runs)
             for condition in modes:
                 condition_matches, _ = _match_scoped_reasons(evidence, [condition], "all", scope)
@@ -353,6 +369,10 @@ def route_project_workflows(message, user, context=None):
                f"{project.code}: {len(rows)} muestras coincidentes ({mode}). Se revisaron {checked} en esta consulta; quedan {remaining} por revisar. Alcance: {total} muestras accesibles no finalizadas.")]
     if complete_scan:
         lines.append(t(f"Complete project scan: {match_total} matching samples.", f"Revisión completa del proyecto: {match_total} muestras coincidentes."))
+    window_records = []
+    if windows:
+        window_records, window_text = describe_deadlines(windows, spanish)
+        lines.append(window_text)
     diagnostics = None
     diagnostic_suggestions = []
     if not rows:
@@ -371,6 +391,7 @@ def route_project_workflows(message, user, context=None):
                       "qc_failed": t("failed QC", "QC rechazado"), "blocked": t("blocked", "bloqueadas"),
                       "ready": t("ready", "listas"), "all": t("workflow overview", "resumen del flujo")}
             labels["assigned"] = t(f"assigned to {assignee.username if assignee else ''}", f"asignadas a {assignee.username if assignee else ''}")
+            labels.update({mode: names[int(spanish)] for mode, names in DEADLINE_LABELS.items()})
             counts = "; ".join(f"{labels[condition]}: {count}" for condition, count in filter_counts.items())
             lines.append(t(f"Individual conditions among the {checked} samples checked in this request: {counts}. Counts overlap; do not add them together.",
                            f"Condiciones individuales entre las {checked} muestras revisadas en esta consulta: {counts}. Los conteos pueden solaparse; no los sumes."))
@@ -427,6 +448,8 @@ def route_project_workflows(message, user, context=None):
     if len(modes) > 1:
         controls.append(t("Match any condition", "Cumplir cualquier condición") if match == "all" else t("Require all conditions", "Cumplir todas las condiciones"))
     controls.append(t("Only assigned to me", "Solo asignadas a mí"))
+    if match == "all" and "due_today" not in modes:
+        controls.append(t("Also due today", "También vencen hoy"))
     if match == "all" and "assigned" not in modes:
         controls.append(t("Also assigned to me", "También asignadas a mí"))
     suggestions = list(dict.fromkeys(([t("Next page", "Siguiente página")] if has_more else []) + diagnostic_suggestions + controls + suggestions))[:8]
@@ -434,10 +457,11 @@ def route_project_workflows(message, user, context=None):
                      links=[{"label": row["sample_code"], "url": row["url"], "kind": "sample"} for row in rows],
                      project_workflows={"project_code": project.code, "filter": mode, "filters": modes, "match": match, "scope": scope, "rows": rows,
                                         "assignee": assignee.username if assignee else None,
+                                        "deadline_windows": window_records,
                                         "language": "es" if spanish else "en",
                                         "summary": "\n".join([*header_lines, *lines[summary_start:]]),
                                         "checked_on_page": checked, "accessible_sample_count": total,
                                         "remaining_to_check": remaining, "matching_sample_count": match_total,
                                         "complete_project_scan": complete_scan, "scan_limit_reached": scan_limit_reached,
                                         "empty_result_diagnostics": diagnostics,
-                                        "has_more": has_more, "as_of": timezone.now().isoformat(), "read_only": True})
+                                        "has_more": has_more, "as_of": observed_at.isoformat(), "read_only": True})
