@@ -531,3 +531,57 @@ class AssistantComparisonTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 401)
+
+    def test_peter_bottleneck_graph_followup_keeps_project_and_reads_live_work(self):
+        from assistant.models import AssistantAction
+        from events.models import Event
+        self.tech.username = "peter"
+        self.tech.save(update_fields=["username"])
+        self.alpha.code = "DEMO-360"
+        self.alpha.save(update_fields=["code"])
+        first = self.chat("Where are samples getting stuck in project DEMO-360")
+        before = Event.objects.count()
+        context = first.data["context"]
+        for _ in range(2):
+            response = self.chat("Graph overdue and unassigned work", context=context)
+            self.assertEqual(response.status_code, 200)
+            self.assertNotIn("A user is required", response.data["answer"])
+            chart = response.data["chart"]
+            self.assertIsNotNone(chart)
+            self.assertEqual([series["dataKey"] for series in chart["series"]], ["overdue_work", "unassigned_work"])
+            self.assertEqual([row["entity"] for row in chart["data"]], ["DEMO-360"])
+            self.assertEqual(chart["data"][0]["overdue_work"], 1)
+            self.assertFalse(chart["stacked"])
+            self.assertNotIn("pending_action", response.data)
+            context = response.data["context"]
+        WorkItem.objects.filter(sample__project=self.alpha).update(due_at=timezone.now() + timedelta(days=1))
+        refreshed = self.chat("Graph overdue and unassigned work", context=context)
+        self.assertEqual(refreshed.data["chart"]["data"][0]["overdue_work"], 0)
+        self.assertFalse(AssistantAction.objects.exists())
+        self.assertEqual(Event.objects.count(), before)
+
+    def test_unassigned_read_is_not_an_assignment_for_viewers(self):
+        from assistant.models import AssistantAction
+        self.tech.groups.clear()
+        self.tech.groups.add(Group.objects.get(name="viewer"))
+        response = self.chat("Show unassigned work today")
+        self.assertIn("Unassigned", response.data["answer"])
+        self.assertNotIn("A user is required", response.data["answer"])
+        self.assertNotIn("pending_action", response.data)
+        self.assertFalse(AssistantAction.objects.exists())
+
+    def test_work_graph_followup_rechecks_project_access(self):
+        first = self.chat("Where are samples getting stuck in project ALPHA")
+        self.alpha.members.remove(self.tech)
+        response = self.chat("Graph overdue and unassigned work", context=first.data["context"])
+        self.assertFalse(response.data.get("chart"))
+        self.assertIn("selected records are unavailable", response.data["answer"])
+        self.assertNotIn("comparison", response.data["context"])
+        self.assertNotIn("pending_action", response.data)
+
+    def test_bottleneck_does_not_silently_drop_unavailable_selections(self):
+        from assistant.comparisons import find_bottlenecks
+        result = find_bottlenecks(["ALPHA", "NONEXISTENT"], self.tech)
+        self.assertNotIn("chart", result)
+        self.assertTrue(result["replace_context"])
+        self.assertEqual(result["context"], {})

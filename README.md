@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.49.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.49.1-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,7 +25,9 @@
 
 ## Overview
 
-### v0.49.0 — Personal saved AI questions
+### v0.49.1 — AI work graph fixes
+
+Fixes the bottleneck follow-up **Graph overdue and unassigned work**: it retains the selected project, charts current work counts, and no longer mistakes unassigned work for an assignment command.
 
 Save named workflow questions to your account and reopen them from either chat view. Load a question into the builder, adjust it, then explicitly run it against current records. Only query settings are saved; permissions are checked again when running. Includes a 20-question limit and confirmed deletion. See the [saved questions guide](docs/assistant-project-workflows.md#personal-saved-questions).
 
@@ -43,7 +45,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.49.0 — Personal saved questions`.
+**Current development version:** `v0.49.1 — AI work graph fixes`.
 
 ## Deployment Access
 

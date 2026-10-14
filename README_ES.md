@@ -1,6 +1,8 @@
 # OpenLIMS
 
-## v0.49.0 — Consultas de IA guardadas por usuario
+## v0.49.1 — Correcciones de gráficos de trabajo con IA
+
+Corrige **Graph overdue and unassigned work** tras revisar bloqueos: conserva el proyecto, grafica conteos actuales y ya no interpreta trabajo sin asignar como una orden de asignación.
 
 Guarda consultas de flujo con nombre en tu cuenta y ábrelas desde ambas vistas del chat. Carga una consulta en el constructor, ajústala y ejecútala con registros actuales. Solo se guardan los ajustes; los permisos se verifican al ejecutar. Incluye límite de 20 consultas y eliminación confirmada. Consulta la [guía](docs/assistant-project-workflows.md#personal-saved-questions).
 
@@ -18,7 +20,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.49.0`
+**Versión de desarrollo actual:** `v0.49.1`
 
 **Demo:** http://35.164.28.250
 

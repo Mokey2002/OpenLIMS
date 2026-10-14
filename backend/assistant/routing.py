@@ -117,6 +117,10 @@ def classify_route_with_rules(message, context=None):
         )
     ):
         route, confidence = "qc", 0.98
+    elif context.get("comparison") and _contains(
+        text, r"^\s*(?:graph|plot|chart)\s+(?:overdue(?:\s+and\s+unassigned)?|unassigned)\s+work[.!?]*\s*$"
+    ):
+        route, confidence = "comparison", 0.98
     elif _contains(text, r"\b(?:compare|comparar|compara|difference between|versus|\bvs\.?\b|outliers?|inusuales?|unusual|bottlenecks?|trend|tendencia)\b"):
         route, confidence = "comparison", 0.94
     elif _contains(

@@ -1361,9 +1361,18 @@ def find_outliers(identifiers, user, kind="project", days=90, result_key=""):
     }
 
 
-def find_bottlenecks(identifiers, user, kind="project", days=7):
+def find_bottlenecks(identifiers, user, kind="project", days=7, bottleneck_chart="status"):
+    bottleneck_chart = "work" if bottleneck_chart == "work" else "status"
     stale_days = _safe_days(days, 7)
-    entities, _ = _resolve_entities(kind, identifiers, user)
+    entities, unresolved = _resolve_entities(kind, identifiers, user)
+    if identifiers and (unresolved or not entities):
+        return {
+            "answer": "The selected records are unavailable or could not be resolved. Please choose an accessible project, sample, or batch for the bottleneck review.",
+            "links": [],
+            "context": {},
+            "replace_context": True,
+            "skip_llm": True,
+        }
     if not entities:
         entities = list(_accessible_projects(user)[:MAX_COMPARISON_ENTITIES])
         kind = "project"
@@ -1407,6 +1416,7 @@ def find_bottlenecks(identifiers, user, kind="project", days=7):
             "identifiers": [_entity_key(kind, entity) for entity in entities],
             "days": stale_days,
             "metric": "work",
+            "bottleneck_chart": bottleneck_chart,
         }
     }
     chart_series = []
@@ -1417,6 +1427,11 @@ def find_bottlenecks(identifiers, user, kind="project", days=7):
             "axisLabel": "Stale samples",
             "valueFormat": "integer",
         })
+    if bottleneck_chart == "work":
+        chart_series = [
+            {"dataKey": key, "label": label, "axisLabel": "Work items", "valueFormat": "integer"}
+            for key, label in [("overdue_work", "Overdue work"), ("unassigned_work", "Unassigned work")]
+        ]
     return {
         "answer": (
             f"Bottleneck review used a {stale_days}-day status threshold across "
@@ -1442,12 +1457,12 @@ def find_bottlenecks(identifiers, user, kind="project", days=7):
         "chart": {
             "chartType": "bar",
             "meta": {
-                "title": "Stale samples by workflow status",
-                "description": f"Samples unchanged for at least {stale_days} days.",
+                "title": "Overdue and unassigned work" if bottleneck_chart == "work" else "Stale samples by workflow status",
+                "description": "Current open work; overdue and unassigned counts may overlap." if bottleneck_chart == "work" else f"Samples unchanged for at least {stale_days} days.",
             },
             "xKey": "entity",
             "xAxisLabel": kind.title(),
-            "stacked": True,
+            "stacked": bottleneck_chart != "work",
             "series": chart_series,
             "data": rows,
         },
@@ -1550,6 +1565,7 @@ def run_comparison_spec(spec, user):
             user,
             kind=kind,
             days=days or 7,
+            bottleneck_chart=spec.get("bottleneck_chart", "status"),
         )
     return compare_entities(
         kind,
@@ -1789,6 +1805,8 @@ def route_comparison_analytics(message, user, context=None):
             "chart_type": requested_chart_type or "auto",
             "result_keys": [],
         }
+    if analysis == "bottleneck" and visualization_follow_up and re.search(r"\b(?:overdue|unassigned)\b", lower) and re.search(r"\bwork\b", lower):
+        spec["bottleneck_chart"] = "work"
     spec["analysis"] = analysis
     spec["days"] = _extract_days(text, spec.get("days"))
     spec["metric"] = _metric_from_message(text, spec.get("metric", "overview"))
