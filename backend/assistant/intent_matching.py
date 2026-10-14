@@ -106,3 +106,18 @@ def contains_intent_phrase(message, phrase):
 
 def contains_any_intent_phrase(message, phrases):
     return any(contains_intent_phrase(message, phrase) for phrase in phrases)
+
+
+def work_graph_metrics(message):
+    """Recognize a complete read-only work graph request, not embedded commands."""
+    text = compact_command_text(message)
+    match = re.fullmatch(
+        r"(?:graph|plot|chart|show|display) (overdue|unassigned)"
+        r"(?: and (overdue|unassigned))? work(?: items)?"
+        r"(?: (?:as|in) (?:bar )?(?:chart|graph|plot))?",
+        text,
+    )
+    if not match or not re.search(r"\b(?:graph|plot|chart)\b", text):
+        return []
+    requested = set(filter(None, match.groups()))
+    return [f"{metric}_work" for metric in ("overdue", "unassigned") if metric in requested]

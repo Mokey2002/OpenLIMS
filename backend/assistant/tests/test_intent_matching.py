@@ -4,10 +4,33 @@ from assistant.intent_matching import (
     compact_command_text,
     contains_intent_phrase,
     normalize_intent_text,
+    work_graph_metrics,
 )
 
 
 class AssistantIntentMatchingTests(SimpleTestCase):
+    def test_work_graph_variations_preserve_requested_metrics(self):
+        for message, expected in [
+            ("Could you please graph the overdue and unassigned work?", ["overdue_work", "unassigned_work"]),
+            ("Show unassigned work as a bar chart", ["unassigned_work"]),
+            ("Plot overdue work items, please", ["overdue_work"]),
+            ("Chart unassigned and overdue work", ["overdue_work", "unassigned_work"]),
+        ]:
+            with self.subTest(message=message):
+                self.assertEqual(work_graph_metrics(message), expected)
+
+    def test_work_graph_does_not_discard_meaningful_modifiers(self):
+        for message in [
+            "Graph overdue work and assign it to peter",
+            "Do not graph overdue work",
+            "Graph overdue work in project PRIVATE",
+            "Graph overdue work tomorrow",
+            "Show unassigned work",
+            "Graph not overdue work",
+        ]:
+            with self.subTest(message=message):
+                self.assertEqual(work_graph_metrics(message), [])
+
     def test_harmless_filler_words_can_appear_inside_known_phrases(self):
         self.assertTrue(
             contains_intent_phrase(
