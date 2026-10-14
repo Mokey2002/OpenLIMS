@@ -228,7 +228,7 @@ def _propose_create(message, user):
 
 def _propose_assignment(message, user):
     lower = message.lower()
-    if "assign" not in lower and "reassign" not in lower:
+    if not re.search(r"\b(?:assign|reassign)\b", lower):
         return None
     target_label = _extract_person_after(message, "to")
     target, error = _resolve_user(target_label)
