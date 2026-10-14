@@ -1,5 +1,7 @@
 # OpenLIMS
 
+**Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
+
 ## v0.49.4 — Solicitudes de trabajo con IA más seguras
 
 Las solicitudes de operaciones de trabajo con negación, fechas no admitidas o acciones mezcladas piden aclaración en vez de ignorar condiciones. No se generan propuestas para proyectos repetidos ni usuarios inactivos. Las asignaciones entre varios proyectos conservan su alcance al confirmar. Las listas muestran el total de coincidencias e indican el límite de visualización de 100 elementos.
@@ -29,6 +31,143 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 **Versión de desarrollo actual:** `v0.49.4`
 
 **Demo:** http://35.164.28.250
+
+---
+
+## Instalación paso a paso
+
+### 1. Comprueba los requisitos
+
+Usa una terminal de Linux o macOS, o Ubuntu en WSL2 si utilizas Windows. Necesitas **Git**, **Docker con Compose v2** y **OpenSSL**. Si usas Docker Desktop, ábrelo primero. Comprueba:
+
+```bash
+git --version
+docker info
+docker compose version
+openssl version
+```
+
+Esta guía es para una **instalación nueva en tu computadora**, disponible en **http://localhost:8080**. Docker ejecuta la interfaz, API, base de datos y trabajador en segundo plano. No necesitas instalar Python, Node.js, PostgreSQL, OpenAI ni Ollama por separado. La primera compilación descarga dependencias y puede tardar varios minutos.
+
+Para un servidor compartido, consulta también [Instalación en un servidor](#instalación-en-un-servidor). No reemplaces la configuración ni las credenciales de una instalación existente.
+
+### 2. Descarga OpenLIMS
+
+```bash
+git clone https://github.com/Mokey2002/OpenLIMS.git
+cd OpenLIMS
+cp deploy/.env.prod.example deploy/.env
+chmod 600 deploy/.env
+```
+
+Ejecuta los comandos de Docker siguientes desde esta **carpeta OpenLIMS**.
+
+### 3. Configura la instalación local
+
+Ejecuta este comando **tres veces** para generar valores diferentes para el secreto de Django, la contraseña de la base de datos y la clave de instrumentos:
+
+```bash
+openssl rand -hex 32
+```
+
+Abre `deploy/.env` en un editor de texto. Reemplaza los valores existentes que aparecen abajo y conserva los demás. Sustituye cada `REPLACE_...` por un valor generado. Usa **la misma contraseña de base de datos en las dos líneas** correspondientes.
+
+```env
+DJANGO_SECRET_KEY=REPLACE_DJANGO_SECRET
+DJANGO_DEBUG=0
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080
+OPENLIMS_PUBLIC_URL=http://localhost:8080
+OPENLIMS_HTTP_PORT=8080
+
+JWT_COOKIE_SECURE=false
+CSRF_COOKIE_SECURE=false
+SESSION_COOKIE_SECURE=false
+SECURE_SSL_REDIRECT=false
+
+POSTGRES_PASSWORD=REPLACE_DATABASE_PASSWORD
+DATABASE_URL=postgres://openlims:REPLACE_DATABASE_PASSWORD@db:5432/openlims
+INSTRUMENT_API_KEY=REPLACE_INSTRUMENT_KEY
+
+OPENLIMS_ASSISTANT_LLM_ENABLED=false
+OPENLIMS_EMAIL_ENABLED=false
+```
+
+Estas opciones de cookies son **solo para HTTP local**. Conserva `POSTGRES_DB=openlims` y `POSTGRES_USER=openlims` de la plantilla. No compartas este archivo: contiene los secretos de tu instalación.
+
+### 4. Compila e inicia el sistema
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml up -d --build
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml ps
+```
+
+Espera a que `db`, `redis` y `api` indiquen `healthy`, y que `web` y `worker` estén ejecutándose. La API aplica las migraciones y recopila los archivos estáticos automáticamente. Para consultar su avance:
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml logs --tail=80 api
+```
+
+### 5. Crea tu cuenta de administrador
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py createsuperuser
+```
+
+Introduce el usuario, correo y contraseña cuando se soliciten. La contraseña no se muestra mientras escribes. **No hay una contraseña predeterminada de administrador.**
+
+### 6. Abre OpenLIMS e inicia sesión
+
+Abre **http://localhost:8080** e inicia sesión con la cuenta que acabas de crear. Comprueba la API en **http://localhost:8080/api/health/**.
+
+Ya puedes crear tus proyectos y usuarios. Si prefieres explorar ejemplos en una instalación de evaluación, ejecuta opcionalmente:
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py seed_demo
+```
+
+La demo añade registros de ejemplo y habilita Registry y Notebook. No crea ni cambia contraseñas: usa tu cuenta de administrador. Las identidades nuevas de la demo no permiten iniciar sesión. No añadas la demo a una instalación con datos reales del laboratorio.
+
+### Detener y volver a iniciar
+
+Detén los servicios sin borrar los datos:
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml stop
+```
+
+Para iniciarlos de nuevo:
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml up -d
+```
+
+Los registros y archivos se guardan en volúmenes de Docker. Conserva el nombre del proyecto Compose (`openlims`). **No uses `down -v` para reiniciar:** elimina los volúmenes de datos.
+
+### Solución de problemas
+
+| Problema | Qué revisar |
+|---|---|
+| No se puede conectar a Docker | Abre Docker Desktop o solicita acceso a Docker al administrador del servidor. Comprueba `docker info`. |
+| El puerto 8080 está ocupado | Cambia `OPENLIMS_HTTP_PORT`, los dos orígenes locales y `OPENLIMS_PUBLIC_URL` al nuevo puerto; repite el inicio. |
+| No carga la página o aparece 502 | Revisa `ps` y los logs de la API. La interfaz espera a que la API esté saludable. |
+| Falla el inicio de sesión o aparece CSRF 403 | Usa la dirección configurada. En HTTP local, las tres opciones de cookies seguras deben ser `false`. |
+| Falla la autenticación de PostgreSQL | La contraseña de `DATABASE_URL` debe coincidir con `POSTGRES_PASSWORD`. Editar el archivo no cambia la contraseña de una base de datos ya creada. |
+| Falla la descarga de una dependencia | Revisa la conexión y repite la compilación. No borres la base de datos ni los volúmenes. |
+
+### Instalación en un servidor
+
+Antes de iniciar el mismo stack para otros usuarios:
+
+- Configura `DJANGO_ALLOWED_HOSTS` con el hostname real, sin esquema ni ruta. Incluye `127.0.0.1` para la comprobación interna de salud.
+- Usa la dirección HTTPS exacta en `CSRF_TRUSTED_ORIGINS` y `OPENLIMS_PUBLIC_URL`, incluyendo el puerto si no es el estándar.
+- Establece `JWT_COOKIE_SECURE`, `CSRF_COOKIE_SECURE` y `SESSION_COOKIE_SECURE` en `true`. Conserva `DJANGO_DEBUG=0`.
+- Configura un proxy HTTPS que conserve `Host`, envíe `X-Forwarded-Proto: https` y reenvíe WebSockets en `/ws/`. Restringe el acceso directo al puerto 8080 al proxy o red de confianza.
+- Prepara copias de la base de datos, archivos subidos y configuración privada antes de trabajar con datos reales.
+
+Después sigue los pasos 4–6 usando tu dirección HTTPS. SMTP e IA externa son opcionales. El [instalador guiado](deploy/installer/README.md) es una implementación inicial que requiere imágenes publicadas con sus digests; no es necesario para esta instalación desde código ni sirve para actualizar instalaciones existentes.
+
+Para modificar código con recarga automática, consulta [Local Development](README.md#-local-development): esa alternativa requiere iniciar también el frontend con npm.
 
 ---
 
