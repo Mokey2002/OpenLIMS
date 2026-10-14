@@ -1,6 +1,10 @@
 # OpenLIMS
 
-## v0.49.2 — Seguimiento de consultas de IA más robusto
+## v0.49.4 — Solicitudes de trabajo con IA más seguras
+
+Las solicitudes de operaciones de trabajo con negación, fechas no admitidas o acciones mezcladas piden aclaración en vez de ignorar condiciones. No se generan propuestas para proyectos repetidos ni usuarios inactivos. Las asignaciones entre varios proyectos conservan su alcance al confirmar. Las listas muestran el total de coincidencias e indican el límite de visualización de 100 elementos.
+
+Las listas y propuestas de asignación respetan el proyecto indicado. Los proyectos desconocidos, inaccesibles o ambiguos requieren un código o nombre exacto, sin ampliar la búsqueda. La carga de trabajo muestra solo registros visibles para quien consulta; la confirmación rechaza trabajos que cambiaron de proyecto. También se corrigen los filtros combinados de trabajo vencido y sin asignar, y el regreso a gráficos de estado de muestras.
 
 Los gráficos de trabajo aceptan solicitudes corteses, métricas en distinto orden y una sola métrica. Al quitar el último registro seleccionado, se solicita una nueva selección en vez de ampliar la búsqueda. Un proyecto indicado explícitamente en una solicitud de gráfico reemplaza la selección anterior. Las listas de trabajo sin asignar incluyen elementos vencidos y sin fecha, salvo que se pida **today**. Se mantienen los controles de acceso.
 
@@ -22,7 +26,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.49.2`
+**Versión de desarrollo actual:** `v0.49.4`
 
 **Demo:** http://35.164.28.250
 
