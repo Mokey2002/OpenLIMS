@@ -5,6 +5,8 @@
 </p>
 
 <p align="center">
+  <a href="#installation">Install OpenLIMS</a>
+  ·
   <a href="#-features">Features</a>
   ·
   <a href="#-architecture">Architecture</a>
@@ -20,6 +22,8 @@
   <img alt="Database" src="https://img.shields.io/badge/database-PostgreSQL-336791">
   <img alt="Assistant" src="https://img.shields.io/badge/assistant-OpenLIMS%20%7C%20OpenAI%20%7C%20Ollama-purple">
 </p>
+
+**Getting started:** [Installation guide](#installation) · [Guía de instalación en español](README_ES.md#instalación-paso-a-paso)
 
 ---
 
@@ -95,6 +99,8 @@ directly from the repository owner.
 
 ## 🧭 Table of Contents
 
+- [Installation](#installation)
+- [Server deployment](#server-deployment)
 - [Core Concepts](#-core-concepts)
 - [OpenLIMS Assistant](#-openlims-assistant)
 - [Architecture](#-architecture)
@@ -562,94 +568,163 @@ Optional OpenAI or local Ollama summary
 
 ---
 
-## 💻 Local Development
+## Installation
 
-### 1. Clone the repository
+### 1. Check what you need
+
+Use a terminal on Linux or macOS, or an Ubuntu terminal in WSL2 on Windows. Install **Git**, **Docker with the Compose v2 plugin**, and **OpenSSL** first. Start Docker Desktop if you use it. These commands should succeed:
+
+```bash
+git --version
+docker info
+docker compose version
+openssl version
+```
+
+This guide is for a **new installation on your own computer**, opened at **http://localhost:8080**. It builds the application from source and runs the frontend, API, database, and background worker in Docker. You do not need to install Python, Node.js, PostgreSQL, OpenAI, or Ollama separately. The first build downloads dependencies and can take several minutes.
+
+For a shared lab server, also follow [Server deployment](#server-deployment). Do not overwrite an existing installation's environment file or database credentials.
+
+### 2. Download OpenLIMS
 
 ```bash
 git clone https://github.com/Mokey2002/OpenLIMS.git
 cd OpenLIMS
+cp deploy/.env.prod.example deploy/.env
+chmod 600 deploy/.env
 ```
 
-### 2. Create the environment file
+Run all remaining Docker commands from this **OpenLIMS folder**.
+
+### 3. Set your local configuration
+
+Run the following command **three times** to generate separate values for the Django secret, database password, and instrument key:
+
+```bash
+openssl rand -hex 32
+```
+
+Open `deploy/.env` in a text editor. Replace the existing values below; leave the other settings as they are. Replace each `REPLACE_...` placeholder with a generated value. Use the **same database password in both lines** that contain it.
+
+```env
+DJANGO_SECRET_KEY=REPLACE_DJANGO_SECRET
+DJANGO_DEBUG=0
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080
+OPENLIMS_PUBLIC_URL=http://localhost:8080
+OPENLIMS_HTTP_PORT=8080
+
+JWT_COOKIE_SECURE=false
+CSRF_COOKIE_SECURE=false
+SESSION_COOKIE_SECURE=false
+SECURE_SSL_REDIRECT=false
+
+POSTGRES_PASSWORD=REPLACE_DATABASE_PASSWORD
+DATABASE_URL=postgres://openlims:REPLACE_DATABASE_PASSWORD@db:5432/openlims
+INSTRUMENT_API_KEY=REPLACE_INSTRUMENT_KEY
+
+OPENLIMS_ASSISTANT_LLM_ENABLED=false
+OPENLIMS_EMAIL_ENABLED=false
+```
+
+The cookie settings above are for **local HTTP only**. Keep `POSTGRES_DB=openlims` and `POSTGRES_USER=openlims` from the template. Keep this file private; it contains your installation's secrets.
+
+### 4. Build and start the application
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml up -d --build
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml ps
+```
+
+Wait for `db`, `redis`, and `api` to show healthy, and for `web` and `worker` to be running. The API applies database migrations and collects static files automatically. If it is still starting, check its progress:
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml logs --tail=80 api
+```
+
+### 5. Create your administrator account
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py createsuperuser
+```
+
+Choose your username, email, and password when prompted. Password characters are not displayed while you type. There is **no default administrator password**.
+
+### 6. Sign in and check the installation
+
+Open **http://localhost:8080** and sign in with the account you just created. Open **http://localhost:8080/api/health/** to check the API.
+
+For an empty lab installation, you are ready to create your own projects and users. To explore connected example records instead, optionally run:
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py seed_demo
+```
+
+Use demo data only on an evaluation installation. It adds example records and enables the Registry and Notebook features. It does **not** create or change passwords: keep using your administrator account. New demo identities are non-login accounts.
+
+### Stop and start again
+
+Stop the installation without deleting its data:
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml stop
+```
+
+Start it again:
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml up -d
+```
+
+Database records and uploaded files are stored in Docker volumes. Keep the same Compose project name (`openlims`). **Do not use `down -v` to restart:** it removes the data volumes.
+
+### Troubleshooting
+
+| Problem | What to check |
+|---|---|
+| Cannot connect to Docker | Start Docker Desktop or ask your server administrator to grant Docker access. Confirm `docker info` works. |
+| Port 8080 is already in use | Choose another `OPENLIMS_HTTP_PORT`, update both local origins and `OPENLIMS_PUBLIC_URL` to that port, then rerun the start command. |
+| Page does not load or shows 502 | Check `ps` and the API logs above. The web service waits for a healthy API. |
+| Login fails or returns CSRF 403 | Use the exact configured browser address. Local HTTP needs the three secure-cookie settings set to `false`. |
+| Database authentication fails | The password in `DATABASE_URL` must match `POSTGRES_PASSWORD`. Changing the environment file does not reset a password in an existing database volume. |
+| A dependency download fails | Check network access and retry the build. Do not delete the database or volumes to fix download errors. |
+
+## Server deployment
+
+For access from other computers, use your server's real hostname and a trusted HTTPS reverse proxy. Before starting the same stack:
+
+- Set `DJANGO_ALLOWED_HOSTS` to the hostname, without a scheme or path. Include `127.0.0.1` for the internal API health check.
+- Set `CSRF_TRUSTED_ORIGINS` and `OPENLIMS_PUBLIC_URL` to the browser's exact HTTPS address, including a nonstandard port if used.
+- Set `JWT_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, and `SESSION_COOKIE_SECURE` to `true`. Keep `DJANGO_DEBUG=0`.
+- Have the proxy preserve `Host`, send `X-Forwarded-Proto: https`, and forward WebSockets under `/ws/`. Restrict direct access to port 8080 to the proxy/trusted network.
+- Arrange backups of the database, uploaded files, and private configuration before using real lab data.
+
+Then follow steps 4–6 using your HTTPS address. SMTP and external AI are optional. See [Deployment Notes](#-deployment-notes) for more detail. The separate [guided installer](deploy/installer/README.md) is an initial implementation requiring published image digests; it is not needed for this source-based setup and is not an upgrade tool.
+
+## 💻 Local Development
+
+For editing source code with live reload, use this alternative **instead of** the installation stack above. Use a fresh checkout and environment file; do not replace an existing installation's configuration. You also need Node.js 22.12 or newer with npm (the locked Vite dependency also accepts Node.js 20.19–20.x).
 
 ```bash
 cp deploy/.env.example deploy/.env
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.yml up -d --build db redis api worker
 ```
 
-Example local environment:
-
-```env
-DJANGO_DEBUG=1
-DJANGO_SECRET_KEY=dev-secret-key
-DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
-CSRF_TRUSTED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-
-POSTGRES_DB=openlims
-POSTGRES_USER=openlims
-POSTGRES_PASSWORD=openlims
-DB_HOST=db
-DB_PORT=5432
-
-CELERY_BROKER_URL=redis://redis:6379/0
-CELERY_RESULT_BACKEND=redis://redis:6379/1
-CHANNEL_REDIS_URL=redis://redis:6379/2
-
-INSTRUMENT_API_KEY=my-shared-lab-instrument-key
-
-OPENLIMS_ASSISTANT_LLM_ENABLED=false
-OPENLIMS_ASSISTANT_LLM_PROVIDER=ollama
-OPENLIMS_ASSISTANT_LLM_ROUTING_ENABLED=true
-OPENLIMS_ASSISTANT_LLM_ROUTING_MIN_CONFIDENCE=0.65
-OLLAMA_BASE_URL=http://ollama:11434
-OLLAMA_MODEL=llama3.2:1b
-OLLAMA_TIMEOUT_SECONDS=25
-```
-
-### 3. Start services
+The development API runs migrations automatically. Once it is running, create an administrator:
 
 ```bash
-docker compose -p openlims -f deploy/docker-compose.yml up -d --build
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.yml exec api python manage.py createsuperuser
 ```
 
-### 4. Run migrations
+Start the frontend in a second terminal and leave it running:
 
 ```bash
-docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py migrate
+cd frontend
+npm ci
+npm run dev
 ```
 
-### 5. Seed demo data
-
-```bash
-docker compose -p openlims -f deploy/docker-compose.yml exec api python manage.py seed_demo
-```
-
-The command is idempotent and seeds connected demonstrations for projects,
-samples, batches, custom metadata, lineage, barcode custody, inventory,
-reservations, scan transactions, plate maps, cycle counts, workflow requests,
-notebooks and signed experiments, workflows, results, QC, instrument imports,
-migration previews and rollback, Registry records, Molecular Biology revisions
-and assembly plans, BLAST, alignments, mass spectrometry, reports,
-notifications, audit history, shared links and attachments, and assistant
-confirmations.
-The seeder does not create, require, display, or change passwords. Existing
-account credentials are preserved, while newly created demo identities are
-non-login accounts used for realistic ownership, assignment, QC, and audit
-history. Sign in with an existing OpenLIMS administrator account to explore the
-seeded data.
-
-The Registry and Notebook feature flags are enabled for the comprehensive demo.
-Studies and Insight remain disabled because those modules are still under
-development.
-
-### 6. Open the app
-
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| API | http://localhost:8000 |
-| Admin | http://localhost:8000/admin |
-| Health | http://localhost:8000/api/health/ |
+Open **http://localhost:5173**. The API is at **http://localhost:8000**, and Django admin is at **http://localhost:8000/admin/**. The development Compose file does not start a frontend container. Demo data is optional: run `seed_demo` using the development API service, then sign in with your own administrator account.
 
 ---
 
@@ -772,17 +847,7 @@ OpenLIMS can run locally, on a private lab server, on a VM, or on cloud infrastr
 
 `deploy/docker-compose.prod.yml` provides the production-style stack introduced in v0.28.1. v0.29.0 improves runtime efficiency on that stack with reusable PostgreSQL connections, optional Redis-backed Django caching, gzip compression, immutable hashed-asset caching, route-level frontend code splitting, and larger bounded API pages. The production stack runs Django under Daphne, serves the built React frontend through Nginx, keeps PostgreSQL and Redis internal by default, persists database/cache/media/static data, includes health checks, and exposes the web service on `${OPENLIMS_HTTP_PORT:-8080}`. Ollama remains optional through the `llm` Compose profile.
 
-Start from the production environment template:
-
-```bash
-cp deploy/.env.prod.example deploy/.env
-```
-
-Replace placeholder secrets, configure `DJANGO_ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` for the public hostname, and then start the stack:
-
-```bash
-docker compose -p openlims -f deploy/docker-compose.prod.yml up -d --build
-```
+For a new installation, follow the [installation steps](#installation) and [server configuration](#server-deployment), including administrator creation. Keep an existing installation's `deploy/.env`; do not copy the template over it. Use `--env-file deploy/.env` with the production Compose commands so the configured host port is read consistently.
 
 A typical production-style deployment uses:
 
@@ -818,13 +883,13 @@ CACHE_URL=redis://redis:6379/3
 Create a backup:
 
 ```bash
-docker compose -p openlims -f deploy/docker-compose.prod.yml exec db pg_dump -U openlims openlims > openlims_backup.sql
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec -T db pg_dump -U openlims openlims > openlims_backup.sql
 ```
 
-Restore a backup:
+This command backs up the database only. Back up uploaded files and private configuration separately. Test restoration on an isolated installation, not over live laboratory data. On that isolated installation, restore the database with:
 
 ```bash
-cat openlims_backup.sql | docker compose -p openlims -f deploy/docker-compose.prod.yml exec -T db psql -U openlims openlims
+cat openlims_backup.sql | docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec -T db psql -U openlims openlims
 ```
 
 ---
