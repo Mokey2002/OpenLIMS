@@ -1821,6 +1821,9 @@ def route_comparison_analytics(message, user, context=None):
     if analysis == "bottleneck" and visualization_follow_up and re.search(r"\b(?:overdue|unassigned)\b", lower) and re.search(r"\bwork\b", lower):
         spec["bottleneck_chart"] = "work"
         spec["work_metrics"] = work_graph_metrics(text) or ["overdue_work", "unassigned_work"]
+    elif analysis == "bottleneck" and visualization_follow_up and re.search(r"\bstatus\b", lower):
+        spec["bottleneck_chart"] = "status"
+        spec.pop("work_metrics", None)
     spec["analysis"] = analysis
     spec["days"] = _extract_days(text, spec.get("days"))
     spec["metric"] = _metric_from_message(text, spec.get("metric", "overview"))

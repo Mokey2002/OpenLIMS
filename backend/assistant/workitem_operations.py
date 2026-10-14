@@ -13,6 +13,7 @@ from samples.access import get_sample_access_queryset
 from samples.models import Sample, SampleBatch
 
 from .suggestions import batch_prompt
+from .entity_resolution import accessible_entity_queryset
 
 
 ACTIVE_STATUSES = [WorkItem.STATUS_PENDING, WorkItem.STATUS_IN_PROGRESS]
@@ -94,6 +95,27 @@ def _accessible_work(user):
     return WorkItem.objects.filter(sample__in=samples)
 
 
+def _project_scope(message, user, queryset):
+    """Resolve an explicit project exactly; never widen an unresolved scope."""
+    if not re.search(r"\bprojects?\b", message, re.I):
+        return queryset, None, None
+    match = re.search(
+        r"\bproject\s+(.+?)(?=\s+(?:to|from|today|please)\b|$)",
+        message.strip(), re.I,
+    )
+    label = match.group(1).strip().rstrip(".!?").strip("\"'") if match else ""
+    projects = list(accessible_entity_queryset("project", user).filter(
+        Q(code__iexact=label) | Q(name__iexact=label),
+    )[:2]) if label else []
+    if len(projects) != 1:
+        return queryset.none(), None, {
+            "answer": "Please specify one accessible project using its exact code or name.",
+            "links": [], "skip_llm": True,
+        }
+    project = projects[0]
+    return queryset.filter(sample__project=project), project, None
+
+
 def _read_work_items(message, user):
     lower = message.lower()
     work_type = _work_type(message)
@@ -104,15 +126,28 @@ def _read_work_items(message, user):
     )
     if work_type:
         queryset = queryset.filter(work_type=work_type)
+    queryset, project, error = _project_scope(message, user, queryset)
+    if error:
+        return error
     heading_type = work_type.lower() if work_type else ""
     now = timezone.now()
-    if "overdue" in lower:
+    overdue = bool(re.search(r"\boverdue\b", lower))
+    unassigned = bool(re.search(r"\bunassigned\b", lower))
+    if overdue and unassigned:
+        overdue_filter = Q(due_at__lt=now)
+        unassigned_filter = Q(assigned_to__isnull=True)
+        either = bool(re.search(r"\bor\b", lower))
+        queryset = queryset.filter(status__in=ACTIVE_STATUSES).filter(
+            overdue_filter | unassigned_filter if either else overdue_filter & unassigned_filter
+        )
+        heading = f"Overdue {'or' if either else 'and'} unassigned {heading_type} work".replace("  ", " ")
+    elif overdue:
         queryset = queryset.filter(
             due_at__lt=now,
             status__in=ACTIVE_STATUSES,
         )
         heading = f"Overdue {heading_type} work".replace("  ", " ")
-    elif "unassigned" in lower:
+    elif unassigned:
         queryset = queryset.filter(
             assigned_to__isnull=True,
             status__in=ACTIVE_STATUSES,
@@ -125,6 +160,8 @@ def _read_work_items(message, user):
         today_start = timezone.make_aware(datetime.combine(timezone.localdate(), time.min))
         queryset = queryset.filter(due_at__gte=today_start, due_at__lt=today_start + timedelta(days=1))
         heading += " today"
+    if project:
+        heading += f" in project {project.code}"
 
     items = list(queryset[:100])
     lines = [f"{heading}: {len(items)} item(s)."]
@@ -241,6 +278,9 @@ def _propose_assignment(message, user):
         .select_related("sample", "sample__project", "assigned_to")
         .filter(work_type=work_type, status__in=ACTIVE_STATUSES)
     )
+    queryset, project, error = _project_scope(message, user, queryset)
+    if error:
+        return error
     operation = "ASSIGN"
     if "reassign" in lower:
         operation = "REASSIGN"
@@ -268,11 +308,11 @@ def _propose_assignment(message, user):
             excluded.append({"id": item.id, "label": f"Work #{item.id}", "reason": f"{target.username} is not a project member"})
             continue
         records.append(_record(item, {"assigned_to": target.username}))
-    workload = WorkItem.objects.filter(assigned_to=target, status__in=ACTIVE_STATUSES).count()
+    workload = _accessible_work(user).filter(assigned_to=target, status__in=ACTIVE_STATUSES).count()
     preview = {
         "title": "Proposed work assignment",
         "operation": operation,
-        "project": "Multiple accessible projects",
+        "project": project.code if project else "Multiple accessible projects",
         "records_affected": len(records),
         "excluded_count": len(excluded),
         "records": records,
@@ -281,7 +321,7 @@ def _propose_assignment(message, user):
         "proposed_values": {"assigned_to": target.username},
     }
     return {
-        "answer": f"{operation.title()} {len(records)} {work_type.lower()} work item(s) to {target.username}. Current active workload: {workload}. Review and confirm.",
+        "answer": f"{operation.title()} {len(records)} {work_type.lower()} work item(s) to {target.username}. Current active workload visible to you: {workload}. Review and confirm.",
         "links": [],
         "skip_llm": True,
         "pending_action": {
@@ -292,6 +332,7 @@ def _propose_assignment(message, user):
                 "work_type": work_type,
                 "work_item_ids": [record["id"] for record in records],
                 "target_user_id": target.id,
+                "project_id": project.id if project else None,
                 "snapshots": {str(record["id"]): record["current"] for record in records},
                 "preview": preview,
             },
@@ -384,6 +425,9 @@ def execute_workitem_operation(action):
             item = items.get(item_id)
             if not item:
                 failed.append({"id": item_id, "reason": "work item no longer exists"})
+                continue
+            if payload.get("project_id") is not None and item.sample.project_id != payload["project_id"]:
+                failed.append({"id": item_id, "reason": "work item left the selected project"})
                 continue
             if item.status in LOCKED_STATUSES:
                 failed.append({"id": item_id, "label": f"Work #{item.id}", "reason": f"{item.status} work cannot be reassigned"})
