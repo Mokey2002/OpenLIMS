@@ -14,7 +14,7 @@ from results.models import Result, WorkItem
 from samples.access import get_sample_access_queryset
 from samples.models import Sample, SampleBatch
 
-from .intent_matching import contains_any_intent_phrase
+from .intent_matching import contains_any_intent_phrase, work_graph_metrics
 from .entity_resolution import entity_clarification, resolve_entities
 from .suggestions import (
     accessible_batch_codes,
@@ -1361,7 +1361,7 @@ def find_outliers(identifiers, user, kind="project", days=90, result_key=""):
     }
 
 
-def find_bottlenecks(identifiers, user, kind="project", days=7, bottleneck_chart="status"):
+def find_bottlenecks(identifiers, user, kind="project", days=7, bottleneck_chart="status", work_metrics=None):
     bottleneck_chart = "work" if bottleneck_chart == "work" else "status"
     stale_days = _safe_days(days, 7)
     entities, unresolved = _resolve_entities(kind, identifiers, user)
@@ -1428,10 +1428,15 @@ def find_bottlenecks(identifiers, user, kind="project", days=7, bottleneck_chart
             "valueFormat": "integer",
         })
     if bottleneck_chart == "work":
+        allowed_metrics = ("overdue_work", "unassigned_work")
+        requested_metrics = work_metrics if isinstance(work_metrics, (list, tuple)) else allowed_metrics
+        selected_metrics = [key for key in allowed_metrics if key in requested_metrics] or list(allowed_metrics)
         chart_series = [
             {"dataKey": key, "label": label, "axisLabel": "Work items", "valueFormat": "integer"}
             for key, label in [("overdue_work", "Overdue work"), ("unassigned_work", "Unassigned work")]
+            if key in selected_metrics
         ]
+        context["comparison"]["work_metrics"] = selected_metrics
     return {
         "answer": (
             f"Bottleneck review used a {stale_days}-day status threshold across "
@@ -1457,7 +1462,7 @@ def find_bottlenecks(identifiers, user, kind="project", days=7, bottleneck_chart
         "chart": {
             "chartType": "bar",
             "meta": {
-                "title": "Overdue and unassigned work" if bottleneck_chart == "work" else "Stale samples by workflow status",
+                "title": " / ".join(series["label"] for series in chart_series) if bottleneck_chart == "work" else "Stale samples by workflow status",
                 "description": "Current open work; overdue and unassigned counts may overlap." if bottleneck_chart == "work" else f"Samples unchanged for at least {stale_days} days.",
             },
             "xKey": "entity",
@@ -1566,6 +1571,7 @@ def run_comparison_spec(spec, user):
             kind=kind,
             days=days or 7,
             bottleneck_chart=spec.get("bottleneck_chart", "status"),
+            work_metrics=spec.get("work_metrics"),
         )
     return compare_entities(
         kind,
@@ -1783,6 +1789,13 @@ def route_comparison_analytics(message, user, context=None):
                     for value in mentioned_follow_up_values
                     if value.casefold() not in seen
                 ]
+            if not spec["identifiers"]:
+                return {
+                    "answer": "No records remain selected. Choose a project, sample, or batch before continuing.",
+                    "links": [], "context": {}, "replace_context": True, "skip_llm": True,
+                }
+        elif visualization_follow_up and mentioned_follow_up_values and re.search(r"\b(?:samples?|projects?|batches?)\b", lower):
+            spec["identifiers"] = mentioned_follow_up_values
     else:
         if "batch" in lower:
             kind = "batch"
@@ -1807,6 +1820,7 @@ def route_comparison_analytics(message, user, context=None):
         }
     if analysis == "bottleneck" and visualization_follow_up and re.search(r"\b(?:overdue|unassigned)\b", lower) and re.search(r"\bwork\b", lower):
         spec["bottleneck_chart"] = "work"
+        spec["work_metrics"] = work_graph_metrics(text) or ["overdue_work", "unassigned_work"]
     spec["analysis"] = analysis
     spec["days"] = _extract_days(text, spec.get("days"))
     spec["metric"] = _metric_from_message(text, spec.get("metric", "overview"))

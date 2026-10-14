@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.49.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.49.2-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,7 +25,9 @@
 
 ## Overview
 
-### v0.49.1 — AI work graph fixes
+### v0.49.2 — More robust AI follow-ups
+
+Work graphs accept polite requests and reversed metric order, and can show only overdue or only unassigned work. Removing the last selected record asks for a new selection instead of broadening the search. Explicit project selections in graph follow-ups replace the prior selection. Unassigned-work lists include overdue and undated items unless you explicitly request **today**. All reads continue to respect access permissions.
 
 Fixes the bottleneck follow-up **Graph overdue and unassigned work**: it retains the selected project, charts current work counts, and no longer mistakes unassigned work for an assignment command.
 
@@ -45,7 +47,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.49.1 — AI work graph fixes`.
+**Current development version:** `v0.49.2 — More robust AI follow-ups`.
 
 ## Deployment Access
 

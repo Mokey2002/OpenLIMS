@@ -113,18 +113,18 @@ def _read_work_items(message, user):
         )
         heading = f"Overdue {heading_type} work".replace("  ", " ")
     elif "unassigned" in lower:
-        today_start = timezone.make_aware(
-            datetime.combine(timezone.localdate(), time.min)
-        )
         queryset = queryset.filter(
             assigned_to__isnull=True,
             status__in=ACTIVE_STATUSES,
-            due_at__gte=today_start,
-            due_at__lt=today_start + timedelta(days=1),
         )
-        heading = f"Unassigned {heading_type} work today".replace("  ", " ")
+        heading = f"Unassigned {heading_type} work".replace("  ", " ")
     else:
         return None
+
+    if re.search(r"\btoday\b", lower):
+        today_start = timezone.make_aware(datetime.combine(timezone.localdate(), time.min))
+        queryset = queryset.filter(due_at__gte=today_start, due_at__lt=today_start + timedelta(days=1))
+        heading += " today"
 
     items = list(queryset[:100])
     lines = [f"{heading}: {len(items)} item(s)."]

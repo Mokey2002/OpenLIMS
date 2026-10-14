@@ -1,5 +1,7 @@
 import re
 
+from .intent_matching import work_graph_metrics
+
 
 ASSISTANT_ROUTES = {
     "analytics",
@@ -117,9 +119,7 @@ def classify_route_with_rules(message, context=None):
         )
     ):
         route, confidence = "qc", 0.98
-    elif context.get("comparison") and _contains(
-        text, r"^\s*(?:graph|plot|chart)\s+(?:overdue(?:\s+and\s+unassigned)?|unassigned)\s+work[.!?]*\s*$"
-    ):
+    elif context.get("comparison") and work_graph_metrics(text):
         route, confidence = "comparison", 0.98
     elif _contains(text, r"\b(?:compare|comparar|compara|difference between|versus|\bvs\.?\b|outliers?|inusuales?|unusual|bottlenecks?|trend|tendencia)\b"):
         route, confidence = "comparison", 0.94

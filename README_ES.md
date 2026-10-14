@@ -1,6 +1,8 @@
 # OpenLIMS
 
-## v0.49.1 — Correcciones de gráficos de trabajo con IA
+## v0.49.2 — Seguimiento de consultas de IA más robusto
+
+Los gráficos de trabajo aceptan solicitudes corteses, métricas en distinto orden y una sola métrica. Al quitar el último registro seleccionado, se solicita una nueva selección en vez de ampliar la búsqueda. Un proyecto indicado explícitamente en una solicitud de gráfico reemplaza la selección anterior. Las listas de trabajo sin asignar incluyen elementos vencidos y sin fecha, salvo que se pida **today**. Se mantienen los controles de acceso.
 
 Corrige **Graph overdue and unassigned work** tras revisar bloqueos: conserva el proyecto, grafica conteos actuales y ya no interpreta trabajo sin asignar como una orden de asignación.
 
@@ -20,7 +22,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.49.1`
+**Versión de desarrollo actual:** `v0.49.2`
 
 **Demo:** http://35.164.28.250
 

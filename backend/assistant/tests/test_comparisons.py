@@ -585,3 +585,47 @@ class AssistantComparisonTests(APITestCase):
         self.assertNotIn("chart", result)
         self.assertTrue(result["replace_context"])
         self.assertEqual(result["context"], {})
+
+    def test_polite_work_graphs_and_single_metrics_keep_scope(self):
+        first = self.chat("Where are samples getting stuck in project ALPHA")
+        for message, metrics in [
+            ("Could you please graph the overdue and unassigned work?", ["overdue_work", "unassigned_work"]),
+            ("Show unassigned work as a bar chart", ["unassigned_work"]),
+            ("Plot overdue work items, please", ["overdue_work"]),
+            ("Chart unassigned and overdue work", ["overdue_work", "unassigned_work"]),
+        ]:
+            with self.subTest(message=message):
+                response = self.chat(message, context=first.data["context"])
+                self.assertTrue(response.data.get("chart"), response.data)
+                self.assertEqual([s["dataKey"] for s in response.data["chart"]["series"]], metrics)
+                self.assertEqual([row["entity"] for row in response.data["chart"]["data"]], ["ALPHA"])
+                self.assertNotIn("pending_action", response.data)
+
+    def test_removing_last_bottleneck_selection_does_not_expand_scope(self):
+        first = self.chat("Where are samples getting stuck in project ALPHA")
+        response = self.chat("Remove project ALPHA", context=first.data["context"])
+        self.assertFalse(response.data.get("chart"))
+        self.assertIn("No records remain selected", response.data["answer"])
+        self.assertNotIn("comparison", response.data["context"])
+
+    def test_explicit_graph_project_replaces_previous_selection(self):
+        first = self.chat("Where are samples getting stuck in project ALPHA")
+        response = self.chat("Graph work for project BETA", context=first.data["context"])
+        self.assertTrue(response.data.get("chart"), response.data)
+        self.assertEqual([row["entity"] for row in response.data["chart"]["data"]], ["BETA"])
+
+    def test_unassigned_work_without_today_includes_overdue_and_undated(self):
+        from assistant.workitem_operations import _read_work_items
+        result = _read_work_items("Show unassigned work", self.tech)
+        self.assertIn("S-101", result["answer"])
+        self.assertIn("S-102", result["answer"])
+        self.assertNotIn("S-PRIVATE", result["answer"])
+        today = _read_work_items("Show unassigned work today", self.tech)
+        self.assertIn("0 item(s)", today["answer"])
+
+    def test_invalid_work_metrics_cannot_crash_or_expose_arbitrary_fields(self):
+        from assistant.comparisons import find_bottlenecks
+        for metrics in [7, "secret", ["secret"], [], None]:
+            with self.subTest(metrics=metrics):
+                result = find_bottlenecks(["ALPHA"], self.tech, bottleneck_chart="work", work_metrics=metrics)
+                self.assertEqual([s["dataKey"] for s in result["chart"]["series"]], ["overdue_work", "unassigned_work"])
