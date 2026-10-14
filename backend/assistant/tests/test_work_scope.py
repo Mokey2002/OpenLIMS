@@ -11,6 +11,59 @@ class WorkScopeTests(APITestCase):
     chat = fixtures.AssistantComparisonTests.chat
     confirm = fixtures.AssistantComparisonTests.confirm
 
+    def test_multi_project_assignment_keeps_unscoped_preview_and_confirmation(self):
+        from assistant.models import AssistantAction
+        WorkItem.objects.filter(sample__in=self.samples).update(work_type='GENERAL')
+        proposal = self.chat('Assign unassigned work to eduardo')
+        action = AssistantAction.objects.latest('created_at')
+        self.assertIsNone(action.payload['project_id'])
+        self.assertEqual(action.payload['preview']['project'], 'Multiple accessible projects')
+        response = self.confirm(proposal)
+        self.assertEqual(response.status_code, 200, response.data)
+        for sample in self.samples[1:]:
+            self.assertEqual(WorkItem.objects.get(sample=sample).assigned_to_id, self.tech.id)
+
+    def test_unsupported_modifiers_do_not_return_records_or_propose_actions(self):
+        from assistant.models import AssistantAction
+        for message in [
+            'Show work that is not overdue',
+            'Show overdue work except unassigned work',
+            'Do not assign work to eduardo',
+            "Don't reassign work from eduardo to eduardo",
+            'Show unassigned work tomorrow',
+            'Show overdue work before 2026-10-14',
+            'Assign overdue or unassigned work to eduardo',
+            'Assign work to eduardo and delete work',
+        ]:
+            with self.subTest(message=message):
+                response = self.chat(message)
+                self.assertIn('Please rephrase', response.data['answer'])
+                self.assertNotIn('pending_action', response.data)
+                self.assertFalse(response.data.get('links'))
+        self.assertFalse(AssistantAction.objects.exists())
+
+    def test_repeated_project_scopes_are_not_silently_discarded(self):
+        response = self.chat('Assign work in project ALPHA to eduardo in project BETA')
+        self.assertIn('exact code or name', response.data['answer'])
+        self.assertNotIn('pending_action', response.data)
+
+    def test_inactive_assignee_has_no_preview(self):
+        self.tech.is_active = False
+        self.tech.save(update_fields=['is_active'])
+        result = _propose_assignment('Assign work to eduardo', self.tech)
+        self.assertIn('inactive', result['answer'])
+        self.assertNotIn('pending_action', result)
+
+    def test_large_work_lists_disclose_total_and_display_limit(self):
+        WorkItem.objects.bulk_create([
+            WorkItem(sample=self.samples[1], name=f'Extra {i}', work_type=f'TEST_{i}', created_by=self.tech)
+            for i in range(101)
+        ])
+        response = self.chat('Show unassigned work in project ALPHA')
+        self.assertIn('102 item(s)', response.data['answer'])
+        self.assertIn('Showing the first 100', response.data['answer'])
+        self.assertEqual(len(response.data['links']), 100)
+
     def test_combined_filters(self):
         WorkItem.objects.filter(sample=self.samples[0]).update(due_at=timezone.now()-timedelta(days=1))
         response = self.chat('Show overdue and unassigned work')

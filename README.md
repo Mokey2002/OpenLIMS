@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.49.3-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.49.4-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -25,7 +25,9 @@
 
 ## Overview
 
-### v0.49.3 — AI project scope and permission fixes
+### v0.49.4 — Safer AI work requests
+
+Work-operation requests with unsupported negation, date filters, or mixed actions ask for clarification instead of ignoring those conditions. Repeated project scopes and inactive assignees cannot produce assignment previews. Multi-project assignments retain their intended scope through confirmation. Work lists report the full matching count and explicitly disclose the 100-item display limit.
 
 Work lists and assignment previews honor an explicitly named project. Unknown, inaccessible, or ambiguous project selections ask for an exact code or name instead of broadening the request. Assignment workload counts include only records visible to the requester; confirmation rejects work that moved out of the selected project. Combined overdue/unassigned filters and switching back to sample-status graphs are also corrected.
 
@@ -49,7 +51,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.49.3 — AI project scope and permission fixes`.
+**Current development version:** `v0.49.4 — Safer AI work requests`.
 
 ## Deployment Access
 

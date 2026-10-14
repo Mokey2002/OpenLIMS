@@ -97,13 +97,14 @@ def _accessible_work(user):
 
 def _project_scope(message, user, queryset):
     """Resolve an explicit project exactly; never widen an unresolved scope."""
-    if not re.search(r"\bprojects?\b", message, re.I):
+    mentions = re.findall(r"\bprojects?\b", message, re.I)
+    if not mentions:
         return queryset, None, None
     match = re.search(
         r"\bproject\s+(.+?)(?=\s+(?:to|from|today|please)\b|$)",
         message.strip(), re.I,
     )
-    label = match.group(1).strip().rstrip(".!?").strip("\"'") if match else ""
+    label = match.group(1).strip().rstrip(".!?").strip("\"'") if match and len(mentions) == 1 else ""
     projects = list(accessible_entity_queryset("project", user).filter(
         Q(code__iexact=label) | Q(name__iexact=label),
     )[:2]) if label else []
@@ -114,6 +115,24 @@ def _project_scope(message, user, queryset):
         }
     project = projects[0]
     return queryset.filter(sample__project=project), project, None
+
+
+def _unsupported_work_request(message):
+    """Fail closed for modifiers that these work handlers cannot represent."""
+    lower = message.lower()
+    reason = None
+    if re.search(r"\b(?:not|never|except|excluding|exclude|without)\b|\bdon['’]t\b", lower):
+        reason = "Negative and exclusion filters are not supported for work requests yet."
+    elif re.search(r"\b(?:tomorrow|yesterday|last|past|next|between|before|after)\b|\b\d{4}-\d{2}-\d{2}\b", lower):
+        reason = "That date filter is not supported for work requests yet; only an explicit today filter is supported."
+    elif re.search(r"\b(?:assign|reassign|create)\b", lower) and (
+        re.search(r"\bor\b", lower)
+        or len(re.findall(r"\b(?:assign|reassign|create|delete)\b", lower)) > 1
+    ):
+        reason = "Please submit one work action with one unambiguous set of conditions."
+    if reason:
+        return {"answer": reason + " Please rephrase; no work was changed.", "links": [], "skip_llm": True}
+    return None
 
 
 def _read_work_items(message, user):
@@ -163,8 +182,11 @@ def _read_work_items(message, user):
     if project:
         heading += f" in project {project.code}"
 
-    items = list(queryset[:100])
-    lines = [f"{heading}: {len(items)} item(s)."]
+    total = queryset.count()
+    items = list(queryset[:MAX_WORK_ITEMS])
+    lines = [f"{heading}: {total} item(s)."]
+    if total > MAX_WORK_ITEMS:
+        lines.append(f"Showing the first {MAX_WORK_ITEMS}; narrow the project or work-type filter to see fewer items.")
     links = []
     for item in items:
         assignee = item.assigned_to.username if item.assigned_to else "unassigned"
@@ -271,6 +293,8 @@ def _propose_assignment(message, user):
     target, error = _resolve_user(target_label)
     if error:
         return {"answer": error, "links": [], "skip_llm": True}
+    if not target.is_active:
+        return {"answer": "The selected assignee is inactive. Choose an active user.", "links": [], "skip_llm": True}
 
     work_type = _work_type(message) or "GENERAL"
     queryset = (
@@ -303,8 +327,8 @@ def _propose_assignment(message, user):
     records = []
     excluded = []
     for item in items:
-        project = item.sample.project
-        if project and not project.members.filter(id=target.id).exists() and not _is_admin(target):
+        item_project = item.sample.project
+        if item_project and not item_project.members.filter(id=target.id).exists() and not _is_admin(target):
             excluded.append({"id": item.id, "label": f"Work #{item.id}", "reason": f"{target.username} is not a project member"})
             continue
         records.append(_record(item, {"assigned_to": target.username}))
@@ -345,6 +369,9 @@ def route_workitem_operations(message, user, context=None):
     lower = str(message or "").lower()
     if "work" not in lower:
         return None
+    clarification = _unsupported_work_request(message)
+    if clarification:
+        return clarification
     if re.search(r"\b(?:create|assign|reassign)\b", lower) and not _can_write(user):
         return {
             "answer": "Only Tech or Director users can create or assign work items.",
