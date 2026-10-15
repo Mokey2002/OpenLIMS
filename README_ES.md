@@ -2,7 +2,9 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-## v0.49.4 — Solicitudes de trabajo con IA más seguras
+## v0.49.5 — Vistas previas de asignación de IA más fiables
+
+Al confirmar una asignación se vuelven a comprobar la fecha límite, el tipo de trabajo, la muestra y el proyecto principal, además del estado y responsable. Los elementos modificados se omiten y requieren una vista previa nueva; también deben regenerarse las vistas antiguas que no contienen estos datos. Las solicitudes de más de 100 trabajos piden reducir la selección en vez de tomar solo los primeros 100. Si se indican varios responsables, se solicita uno por acción.
 
 Las solicitudes de operaciones de trabajo con negación, fechas no admitidas o acciones mezcladas piden aclaración en vez de ignorar condiciones. No se generan propuestas para proyectos repetidos ni usuarios inactivos. Las asignaciones entre varios proyectos conservan su alcance al confirmar. Las listas muestran el total de coincidencias e indican el límite de visualización de 100 elementos.
 
@@ -28,7 +30,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.49.4`
+**Versión de desarrollo actual:** `v0.49.5`
 
 **Demo:** http://35.164.28.250
 
