@@ -158,6 +158,83 @@ class LabHelpersTests(APITestCase):
         self.assertIsNone(row["shortfall"])
         self.assertIn("Unknown", row["status"])
 
+    def test_registration_rejects_negation_duplicate_and_malformed_fields(self):
+        messages = [
+            "Do not register 2 plasma samples in project ALPHA with source=blood",
+            "Explain how to create 2 samples in project ALPHA with source=blood",
+            "Register 2 samples in project ALPHA with source=blood, source=plasma",
+            "Register 2 samples in project ALPHA with ignored words source=blood",
+            "Register 2 samples in project ALPHA with source=blood,",
+            "Register 2 samples in project ALPHA with source=",
+            'Register 2 samples in project ALPHA with source="blood" and approve all work',
+            'Register 2 samples in project ALPHA with source="unclosed',
+            "Register 2 samples in project ALPHA with source=blood and delete samples",
+            "Register 2 samples in project ALPHA with source=blood; delete samples",
+            "Register 2 samples in project ALPHA with source=NaN",
+            "Register 2 samples in project ALPHA with source=1e999",
+        ]
+        original = Sample.objects.count()
+        for message in messages:
+            with self.subTest(message=message):
+                result = self.chat(message)
+                self.assertEqual(result.status_code, 200)
+                self.assertNotIn("pending_action", result.data)
+        self.assertEqual(AssistantAction.objects.count(), 0)
+        self.assertEqual(Sample.objects.count(), original)
+
+    def test_registration_preserves_quoted_commas_and_punctuation(self):
+        proposal = self.chat('Please register 1 plasma sample in project ALPHA with source="blood, frozen."')
+        self.assertIn("pending_action", proposal.data)
+        action = AssistantAction.objects.get(pk=proposal.data["pending_action"]["id"])
+        self.assertEqual(action.payload["custom_fields"]["source"], "blood, frozen.")
+        self.assertEqual(self.confirm(proposal).status_code, 200)
+
+    def test_registration_invalid_frozen_payload_never_creates_samples(self):
+        from types import SimpleNamespace
+        from assistant.sample_operations import execute_create_samples
+        original = Sample.objects.count()
+        for fields in [{"sample_codes": []}, {"sample_codes": "ALPHA-X"},
+                       {"sample_codes": [None]}, {"sample_codes": [" "]},
+                       {"sample_codes": ["x" * 65]}, {"sample_type": "x" * 65},
+                       {"sample_type": {"bad": True}}, {"custom_fields": ["source"]}]:
+            payload = {"project_id": self.alpha.pk, "sample_codes": ["ALPHA-X"], "custom_fields": {"source": "blood"}, **fields}
+            with self.subTest(fields=fields), self.assertRaises(ValueError):
+                execute_create_samples(SimpleNamespace(payload=payload, requested_by=self.tech))
+        self.assertEqual(Sample.objects.count(), original)
+
+    def test_registration_can_recover_after_invalid_field_followup(self):
+        first = self.chat("Register 2 plasma samples in project ALPHA")
+        invalid = self.chat("with source=blood, source=plasma", context=first.data["context"])
+        self.assertNotIn("pending_action", invalid.data)
+        corrected = self.chat('with source="plasma, frozen"', context=invalid.data["context"])
+        self.assertIn("pending_action", corrected.data)
+
+    def test_overlong_generated_ids_are_rejected_before_preview(self):
+        self.alpha.code = "A" * 64
+        self.alpha.save()
+        data = self.chat(f"Register 1 sample in project {self.alpha.code} with source=blood").data
+        self.assertNotIn("pending_action", data)
+        self.assertIn("64 characters", data["answer"])
+
+    def test_plan_revalidates_configuration_written_without_form_validation(self):
+        self.configure_inventory()
+        self.procedure.reagent_requirements.update(unit="kg")
+        data = self.chat("Plan reagents for 30 samples using procedure EXTRACT").data
+        self.assertNotIn("inventory_plan", data)
+        self.assertIn("Invalid reagent configuration", data["answer"])
+
+    def test_overreserved_lot_is_unknown_and_released_reservations_are_ignored(self):
+        lot = self.configure_inventory()
+        reservation = InventoryReservation.objects.create(lot=lot, quantity=101, unit="mL", project=self.alpha)
+        row = self.chat("Plan reagents for 30 samples using procedure EXTRACT").data["inventory_plan"]["rows"][0]
+        self.assertIsNone(row["available"])
+        self.assertIn("Unknown", row["status"])
+        reservation.status = InventoryReservation.STATUS_RELEASED
+        reservation.save()
+        row = self.chat("Plan reagents for 30 samples using procedure EXTRACT").data["inventory_plan"]["rows"][0]
+        self.assertEqual(Decimal(row["available"]), 100)
+        self.assertEqual(row["status"], "Enough")
+
     def test_project_draft_is_scoped_read_only_and_rechecks_access(self):
         data = self.chat("Write a short progress update for project ALPHA").data
         self.assertIn("2 samples", data["draft"]["text"])

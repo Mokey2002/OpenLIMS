@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.50.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.50.1-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,12 @@
 ---
 
 ## Overview
+
+### v0.50.1 — Stricter registration and stock estimates
+
+Sample registration rejects negated/embedded requests, duplicate fields, malformed field lists and trailing instructions. Use JSON quotes for values containing commas or significant punctuation: `Register 2 plasma samples in project ALPHA with source="blood, frozen."`. Correct invalid fields with another `with ...` reply; project permissions are checked again. Confirmation validates frozen sample IDs and sample type before creating records. Overlong generated IDs are rejected at preview time.
+
+Reagent planning revalidates configured quantities/units even if imported without form validation. Invalid stock, incompatible reservation units or reservations exceeding stock produce an **unknown** estimate, never a claim that stock is sufficient. Released reservations remain excluded. No database migration is needed for this patch.
 
 ### v0.50.0 — Five practical AI lab helpers
 
@@ -67,7 +73,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.50.0 — Five practical AI lab helpers`.
+**Current development version:** `v0.50.1 — Stricter registration and stock estimates`.
 
 ## Deployment Access
 

@@ -628,6 +628,11 @@ def _propose_create_samples(message, user):
     if not match:
         return None
 
+    prefix = message[:match.start()].strip().lower()
+    if prefix not in {"", "please", "can you", "could you", "would you", "can you please", "could you please", "would you please"}:
+        return _error_result("Use one explicit registration request, without negation or other actions. No samples were proposed.")
+    if len(match.group(1)) > 6:
+        return _error_result("The sample count exceeds the assistant bulk limit.")
     count = int(match.group(1))
     maximum = assistant_bulk_max_records()
     if count < 1:
@@ -642,12 +647,20 @@ def _propose_create_samples(message, user):
     if error:
         return _error_result(error)
 
-    custom_fields, field_errors = _validate_custom_field_payload(
-        _parse_custom_fields(message),
-        require_all=True,
-    )
-    codes = _generated_sample_codes(project, count)
+    from .registration_input import parse_registration_fields
     sample_type = (match.group("sample_type") or "GENERAL").upper()
+    registration_context = {"sample_registration": f"register {count} {sample_type} samples in project {project.code}"}
+    tail = message[match.end():].strip()
+    try:
+        supplied = parse_registration_fields(tail[5:].strip()) if re.match(r"^with\b", tail, re.I) else {}
+        if tail and not re.match(r"^with\b", tail, re.I) and tail not in {".", "?", "!"}:
+            raise ValueError("Use one registration request without trailing instructions.")
+    except ValueError as exc:
+        return _error_result(str(exc), context=registration_context)
+    custom_fields, field_errors = _validate_custom_field_payload(supplied, require_all=True)
+    codes = _generated_sample_codes(project, count)
+    if any(len(code) > 64 for code in codes):
+        return _error_result("Generated sample IDs exceed 64 characters. Use a shorter project code before registering samples.")
     rows = [
         {
             "id": None,
@@ -683,7 +696,7 @@ def _propose_create_samples(message, user):
             " Reply with all custom values using: with field_name=value, other_field=value.",
             preview=preview,
         )
-        result["context"] = {"sample_registration": f"register {count} {sample_type} samples in project {project.code}"}
+        result["context"] = registration_context
         result["replace_context"] = True
         return result
 
@@ -1273,7 +1286,15 @@ def execute_create_samples(action):
         raise ValueError("The selected project no longer exists.")
     validate_sample_project_assignment(action.requested_by, project)
 
-    sample_codes = list(payload.get("sample_codes") or [])
+    sample_codes = payload.get("sample_codes")
+    if not isinstance(sample_codes, list) or not sample_codes or any(
+        not isinstance(code, str) or not code.strip() or len(code) > 64
+        for code in sample_codes
+    ):
+        raise ValueError("The frozen sample IDs are invalid. Request a new preview.")
+    sample_type = payload.get("sample_type", "GENERAL")
+    if not isinstance(sample_type, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,63}", sample_type):
+        raise ValueError("The frozen sample type is invalid. Request a new preview.")
     maximum = assistant_bulk_max_records()
     if len(sample_codes) > maximum:
         raise ValueError(
@@ -1282,6 +1303,8 @@ def execute_create_samples(action):
     if len(sample_codes) != len(set(code.upper() for code in sample_codes)):
         raise ValueError("The frozen sample IDs contain duplicates.")
 
+    if not isinstance(payload.get("custom_fields", {}), dict):
+        raise ValueError("The frozen custom fields are invalid. Request a new preview.")
     custom_fields, field_errors = _validate_custom_field_payload(
         payload.get("custom_fields") or {},
         require_all=True,
@@ -1305,7 +1328,7 @@ def execute_create_samples(action):
                     raise ValueError("sample ID already exists")
                 sample = Sample.objects.create(
                     sample_id=code,
-                    sample_type=payload.get("sample_type", "GENERAL"),
+                    sample_type=sample_type,
                     status=Sample.STATUS_RECEIVED,
                     project=project,
                     created_by=action.requested_by,

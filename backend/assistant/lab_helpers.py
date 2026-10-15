@@ -3,14 +3,14 @@ import re
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import CharField, Count, Q
+from django.db.models import CharField, Count, Prefetch, Q
 from django.db.models.functions import Cast
 from django.utils import timezone
 
 from core.permissions import is_admin
 from events.models import Event
-from inventory.models import InventoryLot
-from inventory.units import UnitConversionError, convert_quantity
+from inventory.models import InventoryLot, InventoryReservation
+from inventory.units import UnitConversionError, convert_quantity, units_compatible
 from notebook.models import Experiment
 from notebook.permissions import notebooks_for_user
 from pipelines.models import ProcedureDefinition
@@ -108,20 +108,33 @@ def inventory_plan(count, code, version, user):
         return response(f"No per-sample reagent quantities are configured for {procedure.code} version {procedure.version}. An administrator must configure these before stock sufficiency can be calculated.")
     rows = []
     for requirement in requirements:
+        if (not requirement.quantity_per_sample.is_finite() or requirement.quantity_per_sample <= 0
+                or not units_compatible(requirement.unit, requirement.item.default_unit)):
+            return response(f"Invalid reagent configuration for {requirement.item.code}. An administrator must correct the positive per-sample quantity and compatible unit before planning.")
         needed = requirement.quantity_per_sample * count
         available = Decimal("0")
         invalid = False
         lots = InventoryLot.objects.filter(item=requirement.item, status=InventoryLot.STATUS_ACTIVE).filter(
-            Q(expiration_date__isnull=True) | Q(expiration_date__gte=timezone.localdate()))
+            Q(expiration_date__isnull=True) | Q(expiration_date__gte=timezone.localdate())).prefetch_related(
+                Prefetch("reservations", queryset=InventoryReservation.objects.filter(status=InventoryReservation.STATUS_ACTIVE), to_attr="planning_reservations"))
         for lot in lots:
             try:
-                available += max(Decimal("0"), convert_quantity(lot.available_quantity, lot.unit, requirement.unit))
+                if not lot.quantity.is_finite() or lot.quantity < 0:
+                    raise ValueError("Invalid stock quantity")
+                reserved = Decimal("0")
+                for reservation in lot.planning_reservations:
+                    if not reservation.quantity.is_finite() or reservation.quantity <= 0:
+                        raise ValueError("Invalid reservation quantity")
+                    reserved += convert_quantity(reservation.quantity, reservation.unit, lot.unit)
+                if reserved > lot.quantity:
+                    raise ValueError("Reservations exceed stock")
+                available += convert_quantity(lot.quantity - reserved, lot.unit, requirement.unit)
             except (UnitConversionError, ValueError, ArithmeticError):
                 invalid = True
         rows.append({"reagent": requirement.item.code, "required": str(needed),
                      "available": None if invalid else str(available), "unit": requirement.unit,
                      "shortfall": None if invalid else str(max(Decimal("0"), needed - available)),
-                     "status": "Unknown: incompatible stock units" if invalid else ("Enough" if available >= needed else "Short")})
+                     "status": "Unknown: invalid stock, reservations or units" if invalid else ("Enough" if available >= needed else "Short")})
     lines = [f"Reagent plan: {count} samples, {procedure.code} version {procedure.version}."]
     lines.extend(f"{r['reagent']}: need {r['required']} {r['unit']}; available {r['available'] if r['available'] is not None else 'unknown'}; {r['status']}." for r in rows)
     lines.append("Available stock excludes active reservations, expired and non-active lots. Quantities cover configured reagents only; no allowance for controls, repeats or waste. This is a live estimate, not a reservation.")
