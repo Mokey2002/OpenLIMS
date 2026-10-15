@@ -12,6 +12,7 @@ import AssistantActionPreview from "./AssistantActionPreview";
 import AssistantClarification from "./AssistantClarification";
 import AssistantContextBar from "./AssistantContextBar";
 import AssistantFeedback from "./AssistantFeedback";
+import AssistantDraft from "./AssistantDraft";
 import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 
 const DEMO_ASSISTANT_NOTE =
@@ -123,6 +124,7 @@ export default function AssistantWidget() {
         {
           role: "assistant",
           content: data.project_workflows?.summary || data.answer || "No answer returned.",
+          draft: data.draft || null,
           projectWorkflows: data.project_workflows || null,
           queryExplanation: data.query_explanation || null,
           links: data.links || [],
@@ -356,6 +358,7 @@ export default function AssistantWidget() {
                     </div>
                   )}
 
+                  {item.draft && <AssistantDraft draft={item.draft} />}
                   {item.suggestions?.length > 0 && (
                     <div className="assistant-widget-suggestions">
                       {item.suggestions.map((suggestion) => (

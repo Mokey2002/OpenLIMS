@@ -2,6 +2,18 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.50.0 — Cinco ayudas de IA para el laboratorio
+
+Los nuevos comandos se escriben en inglés:
+
+- `What happened to sample S-100?`: últimos 50 eventos de auditoría/custodia, responsables y estado actual del trabajo y QC, con enlace a la muestra. No reconstruye eventos ausentes.
+- `Find similar experiments about plasma extraction`: busca todas las palabras en títulos, contenido actual y nombres de plantillas accesibles; muestra hasta 20 experimentos accesibles. Requiere el cuaderno habilitado. Es una búsqueda por palabras, no una evaluación de equivalencia científica.
+- `Plan reagents for 30 samples using procedure EXTRACT version 1`: calcula las cantidades configuradas y el stock activo no vencido, descontando reservas y convirtiendo unidades compatibles. No reserva stock ni incluye controles, repeticiones o pérdidas no configuradas.
+- `Register 12 plasma samples in project ALPHA`: solicita campos obligatorios; responde `with source=blood` usando los nombres de tus campos y todos los valores obligatorios. Presenta una vista previa y exige confirmación explícita. Vuelve a comprobar permisos y campos al confirmar.
+- `Write a short progress update for project ALPHA`: genera un borrador editable en ambas vistas del chat, con enlace al proyecto y botón para copiar. Describe registros actuales del proyecto principal; no envía mensajes. Las ediciones quedan en la vista actual.
+
+**Actualización:** después de reconstruir la API, ejecuta `docker compose -f deploy/docker-compose.yml run --rm api python manage.py migrate`. En Django admin (`/admin/`), abre **Pipelines → Procedure definitions**, selecciona el procedimiento y versión y configura **Procedure reagent requirements**: artículo de inventario, cantidad positiva por muestra y unidad compatible. Guarda antes de pedir el cálculo. Si faltan cantidades, el asistente lo indica; no las deduce de instrucciones de texto.
+
 ## v0.49.5 — Vistas previas de asignación de IA más fiables
 
 Al confirmar una asignación se vuelven a comprobar la fecha límite, el tipo de trabajo, la muestra y el proyecto principal, además del estado y responsable. Los elementos modificados se omiten y requieren una vista previa nueva; también deben regenerarse las vistas antiguas que no contienen estos datos. Las solicitudes de más de 100 trabajos piden reducir la selección en vez de tomar solo los primeros 100. Si se indican varios responsables, se solicita uno por acción.
@@ -30,7 +42,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.49.5`
+**Versión de desarrollo actual:** `v0.50.0`
 
 **Demo:** http://35.164.28.250
 

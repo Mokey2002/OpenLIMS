@@ -2,6 +2,7 @@ import re
 
 
 ALLOWED_CONTEXT_KEYS = {
+    "sample_registration",
     "guidance",
     "project_workflows",
     "analytics",
