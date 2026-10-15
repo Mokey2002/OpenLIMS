@@ -11,6 +11,59 @@ class WorkScopeTests(APITestCase):
     chat = fixtures.AssistantComparisonTests.chat
     confirm = fixtures.AssistantComparisonTests.confirm
 
+    def test_rescheduled_overdue_work_requires_a_new_preview(self):
+        item = WorkItem.objects.get(sample=self.samples[1])
+        item.work_type = 'GENERAL'
+        item.save(update_fields=['work_type'])
+        proposal = self.chat('Assign overdue work to eduardo')
+        item.due_at = timezone.now() + timedelta(days=7)
+        item.save(update_fields=['due_at'])
+        self.confirm(proposal)
+        item.refresh_from_db()
+        self.assertIsNone(item.assigned_to_id)
+
+    def test_changed_work_type_requires_a_new_preview(self):
+        item = WorkItem.objects.get(sample=self.samples[1])
+        item.work_type = 'PCR'
+        item.save(update_fields=['work_type'])
+        proposal = self.chat('Assign PCR work to eduardo')
+        item.work_type = 'EXTRACTION'
+        item.save(update_fields=['work_type'])
+        self.confirm(proposal)
+        item.refresh_from_db()
+        self.assertIsNone(item.assigned_to_id)
+
+    def test_relinked_sample_requires_a_new_preview(self):
+        item = WorkItem.objects.get(sample=self.samples[1])
+        item.work_type = 'GENERAL'
+        item.save(update_fields=['work_type'])
+        proposal = self.chat('Assign work to eduardo')
+        item.sample = self.samples[0]
+        item.save(update_fields=['sample'])
+        self.confirm(proposal)
+        item.refresh_from_db()
+        self.assertIsNone(item.assigned_to_id)
+
+    def test_assignment_limit_does_not_silently_select_first_100(self):
+        from samples.models import Sample
+        from assistant.models import AssistantAction
+        for index in range(101):
+            sample = Sample.objects.create(sample_id=f'LIMIT-{index}', project=self.alpha, created_by=self.tech)
+            WorkItem.objects.create(sample=sample, name='General', created_by=self.tech)
+        response = self.chat('Assign work in project ALPHA to eduardo')
+        self.assertIn('100-item', response.data['answer'])
+        self.assertNotIn('pending_action', response.data)
+        self.assertFalse(AssistantAction.objects.exists())
+
+    def test_multiple_assignees_require_clarification(self):
+        from assistant.models import AssistantAction
+        for message in ['Assign work to eduardo and outsider', 'Assign work to eduardo, outsider']:
+            with self.subTest(message=message):
+                response = self.chat(message)
+                self.assertIn('one assignee', response.data['answer'])
+                self.assertNotIn('pending_action', response.data)
+        self.assertFalse(AssistantAction.objects.exists())
+
     def test_multi_project_assignment_keeps_unscoped_preview_and_confirmation(self):
         from assistant.models import AssistantAction
         WorkItem.objects.filter(sample__in=self.samples).update(work_type='GENERAL')

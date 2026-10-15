@@ -85,6 +85,9 @@ def _record(item, proposed):
             "status": item.status,
             "assigned_to": item.assigned_to.username if item.assigned_to else None,
             "due_at": item.due_at.isoformat() if item.due_at else None,
+            "sample_id": item.sample_id,
+            "project_id": item.sample.project_id,
+            "work_type": item.work_type,
         },
         "proposed": proposed,
     }
@@ -289,6 +292,11 @@ def _propose_assignment(message, user):
     lower = message.lower()
     if not re.search(r"\b(?:assign|reassign)\b", lower):
         return None
+    if re.search(r"\b(?:to|from)\s+[A-Za-z0-9_.@+-]+\s*(?:,|\band\b)", message, re.I) or len(re.findall(r"\bto\b", lower)) > 1:
+        return {
+            "answer": "Specify one assignee per request (and one source user for reassignment). Please rephrase.",
+            "links": [], "skip_llm": True,
+        }
     target_label = _extract_person_after(message, "to")
     target, error = _resolve_user(target_label)
     if error:
@@ -323,7 +331,12 @@ def _propose_assignment(message, user):
         start = timezone.make_aware(datetime.combine(timezone.localdate(), time.min))
         queryset = queryset.filter(due_at__gte=start, due_at__lt=start + timedelta(days=1))
 
-    items = list(queryset.order_by("id")[:100])
+    items = list(queryset.order_by("id")[:MAX_WORK_ITEMS + 1])
+    if len(items) > MAX_WORK_ITEMS:
+        return {
+            "answer": f"This request exceeds the {MAX_WORK_ITEMS}-item assignment limit. Narrow the project, work type, or date filter and try again. No assignment was proposed.",
+            "links": [], "skip_llm": True,
+        }
     records = []
     excluded = []
     for item in items:
@@ -463,6 +476,10 @@ def execute_workitem_operation(action):
             current_assignee = item.assigned_to.username if item.assigned_to else None
             if expected.get("status") != item.status or expected.get("assigned_to") != current_assignee:
                 failed.append({"id": item_id, "label": f"Work #{item.id}", "reason": "assignment or status changed after preview"})
+                continue
+            current = _record(item, {})["current"]
+            if any(key not in expected or expected[key] != current[key] for key in ("due_at", "sample_id", "project_id", "work_type")):
+                failed.append({"id": item_id, "label": f"Work #{item.id}", "reason": "work details changed or preview is outdated; generate a new preview"})
                 continue
             if not _can_access_project(action.requested_by, item.sample.project):
                 failed.append({"id": item_id, "reason": "project access denied"})
