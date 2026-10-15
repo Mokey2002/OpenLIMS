@@ -19,6 +19,7 @@ import AssistantActionPreview from "../components/AssistantActionPreview";
 import AssistantClarification from "../components/AssistantClarification";
 import AssistantContextBar from "../components/AssistantContextBar";
 import AssistantFeedback from "../components/AssistantFeedback";
+import AssistantDraft from "../components/AssistantDraft";
 import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 import { OPENLIMS_VERSION } from "../version";
 
@@ -114,6 +115,7 @@ export default function Assistant() {
         {
           role: "assistant",
           content: data.project_workflows?.summary || data.answer || "No answer returned.",
+          draft: data.draft || null,
           projectWorkflows: data.project_workflows || null,
           queryExplanation: data.query_explanation || null,
           links: data.links || [],
@@ -401,6 +403,7 @@ export default function Assistant() {
                     </div>
                   )}
 
+                  {item.draft && <AssistantDraft draft={item.draft} />}
                   {item.suggestions?.length > 0 && (
                     <div className="assistant-suggestions mt-2">
                       {item.suggestions.map((suggestion) => (

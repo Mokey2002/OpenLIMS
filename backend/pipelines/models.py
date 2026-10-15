@@ -91,6 +91,29 @@ class ProcedureDefinition(models.Model):
         return f"{self.code} v{self.version} - {self.name}"
 
 
+class ProcedureReagentRequirement(models.Model):
+    """Explicit per-sample consumption used for planning, never inferred from SOPs."""
+    procedure = models.ForeignKey(ProcedureDefinition, on_delete=models.CASCADE, related_name="reagent_requirements")
+    item = models.ForeignKey("inventory.InventoryItem", on_delete=models.PROTECT)
+    quantity_per_sample = models.DecimalField(max_digits=14, decimal_places=4)
+    unit = models.CharField(max_length=32)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["procedure", "item"], name="procedure_reagent_unique"),
+            models.CheckConstraint(condition=models.Q(quantity_per_sample__gt=0), name="procedure_reagent_positive"),
+        ]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        from inventory.units import units_compatible
+        super().clean()
+        if self.quantity_per_sample is not None and self.quantity_per_sample <= 0:
+            raise ValidationError({"quantity_per_sample": "Use a positive per-sample quantity."})
+        if self.item_id and not units_compatible(self.unit, self.item.default_unit):
+            raise ValidationError({"unit": "Use a unit compatible with this inventory item."})
+
+
 class PipelineTemplate(models.Model):
     code = models.CharField(max_length=64, unique=True)
     name = models.CharField(max_length=128)

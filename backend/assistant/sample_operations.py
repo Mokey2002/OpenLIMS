@@ -99,8 +99,9 @@ def _resolve_project(reference, user, *, write=False):
     if not cleaned:
         return None, "Tell me which project to use."
 
+    accessible = Project.objects.all() if is_admin(user) else Project.objects.filter(members=user)
     exact = list(
-        Project.objects.filter(
+        accessible.filter(
             Q(code__iexact=cleaned) | Q(name__iexact=cleaned)
         ).distinct()[:2]
     )
@@ -108,13 +109,13 @@ def _resolve_project(reference, user, *, write=False):
 
     if not matches:
         matches = list(
-            Project.objects.filter(
+            accessible.filter(
                 Q(code__icontains=cleaned) | Q(name__icontains=cleaned)
             ).distinct()[:3]
         )
 
     if not matches:
-        return None, f"Project {cleaned} was not found."
+        return None, f"Project {cleaned} was not found or you do not have access to it."
 
     if len(matches) > 1:
         labels = ", ".join(project.code for project in matches)
@@ -619,7 +620,7 @@ def _generated_sample_codes(project, count):
 
 def _propose_create_samples(message, user):
     match = re.search(
-        r"\bcreate\s+(\d+)\s+samples?\s+(?:for|in)\s+"
+        r"\b(?:create|register)\s+(\d+)\s+(?:(?P<sample_type>[A-Za-z][A-Za-z0-9_-]{0,63})\s+)?samples?\s+(?:for|in)\s+"
         r"(?:project\s+)?(.+?)(?=\s+with\s+|[.?!]?$)",
         message,
         re.IGNORECASE,
@@ -637,7 +638,7 @@ def _propose_create_samples(message, user):
             f"assistant maximum of {maximum}."
         )
 
-    project, error = _resolve_project(match.group(2), user, write=True)
+    project, error = _resolve_project(match.group(3), user, write=True)
     if error:
         return _error_result(error)
 
@@ -646,6 +647,7 @@ def _propose_create_samples(message, user):
         require_all=True,
     )
     codes = _generated_sample_codes(project, count)
+    sample_type = (match.group("sample_type") or "GENERAL").upper()
     rows = [
         {
             "id": None,
@@ -655,6 +657,7 @@ def _propose_create_samples(message, user):
                 "status": Sample.STATUS_RECEIVED,
                 "project": project.code,
                 "custom_fields": custom_fields,
+                "sample_type": sample_type,
             },
         }
         for code in codes
@@ -670,14 +673,19 @@ def _propose_create_samples(message, user):
             "status": Sample.STATUS_RECEIVED,
             "project": project.code,
             "custom_fields": custom_fields,
+            "sample_type": sample_type,
         },
     )
     if field_errors:
-        return _error_result(
+        result = _error_result(
             "The samples cannot be proposed until the required custom-field "
-            "errors are corrected.",
+            "errors are corrected. " + "; ".join(field_errors) +
+            " Reply with all custom values using: with field_name=value, other_field=value.",
             preview=preview,
         )
+        result["context"] = {"sample_registration": f"register {count} {sample_type} samples in project {project.code}"}
+        result["replace_context"] = True
+        return result
 
     summary = f"Create {count} samples for {project.code}"
     return _proposal_result(
@@ -685,6 +693,7 @@ def _propose_create_samples(message, user):
         preview,
         {
             "action_type": "CREATE_SAMPLES",
+            "sample_type": sample_type,
             "project_id": project.id,
             "sample_codes": codes,
             "custom_fields": custom_fields,
@@ -1296,6 +1305,7 @@ def execute_create_samples(action):
                     raise ValueError("sample ID already exists")
                 sample = Sample.objects.create(
                     sample_id=code,
+                    sample_type=payload.get("sample_type", "GENERAL"),
                     status=Sample.STATUS_RECEIVED,
                     project=project,
                     created_by=action.requested_by,
@@ -1314,10 +1324,11 @@ def execute_create_samples(action):
                     {},
                     {
                         "status": sample.status,
+                        "sample_type": sample.sample_type,
                         "project_id": sample.project_id,
                         "custom_fields": custom_fields,
                     },
-                    ["sample_id", "status", "project_id", "custom_fields"],
+                    ["sample_id", "sample_type", "status", "project_id", "custom_fields"],
                 )
                 succeeded.append(
                     {"id": sample.id, "sample_id": sample.sample_id}

@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.49.5-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.50.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,16 @@
 ---
 
 ## Overview
+
+### v0.50.0 — Five practical AI lab helpers
+
+- **Sample history:** `What happened to sample S-100?` summarizes the latest 50 audit/custody events, actors and current work/QC state, with a link to the sample. Missing events are not reconstructed.
+- **Related experiments:** `Find similar experiments about plasma extraction` searches titles, current notebook content and accessible template names. Every keyword must match; results are limited to 20 accessible experiments. This is keyword search, not a claim of scientific equivalence. The notebook feature must be enabled.
+- **Reagent planning:** `Plan reagents for 30 samples using procedure EXTRACT version 1` calculates configured quantities against active, unexpired stock after reservations, converting compatible units. Missing configuration or ambiguous versions ask for clarification. It does not reserve stock or include unconfigured controls, repeats or waste.
+- **Sample registration:** `Register 12 plasma samples in project ALPHA` asks for required custom fields, then shows a preview. Reply `with source=blood` (using your configured field names and all required values). Only explicit confirmation creates samples. Role, project access and required fields are checked again; the existing bulk limit applies.
+- **Project updates:** `Write a short progress update for project ALPHA` creates an editable draft in either chat view, with a source project link and a copy button. Counts describe current primary-project records. Nothing is sent; edits remain in the current chat view.
+
+**Upgrade/configuration:** run `docker compose -f deploy/docker-compose.yml run --rm api python manage.py migrate` after rebuilding the API. In Django admin (`/admin/`), open **Pipelines → Procedure definitions**, select the correct procedure/version, and add **Procedure reagent requirements** with inventory item, positive quantity per sample and compatible unit. Save before requesting a reagent plan. No reagent quantities are guessed or extracted from prose SOPs. Existing installation steps below still apply.
 
 ### v0.49.5 — Reliable AI assignment previews
 
@@ -57,7 +67,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.49.5 — Reliable AI assignment previews`.
+**Current development version:** `v0.50.0 — Five practical AI lab helpers`.
 
 ## Deployment Access
 
