@@ -2,6 +2,12 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.50.1 — Registro y cálculo de stock más robustos
+
+El registro rechaza solicitudes negadas, instrucciones adicionales, campos duplicados y listas mal formadas. Usa comillas JSON para conservar comas o puntuación: `Register 2 plasma samples in project ALPHA with source="blood, frozen."`. Puedes corregir los campos con otra respuesta `with ...`; se vuelven a comprobar los permisos. Antes de crear registros se validan los IDs y el tipo de muestra guardados en la propuesta. Los IDs generados demasiado largos se rechazan en la vista previa.
+
+El cálculo de reactivos vuelve a validar cantidades y unidades configuradas, incluso si se importaron sin validación de formularios. Stock inválido, unidades incompatibles o reservas superiores al stock producen un resultado **desconocido**. Las reservas liberadas no se descuentan. Este parche no requiere migración de base de datos.
+
 ## v0.50.0 — Cinco ayudas de IA para el laboratorio
 
 Los nuevos comandos se escriben en inglés:
@@ -42,7 +48,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.50.0`
+**Versión de desarrollo actual:** `v0.50.1`
 
 **Demo:** http://35.164.28.250
 
