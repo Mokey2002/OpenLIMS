@@ -2,6 +2,12 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.50.2 — Respuestas de registro estables y valores seguros
+
+Las respuestas de registro conservan el ID del proyecto: cambiar o reutilizar un código no redirige la solicitud, y la puntuación del código ya no impide responder. Se comprueban nuevamente el rol y el acceso en cada respuesta. Tras actualizar, reinicia los registros pendientes de v0.50.1 o anteriores: su contexto basado solo en el código ya no se reanuda.
+
+Se rechazan claves JSON duplicadas, caracteres nulos, Unicode inválido y números no finitos antes de proponer; los valores se vuelven a validar al confirmar. Los números demasiado grandes generan un mensaje de validación. Se mantiene el soporte de Unicode válido y puntuación entre comillas. No requiere migración de base de datos.
+
 ## v0.50.1 — Registro y cálculo de stock más robustos
 
 El registro rechaza solicitudes negadas, instrucciones adicionales, campos duplicados y listas mal formadas. Usa comillas JSON para conservar comas o puntuación: `Register 2 plasma samples in project ALPHA with source="blood, frozen."`. Puedes corregir los campos con otra respuesta `with ...`; se vuelven a comprobar los permisos. Antes de crear registros se validan los IDs y el tipo de muestra guardados en la propuesta. Los IDs generados demasiado largos se rechazan en la vista previa.
@@ -48,7 +54,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.50.1`
+**Versión de desarrollo actual:** `v0.50.2`
 
 **Demo:** http://35.164.28.250
 

@@ -8,11 +8,30 @@ def _invalid_constant(value):
     raise ValueError(f"{value} is not a finite JSON value.")
 
 
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("JSON object keys must not be repeated.")
+        result[key] = value
+    return result
+
+
 def _validate_json(value, depth=0):
     if depth > 20:
         raise ValueError("Custom field values are nested too deeply.")
     if isinstance(value, float) and not math.isfinite(value):
         raise ValueError("Custom field numbers must be finite.")
+    if isinstance(value, str):
+        if "\x00" in value:
+            raise ValueError("Custom fields cannot contain null characters.")
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise ValueError("Custom fields must contain valid Unicode characters.") from exc
+    if isinstance(value, dict):
+        for key in value:
+            _validate_json(key, depth + 1)
     if isinstance(value, (dict, list)):
         for item in (value.values() if isinstance(value, dict) else value):
             _validate_json(item, depth + 1)
@@ -33,7 +52,7 @@ def parse_registration_fields(text):
         raw = remaining[match.end():]
         if raw.startswith(('"', "[", "{")):
             try:
-                value, end = json.JSONDecoder(parse_constant=_invalid_constant).raw_decode(raw)
+                value, end = json.JSONDecoder(parse_constant=_invalid_constant, object_pairs_hook=_unique_object).raw_decode(raw)
             except (ValueError, RecursionError) as exc:
                 raise ValueError(f"Invalid JSON value for {name}; check quotes and brackets.") from exc
             remaining = raw[end:].strip()

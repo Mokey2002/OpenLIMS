@@ -213,7 +213,12 @@ def _validate_custom_field_payload(values, *, require_all=True):
                 "value": value,
             }
         )
-        if not serializer.is_valid():
+        try:
+            valid = serializer.is_valid()
+        except OverflowError:
+            errors.append(f"{definition.label or definition.name}: value is outside the supported numeric range.")
+            continue
+        if not valid:
             errors.append(
                 f"{definition.label or definition.name}: "
                 f"{_field_error_text(serializer.errors)}"
@@ -618,7 +623,21 @@ def _generated_sample_codes(project, count):
     return [f"{prefix}-S-{value:04d}" for value in range(highest + 1, highest + count + 1)]
 
 
-def _propose_create_samples(message, user):
+def resume_sample_registration(message, user, state):
+    """Context is untrusted; keep identity but recheck permissions and limits."""
+    if (not isinstance(state, dict) or type(state.get("count")) is not int
+            or not 1 <= state["count"] <= assistant_bulk_max_records()
+            or type(state.get("project_id")) is not int or not 0 < state["project_id"] <= 9223372036854775807
+            or not isinstance(state.get("sample_type"), str)
+            or not re.fullmatch(r"[A-Z][A-Z0-9_-]{0,63}", state["sample_type"])):
+        return _error_result("Registration context is invalid or expired. Start a new registration request.")
+    return _propose_create_samples(
+        f"register {state['count']} {state['sample_type']} samples in project pending {message.strip()}",
+        user, project_id=state["project_id"],
+    )
+
+
+def _propose_create_samples(message, user, *, project_id=None):
     match = re.search(
         r"\b(?:create|register)\s+(\d+)\s+(?:(?P<sample_type>[A-Za-z][A-Za-z0-9_-]{0,63})\s+)?samples?\s+(?:for|in)\s+"
         r"(?:project\s+)?(.+?)(?=\s+with\s+|[.?!]?$)",
@@ -643,13 +662,18 @@ def _propose_create_samples(message, user):
             f"assistant maximum of {maximum}."
         )
 
-    project, error = _resolve_project(match.group(3), user, write=True)
+    if project_id is None:
+        project, error = _resolve_project(match.group(3), user, write=True)
+    else:
+        accessible = Project.objects.all() if is_admin(user) else Project.objects.filter(members=user)
+        project = accessible.filter(pk=project_id).first() if _write_user(user) else None
+        error = None if project else "The selected project no longer exists or you no longer have permission to register samples in it."
     if error:
         return _error_result(error)
 
     from .registration_input import parse_registration_fields
     sample_type = (match.group("sample_type") or "GENERAL").upper()
-    registration_context = {"sample_registration": f"register {count} {sample_type} samples in project {project.code}"}
+    registration_context = {"sample_registration": {"count": count, "sample_type": sample_type, "project_id": project.pk}}
     tail = message[match.end():].strip()
     try:
         supplied = parse_registration_fields(tail[5:].strip()) if re.match(r"^with\b", tail, re.I) else {}
@@ -1305,6 +1329,8 @@ def execute_create_samples(action):
 
     if not isinstance(payload.get("custom_fields", {}), dict):
         raise ValueError("The frozen custom fields are invalid. Request a new preview.")
+    from .registration_input import _validate_json
+    _validate_json(payload.get("custom_fields", {}))
     custom_fields, field_errors = _validate_custom_field_payload(
         payload.get("custom_fields") or {},
         require_all=True,

@@ -635,11 +635,14 @@ def route_assistant_message(message, user, context=None, route_hint=None):
     lower = query.lower()
 
     registration = context.get("sample_registration")
+    if isinstance(registration, dict) and re.match(r"^with\s+", message.strip(), re.I):
+        from .sample_operations import resume_sample_registration
+        return _routed(resume_sample_registration(message, user, registration), "samples")
     if isinstance(registration, str) and re.fullmatch(
         r"register \d+ [A-Z0-9_-]+ samples in project [\w-]+", registration
     ) and re.match(r"^with\s+", message.strip(), re.I):
-        from .sample_operations import _propose_create_samples
-        return _routed(_propose_create_samples(registration + " " + message.strip(), user), "samples")
+        return _routed({"answer": "This older registration context has expired. Start a new registration request to confirm the target project.",
+                        "skip_llm": True, "context": {}, "replace_context": True}, "samples")
 
     from .lab_helpers import route_lab_helpers
     helper = route_lab_helpers(message, user)
