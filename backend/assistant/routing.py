@@ -4,6 +4,7 @@ from .intent_matching import work_graph_metrics
 
 
 ASSISTANT_ROUTES = {
+    "tool",
     "analytics",
     "attention",
     "barcode",
@@ -189,6 +190,9 @@ def classify_route_with_rules(message, context=None):
 def validate_routing_plan(data, min_confidence=0.65):
     if not isinstance(data, dict):
         return None
+    if data.get("route") == "tool":
+        from .provider_tools import validate_tool_plan
+        return validate_tool_plan(data, min_confidence)
     route = str(data.get("route") or "").strip().lower()
     if route not in ASSISTANT_ROUTES:
         return None

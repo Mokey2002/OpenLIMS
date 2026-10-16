@@ -2,6 +2,18 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.53.0 — Conexiones compartidas para OpenAI y Ollama
+
+Cuando las reglas no resuelven una solicitud, cualquiera de los proveedores configurados puede devolver una petición de función validada. OpenLIMS la ejecuta con el usuario autenticado y el contexto existente. Habilita el LLM y su enrutamiento, y configura credenciales/modelo de OpenAI o URL/modelo de Ollama. El modo de solo reglas sigue disponible.
+
+El catálogo compartido cubre 32 entradas: historial de muestras, experimentos relacionados, planificación de reactivos, actualizaciones de proyecto, impacto de cuarentena, calidad de datos, borradores de flujos, relevos y comparación de experimentos; además de adaptadores para análisis, prioridades, códigos de barras, cálculos, gráficos, comparaciones, trabajos confirmados, inventario, investigaciones, notificaciones, QC, informes, muestras/registro, secuencias, SOP, trabajos, asignaciones/resultados guiados, orientación de muestras, consultas de workflows, estado del sistema, identidad, búsqueda de registros y migraciones.
+
+Por ejemplo, “Ayuda a Maria a continuar el trabajo de Peter” puede interpretarse como un relevo entre los usuarios `peter` y `maria`. Se comprueban permisos, funciones habilitadas y ambigüedad. Si faltan datos, se pide repetir la solicitud completa; no se guardan automáticamente respuestas libres de aclaración. Los comandos interpretados deben coincidir con el parser existente. La calidad de interpretación depende del modelo.
+
+Ambas vistas muestran la interpretación del proveedor y sus argumentos. OpenLIMS genera los resultados y puede conservar la etiqueta Rules: el modelo interpreta y OpenLIMS ejecuta. Los cambios requieren la confirmación existente; los flujos requieren guardado explícito. El modelo no confirma acciones, ejecuta SQL/código ni define permisos. La búsqueda global de migraciones mediante esta conexión exige administrador.
+
+Las pruebas usan respuestas simuladas de ambos proveedores; no son una evaluación de precisión con modelos en vivo. Una prueba detecta nuevos routers sin conexión explícita. No requiere migración.
+
 ## v0.52.1 — Prueba de privacidad de investigaciones determinista
 
 Corrige un fallo intermitente de CI: los dígitos de un resultado privado (`9999`) podían aparecer en una marca de tiempo ajena. La prueba reproduce esa marca de tiempo y comprueba IDs/valores de resultados, registros comparativos y totales, en lugar de buscar dígitos en toda la respuesta. No cambia el comportamiento ni los permisos de la aplicación; no requiere migración.
@@ -77,7 +89,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.52.1`
+**Versión de desarrollo actual:** `v0.53.0`
 
 **Demo:** http://35.164.28.250
 
