@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.50.2-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.51.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,15 @@
 ---
 
 ## Overview
+
+### v0.51.0 — AI impact previews and data-quality reviews
+
+Two new read-only reports work in both assistant chat views, with evidence tables, record links and prompts based on existing records:
+
+- **Lot quarantine impact:** ask `What would be affected if we quarantine lot LOT-12?` or `Preview quarantine impact for lot LOT-12`. Reviews accessible active reservations, recorded consumption and current notebook links. Distinguishes planned dependencies from past use, shows work/experiment status, and links the affected records. It does not quarantine anything or infer that past results failed. Notebook evidence requires the notebook feature and access to each linked target. Shows at most 25 rows per evidence category, with a partial-preview notice; rows are evidence, not unique specimen counts.
+- **Project data-quality review:** ask `Check project ALPHA for suspicious records` or `Review data quality for project ALPHA`. Flags sample IDs differing only by case/punctuation as possible duplicates, missing required custom metadata, invalid saved intake forms (including conditional fields), differing/missing result units within the same analysis/work type and result key, and unusual timestamps/deadlines. Each finding is a review prompt, not a scientific conclusion or automatic correction. Known compatible units and valid zero/false metadata are accepted.
+
+Quality reviews scan up to 250 primary-project samples, 1,000 related work items and 1,000 results, in ID order, displaying at most 100 findings. Partial scans and display limits are explicit; a clean scanned subset is not certification of the entire project. Rerunning checks current records and permissions. No database migration is required for this release.
 
 ### v0.50.2 — Stable registration follow-ups and database-safe values
 
@@ -79,7 +88,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.50.2 — Stable registration follow-ups and database-safe values`.
+**Current development version:** `v0.51.0 — AI impact previews and data-quality reviews`.
 
 ## Deployment Access
 

@@ -2,6 +2,7 @@
 
 from core.permissions import is_admin
 from django.db.models import Count
+from inventory.models import InventoryLot
 from projects.models import Project
 from results.models import Result
 from samples.access import get_sample_access_queryset
@@ -124,6 +125,7 @@ def without_empty(*suggestions):
 
 
 def assistant_starter_suggestions(user):
+    lot_code = InventoryLot.objects.order_by("lot_code").values_list("lot_code", flat=True).first() if _authenticated(user) else None
     failed_samples = accessible_failed_sample_ids(user, limit=1)
     failed_sample_prompt = (
         f"Investigate why sample {failed_samples[0]} failed QC"
@@ -137,6 +139,8 @@ def assistant_starter_suggestions(user):
     ).exists()
     return without_empty(
         "What needs attention?",
+        project_prompt(user, "Review data quality for project"),
+        f"Preview quarantine impact for lot {lot_code}" if lot_code else None,
         sample_prompt(user, "What next for sample"),
         "Group samples by project",
         "Which instrument has the highest QC failure rate?"

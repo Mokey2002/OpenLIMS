@@ -2,6 +2,15 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.51.0 — Vista previa de impacto y revisión de calidad de datos
+
+Dos informes de solo lectura están disponibles en ambas vistas del chat, con tablas de evidencia, enlaces y sugerencias basadas en registros existentes. Los comandos se escriben en inglés:
+
+- **Impacto de cuarentena:** `What would be affected if we quarantine lot LOT-12?` o `Preview quarantine impact for lot LOT-12`. Revisa reservas activas accesibles, consumo registrado y enlaces de la revisión actual del cuaderno. Distingue dependencias previstas de uso anterior y muestra el estado del trabajo/experimento. No pone el lote en cuarentena ni concluye que sus resultados sean inválidos. La evidencia del cuaderno requiere que esté habilitado y que todos los destinos vinculados sean accesibles. Muestra hasta 25 filas por categoría e indica si el informe es parcial; las filas no representan muestras únicas.
+- **Calidad de datos del proyecto:** `Check project ALPHA for suspicious records` o `Review data quality for project ALPHA`. Señala IDs similares al ignorar mayúsculas y puntuación, metadatos obligatorios ausentes, formularios de ingreso inválidos (incluidos campos condicionales), unidades diferentes/ausentes para el mismo análisis/tipo de trabajo y campo de resultado, y fechas o vencimientos inusuales. Son indicaciones para revisar, no conclusiones científicas ni correcciones automáticas. Se aceptan unidades conocidas compatibles y valores válidos cero/falso.
+
+La revisión examina hasta 250 muestras del proyecto principal, 1.000 trabajos y 1.000 resultados, ordenados por ID, y muestra hasta 100 hallazgos. Indica los límites y si la revisión es parcial. Repetir la consulta vuelve a comprobar registros y permisos. No requiere migración de base de datos.
+
 ## v0.50.2 — Respuestas de registro estables y valores seguros
 
 Las respuestas de registro conservan el ID del proyecto: cambiar o reutilizar un código no redirige la solicitud, y la puntuación del código ya no impide responder. Se comprueban nuevamente el rol y el acceso en cada respuesta. Tras actualizar, reinicia los registros pendientes de v0.50.1 o anteriores: su contexto basado solo en el código ya no se reanuda.
@@ -54,7 +63,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.50.2`
+**Versión de desarrollo actual:** `v0.51.0`
 
 **Demo:** http://35.164.28.250
 
