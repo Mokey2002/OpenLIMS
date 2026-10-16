@@ -2,6 +2,16 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.52.0 — Borradores de flujos, relevos y comparación de experimentos
+
+Las tres funciones restantes están disponibles en ambas vistas del chat. Los comandos se escriben en inglés:
+
+- **Borradores de flujos:** un administrador puede pedir `Create a workflow with EXTRACT@1, QC@1, SEQUENCE@2, REVIEW@1`, usando códigos/versiones activos reales (o nombres exactos). Si falta un procedimiento o es ambiguo, se solicita aclaración. Pulsa **Revisar flujo en el diseñador**, ingresa código/nombre, revisa dependencias, controles QC, condiciones y automatización, y guarda explícitamente. El borrador empieza inactivo, con dependencias secuenciales y sin inferir controles QC ni automatizaciones. Se comprueban las versiones al abrirlo. Editar el texto del chat solo cambia la nota copiable. Máximo: 30 pasos.
+- **Relevos:** `Prepare peter's handover for maria` requiere nombres de usuario activos exactos. Genera un borrador editable de hasta 100 trabajos asignados sin finalizar, visibles para quien consulta y ambas personas, con vencimientos y alertas de atraso, fallo o QC rechazado/repetición. Excluye trabajos completados/cancelados; las dependencias y bloqueos no registrados requieren revisión manual. No envía mensajes ni reasigna trabajo. Comprueba nuevamente el acceso antes de compartirlo.
+- **Comparaciones:** `Compare runs <ID-público-experimento> and <ID-público-experimento>` también acepta títulos exactos únicos. Requiere acceso a ambos experimentos y el cuaderno habilitado. Compara definiciones actuales de pasos, parámetros/estado registrados, lotes vinculados y bloques de resultados estructurados (incluido QC si se registró allí). Alinea por posición: revisa si cambió el orden. Los datos ausentes son desconocidos; un enlace no demuestra consumo ni una diferencia demuestra causalidad. Excluye texto libre, revisiones históricas y QC externo. Límites por experimento: 50 pasos, 100 lotes, 50 bloques; 4.000 caracteres visibles por valor. Indica comparaciones parciales.
+
+No requiere migración de base de datos. Las instrucciones de instalación siguen vigentes.
+
 ## v0.51.0 — Vista previa de impacto y revisión de calidad de datos
 
 Dos informes de solo lectura están disponibles en ambas vistas del chat, con tablas de evidencia, enlaces y sugerencias basadas en registros existentes. Los comandos se escriben en inglés:
@@ -63,7 +73,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.51.0`
+**Versión de desarrollo actual:** `v0.52.0`
 
 **Demo:** http://35.164.28.250
 
