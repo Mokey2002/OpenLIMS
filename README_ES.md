@@ -2,6 +2,10 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.52.1 — Prueba de privacidad de investigaciones determinista
+
+Corrige un fallo intermitente de CI: los dígitos de un resultado privado (`9999`) podían aparecer en una marca de tiempo ajena. La prueba reproduce esa marca de tiempo y comprueba IDs/valores de resultados, registros comparativos y totales, en lugar de buscar dígitos en toda la respuesta. No cambia el comportamiento ni los permisos de la aplicación; no requiere migración.
+
 ## v0.52.0 — Borradores de flujos, relevos y comparación de experimentos
 
 Las tres funciones restantes están disponibles en ambas vistas del chat. Los comandos se escriben en inglés:
@@ -73,7 +77,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.52.0`
+**Versión de desarrollo actual:** `v0.52.1`
 
 **Demo:** http://35.164.28.250
 

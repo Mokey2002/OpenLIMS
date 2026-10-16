@@ -132,7 +132,7 @@ class AssistantInvestigationTests(APITestCase):
             status=WorkItem.STATUS_COMPLETED,
             created_by=self.outsider,
         )
-        Result.objects.create(
+        self.private_result = Result.objects.create(
             work_item=private_work,
             key="glucose",
             value_type=Result.VALUE_TYPE_NUMBER,
@@ -189,6 +189,13 @@ class AssistantInvestigationTests(APITestCase):
         )
 
     def test_workbench_ranks_direct_comparative_and_contextual_evidence(self):
+        # Reproduce the CI collision: valid timestamp microseconds can contain
+        # the private result's digits. Privacy checks must inspect result fields,
+        # not search the string representation of an entire response.
+        event_time = timezone.now().replace(microsecond=399999)
+        Event.objects.filter(
+            entity_type="Result", entity_id=str(self.subject_result.id), action="QC_REJECTED"
+        ).update(timestamp=event_time)
         response = self.client.post(
             "/api/assistant/investigations/",
             {
@@ -213,7 +220,22 @@ class AssistantInvestigationTests(APITestCase):
         )
         self.assertEqual(investigation["reagent_context"][0]["lot_code"], "LOT-EXPIRED")
         self.assertTrue(any(row["action"] == "QC_REJECTED" for row in investigation["timeline"]))
-        self.assertNotIn("9999", str(response.data))
+        self.assertTrue(any(row["timestamp"] == event_time.isoformat() for row in investigation["timeline"]))
+        self.assertEqual({row["id"] for row in investigation["results"]}, {self.subject_result.pk})
+        self.assertEqual([row["value"] for row in investigation["results"]], [100.0])
+        self.assertNotIn(self.private_result.pk, {row.get("result_id") for row in investigation["findings"]})
+        self.assertEqual({row["sample_id"] for row in investigation["similar_failures"]}, {self.peers[0].sample_id})
+        self.assertNotIn(self.private_result.pk, {row["result_id"] for row in investigation["similar_failures"]})
+        self.assertNotIn(self.private_sample.sample_id, str(response.data))
+        self.assertEqual(investigation["scope"]["cohort_sample_count"], 5)
+        self.assertEqual(investigation["scope"]["cohort_result_count"], 5)
+        comparative = next(row for row in investigation["findings"] if row["evidence_type"] == "comparative")
+        self.assertEqual(comparative["peer_count"], 4)
+        self.assertEqual(comparative["peer_mean"], 11.5)
+        self.assertEqual(comparative["peer_median"], 11.5)
+        self.assertEqual(response.data["chart"]["data"], [
+            {"group": "glucose", "total": 5, "failures": 2, "failure_rate": 40.0},
+        ])
 
     def test_assistant_routes_investigation_and_reuses_context_for_graph(self):
         first = self.chat("Investigate why sample S-INV-001 failed QC")
