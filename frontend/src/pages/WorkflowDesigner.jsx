@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { workflowDraftSteps } from "../assistantWorkflowDraft.mjs";
 import {
   Alert,
   Badge,
@@ -102,6 +104,7 @@ function DependencyGraph({ steps }) {
 }
 
 export default function WorkflowDesigner() {
+  const location = useLocation();
   const { language } = useLanguage();
   const [stepForms, setStepForms] = useState([]);
   const [actionUsers, setActionUsers] = useState([]);
@@ -122,7 +125,7 @@ export default function WorkflowDesigner() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  async function load() {
+  async function load(importDraft = false) {
     setLoading(true);
     setError("");
     try {
@@ -146,6 +149,17 @@ export default function WorkflowDesigner() {
       setSops(sopRows);
       setStepForms(formRows);
       setActionUsers(userRows);
+      const draft = importDraft ? location.state?.assistantWorkflowDraft : null;
+      if (draft) {
+        const steps = workflowDraftSteps(draft, procedureRows, emptyPipelineStep);
+        if (steps) {
+          setPipelineEditingId(null);
+          setPipelineForm({ ...emptyPipeline(), active: false, steps });
+          setSuccess("Assistant draft loaded. Review all settings, enter a code/name and save explicitly. / Borrador cargado: revisa los ajustes, ingresa código/nombre y guarda explícitamente.");
+        } else {
+          setError("This workflow draft is no longer valid. Ask the assistant for a fresh draft. / Solicita un borrador actualizado al asistente.");
+        }
+      }
     } catch (requestError) {
       setError(requestError.message || String(requestError));
     } finally {
@@ -155,8 +169,8 @@ export default function WorkflowDesigner() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, []);
+    load(true);
+  }, [location.key]);
 
   const activeProcedures = useMemo(
     () => procedures.filter((procedure) => procedure.active),
@@ -384,7 +398,7 @@ export default function WorkflowDesigner() {
             Configure analysis requirements, versioned procedures, reusable ordered pipelines, and project or sample-type defaults.
           </p>
         </div>
-        <div className="inline-actions"><Badge bg="dark">Director only</Badge><Button size="sm" variant="outline-dark" onClick={load}>Refresh</Button></div>
+        <div className="inline-actions"><Badge bg="dark">Director only</Badge><Button size="sm" variant="outline-dark" onClick={() => load()}>Refresh</Button></div>
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
@@ -452,6 +466,7 @@ export default function WorkflowDesigner() {
               <Col md={5}><Form.Label>Name</Form.Label><Form.Control required value={pipelineForm.name} onChange={(event) => setPipelineForm({ ...pipelineForm, name: event.target.value })} /></Col>
               <Col md={4}><Form.Label>Description</Form.Label><Form.Control value={pipelineForm.description} onChange={(event) => setPipelineForm({ ...pipelineForm, description: event.target.value })} /></Col>
               <Col md={3}><Form.Check type="switch" label="Use as a default" checked={pipelineForm.is_default} onChange={(event) => setPipelineForm({ ...pipelineForm, is_default: event.target.checked })} /></Col>
+              <Col md={3}><Form.Check id="pipeline-active" type="switch" label={language === "es" ? "Flujo activo" : "Active pipeline"} checked={pipelineForm.active} onChange={(event) => setPipelineForm({ ...pipelineForm, active: event.target.checked })} /></Col>
               <Col md={4}><Form.Label>Default project</Form.Label><Form.Select disabled={!pipelineForm.is_default} value={pipelineForm.default_project} onChange={(event) => setPipelineForm({ ...pipelineForm, default_project: event.target.value })}><option value="">All projects</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</Form.Select></Col>
               <Col md={4}><Form.Label>Default sample type</Form.Label><Form.Control disabled={!pipelineForm.is_default} value={pipelineForm.default_sample_type} onChange={(event) => setPipelineForm({ ...pipelineForm, default_sample_type: event.target.value })} placeholder="DNA (blank means all)" /></Col>
             </Row>

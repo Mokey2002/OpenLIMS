@@ -644,6 +644,11 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         return _routed({"answer": "This older registration context has expired. Start a new registration request to confirm the target project.",
                         "skip_llm": True, "context": {}, "replace_context": True}, "samples")
 
+    from .lab_collaboration import route_lab_collaboration
+    collaboration = route_lab_collaboration(message, user)
+    if collaboration:
+        return _routed(collaboration, "samples")
+
     from .lab_reviews import route_lab_reviews
     review = route_lab_reviews(message, user)
     if review:

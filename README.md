@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.51.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.52.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,16 @@
 ---
 
 ## Overview
+
+### v0.52.0 — Workflow drafts, handovers and run comparisons
+
+The remaining collaboration helpers work in both assistant chat views:
+
+- **Workflow drafts:** an administrator can ask `Create a workflow with EXTRACT@1, QC@1, SEQUENCE@2, REVIEW@1`. Replace these examples with existing active procedure codes/versions (or exact names). Missing or ambiguous procedures stop the draft. Click **Review workflow in designer**, enter a code/name, review dependencies, QC gates, conditions and automation, then save explicitly. Drafts start inactive, use sequential dependencies and never infer QC gates or automation. The designer rechecks procedure versions; text edits in chat change only the copyable note. Up to 30 steps are supported.
+- **Shift handovers:** `Prepare peter's handover for maria` uses exact active usernames. The editable draft lists up to 100 unfinished assigned work items visible to the requester and both participants, with deadlines, overdue flags and failed/rejected/rerun QC review flags. Completed/cancelled work is excluded. Dependencies and unrecorded blockers need manual review. Nothing is sent or reassigned; recheck permissions before sharing a copied draft.
+- **Run comparisons:** `Compare runs <experiment-public-ID> and <experiment-public-ID>` also accepts unique exact titles. Both experiments must be accessible and the notebook feature enabled. Tables compare current workflow definitions, recorded parameters/status, linked lot identities and current structured result blocks (including QC if recorded there). Steps/blocks align by position, so review changed ordering. Missing data is unknown; links do not prove consumption and differences do not establish causes. Free text, historical revisions and external QC are excluded. Limits: 50 steps, 100 lots, 50 result blocks per run, 4,000 displayed characters per value; partial comparisons are marked.
+
+No database migration is required. Existing installation instructions below still apply.
 
 ### v0.51.0 — AI impact previews and data-quality reviews
 
@@ -88,7 +98,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.51.0 — AI impact previews and data-quality reviews`.
+**Current development version:** `v0.52.0 — Workflow drafts, handovers and run comparisons`.
 
 ## Deployment Access
 
