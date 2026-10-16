@@ -20,6 +20,81 @@ class LabHelpersTests(APITestCase):
     chat = test_comparisons.AssistantComparisonTests.chat
     confirm = test_comparisons.AssistantComparisonTests.confirm
 
+    def test_unsafe_message_text_is_rejected_before_hashing_or_logging(self):
+        import json
+        for message in ["hello\x00", "hello\ud800"]:
+            with self.subTest(message=repr(message)):
+                result = self.client.post("/api/assistant/chat/", json.dumps({"message": message}), content_type="application/json")
+                self.assertEqual(result.status_code, 400)
+                self.assertIn("message", result.data)
+
+    def test_registration_followup_supports_punctuation_in_project_code(self):
+        self.alpha.code = "LAB.2026/A"
+        self.alpha.save()
+        first = self.chat("Register 2 plasma samples in project LAB.2026/A")
+        result = self.chat("with source=blood", context=first.data["context"])
+        self.assertIn("pending_action", result.data)
+        action = AssistantAction.objects.get(pk=result.data["pending_action"]["id"])
+        self.assertEqual(action.payload["project_id"], self.alpha.pk)
+
+    def test_registration_followup_keeps_project_identity_after_code_reuse(self):
+        first = self.chat("Register 2 plasma samples in project ALPHA")
+        self.alpha.code = "RENAMED"
+        self.alpha.save()
+        self.beta.code = "ALPHA"
+        self.beta.save()
+        result = self.chat("with source=blood", context=first.data["context"])
+        self.assertIn("pending_action", result.data)
+        action = AssistantAction.objects.get(pk=result.data["pending_action"]["id"])
+        self.assertEqual(action.payload["project_id"], self.alpha.pk)
+
+    def test_registration_rejects_database_unsafe_strings(self):
+        for value in ['"\\u0000"', '"\\ud800"', '"\\udfff"']:
+            with self.subTest(value=value):
+                data = self.chat(f"Register 1 sample in project ALPHA with source={value}").data
+                self.assertNotIn("pending_action", data)
+
+    def test_large_float_field_is_validation_error_not_server_error(self):
+        from custom_fields.models import FieldDefinition
+        FieldDefinition.objects.create(entity_type="Sample", name="quantity", data_type="float")
+        result = self.chat("Register 1 sample in project ALPHA with source=blood, quantity=" + "9" * 400)
+        self.assertEqual(result.status_code, 200)
+        self.assertNotIn("pending_action", result.data)
+        self.assertIn("numeric range", result.data["answer"])
+
+    def test_invalid_or_old_registration_context_cannot_propose_actions(self):
+        states = [
+            "register 2 PLASMA samples in project ALPHA",
+            {"project_id": self.alpha.pk, "count": True, "sample_type": "PLASMA"},
+            {"project_id": True, "count": 2, "sample_type": "PLASMA"},
+            {"project_id": 10**100, "count": 2, "sample_type": "PLASMA"},
+            {"project_id": self.alpha.pk, "count": 2, "sample_type": "PLASMA with source=bad"},
+            {"project_id": self.private.pk, "count": 2, "sample_type": "PLASMA"},
+        ]
+        for state in states:
+            with self.subTest(state=state):
+                result = self.chat("with source=blood", context={"sample_registration": state})
+                self.assertEqual(result.status_code, 200)
+                self.assertNotIn("pending_action", result.data)
+        self.assertEqual(AssistantAction.objects.count(), 0)
+
+    def test_role_revocation_blocks_registration_followup(self):
+        first = self.chat("Register 2 plasma samples in project ALPHA")
+        self.tech.groups.clear()
+        result = self.chat("with source=blood", context=first.data["context"])
+        self.assertNotIn("pending_action", result.data)
+
+    def test_confirmation_rejects_unsafe_frozen_values_before_creating(self):
+        from types import SimpleNamespace
+        from assistant.sample_operations import execute_create_samples
+        before = Sample.objects.count()
+        for value in ["\x00", "\ud800", float("inf")]:
+            action = SimpleNamespace(requested_by=self.tech, payload={
+                "project_id": self.alpha.pk, "sample_codes": ["ALPHA-X"], "custom_fields": {"source": value}})
+            with self.subTest(value=repr(value)), self.assertRaises(ValueError):
+                execute_create_samples(action)
+        self.assertEqual(Sample.objects.count(), before)
+
     def test_history_scopes_events_and_never_echoes_payloads(self):
         sample = self.samples[0]
         Event.objects.create(entity_type="sample", entity_id=str(sample.public_id), action="RECEIVED", payload={"secret": "old project secret"})

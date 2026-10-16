@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.50.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.50.2-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,12 @@
 ---
 
 ## Overview
+
+### v0.50.2 — Stable registration follow-ups and database-safe values
+
+Registration follow-ups retain the project ID, so renamed/reused codes cannot redirect a pending request and punctuation in project codes no longer breaks replies. Every follow-up rechecks role and project access. After upgrading, restart any unfinished registration from v0.50.1 or earlier; its code-only context is no longer safe to resume.
+
+Duplicate keys inside JSON objects, null characters, invalid Unicode and non-finite values are rejected before a proposal and checked again at confirmation. Oversized numeric fields return a validation message rather than an error. Normal Unicode text and quoted punctuation remain supported. No database migration is required.
 
 ### v0.50.1 — Stricter registration and stock estimates
 
@@ -73,7 +79,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.50.1 — Stricter registration and stock estimates`.
+**Current development version:** `v0.50.2 — Stable registration follow-ups and database-safe values`.
 
 ## Deployment Access
 
