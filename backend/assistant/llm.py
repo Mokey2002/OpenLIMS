@@ -159,6 +159,7 @@ User question:
 
 
 def build_route_classifier_prompt(message, context=None):
+    from .provider_tools import catalog_prompt
     context = context or {}
     active_context = [
         key
@@ -204,6 +205,25 @@ Allowed routes:
 {routes}
 
 Rules:
+- For an application feature, prefer route "tool" with this alternative JSON shape:
+  {{"route":"tool","tool":"catalog_name","arguments":{{"argument_name":"value"}},"confidence":0.95}}
+- Available tools and their argument names:
+{catalog_prompt()}
+- Direct tool meanings: sample_history = sample audit/history; similar_experiments = keyword search;
+  reagent_plan = stock planning for a sample count and procedure; project_update = editable progress note;
+  quarantine_impact = preview only, never quarantine; data_quality = suspicious project records;
+  workflow_draft = editable sequential workflow, procedures is a comma-separated list of exact CODE@VERSION or names;
+  handover = unfinished work from source username to recipient username;
+  compare_runs = current experiment comparison, left/right are exact public IDs or unique titles.
+- count must be an integer; version is optional for reagent_plan. All other arguments are strings.
+- For command tools, translate the wording into a supported command in English, retaining every requested filter,
+  identifier, quantity, value, unit, reason and negation. Examples are syntax, not actual record identifiers.
+- Copy identifiers/names and scientific values from the user's request. Never invent identifiers, versions,
+  defaults, QC reasons, recipients or experimental values. Do not silently drop unsupported conditions.
+- Omit missing required arguments so OpenLIMS asks for clarification. Do not guess from hidden records.
+- Request exactly one tool. Multi-action or unsupported requests use unknown; never send code, SQL,
+  confirmation tokens, user/permission overrides or executable payloads.
+- Never translate a preview or question into a mutation. Changes only produce server previews for explicit confirmation.
 - Select chart only when the user explicitly requests a visual.
 - Select analytics for allow-listed grouping, aggregate rates, or ranked summaries.
 - Select attention for broad questions about priorities, pending work, or what needs review.

@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.52.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.53.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,18 @@
 ---
 
 ## Overview
+
+### v0.53.0 — Shared OpenAI/Ollama feature dispatch
+
+When rule matching cannot resolve a request, either configured provider can now return a validated feature request. OpenLIMS dispatches it with the authenticated user and existing conversation context. Enable the assistant LLM and LLM routing settings, then configure OpenAI credentials/model or the Ollama URL/model. Rules-only mode remains available.
+
+The shared catalog covers 32 entries: direct connections for sample history, related experiments, reagent planning, project updates, quarantine-impact previews, data-quality reviews, workflow drafts, shift handovers and run comparisons; command adapters for analytics, attention, barcodes, calculations, charts, comparisons, confirmed jobs, inventory, investigations, notifications, QC, reports, samples/registration, sequences, SOPs, work items, guided assignments/results, sample guidance, project workflow queries, monitoring, identity, record search and migration search.
+
+For example, a provider can interpret “Help Maria take over Peter's unfinished work” as a handover with source `peter` and recipient `maria`. Existing features recheck permissions, feature flags and record ambiguity. Missing required inputs ask for a complete request with those details; free-form clarification follow-ups are not automatically stored. Model-generated commands must still match the selected legacy parser. Unsupported conditions should produce clarification, not invented functionality; recognition quality depends on the configured model.
+
+Both chat surfaces show an expandable provider interpretation, including the selected feature and arguments. Results remain deterministic and can retain the OpenLIMS Rules label: the provider interprets, while OpenLIMS executes. Writes only produce the existing server-generated confirmation previews; workflow drafts require explicit saving in the designer. The model cannot confirm an action, execute SQL/code, or supply permissions. Global legacy migration search through this bridge is admin-only.
+
+Validation uses mocked provider responses to exercise both adapters and backend execution; it is not a live-model accuracy benchmark. A catalog coverage regression detects newly added assistant routers without an explicit dispatch connection. No database migration is required.
 
 ### v0.52.1 — Deterministic investigation privacy regression
 
@@ -102,7 +114,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.52.1 — Deterministic investigation privacy regression`.
+**Current development version:** `v0.53.0 — Shared OpenAI/Ollama feature dispatch`.
 
 ## Deployment Access
 

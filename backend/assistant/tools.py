@@ -631,6 +631,11 @@ def _hint_clarification(route_hint, user):
 
 def route_assistant_message(message, user, context=None, route_hint=None):
     context = context or {}
+    if route_hint and route_hint.get("route") == "tool":
+        from .provider_tools import dispatch_tool
+        result = dispatch_tool(route_hint, user, context)
+        return _routed(result, "tool", source=route_hint.get("provider", "llm"),
+                       confidence=route_hint.get("confidence", 0), plan=route_hint)
     query = clean_query(message)
     lower = query.lower()
 
@@ -846,9 +851,13 @@ def route_assistant_message(message, user, context=None, route_hint=None):
             ]
             return _routed(job_result, "migration")
 
+    # These final searches only recognize record mentions, not the requested
+    # operation. Let an enabled provider interpret a richer request first;
+    # the search result remains the fallback if classification is unavailable.
     if "project" in lower or "prj-" in lower:
         project_result = search_projects(query, user)
         if project_result:
+            project_result["route_unmatched"] = True
             project_result["suggestions"] = [
                 "Show samples in this project",
                 "Show migration rows for this project",
@@ -858,6 +867,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
 
     sample_result = search_samples(query, user)
     if sample_result:
+        sample_result["route_unmatched"] = True
         sample_result["suggestions"] = [
             "Summarize this sample",
             "Show related migration rows",
@@ -867,6 +877,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
 
     project_result = search_projects(query, user)
     if project_result:
+        project_result["route_unmatched"] = True
         project_result["suggestions"] = [
             "Summarize this project",
             "Show samples in this project",
