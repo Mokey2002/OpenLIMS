@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.52.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.52.1-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,10 @@
 ---
 
 ## Overview
+
+### v0.52.1 — Deterministic investigation privacy regression
+
+Fixes an intermittent CI test failure: the digits of a private result (`9999`) could appear in an unrelated timestamp. The investigation test now reproduces that timestamp and checks actual result IDs/values, peer records and aggregate counts instead of scanning the entire response for digits. Application behavior and permissions are unchanged; no migration is required.
 
 ### v0.52.0 — Workflow drafts, handovers and run comparisons
 
@@ -98,7 +102,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.52.0 — Workflow drafts, handovers and run comparisons`.
+**Current development version:** `v0.52.1 — Deterministic investigation privacy regression`.
 
 ## Deployment Access
 
