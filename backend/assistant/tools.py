@@ -147,6 +147,7 @@ def get_sample_detail(sample):
 
     return {
         "answer": answer,
+        "context": {"sample_id": sample.pk, "sample_code": sample.sample_id},
         "links": [
             make_link(
                 f"Open sample {sample.sample_id}",
@@ -244,6 +245,7 @@ def search_samples(message, user, limit=10):
 
     return {
         "answer": "\n".join(lines),
+        "context": {"sample_ids": [sample.pk for sample in samples]},
         "links": links,
         "suggestions": without_empty(
             project_prompt(user),
@@ -590,6 +592,12 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         result = dispatch_tool(route_hint, user, context)
         return _routed(result, "tool", source=route_hint.get("provider", "llm"),
                        confidence=route_hint.get("confidence", 0), plan=route_hint)
+    from .record_followups import resolve_read_followup
+    resolved, question = resolve_read_followup(message, user, context)
+    if question:
+        return _routed(question, "samples")
+    if resolved:
+        message = resolved
     from .project_conversation import project_request
     project_result = project_request(message, user, context)
     if project_result:
@@ -600,7 +608,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         return _routed(personal, "work_items")
     from .provider_conversation import resume
     continued = resume(message, user, context)
-    if continued:
+    if continued and not continued.get("route_unmatched"):
         return _routed(continued, "tool")
     query = clean_query(message)
     lower = query.lower()
@@ -850,6 +858,9 @@ def route_assistant_message(message, user, context=None, route_hint=None):
             "Show migration jobs",
         ]
         return _routed(project_result, "record_search")
+
+    if continued:
+        return _routed(continued, "tool")
 
     return _routed({
         "answer": (

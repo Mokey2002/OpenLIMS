@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.55.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.55.1-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,10 @@
 ---
 
 ## Overview
+
+### v0.55.1 — Follow-ups across sample features
+
+After **“Summarize sample S-100”**, you can ask **“Show its history”**, **“Where is it stored?”**, **“Who last moved it?”**, **“What's next?”**, or **“Show its sequences”**. These read-only follow-ups use one stable sample ID, recheck access, and ask for clarification for missing/conflicting/multiple samples. History and sequence reads retain the selected sample; project data-quality reviews retain the project for sample-list follow-ups. Existing deterministic commands get a chance to handle requests before provider continuation fallback. Sequence lookup/summary now requires an exact, unambiguous accessible sample when one is specified; an unresolved ID cannot expand the search to all accessible sequences. General sequence searches still work. This is bounded follow-up support, not unrestricted conversational memory.
 
 ### v0.55.0 — Project briefings and follow-ups
 

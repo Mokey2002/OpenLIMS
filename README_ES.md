@@ -2,6 +2,10 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.55.1 — Seguimiento entre funciones de muestras
+
+Después de **“Summarize sample S-100”**, pregunta **“Show its history”**, **“Where is it stored?”**, **“Who last moved it?”**, **“What's next?”** o **“Show its sequences”**. Estos comandos de lectura usan un ID estable y vuelven a comprobar permisos; varias muestras, IDs inválidos o contexto contradictorio requieren aclaración. Historial/secuencias conservan la muestra y las revisiones de calidad conservan el proyecto. Las búsquedas de secuencias con muestra explícita requieren un ID exacto y accesible; si no se resuelve, no se amplía la búsqueda. El seguimiento está limitado a estas formas compatibles, no es memoria de conversación ilimitada.
+
 ## v0.55.0 — Resúmenes y seguimiento de proyectos
 
 Pregunta **“Summarize project ALPHA”** y después **“Show me samples in that project”** o **“Who is assigned work in that project?”**. Estos comandos en inglés funcionan sin modelo y mediante el adaptador compartido de OpenAI/Ollama. El resumen muestra miembros, estados de muestras, trabajo por responsable, vencimientos, trabajo sin asignar, fallos y QC rechazado/repetición. Cada turno vuelve a verificar los permisos. Incluye muestras primarias y vinculadas accesibles (hasta 100 en la lista). Los indicadores excluyen trabajo completado/cancelado; no evalúan todas las dependencias.
