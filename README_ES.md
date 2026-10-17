@@ -2,6 +2,10 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.55.0 — Resúmenes y seguimiento de proyectos
+
+Pregunta **“Summarize project ALPHA”** y después **“Show me samples in that project”** o **“Who is assigned work in that project?”**. Estos comandos en inglés funcionan sin modelo y mediante el adaptador compartido de OpenAI/Ollama. El resumen muestra miembros, estados de muestras, trabajo por responsable, vencimientos, trabajo sin asignar, fallos y QC rechazado/repetición. Cada turno vuelve a verificar los permisos. Incluye muestras primarias y vinculadas accesibles (hasta 100 en la lista). Los indicadores excluyen trabajo completado/cancelado; no evalúan todas las dependencias.
+
 ## v0.54.0 — Prioridades personales y continuidad de conversación
 
 Pregunta **“What do I need to work on?”**, **“Show my tasks”** o **“¿En qué debo trabajar hoy?”** sin habilitar un proveedor de IA. Se muestran hasta 100 trabajos accesibles, asignados al usuario actual y sin finalizar, ordenados por vencimiento, con alertas y enlaces. Excluye trabajo ajeno, sin asignar, completado o cancelado; incluye fechas futuras y trabajos sin fecha. No es una evaluación completa de dependencias ni de tareas QC. Una lista vacía no significa que todo el laboratorio esté al día. Las respuestas de estas nuevas funciones están principalmente en inglés.

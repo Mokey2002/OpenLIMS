@@ -107,7 +107,10 @@ def dispatch_tool(plan, user, context=None):
             result = search_migration_rows(command) if "row" in command.lower() else fn(command)
         elif tool == "record_search":
             from .tools import search_projects
-            result = search_projects(command, user) if "project" in command.lower() else fn(command, user)
+            from .project_conversation import project_request
+            result = project_request(command, user, context)
+            if result is None:
+                result = search_projects(command, user) if "project" in command.lower() else fn(command, user)
         elif tool in NO_CONTEXT:
             result = fn(command, user)
         else:

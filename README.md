@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.54.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.55.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,10 @@
 ---
 
 ## Overview
+
+### v0.55.0 — Project briefings and follow-ups
+
+Ask **“Summarize project ALPHA”**, then **“Show me samples in that project”** or **“Who is assigned work in that project?”**. These requests work without a model and through the shared OpenAI/Ollama record-search adapter. Briefings show project members, sample statuses, work by assignee, overdue work, unassigned work, failures and rejected/rerun QC. Follow-ups retain the project ID and recheck access every turn. Sample lists include accessible primary and linked samples (up to 100); assignments refer to work items in the briefing and samples in the sample list. Attention counts exclude completed/cancelled work and are not a full dependency assessment.
 
 ### v0.54.0 — Personal work priorities and conversational follow-ups
 

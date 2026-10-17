@@ -158,7 +158,7 @@ def project_update(code, user):
             f"and {active.filter(assigned_to__isnull=True).count()} unassigned.\n"
             f"{work.filter(qc_status=WorkItem.QC_REJECTED).count()} work items have rejected QC.\n"
             "Counts cover samples owned by this project and reflect current records, not changes over a reporting period.")
-    return response("Review and edit this project update before sharing.", draft={"text": text},
+    return response("Review and edit this project update before sharing.", context={"project_id": project.pk}, draft={"text": text},
                     links=[{"label": f"Project {project.code}", "url": f"/projects/{project.pk}"}])
 
 

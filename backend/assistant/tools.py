@@ -1,5 +1,4 @@
 import re
-from collections import Counter
 
 from django.db.models import Q
 
@@ -129,53 +128,8 @@ def extract_sample_like_tokens(message):
 
 
 def summarize_project(project, user):
-    samples = get_sample_access_queryset(
-        Sample.objects.filter(
-            Q(project=project) | Q(linked_projects=project)
-        ).distinct(),
-        user,
-    )
-
-    status_counts = Counter(samples.values_list("status", flat=True))
-
-    migration_jobs = MigrationJob.objects.filter(project=project).order_by("-created_at")[:5]
-    migration_rows = MigrationRowRecord.objects.filter(project=project)
-
-    answer = (
-        f"{project.code} — {project.name}\n\n"
-        f"This project has {samples.count()} visible sample(s). "
-        f"Migration review has {migration_rows.count()} row record(s) linked to this project."
-    )
-
-    if status_counts:
-        status_text = ", ".join(
-            f"{status}: {count}" for status, count in sorted(status_counts.items())
-        )
-        answer += f"\n\nSample statuses: {status_text}."
-
-    links = [
-        make_link(
-            f"Open project {project.code}",
-            f"/projects/{project.id}",
-            "project",
-            {"id": project.id, "code": project.code},
-        )
-    ]
-
-    for job in migration_jobs:
-        links.append(
-            make_link(
-                f"Migration job #{job.id} — {job.status}",
-                f"/data-migration/jobs/{job.id}",
-                "migration_job",
-                {"id": job.id, "status": job.status},
-            )
-        )
-
-    return {
-        "answer": answer,
-        "links": links,
-    }
+    from .project_conversation import project_briefing
+    return project_briefing(project, user)
 
 
 def get_sample_detail(sample):
@@ -636,6 +590,10 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         result = dispatch_tool(route_hint, user, context)
         return _routed(result, "tool", source=route_hint.get("provider", "llm"),
                        confidence=route_hint.get("confidence", 0), plan=route_hint)
+    from .project_conversation import project_request
+    project_result = project_request(message, user, context)
+    if project_result:
+        return _routed(project_result, "samples")
     from .workitem_operations import personal_work_summary
     personal = personal_work_summary(message, user)
     if personal:
