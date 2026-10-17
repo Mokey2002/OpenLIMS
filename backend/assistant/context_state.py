@@ -2,6 +2,7 @@ import re
 
 
 ALLOWED_CONTEXT_KEYS = {
+    "clarification_topic",
     "sample_registration",
     "guidance",
     "project_workflows",
@@ -67,6 +68,10 @@ def update_conversation_context(message, previous, result):
         return supplied
     if supplied:
         return supplied
+    # Courtesy replies should not discard the current task or its clarification.
+    if re.fullmatch(r"(?:thanks|thank you|thanks a lot|great thanks|okay thanks|ok thanks|okay|ok|got it|understood)[.! ]*",
+                    str(message or "").strip(), re.I):
+        return previous
     if FOLLOW_UP_PATTERN.search(str(message or "")) and previous:
         return previous
     return {}

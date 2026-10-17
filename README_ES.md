@@ -2,6 +2,12 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.56.0 — Respuestas breves y continuidad de conversación
+
+Si el asistente ofrece opciones de muestras, resultados, QC, fallos o inventario, responde con el nombre mostrado, su número o **“the second one”**. Las opciones se reconstruyen con comandos del servidor. **“Thanks”**, **“okay”** y **“got it”** conservan el contexto para seguir consultando, graficando o exportando; **“start over”** borra la elección pendiente. Una solicitud explícita nueva cambia de tema.
+
+Usa **“Summarize this project”**, **“Preview quarantine impact for that lot”** o compara el resultado seleccionado con su rango de referencia. Los IDs inválidos, contradictorios o múltiples requieren aclaración. Las consultas vuelven a comprobar permisos y las escrituras siguen requiriendo confirmación. Son mejoras para conversaciones compatibles, no memoria ilimitada ni respuestas garantizadas a cualquier pregunta.
+
 ## v0.55.1 — Seguimiento entre funciones de muestras
 
 Después de **“Summarize sample S-100”**, pregunta **“Show its history”**, **“Where is it stored?”**, **“Who last moved it?”**, **“What's next?”** o **“Show its sequences”**. Estos comandos de lectura usan un ID estable y vuelven a comprobar permisos; varias muestras, IDs inválidos o contexto contradictorio requieren aclaración. Historial/secuencias conservan la muestra y las revisiones de calidad conservan el proyecto. Las búsquedas de secuencias con muestra explícita requieren un ID exacto y accesible; si no se resuelve, no se amplía la búsqueda. El seguimiento está limitado a estas formas compatibles, no es memoria de conversación ilimitada.

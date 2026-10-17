@@ -95,7 +95,7 @@ def quarantine_impact(code, user):
     answer = f"Quarantine impact preview for {lot.lot_code} (current status: {lot.status}). {len(rows)} accessible evidence rows found."
     if not rows:
         answer += " No recorded accessible dependencies were found; this does not prove there is no impact."
-    return response(answer, impact_preview={"lot_id": lot.pk, "truncated": limited},
+    return response(answer, context={"inventory_lot_id": lot.pk}, impact_preview={"lot_id": lot.pk, "truncated": limited},
         suggestions=[f"Preview quarantine impact for lot {lot.lot_code}"],
         comparison=_table("Lot quarantine impact", rows, [("kind", "Evidence type"), ("target", "Linked record"), ("evidence", "What to review")], notes),
         links=[{"label": label, "url": url} for url, label in links.items()][:100])

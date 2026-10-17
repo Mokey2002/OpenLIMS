@@ -36,9 +36,41 @@ def _response(topic, question, options, context):
         },
         "links": [],
         "suggestions": [],
-        "context": dict(context or {}),
+        "context": {**dict(context or {}), "clarification_topic": topic},
         "skip_llm": True,
     }
+
+
+# Rebuild choices from server-owned read commands; never replay client commands.
+CHOICE_REQUESTS = {
+    "qc_samples": "show qc samples", "qc_results": "show qc results",
+    "sample_scope": "show samples", "result_scope": "show results",
+    "failure_domain": "show failures", "inventory_scope": "show inventory",
+}
+
+
+def resume_clarification(message, context):
+    topic = context.get("clarification_topic")
+    if not isinstance(topic, str) or topic not in CHOICE_REQUESTS:
+        return None, None
+    text = _normalize(message)
+    if text in {"cancel", "never mind", "start over", "forget that"}:
+        return None, {"answer": "Okay, let's start fresh. What would you like to check?",
+                      "context": {}, "replace_context": True, "skip_llm": True}
+    question = route_assistant_clarification(CHOICE_REQUESTS[topic], context)
+    options = question["clarification"]["options"]
+    ordinals = ["first", "second", "third", "fourth"]
+    for index, option in enumerate(options):
+        labels = {_normalize(option["id"]), _normalize(option["label"]), str(index + 1),
+                  f"option {index + 1}"}
+        if index < len(ordinals):
+            labels.update({ordinals[index], f"the {ordinals[index]} one"})
+        if text in labels:
+            return option["message"], None
+    if text in {"yes", "no", "that one", "which ones", "not sure"} or text.isdigit():
+        question["answer"] = "Which option do you mean? Reply with its name or number."
+        return None, question
+    return None, None
 
 
 def _qc_scope_is_explicit(lower):
