@@ -28,7 +28,7 @@ class AssistantClarificationTests(APITestCase):
 
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["clarification"]["topic"], "qc_samples")
-        self.assertEqual(response.data["context"], context)
+        self.assertEqual(response.data["context"], {**context, "clarification_topic": "qc_samples"})
         self.assertNotIn("chart", response.data)
         self.assertNotIn("investigation", response.data)
         self.assertEqual(

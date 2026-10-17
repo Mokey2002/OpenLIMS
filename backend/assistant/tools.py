@@ -587,6 +587,13 @@ def _hint_clarification(route_hint, user):
 
 def route_assistant_message(message, user, context=None, route_hint=None):
     context = context or {}
+    from .clarifications import resume_clarification
+    selected, choice_question = resume_clarification(message, context)
+    if choice_question:
+        return _routed(choice_question, "clarification")
+    if selected:
+        message = selected
+        context = {key: value for key, value in context.items() if key != "clarification_topic"}
     if route_hint and route_hint.get("route") == "tool":
         from .provider_tools import dispatch_tool
         result = dispatch_tool(route_hint, user, context)
@@ -861,6 +868,23 @@ def route_assistant_message(message, user, context=None, route_hint=None):
 
     if continued:
         return _routed(continued, "tool")
+
+    if context and re.search(r"\b(?:it|its|this|that|those|them|same)\b", query, re.I):
+        next_questions = []
+        if context.get("sample_id") or context.get("sample_ids"):
+            next_questions += ["Show its history", "Where is it stored?", "What's next?"]
+        elif context.get("project_id"):
+            next_questions += ["Summarize this project", "Show samples in that project"]
+        if context.get("comparison"):
+            next_questions += ["Graph it", "Export this comparison as CSV"]
+        if context.get("inventory_lot_id") or context.get("inventory_lot_ids"):
+            next_questions += ["Preview quarantine impact for that lot"]
+        if next_questions:
+            return _routed({"answer": "I'm not sure what you want to know about the current records. "
+                            "Could you be more specific, or choose one of these follow-ups?",
+                            "context": context, "suggestions": next_questions[:5], "links": [],
+                            "clarification": {"required": True}, "skip_llm": True,
+                            "route_unmatched": True}, "unknown", confidence=0)
 
     return _routed({
         "answer": (

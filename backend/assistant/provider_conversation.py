@@ -82,7 +82,7 @@ def resume(message, user, context):
             value = value[1:-1]
         # Only consume unambiguous short answers. Full questions/new commands
         # continue through ordinary routing and can reset the topic.
-        reserved = {"hi", "hello", "thanks", "thank", "yes", "no", "help", "stop", "cancel", "status", "again", "refresh"}
+        reserved = {"hi", "hello", "thanks", "thank", "yes", "no", "help", "stop", "cancel", "status", "again", "refresh", "ok", "okay", "understood"}
         simple = bool(re.fullmatch(r"[\w.@+:/-]+", value)) and value.casefold() not in reserved
         if field == "count":
             candidate = int(value) if re.fullmatch(r"\d{1,6}", value) else None

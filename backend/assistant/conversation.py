@@ -151,6 +151,9 @@ def route_conversation_utility(message, user=None):
             "Hello! What would you like to check in OpenLIMS?"
         )
 
+    if normalized in {"okay", "ok", "got it", "understood"}:
+        return _utility_response("Okay. What would you like to check next?")
+
     if _is_thanks(normalized):
         return _utility_response("You're welcome.")
 

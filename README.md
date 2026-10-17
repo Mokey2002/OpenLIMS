@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.55.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.56.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,12 @@
 ---
 
 ## Overview
+
+### v0.56.0 — Clarification replies and conversation continuity
+
+When the assistant offers sample, result, QC, failure, or inventory choices, reply with the displayed name, number, or **“the second one”**. Choices are rebuilt from server-owned commands; client-provided commands are never replayed. **“Thanks”**, **“okay”**, and **“got it”** keep the current task, so a comparison can still be graphed/exported afterward. **“Start over”** clears a pending choice; a new specific request switches topics.
+
+Project follow-ups include **“Summarize this project”** and, when only a project is selected, **“Summarize it”**. After a single-lot inventory result, ask **“Preview quarantine impact for that lot”**; multiple lots require clarification. QC reference-range comparisons accept one selected result and safely reject malformed or conflicting IDs. Unresolved record follow-ups offer relevant next questions while retaining their context. Permissions are checked when records are read; writes still require confirmation. These improvements cover supported conversation paths, not unlimited memory or guaranteed answers to every question.
 
 ### v0.55.1 — Follow-ups across sample features
 

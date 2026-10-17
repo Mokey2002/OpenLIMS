@@ -69,6 +69,8 @@ def project_sample_list(project, user):
 def project_request(message, user, context=None):
     text = str(message or '').strip().rstrip('?.!').strip()
     match = re.fullmatch(r'(?:please\s+)?(?:summarize|summarise|summary of|give me (?:a |the )?summary of|tell me about)\s+(?:the\s+)?project\s+(.+)', text, re.I)
+    if not match:
+        match = re.fullmatch(r'(?:summarize|summarise|tell me about)\s+(this project|that project|the project)', text, re.I)
     samples = re.fullmatch(r'(?:please\s+)?(?:show|list|show me|list all|show me all)\s+(?:the\s+)?samples\s+(?:in|for|from)\s+(.+)', text, re.I)
     if samples:
         # Preserve richer existing workflow/filter requests before the plain list.

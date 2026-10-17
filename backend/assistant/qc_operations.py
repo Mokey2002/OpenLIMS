@@ -512,8 +512,17 @@ def _read_failure_reason(message, user):
 def _read_reference_comparison(message, user, context):
     if not re.search(r"\bcompare\b.*\breference\s+range\b", message, re.I):
         return None
-    result_id = _result_id_from_message(message) or context.get("result_id")
-    if not result_id:
+    result_id = _result_id_from_message(message)
+    if result_id is None:
+        ids = context.get("result_ids", [])
+        if not isinstance(ids, list):
+            ids = [None]
+        ids = list(ids)
+        if context.get("result_id") is not None:
+            ids.append(context["result_id"])
+        if ids and all(type(pk) is int and 0 < pk < 2**63 for pk in ids) and len(set(ids)) == 1:
+            result_id = ids[0]
+    if type(result_id) is not int or not 0 < result_id < 2**63:
         return _error(
             _result_request_help(
                 user,
