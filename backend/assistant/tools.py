@@ -636,6 +636,14 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         result = dispatch_tool(route_hint, user, context)
         return _routed(result, "tool", source=route_hint.get("provider", "llm"),
                        confidence=route_hint.get("confidence", 0), plan=route_hint)
+    from .workitem_operations import personal_work_summary
+    personal = personal_work_summary(message, user)
+    if personal:
+        return _routed(personal, "work_items")
+    from .provider_conversation import resume
+    continued = resume(message, user, context)
+    if continued:
+        return _routed(continued, "tool")
     query = clean_query(message)
     lower = query.lower()
 

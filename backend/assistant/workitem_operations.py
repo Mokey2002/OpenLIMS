@@ -16,6 +16,38 @@ from .suggestions import batch_prompt
 from .entity_resolution import accessible_entity_queryset
 
 
+def personal_work_summary(message, user):
+    """Personal-priority questions do not require a model or special commands."""
+    text = str(message).strip().lower().replace("’", "'")
+    text = re.sub(r"[?!¿¡.,]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"^(?:please |hey |hi )", "", text)
+    text = re.sub(r" (?:please|smh|shm)$", "", text)
+    if not re.fullmatch(r"(?:what (?:do i need to|should i|can i|am i supposed to) work on(?: today| next)?|what should i do next|what(?:'s| is) on my plate(?: today)?|(?:show|list)(?: me)? my (?:work|tasks|assignments)|what (?:are my tasks|is assigned to me)|(?:en )?qu[eé] (?:debo|tengo que) trabajar(?: hoy)?)", text):
+        return None
+    from django.db.models import F
+    from .lab_helpers import response
+    now = timezone.now()
+    queryset = _accessible_work(user).filter(assigned_to=user).exclude(status__in=LOCKED_STATUSES)
+    items = list(queryset.select_related("sample").order_by(F("due_at").asc(nulls_last=True), "pk")[:101])
+    rows = [{"sample": item.sample.sample_id, "work": item.name, "status": item.status,
+             "due": item.due_at.isoformat() if item.due_at else "No deadline recorded",
+             "review": "Failed work—review before proceeding" if item.status == "FAILED" else
+                       "QC needs review" if item.qc_status in {"REJECTED", "RERUN_REQUIRED"} else
+                       "Overdue" if item.due_at and item.due_at < now else "Check the next step"}
+            for item in items[:100]]
+    answer = ("Here's your unfinished assigned work, with the earliest deadlines first. Open a sample to check its next step before proceeding."
+              if rows else "I couldn't find any unfinished work assigned to you in the records you can access. You can check the team's attention summary for unassigned work and other issues.")
+    if len(items) > 100:
+        answer += " I'm showing the first 100 items; open My Work for the rest."
+    return response(answer, personal_work={"username": user.username, "truncated": len(items) > 100},
+                    comparison={"title": "Your work priorities", "rows": rows,
+                                "columns": [{"key": key, "label": label} for key, label in [("sample", "Sample"), ("work", "Work"), ("status", "Status"), ("due", "Deadline"), ("review", "What to check")]],
+                                "notes": ["Only unfinished work assigned to you and currently accessible. This is not a full dependency or QC task assessment; future and undated work are included."]},
+                    links=[{"label": item.sample.sample_id, "url": f"/samples/{item.sample_id}"} for item in items[:10]],
+                    suggestions=([f"What next for sample {items[0].sample.sample_id}"] if items else []) + ["What needs attention?"])
+
+
 ACTIVE_STATUSES = [WorkItem.STATUS_PENDING, WorkItem.STATUS_IN_PROGRESS]
 LOCKED_STATUSES = [WorkItem.STATUS_COMPLETED, WorkItem.STATUS_CANCELLED]
 MAX_WORK_ITEMS = 100
@@ -379,6 +411,9 @@ def _propose_assignment(message, user):
 
 def route_workitem_operations(message, user, context=None):
     del context
+    personal = personal_work_summary(message, user)
+    if personal:
+        return personal
     lower = str(message or "").lower()
     if "work" not in lower:
         return None

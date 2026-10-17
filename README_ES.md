@@ -2,6 +2,14 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.54.0 — Prioridades personales y continuidad de conversación
+
+Pregunta **“What do I need to work on?”**, **“Show my tasks”** o **“¿En qué debo trabajar hoy?”** sin habilitar un proveedor de IA. Se muestran hasta 100 trabajos accesibles, asignados al usuario actual y sin finalizar, ordenados por vencimiento, con alertas y enlaces. Excluye trabajo ajeno, sin asignar, completado o cancelado; incluye fechas futuras y trabajos sin fecha. No es una evaluación completa de dependencias ni de tareas QC. Una lista vacía no significa que todo el laboratorio esté al día. Las respuestas de estas nuevas funciones están principalmente en inglés.
+
+Las nueve funciones directas de lectura/borrador ahora preguntan por un dato faltante a la vez. El relevo acepta `me` como usuario actual, y después pregunta quién recibe el trabajo. Los IDs/nombres de usuario cortos se resuelven sin otra llamada al modelo; usa comillas para títulos con espacios. Con OpenAI/Ollama, respuestas como `same for BETA` reciben los argumentos verificados de la solicitud anterior. Un tema nuevo empieza de cero; `never mind` o `start over` descarta ese contexto.
+
+El estado está firmado, vinculado al usuario y caduca a los 30 minutos. Guarda argumentos, no resultados, y vuelve a comprobar permisos. No autoriza cambios ni permite repetir escrituras; las confirmaciones siguen vigentes. Las dos vistas muestran la interpretación con etiquetas más claras, sin JSON crudo. Las pruebas de proveedores usan respuestas simuladas. No requiere migración.
+
 ## v0.53.0 — Conexiones compartidas para OpenAI y Ollama
 
 Cuando las reglas no resuelven una solicitud, cualquiera de los proveedores configurados puede devolver una petición de función validada. OpenLIMS la ejecuta con el usuario autenticado y el contexto existente. Habilita el LLM y su enrutamiento, y configura credenciales/modelo de OpenAI o URL/modelo de Ollama. El modo de solo reglas sigue disponible.
@@ -89,7 +97,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.53.0`
+**Versión de desarrollo actual:** `v0.54.0`
 
 **Demo:** http://35.164.28.250
 
