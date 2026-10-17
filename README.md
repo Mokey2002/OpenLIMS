@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.53.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.55.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,18 @@
 ---
 
 ## Overview
+
+### v0.55.0 — Project briefings and follow-ups
+
+Ask **“Summarize project ALPHA”**, then **“Show me samples in that project”** or **“Who is assigned work in that project?”**. These requests work without a model and through the shared OpenAI/Ollama record-search adapter. Briefings show project members, sample statuses, work by assignee, overdue work, unassigned work, failures and rejected/rerun QC. Follow-ups retain the project ID and recheck access every turn. Sample lists include accessible primary and linked samples (up to 100); assignments refer to work items in the briefing and samples in the sample list. Attention counts exclude completed/cancelled work and are not a full dependency assessment.
+
+### v0.54.0 — Personal work priorities and conversational follow-ups
+
+Ask **“What do I need to work on?”**, **“What's on my plate?”**, or **“Show my tasks”** without enabling an AI provider. The assistant shows up to 100 accessible unfinished work items assigned to the signed-in user, earliest deadlines first, with overdue/failure/QC-review flags and sample links. Unassigned and other people's work are excluded; completed/cancelled work is excluded. Future/undated work is included. This is a work list, not a complete dependency or QC task assessment. An empty list does not mean the whole lab has no pending work.
+
+For the nine direct read/draft features connected in v0.53.0, missing inputs now trigger one plain-language question at a time. For example, the handover helper asks whose work to cover, accepts `me`, then asks who is taking over. Exact short IDs/usernames work without another model call; quote multi-word titles. With OpenAI/Ollama enabled, follow-ups such as `same for BETA` receive the verified previous feature arguments. New topics start fresh, and `never mind` or `start over` clears this feature context.
+
+Conversation state is signed, tied to the requesting user and expires after 30 minutes. Every resumed feature rechecks current permissions. It stores request arguments, not result snapshots, and never authorizes changes. Write-command adapters do not receive this replay context; previews/confirmations remain unchanged. Both chat views use friendlier interpretation labels instead of raw JSON. Model follow-up tests use simulated responses, not a live-model quality benchmark. No migration is required.
 
 ### v0.53.0 — Shared OpenAI/Ollama feature dispatch
 
@@ -114,7 +126,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.53.0 — Shared OpenAI/Ollama feature dispatch`.
+**Current development version:** `v0.54.0 — Personal work priorities and conversational follow-ups`.
 
 ## Deployment Access
 

@@ -80,10 +80,16 @@ def dispatch_tool(plan, user, context=None):
     if not validated or not user or not user.is_authenticated:
         return response("I could not validate that feature request. Please restate the action and exact record identifiers.")
     tool, args = validated["tool"], validated["arguments"]
+    if tool == "handover":
+        args = {key: user.username if value.casefold() in {"me", "myself", "mí"} else value for key, value in args.items()}
+        plan = {**plan, "arguments": args}
     fields = DIRECT_TOOLS[tool][2] if tool in DIRECT_TOOLS else ("command",)
     missing = [field for field in fields if field != "version" and (field not in args or (isinstance(args[field], str) and not args[field].strip()))]
+    from .provider_conversation import QUESTIONS, remember
+    token = remember(plan, user)
     if missing:
-        return response(f"For {tool}, please provide: {', '.join(missing)}. Repeat the full request with those details.", clarification={"required": True, "fields": missing})
+        return response(QUESTIONS[missing[0]], clarification={"required": True, "fields": missing},
+                        context={"provider_conversation": token} if token else {})
     if tool in DIRECT_TOOLS:
         module, name, fields = DIRECT_TOOLS[tool]
         fn = getattr(import_module(f"assistant.{module}"), name)
@@ -101,7 +107,10 @@ def dispatch_tool(plan, user, context=None):
             result = search_migration_rows(command) if "row" in command.lower() else fn(command)
         elif tool == "record_search":
             from .tools import search_projects
-            result = search_projects(command, user) if "project" in command.lower() else fn(command, user)
+            from .project_conversation import project_request
+            result = project_request(command, user, context)
+            if result is None:
+                result = search_projects(command, user) if "project" in command.lower() else fn(command, user)
         elif tool in NO_CONTEXT:
             result = fn(command, user)
         else:
@@ -111,5 +120,7 @@ def dispatch_tool(plan, user, context=None):
     # Preserve deterministic evidence, drafts and server-generated confirmation
     # proposals; never let a second model call rewrite or manufacture these.
     result = {**result, "skip_llm": True}
+    if token:
+        result["context"] = {**(result.get("context") or {}), "provider_conversation": token}
     result["interpretation"] = {"provider": plan.get("provider", "llm"), "tool": tool, "arguments": args}
     return result

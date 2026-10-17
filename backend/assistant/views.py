@@ -135,7 +135,8 @@ class AssistantChatView(APIView):
             )
             unmatched = result.pop("route_unmatched", False)
             if unmatched:
-                route_hint = classify_route_with_llm(message, context=context)
+                from .provider_conversation import classifier_context
+                route_hint = classify_route_with_llm(message, context=classifier_context(context, request.user, message))
                 if route_hint:
                     hinted_result = route_assistant_message(
                         message=message,

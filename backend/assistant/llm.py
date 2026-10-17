@@ -235,6 +235,10 @@ Rules:
 - Use unknown when uncertain. Never invent identifiers or facts.
 
 Active context types: {safe_json(active_context)}
+Verified previous read/draft feature request (only for relevant follow-ups; a new topic must start fresh):
+{safe_json(context.get('verified_feature_context'))}
+For short follow-ups, reuse these arguments only when the user clearly refers to that request.
+Apply explicit corrections, keep unrelated arguments, and never convert a read/draft follow-up into a write.
 User request: {message}
 """
 

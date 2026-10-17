@@ -49,11 +49,15 @@ def _safe_value(value, depth=0):
 def sanitize_context(context):
     if not isinstance(context, dict):
         return {}
-    return {
+    sanitized = {
         key: _safe_value(value)
         for key, value in context.items()
         if key in ALLOWED_CONTEXT_KEYS
     }
+    token = context.get("provider_conversation")
+    if isinstance(token, str) and len(token) <= 12000:
+        sanitized["provider_conversation"] = token
+    return sanitized
 
 
 def update_conversation_context(message, previous, result):
