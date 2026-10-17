@@ -225,19 +225,10 @@ def find_accessible_sample_from_message(message, user):
     queryset = apply_sample_access(user)
     tokens = extract_sample_tokens(message)
 
-    for token in tokens:
-        sample = queryset.filter(sample_id__iexact=token).first()
-
-        if sample:
-            return sample
-
-    for token in tokens:
-        sample = queryset.filter(sample_id__icontains=token).first()
-
-        if sample:
-            return sample
-
-    return None
+    if len(tokens) != 1:
+        return None
+    matches = list(queryset.filter(sample_id__iexact=tokens[0])[:2])
+    return matches[0] if len(matches) == 1 else None
 
 
 def sequence_queryset_for_user(model, sample_fk, user, sample=None):
@@ -288,6 +279,10 @@ def find_sample_sequences(message, user, limit=20):
         }
 
     sample = find_accessible_sample_from_message(message, user)
+    if extract_sample_tokens(message) and sample is None:
+        return {"answer": "I could not identify one accessible sample. Please give its exact sample ID.",
+                "links": [], "context": {}, "replace_context": True, "skip_llm": True,
+                "clarification": {"required": True}}
 
     lines = []
     links = []
@@ -317,6 +312,7 @@ def find_sample_sequences(message, user, limit=20):
             return {
                 "answer": f"No sequence records were found for sample {sample.sample_id}.",
                 "links": [sample_link(sample)],
+                "context": {"sample_id": sample.pk, "sample_code": sample.sample_id},
                 "suggestions": [
                     "Summarize sequence records",
                     "Prepare BLAST for sample",
@@ -341,6 +337,8 @@ def find_sample_sequences(message, user, limit=20):
     return {
         "answer": "\n".join(answer),
         "links": links[:10],
+        "context": {"sample_id": sample.pk, "sample_code": sample.sample_id} if sample else {},
+        "replace_context": True,
         "suggestions": [
             "Prepare BLAST for sample",
             "Summarize sequence records",
@@ -367,6 +365,10 @@ def summarize_sequence_records(message, user):
         }
 
     sample = find_accessible_sample_from_message(message, user)
+    if extract_sample_tokens(message) and sample is None:
+        return {"answer": "I could not identify one accessible sample. Please give its exact sample ID.",
+                "links": [], "context": {}, "replace_context": True, "skip_llm": True,
+                "clarification": {"required": True}}
 
     total = 0
     model_counts = Counter()
@@ -399,6 +401,8 @@ def summarize_sequence_records(message, user):
         return {
             "answer": f"No accessible sequence records were found{scope}.",
             "links": [sample_link(sample)] if sample else [],
+            "context": {"sample_id": sample.pk, "sample_code": sample.sample_id} if sample else {},
+            "replace_context": True,
             "suggestions": [
                 "Find sample sequences",
                 "Prepare BLAST for sample",
@@ -436,6 +440,8 @@ def summarize_sequence_records(message, user):
     return {
         "answer": "\n".join(lines),
         "links": links[:10],
+        "context": {"sample_id": sample.pk, "sample_code": sample.sample_id} if sample else {},
+        "replace_context": True,
         "suggestions": [
             "Find sample sequences",
             "Prepare BLAST for sample",

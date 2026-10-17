@@ -67,6 +67,7 @@ def sample_history(code, user):
     if len(results) > 10:
         lines.append("Showing the latest 10 results; open the sample for all results.")
     return response("\n".join(lines), history={"events": rows, "truncated": truncated},
+                    context={"sample_id": sample.pk, "sample_ids": [sample.pk], "sample_code": sample.sample_id},
                     links=[{"label": sample.sample_id, "url": f"/samples/{sample.pk}"}])
 
 

@@ -176,7 +176,7 @@ def project_quality(code, user):
     answer = f"Data-quality review for {project.code}: {finding_count} potential issues in the scanned records."
     if not finding_count:
         answer += " These checks found no issues in the scanned records; this is not a completeness or accuracy certification."
-    return response(answer, quality_review={"project_id": project.pk, "scanned_samples": len(samples),
+    return response(answer, context={"project_id": project.pk}, quality_review={"project_id": project.pk, "scanned_samples": len(samples),
         "finding_count": finding_count, "partial_scan": partial, "truncated": finding_count > FINDING_LIMIT},
         suggestions=[f"Review data quality for project {project.code}"],
         comparison=_table("Project data-quality review", rows, [("sample", "Sample"), ("kind", "Check"), ("evidence", "Evidence / review")], notes),
