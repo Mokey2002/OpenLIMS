@@ -586,6 +586,14 @@ def _hint_clarification(route_hint, user):
 
 
 def route_assistant_message(message, user, context=None, route_hint=None):
+    from .natural_requests import prepare_read_request, remember_read
+    message, question = prepare_read_request(message, user, context or {})
+    if question:
+        return _routed(question, "clarification")
+    return remember_read(message, _route_assistant_message(message, user, context, route_hint))
+
+
+def _route_assistant_message(message, user, context=None, route_hint=None):
     context = context or {}
     from .clarifications import resume_clarification
     selected, choice_question = resume_clarification(message, context)

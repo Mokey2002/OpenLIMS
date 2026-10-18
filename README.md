@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.56.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.57.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,12 @@
 ---
 
 ## Overview
+
+### v0.57.0 — More natural requests and repeatable read tasks
+
+Try **“Could you please give me a quick overview of project ALPHA?”**, **“How is project ALPHA doing?”**, **“Which samples are in project ALPHA?”**, or **“Show me my priorities”**. Supported Spanish inputs include **“Dame un resumen del proyecto ALPHA”** and **“Muéstrame las muestras de ese proyecto”**; responses remain primarily English. These forms share the existing permission-filtered handlers and provider command adapters.
+
+For sample summaries/history/location/sequences and project summaries/sample lists/data-quality reviews, **“same for BETA”** or **“what about sample S-102?”** repeats the previous supported read task. **“Summarize a project” → “ALPHA”** asks for the missing identifier and accepts a short reply (quote names containing spaces). Records are resolved exactly and access is checked again; missing, ambiguous or inaccessible records require clarification. Task memory selects only fixed read operations and cannot replay writes. **“What should I do next?”** shows your work list when no sample is selected and sample guidance when one is selected. Extra filters are retained, not silently discarded. This expands supported wording and short follow-ups; it does not guarantee interpretation of every phrase.
 
 ### v0.56.0 — Clarification replies and conversation continuity
 

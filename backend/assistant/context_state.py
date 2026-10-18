@@ -2,6 +2,8 @@ import re
 
 
 ALLOWED_CONTEXT_KEYS = {
+    "read_intent",
+    "awaiting_read",
     "clarification_topic",
     "sample_registration",
     "guidance",
