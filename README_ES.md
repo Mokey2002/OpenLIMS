@@ -2,6 +2,12 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.58.0 — Volver a temas anteriores de conversación
+
+El asistente conserva hasta cinco consultas compatibles recientes de muestras/proyectos en el chat. Prueba **“Show samples in project ALPHA” → “What happened to sample S-102?” → “Show system status” → “Go back to the previous project”**. **“Back to the previous topic”** recupera la consulta anterior y **“What were we talking about?”** muestra los temas accesibles recientes.
+
+Corrige una consulta con **“No, I meant BETA”**, **“Actually BETA”** o **“Sorry, I meant project BETA”**. **“Forget this conversation”** borra el contexto. La memoria guarda IDs y tipos de consulta de lectura permitidos en un token firmado, vinculado al usuario y con caducidad de una hora renovada durante el chat. Cada recuperación vuelve a comprobar permisos y consulta datos actuales; omite registros sin acceso. Cubre las siete consultas de muestras/proyectos, sin repetir escrituras ni guardar una transcripción completa. No requiere migraciones.
+
 ## v0.57.0 — Lenguaje más natural y repetición de consultas
 
 Prueba **“Dame un resumen del proyecto ALPHA”**, **“Muéstrame las muestras de ese proyecto”**, **“Could you please give me a quick overview of project ALPHA?”** o **“Show me my priorities”**. Se reutilizan los mismos servicios con permisos y los adaptadores de proveedores; las respuestas siguen principalmente en inglés.

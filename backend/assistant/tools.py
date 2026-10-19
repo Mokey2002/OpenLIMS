@@ -586,6 +586,12 @@ def _hint_clarification(route_hint, user):
 
 
 def route_assistant_message(message, user, context=None, route_hint=None):
+    from .dialogue_memory import resume_topic
+    restored, response = resume_topic(message, user, context or {})
+    if response:
+        return _routed(response, "clarification")
+    if restored:
+        message = restored
     from .natural_requests import prepare_read_request, remember_read
     message, question = prepare_read_request(message, user, context or {})
     if question:
