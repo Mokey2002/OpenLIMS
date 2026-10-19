@@ -2,6 +2,12 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## v0.57.0 — Lenguaje más natural y repetición de consultas
+
+Prueba **“Dame un resumen del proyecto ALPHA”**, **“Muéstrame las muestras de ese proyecto”**, **“Could you please give me a quick overview of project ALPHA?”** o **“Show me my priorities”**. Se reutilizan los mismos servicios con permisos y los adaptadores de proveedores; las respuestas siguen principalmente en inglés.
+
+Para resúmenes/historial/ubicación/secuencias de muestras y resúmenes/listas/calidad de proyectos, **“same for BETA”** o **“what about sample S-102?”** repite la consulta anterior compatible. **“Summarize a project” → “ALPHA”** permite responder con el identificador faltante; usa comillas para nombres con espacios. Se comprueban permisos y ambigüedad en cada lectura. Esta memoria solo selecciona consultas de lectura, nunca repite escrituras. **“What should I do next?”** muestra trabajo personal si no hay muestra seleccionada y orientación de la muestra si la hay. No garantiza comprender cualquier frase.
+
 ## v0.56.0 — Respuestas breves y continuidad de conversación
 
 Si el asistente ofrece opciones de muestras, resultados, QC, fallos o inventario, responde con el nombre mostrado, su número o **“the second one”**. Las opciones se reconstruyen con comandos del servidor. **“Thanks”**, **“okay”** y **“got it”** conservan el contexto para seguir consultando, graficando o exportando; **“start over”** borra la elección pendiente. Una solicitud explícita nueva cambia de tema.

@@ -33,6 +33,8 @@ def resolve_read_followup(message, user, context):
     template = next((command for pattern, command in SAMPLE_READS if re.fullmatch(pattern, text, re.I)), None)
     if not template:
         return None, None
+    if re.fullmatch(r"what should I do next", text, re.I) and not (context.get('sample_id') or context.get('sample_ids')):
+        return None, None
     ids = context.get('sample_ids', [])
     if not isinstance(ids, list):
         ids = []

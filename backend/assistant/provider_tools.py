@@ -97,7 +97,10 @@ def dispatch_tool(plan, user, context=None):
     else:
         module, name, _ = COMMAND_TOOLS[tool]
         fn = getattr(import_module(f"assistant.{module}"), name)
-        command = args["command"]
+        from .natural_requests import prepare_read_request
+        command, question = prepare_read_request(args["command"], user, context or {})
+        if question:
+            return question
         if tool == "migration":
             # Legacy migration search has no per-user argument. Do not expose
             # global jobs/row payloads to non-administrators through this bridge.
@@ -120,6 +123,12 @@ def dispatch_tool(plan, user, context=None):
     # Preserve deterministic evidence, drafts and server-generated confirmation
     # proposals; never let a second model call rewrite or manufacture these.
     result = {**result, "skip_llm": True}
+    from .natural_requests import remember_read
+    if tool not in DIRECT_TOOLS:
+        result = remember_read(command, result)
+    elif tool in {"sample_history", "data_quality"}:
+        canonical = {"sample_history": "What happened to sample ", "data_quality": "Review data quality for project "}[tool]
+        result = remember_read(canonical + args.get('sample', args.get('project', '')), result)
     if token:
         result["context"] = {**(result.get("context") or {}), "provider_conversation": token}
     result["interpretation"] = {"provider": plan.get("provider", "llm"), "tool": tool, "arguments": args}
