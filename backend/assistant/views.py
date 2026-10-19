@@ -176,6 +176,8 @@ class AssistantChatView(APIView):
                 context,
                 result,
             )
+            from .dialogue_memory import remember_topics
+            remember_topics(message, context, result, request.user)
             result = normalize_assistant_response(message, result)
             result = enhance_with_llm(message=message, tool_result=result)
             result = normalize_assistant_response(message, result)

@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.57.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.58.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,12 @@
 ---
 
 ## Overview
+
+### v0.58.0 — Returning to earlier conversation topics
+
+The assistant retains up to five recent supported sample/project read tasks in the current chat. Try **“Show samples in project ALPHA” → “What happened to sample S-102?” → “Show system status” → “Go back to the previous project”**. It restores the earlier read task and fetches current records. **“Back to the previous topic”** restores the previous read task, and **“What were we talking about?”** lists recent accessible tasks with suggestions to reopen them.
+
+Correct the current read with **“No, I meant BETA”**, **“Actually BETA”**, or **“Sorry, I meant project BETA”**. **“Forget this conversation”** clears chat context. Memory stores only record IDs and allow-listed read-task names in a signed, user-bound token with a one-hour expiry refreshed during chats. Access is rechecked, renamed records use their current names, and revoked/inaccessible records are omitted. This covers the seven sample/project reads above; it does not replay writes or retain a full transcript. No database migration is required.
 
 ### v0.57.0 — More natural requests and repeatable read tasks
 

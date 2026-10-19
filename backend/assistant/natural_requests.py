@@ -68,7 +68,7 @@ def prepare_read_request(message, user, context):
                                   context={'awaiting_read': key}, clarification={'required': True})
     waiting = context.get('awaiting_read')
     previous = context.get('read_intent')
-    continuation = re.fullmatch(r'(?:same for|what about|how about|and for)\s+(?:(sample|project)\s+)?(.+)', text, re.I)
+    continuation = re.fullmatch(r'(?:same for|what about|how about|and for|(?:no,? )?I meant|actually,?(?: I meant)?|sorry,? I meant)\s+(?:(sample|project)\s+)?(.+)', text, re.I)
     target = None
     if isinstance(previous, str) and previous in READS and continuation:
         intent = previous

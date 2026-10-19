@@ -60,6 +60,9 @@ def sanitize_context(context):
     token = context.get("provider_conversation")
     if isinstance(token, str) and len(token) <= 12000:
         sanitized["provider_conversation"] = token
+    memory = context.get("dialogue_memory")
+    if isinstance(memory, str) and len(memory) <= 6000:
+        sanitized["dialogue_memory"] = memory
     return sanitized
 
 
@@ -74,6 +77,8 @@ def update_conversation_context(message, previous, result):
     if re.fullmatch(r"(?:thanks|thank you|thanks a lot|great thanks|okay thanks|ok thanks|okay|ok|got it|understood)[.! ]*",
                     str(message or "").strip(), re.I):
         return previous
+    if (result or {}).get('routing', {}).get('route') in {'monitoring', 'identity'}:
+        return {}
     if FOLLOW_UP_PATTERN.search(str(message or "")) and previous:
         return previous
     return {}
