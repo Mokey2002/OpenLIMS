@@ -2,6 +2,11 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
+## Cambios recientes
+
+- **Prioridades de muestras y evidencia de QC ([PR #173](https://github.com/Mokey2002/OpenLIMS/pull/173)):** `Summarize sample S-100` muestra la evidencia de trabajo y QC antes de los metadatos. Incluye hasta tres trabajos y tres resultados que necesitan atención, incluso fallos antiguos fuera de los cinco resultados más recientes, con responsables, fechas límite, motivos de QC registrados, notas de revisión y límites de referencia configurados. Las sugerencias consultan datos actuales y vuelven a comprobar el acceso. `Compare result R-42 with its reference range` abre el resultado indicado sin contexto previo de resultado; sustituye los IDs de ejemplo por registros accesibles.
+- **Recuperación de descargas de imágenes en CI ([PR #174](https://github.com/Mokey2002/OpenLIMS/pull/174)):** los errores `context deadline exceeded` del daemon de Docker ahora utilizan los reintentos limitados y el registro alternativo configurado explícitamente. CI ya no se detiene en la primera aparición de este timeout transitorio. Los errores permanentes y el agotamiento de los intentos del registro alternativo siguen haciendo fallar el trabajo. Consulta [las pruebas de descarga de imágenes](#pruebas-de-descarga-de-imágenes-en-ci).
+
 ## v0.58.0 — Volver a temas anteriores de conversación
 
 El asistente conserva hasta cinco consultas compatibles recientes de muestras/proyectos en el chat. Prueba **“Show samples in project ALPHA” → “What happened to sample S-102?” → “Show system status” → “Go back to the previous project”**. **“Back to the previous topic”** recupera la consulta anterior y **“What were we talking about?”** muestra los temas accesibles recientes.
@@ -547,6 +552,22 @@ Ollama u OpenAI son opciones del asistente de lenguaje natural, no dependencias 
 
 ## 9. Asistente de OpenLIMS
 
+### Resúmenes de muestras con evidencia
+
+Usa `Summarize sample S-100` para ver prioridades de trabajo, conteos de QC y los
+cinco resultados más recientes, con valores, unidades y fechas. Una lista separada
+muestra hasta tres trabajos y tres resultados que necesitan atención, para que los
+fallos antiguos puedan aparecer aunque no estén entre los resultados recientes.
+Los conteos totales indican cuántos registros quedan fuera de las listas.
+
+El resumen distingue comprobaciones de QC, decisiones del revisor y comparación
+con límites de referencia. Muestra responsables, fechas límite, motivos y notas
+registrados; indica valores o límites inválidos y marca los textos largos como
+extractos. Los resultados pueden ser históricos; el trabajo completado o cancelado
+no entra en las prioridades de trabajo. Funciona sin un modelo externo y no
+determina si una muestra está lista para liberarse. Las preguntas sugeridas sobre
+resultados, flujo e historial vuelven a comprobar los registros y permisos actuales.
+
 ### Consultas de flujo y seguimiento
 
 | Pregunta | Comportamiento |
@@ -700,6 +721,21 @@ La bitácora de auditoría puede registrar, entre otros eventos:
 | Despliegue | Docker Compose y Caddy |
 
 La plataforma está diseñada para ser autohospedada y mantener los componentes de laboratorio dentro de la infraestructura elegida por la organización.
+
+### Pruebas de descarga de imágenes en CI
+
+Desde la raíz del repositorio, con Python 3 y sin necesidad de Docker:
+
+```bash
+python3 -m unittest discover -s scripts -p 'test_ci_pull_images.py'
+```
+
+Las descargas en CI realizan hasta tres intentos ante errores transitorios de red
+o del registro, incluido `context deadline exceeded` del daemon de Docker, con
+esperas de 15 y 30 segundos entre intentos. Si se agotan, un registro alternativo
+configurado explícitamente utiliza los mismos límites de reintentos. Los errores
+permanentes fallan de inmediato; una descarga fallida del registro alternativo
+nunca se etiqueta como una imagen descargada correctamente.
 
 ---
 
