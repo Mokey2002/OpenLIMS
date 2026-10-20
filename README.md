@@ -399,6 +399,13 @@ imports, failed BLAST and alignment jobs, and admin-only system health
 warnings. Inventory quantity, reservation, reorder, and expiry alerts are also
 included when they need attention.
 
+Sample summaries (`Summarize sample S-100`) include recorded work priorities,
+QC check and review counts, and the five most recently recorded results with values,
+units, and timestamps. Overall counts include older results; work attention counts
+exclude completed/cancelled items. These summaries use current permission-filtered
+records without an external model and offer workflow guidance and history follow-ups.
+They do not assess release readiness or replace an authorized QC review.
+
 ### Workflow questions and follow-ups
 
 Start with an exact project code, then refine the question:
