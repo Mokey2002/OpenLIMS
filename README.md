@@ -29,6 +29,11 @@
 
 ## Overview
 
+### Recent updates
+
+- **Sample priorities and QC evidence ([PR #173](https://github.com/Mokey2002/OpenLIMS/pull/173)):** `Summarize sample S-100` puts work and QC evidence before metadata. It shows up to three work items and three results needing attention, including older failures outside the five most recent results, with owners, deadlines, recorded QC reasons, review notes, and configured reference limits. Suggestions reload current records and recheck access. `Compare result R-42 with its reference range` now opens the selected result without requiring prior result context; replace the example IDs with accessible records.
+- **CI image-download recovery ([PR #174](https://github.com/Mokey2002/OpenLIMS/pull/174)):** Docker daemon `context deadline exceeded` errors now use the existing bounded retries and explicitly configured fallback registry. CI no longer stops on the first occurrence of this transient timeout. Permanent errors and exhausted fallback attempts still fail the job. See [Testing](#-testing) for the image-pull regression command.
+
 ### v0.58.0 — Returning to earlier conversation topics
 
 The assistant retains up to five recent supported sample/project read tasks in the current chat. Try **“Show samples in project ALPHA” → “What happened to sample S-102?” → “Show system status” → “Go back to the previous project”**. It restores the earlier read task and fetches current records. **“Back to the previous topic”** restores the previous read task, and **“What were we talking about?”** lists recent accessible tasks with suggestions to reopen them.
@@ -882,6 +887,18 @@ The Assistant page will show which engine is active: **OpenLIMS Rules**, **OpenA
 ---
 
 ## 🧪 Testing
+
+Run CI image-pull regression tests from the repository root (Python 3, no Docker required):
+
+```bash
+python3 -m unittest discover -s scripts -p 'test_ci_pull_images.py'
+```
+
+CI image pulls make up to three attempts for transient registry/network errors,
+including Docker daemon `context deadline exceeded`, with 15- and 30-second backoff.
+After primary retries are exhausted, an explicitly configured fallback registry
+uses the same retry limits. Permanent errors fail immediately; failed fallback
+pulls are never tagged as successful images.
 
 Run backend tests:
 
