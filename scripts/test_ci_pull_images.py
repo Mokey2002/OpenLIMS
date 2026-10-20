@@ -6,6 +6,12 @@ from unittest.mock import call, patch
 import ci_pull_images as ci
 
 
+DAEMON_DEADLINE_ERROR = (
+    'Error response from daemon: Get "https://public.ecr.aws/v2/": '
+    'context deadline exceeded'
+)
+
+
 class PullImagesTests(unittest.TestCase):
     def result(self, code=0, error=""):
         return subprocess.CompletedProcess([], code, stdout="", stderr=error)
@@ -47,6 +53,60 @@ class PullImagesTests(unittest.TestCase):
         ci.pull("redis:7")
         self.assertEqual(run.call_args.kwargs["timeout"], 300)
         sleep.assert_called_once_with(15)
+
+    @patch.object(ci.time, "sleep")
+    @patch.object(ci.subprocess, "run")
+    def test_daemon_deadline_retries_then_recovers(self, run, sleep):
+        run.side_effect = [self.result(1, DAEMON_DEADLINE_ERROR), self.result()]
+
+        ci.pull("public.ecr.aws/docker/library/postgres:16")
+
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args_list[0], run.call_args_list[1])
+        sleep.assert_called_once_with(15)
+
+    @patch.dict(os.environ, {
+        "PYTHON_IMAGE": "public.ecr.aws/docker/library/python:3.12-slim",
+        "POSTGRES_IMAGE": "public.ecr.aws/docker/library/postgres:16",
+        "REDIS_IMAGE": "public.ecr.aws/docker/library/redis:7",
+        "POSTGRES_IMAGE_FALLBACK": "docker.io/library/postgres:16",
+    }, clear=True)
+    @patch.object(ci.time, "sleep")
+    @patch.object(ci.subprocess, "run")
+    def test_main_recovers_postgres_deadline_via_configured_fallback(self, run, sleep):
+        # Reproduce the failed E2E job: Python pulled successfully, then the
+        # Docker daemon timed out reaching ECR for PostgreSQL.
+        run.side_effect = (
+            [self.result()] + [self.result(1, DAEMON_DEADLINE_ERROR)] * 3
+            + [self.result(), self.result(), self.result()]
+        )
+
+        ci.main()
+
+        commands = [entry.args[0] for entry in run.call_args_list]
+        self.assertEqual(commands, [
+            ["docker", "pull", "public.ecr.aws/docker/library/python:3.12-slim"],
+            *[["docker", "pull", "public.ecr.aws/docker/library/postgres:16"]] * 3,
+            ["docker", "pull", "docker.io/library/postgres:16"],
+            ["docker", "tag", "docker.io/library/postgres:16", "public.ecr.aws/docker/library/postgres:16"],
+            ["docker", "pull", "public.ecr.aws/docker/library/redis:7"],
+        ])
+        self.assertEqual(sleep.call_args_list, [call(15), call(30)])
+
+    @patch.object(ci.time, "sleep")
+    @patch.object(ci.subprocess, "run")
+    def test_deadline_exhaustion_on_both_registries_fails_without_tagging(self, run, sleep):
+        run.return_value = self.result(1, DAEMON_DEADLINE_ERROR)
+
+        with self.assertRaises(ci.TransientPullError):
+            ci.pull_with_fallback("public.ecr.aws/docker/library/postgres:16", "docker.io/library/postgres:16")
+
+        commands = [entry.args[0] for entry in run.call_args_list]
+        self.assertEqual(commands, [
+            *[["docker", "pull", "public.ecr.aws/docker/library/postgres:16"]] * 3,
+            *[["docker", "pull", "docker.io/library/postgres:16"]] * 3,
+        ])
+        self.assertEqual(sleep.call_args_list, [call(15), call(30), call(15), call(30)])
 
     @patch.dict(os.environ, dict(zip(ci.IMAGE_KEYS, ["python:test", "postgres:test", "redis:test"])), clear=True)
     @patch.object(ci, "pull")
