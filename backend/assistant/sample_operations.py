@@ -474,7 +474,9 @@ def _summarize_sample_read(message, user):
         .filter(entity_type="Sample", entity_id=str(sample.id))
         .order_by("field_definition__name")
     )
-    work_items = sample.work_items.all()
+    from .sample_briefing import briefing_lines, sample_briefing
+
+    briefing = sample_briefing(sample)
     project = (
         f"{sample.project.code} — {sample.project.name}"
         if sample.project
@@ -503,8 +505,9 @@ def _summarize_sample_read(message, user):
         f"Created: {sample.created_at.isoformat()}",
         f"Status last changed: {sample.status_changed_at.isoformat()}",
         f"Attachments: {sample.attachments.count()}",
-        f"Work items: {work_items.count()}",
+        f"Work items: {briefing['work']['total']}",
     ]
+    lines.extend(briefing_lines(briefing))
     if values:
         lines.extend(["", "Custom fields:"])
         for field_value in values:
@@ -518,6 +521,7 @@ def _summarize_sample_read(message, user):
 
     return {
         "answer": "\n".join(lines),
+        "sample_briefing": briefing,
         "links": [_sample_link(sample)],
         "context": {
             "sample_ids": [sample.id],
@@ -526,8 +530,8 @@ def _summarize_sample_read(message, user):
             "batch_code": sample.batch.code if sample.batch else None,
         },
         "suggestions": [
-            f"Change sample {sample.sample_id} to PROCESSING",
-            f"Archive sample {sample.sample_id}",
+            f"What next for sample {sample.sample_id}?",
+            f"What happened to sample {sample.sample_id}?",
         ],
         "skip_llm": True,
     }
