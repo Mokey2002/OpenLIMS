@@ -40,6 +40,20 @@ class RoutingEvaluationCorpusTests(SimpleTestCase):
         for message in LLM_FALLBACK_EVALUATION_CASES:
             self.assertIsNone(classify_route_with_rules(message), message)
 
+    def test_explicit_result_reference_comparison_does_not_require_result_context(self):
+        for context in [{}, {"sample_ids": [1]}, {"comparison": {"kind": "sample"}}]:
+            for message in ["Compare result R-42 with its reference range",
+                            "Compare result R42 against the reference range."]:
+                with self.subTest(context=context, message=message):
+                    self.assertEqual(classify_route_with_rules(message, context)["route"], "qc")
+
+    def test_result_reference_route_does_not_discard_extra_records_or_conditions(self):
+        for message in ["Compare result R-1 and R-2 with their reference ranges",
+                        "Compare result R-1 with its reference range and approve it",
+                        "Compare result R-1 with its reference range from last week"]:
+            with self.subTest(message=message):
+                self.assertNotEqual(classify_route_with_rules(message)["route"], "qc")
+
     def test_structured_llm_plan_is_allow_listed_and_confidence_gated(self):
         plan = validate_routing_plan(
             {
