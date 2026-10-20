@@ -10,7 +10,7 @@ RETRY_DELAYS = (15, 30)
 TRANSIENT = re.compile(
     r"toomanyrequests|too many requests|rate exceeded|\b429\b|"
     r"\b(?:500|502|503|504)\b|i/o timeout|tls handshake timeout|"
-    r"connection reset|temporary failure|service unavailable", re.I
+    r"context deadline exceeded|connection reset|temporary failure|service unavailable", re.I
 )
 
 
