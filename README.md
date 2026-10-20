@@ -406,6 +406,15 @@ exclude completed/cancelled items. These summaries use current permission-filter
 records without an external model and offer workflow guidance and history follow-ups.
 They do not assess release readiness or replace an authorized QC review.
 
+The summary also shows up to three work items and three results needing attention,
+including older QC failures outside the recent-results list. Work entries identify
+the recorded owner, deadline, and flags; result entries show recorded QC reasons,
+review notes, and compare values with configured reference limits without inferring a failure's cause.
+Failures and rejected results come before pending reviews, with oldest records first
+within each result group. Displayed counts identify omitted records, and long QC
+reasons and review notes are marked as excerpts. Suggested result questions reload current records
+and recheck access.
+
 ### Workflow questions and follow-ups
 
 Start with an exact project code, then refine the question:

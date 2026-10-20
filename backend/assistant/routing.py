@@ -112,12 +112,17 @@ def classify_route_with_rules(message, context=None):
     context = context or {}
     route = None
     confidence = 0.0
+    explicit_reference = _contains(
+        text,
+        r"^compare\s+result\s+r-?\d+\s+(?:with|to|against)\s+"
+        r"(?:its|the)\s+reference\s+range[.!?]*$",
+    )
     if (
-        (context.get("result_id") or context.get("result_ids"))
-        and _contains(
+        explicit_reference
+        or ((context.get("result_id") or context.get("result_ids")) and _contains(
             text,
             r"\b(?:this|that)\s+(?:value|result)\b|\breference range\b|\bqc rule\b",
-        )
+        ))
     ):
         route, confidence = "qc", 0.98
     elif context.get("comparison") and work_graph_metrics(text):
