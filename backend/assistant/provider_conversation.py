@@ -53,12 +53,18 @@ def missing_fields(plan):
 
 
 def classifier_context(context, user, message):
+    from .general_conversation import CONTEXT_KEY, recall as recall_general
+
     # Do not pass arbitrary client plans or conversational tokens to a model.
     clean = {key: value for key, value in (context or {}).items()
-             if key not in {"provider_conversation", "verified_feature_context", "dialogue_memory"}}
+             if key not in {"provider_conversation", "verified_feature_context", "dialogue_memory",
+                            CONTEXT_KEY, "verified_general_history"}}
     previous = recall(context, user)
     if previous and (missing_fields(previous) or CONTINUATION.search(message.strip())):
         clean["verified_feature_context"] = {"tool": previous["tool"], "arguments": previous["arguments"]}
+    history = recall_general(context, user)
+    if history:
+        clean["verified_general_history"] = history
     return clean
 
 

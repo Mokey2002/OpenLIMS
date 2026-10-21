@@ -4,6 +4,7 @@
 
 ## Cambios recientes
 
+- **IA más conversacional:** OpenAI y Ollama reciben un historial breve y verificado del chat general. Respuestas como `Explain that more simply`, `Give me an example` y `Explain that in Spanish` conservan la pregunta y respuesta anteriores. Ambos proveedores reciben instrucciones para responder directamente, usar ejemplos y expresar incertidumbre. Consulta [conversación general y seguimiento](#conversación-general-y-seguimiento) para configuración, límites y comandos de reinicio.
 - **Prioridades de muestras y evidencia de QC ([PR #173](https://github.com/Mokey2002/OpenLIMS/pull/173)):** `Summarize sample S-100` muestra la evidencia de trabajo y QC antes de los metadatos. Incluye hasta tres trabajos y tres resultados que necesitan atención, incluso fallos antiguos fuera de los cinco resultados más recientes, con responsables, fechas límite, motivos de QC registrados, notas de revisión y límites de referencia configurados. Las sugerencias consultan datos actuales y vuelven a comprobar el acceso. `Compare result R-42 with its reference range` abre el resultado indicado sin contexto previo de resultado; sustituye los IDs de ejemplo por registros accesibles.
 - **Recuperación de descargas de imágenes en CI ([PR #174](https://github.com/Mokey2002/OpenLIMS/pull/174)):** los errores `context deadline exceeded` del daemon de Docker ahora utilizan los reintentos limitados y el registro alternativo configurado explícitamente. CI ya no se detiene en la primera aparición de este timeout transitorio. Los errores permanentes y el agotamiento de los intentos del registro alternativo siguen haciendo fallar el trabajo. Consulta [las pruebas de descarga de imágenes](#pruebas-de-descarga-de-imágenes-en-ci).
 
@@ -643,10 +644,44 @@ Los resultados de las herramientas internas son la fuente de verdad. El modelo d
 | Modo | Uso |
 |---|---|
 | **OpenLIMS Rules** | Rutas y respuestas integradas sin utilizar una LLM externa |
-| **Ollama** | Modelo local y autohospedado |
-| **OpenAI** | Resúmenes opcionales mediante configuración del servidor |
+| **Ollama** | Resúmenes y conversación general con un modelo local y autohospedado |
+| **OpenAI** | Resúmenes y conversación general mediante configuración del servidor |
 
 Si el modelo no está disponible o su clasificación tiene baja confianza, el asistente utiliza las reglas integradas o indica claramente que la solicitud no está soportada.
+
+### Conversación general y seguimiento
+
+Configura OpenAI u Ollama y activa `OPENLIMS_ASSISTANT_LLM_ENABLED=true` y
+`OPENLIMS_ASSISTANT_LLM_ROUTING_ENABLED=true`. En cualquiera de las dos vistas del
+chat, prueba `Explain photosynthesis`, seguido de `Explain that more simply`,
+`Give me an example`, `Explain that in Spanish` o `What were we talking about?`.
+Estas formas comunes reutilizan el historial general verificado sin otra llamada
+al clasificador; otras preguntas no reconocidas proporcionan ese historial al
+clasificador para interpretar referencias. El modelo recibe roles separados y
+guías para responder directamente, adaptar idioma y detalle, usar ejemplos y
+distinguir hechos de incertidumbre. La calidad depende del modelo configurado;
+las pruebas simulan proveedores y no demuestran equivalencia con ChatGPT ni una
+puntuación de calidad con modelos reales.
+
+La memoria general conserva hasta cuatro pares de pregunta/respuesta y 12.000
+caracteres. Los mensajes de más de 4.000 caracteres se recortan con una indicación.
+Caduca 30 minutos después de la última respuesta general correcta. `Thanks` y
+`Okay` conservan el contexto sin añadir mensajes de cortesía al historial; los
+fallos o respuestas vacías conservan el último historial correcto para reintentar.
+`Start over`, `Reset conversation` y `Forget this conversation` borran el contexto
+del chat. Una consulta a herramientas del laboratorio descarta la transcripción
+general activa; las referencias anteriores de muestras/proyectos siguen sus
+propias reglas de memoria.
+
+El historial viaja en el contexto del chat como un token firmado, vinculado al
+usuario y **legible, sin cifrar**. No se añade almacenamiento de transcripciones
+en la base de datos ni se requieren migraciones. Los mensajes generales retenidos
+se envían al proveedor configurado cuando se necesitan. Las respuestas de
+herramientas y los datos de registros no se incorporan automáticamente a esta
+memoria ni a su prompt de respuesta. El modo general no accede a registros ni
+ejecuta herramientas. Las consultas del laboratorio mantienen sus permisos y
+las modificaciones compatibles requieren confirmación explícita. Sigue
+disponible el modo de solo reglas sin un modelo.
 
 ---
 

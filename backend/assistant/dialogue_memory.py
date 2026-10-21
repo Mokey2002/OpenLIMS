@@ -80,7 +80,7 @@ def remember_topics(message, previous, result, user):
 
 def resume_topic(message, user, context):
     text = normalize_request(message)
-    if re.fullmatch(r'(?:forget (?:this|our) conversation|clear (?:the )?conversation|start a new conversation)', text, re.I):
+    if re.fullmatch(r'(?:forget (?:this|our) conversation|clear (?:the )?conversation|start a new conversation|start over|reset (?:the )?conversation)', text, re.I):
         return None, response('Okay, we can start fresh. What would you like to work on?', clear_dialogue_memory=True)
     recap = re.fullmatch(r'what were we (?:talking about|discussing)|where were we|recap (?:our|this) conversation', text, re.I)
     back = re.fullmatch(r'(?:go |take me )?back to (?:the )?(?:previous|last) (project|sample|topic)', text, re.I)

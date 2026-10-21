@@ -586,6 +586,10 @@ def _hint_clarification(route_hint, user):
 
 
 def route_assistant_message(message, user, context=None, route_hint=None):
+    from .general_conversation import resume as resume_general
+    general_followup = resume_general(message, context or {}, user)
+    if general_followup:
+        return _routed(general_followup, "general")
     from .dialogue_memory import resume_topic
     restored, response = resume_topic(message, user, context or {})
     if response:

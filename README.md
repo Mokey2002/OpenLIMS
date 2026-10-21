@@ -31,6 +31,7 @@
 
 ### Recent updates
 
+- **More conversational AI:** OpenAI and Ollama now receive a short, verified general-chat history, so follow-ups such as `Explain that more simply`, `Give me an example`, and `Explain that in Spanish` retain the earlier question and answer. Both providers receive the same guidance for direct answers, useful examples, and explicit uncertainty. See [general conversation and follow-ups](#general-conversation-and-follow-ups) for setup, limits, and reset commands.
 - **Sample priorities and QC evidence ([PR #173](https://github.com/Mokey2002/OpenLIMS/pull/173)):** `Summarize sample S-100` puts work and QC evidence before metadata. It shows up to three work items and three results needing attention, including older failures outside the five most recent results, with owners, deadlines, recorded QC reasons, review notes, and configured reference limits. Suggestions reload current records and recheck access. `Compare result R-42 with its reference range` now opens the selected result without requiring prior result context; replace the example IDs with accessible records.
 - **CI image-download recovery ([PR #174](https://github.com/Mokey2002/OpenLIMS/pull/174)):** Docker daemon `context deadline exceeded` errors now use the existing bounded retries and explicitly configured fallback registry. CI no longer stops on the first occurrence of this transient timeout. Permanent errors and exhausted fallback attempts still fail the job. See [Testing](#-testing) for the image-pull regression command.
 
@@ -467,8 +468,8 @@ filters. Refresh and pagination use current dates and records, not a frozen snap
 | Mode | Description |
 |---|---|
 | **OpenLIMS Rules** | Built-in rule-based search and summaries with no external model required |
-| **OpenAI** | Optional external LLM summaries using server-side API configuration |
-| **Ollama** | Optional local LLM summaries using a self-hosted Ollama container |
+| **OpenAI** | Optional external LLM summaries and general conversation using server-side API configuration |
+| **Ollama** | Optional local LLM summaries and general conversation using a self-hosted Ollama container |
 
 If an LLM is unavailable, the assistant falls back to **OpenLIMS Rules** mode.
 
@@ -480,6 +481,45 @@ prompt. That prompt receives no database records or tool output and cannot run
 an OpenLIMS action. Requests that appear to require unsupported laboratory data
 or application operations remain explicit unsupported requests instead of being
 answered as general chat.
+
+### General conversation and follow-ups
+
+With an OpenAI or Ollama provider configured, enable
+`OPENLIMS_ASSISTANT_LLM_ENABLED=true` and
+`OPENLIMS_ASSISTANT_LLM_ROUTING_ENABLED=true`. In either chat view, try:
+
+```text
+Explain photosynthesis
+Explain that more simply
+Give me an example
+Explain that in Spanish
+What were we talking about?
+```
+
+Common explanation, example, language, and recap follow-ups reuse verified general
+history without another classifier call. Other unmatched questions give the
+classifier that history to interpret references. The model receives separate
+system/user/assistant messages and guidance to answer directly, adapt detail and
+language, explain with examples, and distinguish facts from uncertainty. Answer
+quality still depends on the configured model; regression tests simulate provider
+responses and do not establish equivalence to ChatGPT or a live-model quality score.
+
+General memory keeps at most four question/answer pairs and 12,000 characters;
+individual messages over 4,000 characters are excerpted with a marker. It expires
+30 minutes after the last successful general answer. `Thanks` and `Okay` preserve
+the context without adding filler; empty/failed model responses preserve the last
+successful history for a retry. `Start over`, `Reset conversation`, or
+`Forget this conversation` clears chat context. Switching to a lab tool clears
+the active general transcript, while existing sample/project topic references
+remain governed by their own memory rules.
+
+The transcript is carried in a signed, user-bound **readable, not encrypted** token
+in the current chat context; this feature adds no database transcript storage or
+migration. Retained general messages are sent to the configured provider when
+needed. Tool answers and lab record snapshots are not automatically added to
+general memory or its answer prompt. General chat has no record/tool access;
+lab requests continue through permission checks and supported changes still
+require explicit confirmation. Rules-only mode remains available without a model.
 
 The UI displays the active engine/model, such as:
 
