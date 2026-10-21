@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.58.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.59.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -29,9 +29,9 @@
 
 ## Overview
 
-### Recent updates
+### v0.59.0 — Conversational AI and evidence-based answers
 
-- **More conversational AI:** OpenAI and Ollama now receive a short, verified general-chat history, so follow-ups such as `Explain that more simply`, `Give me an example`, and `Explain that in Spanish` retain the earlier question and answer. Both providers receive the same guidance for direct answers, useful examples, and explicit uncertainty. See [general conversation and follow-ups](#general-conversation-and-follow-ups) for setup, limits, and reset commands.
+- **More conversational AI ([PR #176](https://github.com/Mokey2002/OpenLIMS/pull/176)):** OpenAI and Ollama now receive a short, verified general-chat history, so follow-ups such as `Explain that more simply`, `Give me an example`, and `Explain that in Spanish` retain the earlier question and answer. Both providers receive the same guidance for direct answers, useful examples, and explicit uncertainty. See [general conversation and follow-ups](#general-conversation-and-follow-ups) for setup, limits, and reset commands.
 - **Sample priorities and QC evidence ([PR #173](https://github.com/Mokey2002/OpenLIMS/pull/173)):** `Summarize sample S-100` puts work and QC evidence before metadata. It shows up to three work items and three results needing attention, including older failures outside the five most recent results, with owners, deadlines, recorded QC reasons, review notes, and configured reference limits. Suggestions reload current records and recheck access. `Compare result R-42 with its reference range` now opens the selected result without requiring prior result context; replace the example IDs with accessible records.
 - **CI image-download recovery ([PR #174](https://github.com/Mokey2002/OpenLIMS/pull/174)):** Docker daemon `context deadline exceeded` errors now use the existing bounded retries and explicitly configured fallback registry. CI no longer stops on the first occurrence of this transient timeout. Permanent errors and exhausted fallback attempts still fail the job. See [Testing](#-testing) for the image-pull regression command.
 
@@ -995,15 +995,21 @@ The health check verifies:
 
 ## 🔖 Frontend Version Footer
 
-The frontend footer should use the generated `frontend/src/version.js` file instead of a hardcoded version string.
+The frontend footer uses `OPENLIMS_VERSION` from the generated
+`frontend/src/version.js` file. The current application version is **v0.59.0**.
 
-Recommended footer source:
+Footer source:
 
 ```jsx
 OpenLIMS {OPENLIMS_VERSION}
 ```
 
-The version file can be generated from the latest Git tag during frontend dev/build so the footer stays aligned with releases.
+Before frontend dev/build, `frontend/scripts/write-version.mjs` generates the
+version file using this order: `VITE_OPENLIMS_VERSION`, the root `VERSION` file,
+the latest reachable Git tag, the existing generated version, then `development`.
+For a normal version bump, update the root `VERSION` and regenerate
+`frontend/src/version.js`; keep this badge and both README release notes aligned.
+An explicit `VITE_OPENLIMS_VERSION` overrides the normal release version.
 
 ---
 
