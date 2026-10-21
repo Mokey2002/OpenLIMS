@@ -2,9 +2,17 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-## Cambios recientes
+**Versión actual: v0.59.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
+`frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
+`VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
+o `development`, en ese orden. Una variable `VITE_OPENLIMS_VERSION` explícita
+prevalece sobre la versión normal. Al cambiar de versión, actualiza `VERSION`,
+regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
-- **IA más conversacional:** OpenAI y Ollama reciben un historial breve y verificado del chat general. Respuestas como `Explain that more simply`, `Give me an example` y `Explain that in Spanish` conservan la pregunta y respuesta anteriores. Ambos proveedores reciben instrucciones para responder directamente, usar ejemplos y expresar incertidumbre. Consulta [conversación general y seguimiento](#conversación-general-y-seguimiento) para configuración, límites y comandos de reinicio.
+## v0.59.0 — IA conversacional y respuestas con evidencia
+
+- **IA más conversacional ([PR #176](https://github.com/Mokey2002/OpenLIMS/pull/176)):** OpenAI y Ollama reciben un historial breve y verificado del chat general. Respuestas como `Explain that more simply`, `Give me an example` y `Explain that in Spanish` conservan la pregunta y respuesta anteriores. Ambos proveedores reciben instrucciones para responder directamente, usar ejemplos y expresar incertidumbre. Consulta [conversación general y seguimiento](#conversación-general-y-seguimiento) para configuración, límites y comandos de reinicio.
 - **Prioridades de muestras y evidencia de QC ([PR #173](https://github.com/Mokey2002/OpenLIMS/pull/173)):** `Summarize sample S-100` muestra la evidencia de trabajo y QC antes de los metadatos. Incluye hasta tres trabajos y tres resultados que necesitan atención, incluso fallos antiguos fuera de los cinco resultados más recientes, con responsables, fechas límite, motivos de QC registrados, notas de revisión y límites de referencia configurados. Las sugerencias consultan datos actuales y vuelven a comprobar el acceso. `Compare result R-42 with its reference range` abre el resultado indicado sin contexto previo de resultado; sustituye los IDs de ejemplo por registros accesibles.
 - **Recuperación de descargas de imágenes en CI ([PR #174](https://github.com/Mokey2002/OpenLIMS/pull/174)):** los errores `context deadline exceeded` del daemon de Docker ahora utilizan los reintentos limitados y el registro alternativo configurado explícitamente. CI ya no se detiene en la primera aparición de este timeout transitorio. Los errores permanentes y el agotamiento de los intentos del registro alternativo siguen haciendo fallar el trabajo. Consulta [las pruebas de descarga de imágenes](#pruebas-de-descarga-de-imágenes-en-ci).
 
