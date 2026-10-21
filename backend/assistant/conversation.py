@@ -14,6 +14,14 @@ OPENLIMS_SUGGESTIONS = [
 ]
 
 
+def is_courtesy_reply(message):
+    return bool(re.fullmatch(
+        r"(?:thanks|thank you|thanks a lot|great thanks|okay thanks|ok thanks|"
+        r"okay|ok|got it|understood)[.! ]*",
+        str(message or "").strip(), re.I,
+    ))
+
+
 def _utility_response(answer, suggestions=None):
     return {
         "answer": answer,

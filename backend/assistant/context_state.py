@@ -63,19 +63,28 @@ def sanitize_context(context):
     memory = context.get("dialogue_memory")
     if isinstance(memory, str) and len(memory) <= 6000:
         sanitized["dialogue_memory"] = memory
+    from .general_conversation import CONTEXT_KEY, MAX_TOKEN_CHARS
+    general = context.get(CONTEXT_KEY)
+    if isinstance(general, str) and len(general) <= MAX_TOKEN_CHARS:
+        sanitized[CONTEXT_KEY] = general
     return sanitized
 
 
 def update_conversation_context(message, previous, result):
+    from .conversation import is_courtesy_reply
+
     previous = sanitize_context(previous)
     supplied = sanitize_context((result or {}).get("context") or {})
+    if (result or {}).get("response_type") == "general":
+        # General chat must not carry an active lab record or pending operation.
+        # Its verified transcript is attached separately after model generation.
+        return {}
     if (result or {}).get("replace_context"):
         return supplied
     if supplied:
         return supplied
     # Courtesy replies should not discard the current task or its clarification.
-    if re.fullmatch(r"(?:thanks|thank you|thanks a lot|great thanks|okay thanks|ok thanks|okay|ok|got it|understood)[.! ]*",
-                    str(message or "").strip(), re.I):
+    if is_courtesy_reply(message):
         return previous
     if (result or {}).get('routing', {}).get('route') in {'monitoring', 'identity'}:
         return {}

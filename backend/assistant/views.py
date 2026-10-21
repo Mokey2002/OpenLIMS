@@ -26,6 +26,7 @@ from .actions import (
 )
 from .llm import classify_route_with_llm, configured_model_info, enhance_with_llm
 from .context_state import update_conversation_context
+from .general_conversation import recall as recall_general, remember_response
 from .models import AssistantAction, AssistantFeedback, AssistantInteraction
 from .models import GeneratedArtifact, NotificationSubscription, SOPDocument
 from .monitoring import build_admin_monitoring_status
@@ -179,7 +180,9 @@ class AssistantChatView(APIView):
             from .dialogue_memory import remember_topics
             remember_topics(message, context, result, request.user)
             result = normalize_assistant_response(message, result)
-            result = enhance_with_llm(message=message, tool_result=result)
+            history = recall_general(context, request.user) if result.get("response_type") == "general" else []
+            result = enhance_with_llm(message=message, tool_result=result, history=history)
+            remember_response(message, context, result, request.user)
             result = normalize_assistant_response(message, result)
             routing = result.get("routing") or {}
             presentation = result.get("presentation") or {}
