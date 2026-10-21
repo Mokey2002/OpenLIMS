@@ -9,6 +9,10 @@ READS = {
     'sample_history': ('sample', 'What happened to sample {}'),
     'sample_location': ('sample', 'Where is sample {}'),
     'sample_sequences': ('sample', 'Find sequences for sample {}'),
+    'sample_explanation': ('sample', 'Explain sample {}'),
+    'sample_evidence': ('sample', 'Show evidence for sample {}'),
+    'sample_checks': ('sample', 'What should I check first for sample {}'),
+    'sample_unknowns': ('sample', 'What is still unknown about sample {}'),
     'project_summary': ('project', 'Summarize project {}'),
     'project_samples': ('project', 'Show samples in project {}'),
     'project_quality': ('project', 'Review data quality for project {}'),
@@ -48,6 +52,13 @@ def read_intent(message):
     return None
 
 
+def _awaiting_context(intent, context):
+    pending = {'awaiting_read': intent}
+    if context.get('explanation_language') in ('en', 'es'):
+        pending['explanation_language'] = context['explanation_language']
+    return pending
+
+
 def prepare_read_request(message, user, context):
     """Return a canonical command or a clarification, with access rechecked."""
     text = normalize_request(message)
@@ -57,6 +68,10 @@ def prepare_read_request(message, user, context):
         'sample_history': r'(?:show (?:me )?(?:a |the )?sample history|what happened to (?:a |the )?sample)',
         'sample_location': r'where is (?:a |the )?sample',
         'sample_sequences': r'find sequences for (?:a |the )?sample',
+        'sample_explanation': r'explain (?:a |the )?sample',
+        'sample_evidence': r'show (?:the )?evidence for (?:a |the )?sample',
+        'sample_checks': r'what should I check first for (?:a |the )?sample',
+        'sample_unknowns': r'what is still unknown about (?:a |the )?sample',
         'project_summary': r'summarize (?:a |the )?project',
         'project_samples': r'show samples in (?:a |the )?project',
         'project_quality': r'review data quality for (?:a |the )?project',
@@ -65,7 +80,7 @@ def prepare_read_request(message, user, context):
         if re.fullmatch(pattern, text, re.I):
             kind = READS[key][0]
             return text, response(f'Which {kind} should I use? Reply with its exact {"code" if kind == "project" else "ID"}.',
-                                  context={'awaiting_read': key}, clarification={'required': True})
+                                  context=_awaiting_context(key, context), clarification={'required': True})
     waiting = context.get('awaiting_read')
     previous = context.get('read_intent')
     continuation = re.fullmatch(r'(?:same for|what about|how about|and for|(?:no,? )?I meant|actually,?(?: I meant)?|sorry,? I meant)\s+(?:(sample|project)\s+)?(.+)', text, re.I)
@@ -95,7 +110,7 @@ def prepare_read_request(message, user, context):
         identifier = matches[0].code if len(matches) == 1 else None
     if identifier is None:
         return text, response(f'I could not identify one accessible {kind}. Please give its exact identifier.',
-                              context={'awaiting_read': intent}, clarification={'required': True})
+                              context=_awaiting_context(intent, context), clarification={'required': True})
     return template.format(identifier), None
 
 

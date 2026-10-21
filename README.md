@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.59.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.60.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,10 @@
 ---
 
 ## Overview
+
+### v0.60.0 — Grounded sample explanations
+
+After `Summarize sample S-100`, ask **“Explain that more simply”**, **“Why does this sample need attention?”**, **“What should I check first?”**, or **“What don't we know?”**. These read-only answers work without an AI provider, reload current accessible records, prioritize recorded QC/work flags, and distinguish evidence from missing information and unestablished scientific causes. English and Spanish explanations are supported; `In Spanish` / `In English` switches language while keeping the explanation focus. `same for S-102` repeats the chosen explanation for another accessible sample. See [sample explanations and follow-ups](#sample-explanations-and-follow-ups) for examples and limits. The application version, generated footer, and both READMEs are updated together.
 
 ### v0.59.0 — Conversational AI and evidence-based answers
 
@@ -420,6 +424,45 @@ Failures and rejected results come before pending reviews, with oldest records f
 within each result group. Displayed counts identify omitted records, and long QC
 reasons and review notes are marked as excerpts. Suggested result questions reload current records
 and recheck access.
+
+### Sample explanations and follow-ups
+
+These explanations work with OpenLIMS Rules in both chat views. Replace `S-100`
+with an exact accessible sample ID; quote an ID containing spaces.
+
+| Ask directly | Or follow a selected sample with | Answer |
+|---|---|---|
+| `Explain sample S-100` | `Explain that more simply` | Short explanation of recorded flags and the first suggested check. |
+| `Show evidence for sample S-100` | `Why does this sample need attention?` / `Show the evidence` | Current counts, bounded priority records, owners/deadlines, QC reasons, review notes, values, reference limits, and timestamps. |
+| `What should I check first for sample S-100?` | `What should I check first?` | Review suggestions ordered by recorded failures/QC decisions, pending review, overdue work, then missing assignees. |
+| `What is still unknown about sample S-100?` | `What don't we know?` | Missing values, unevaluated checks, missing notes/limits, invalid ranges, and the limits of the evidence. |
+
+Spanish forms include `Explica la muestra S-100`, `Explícalo más simple`,
+`Muestra la evidencia`, `¿Qué debo revisar primero?`, and `¿Qué no sabemos?`.
+`In Spanish` / `In English` retains the current explanation focus. `Thanks` keeps
+the selected sample; `same for S-102` repeats the current explanation for that
+sample, and `Back to the previous sample` restores a recent supported read.
+`Forget this conversation` clears context. A missing or conflicting selection
+asks for one sample ID. Stable IDs survive renames, access is rechecked on every
+read, and linked-project viewers can read without gaining modification rights.
+
+Counts can overlap: unfinished-work flags exclude completed/cancelled items,
+while result counts include historical records. Evidence shows up to three
+flagged work items and three flagged results; when no results are flagged it
+shows up to three recent results instead. Unknowns inspect the five recent
+results and up to three priority results, deduplicated, rather than scanning
+every result. QC notes are limited to 240 characters with an excerpt marker.
+Reference comparisons describe configured inclusive limits and preserve unknown
+or invalid values; an out-of-range value does not invent a recorded QC failure
+or establish its cause. Review approval and QC check outcomes remain separate.
+
+Recommendations do not assess every workflow dependency, prove release readiness,
+or execute changes. Use `What next for sample S-100?` for the existing pipeline
+guidance and an authorized reviewer for QC decisions. Neither a transcript nor
+record snapshots are saved by these explanations; read-topic memory contains
+only IDs and allow-listed read operations. OpenAI/Ollama can dispatch the same
+permission-checked `sample_explanations` feature, whose evidence is not rewritten
+by a model. No database migration or new model configuration is required.
 
 ### Workflow questions and follow-ups
 
@@ -996,7 +1039,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.59.0**.
+`frontend/src/version.js` file. The current application version is **v0.60.0**.
 
 Footer source:
 

@@ -2,6 +2,7 @@ import re
 
 
 ALLOWED_CONTEXT_KEYS = {
+    "explanation_language",
     "read_intent",
     "awaiting_read",
     "clarification_topic",

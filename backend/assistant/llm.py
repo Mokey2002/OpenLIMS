@@ -223,6 +223,8 @@ Rules:
   workflow_draft = editable sequential workflow, procedures is a comma-separated list of exact CODE@VERSION or names;
   handover = unfinished work from source username to recipient username;
   compare_runs = current experiment comparison, left/right are exact public IDs or unique titles.
+- sample_explanations = read-only, current sample explanations, priority evidence, suggested checks,
+  or missing information. Use its supported command examples; it never infers a scientific cause or grants QC approval.
 - count must be an integer; version is optional for reagent_plan. All other arguments are strings.
 - For command tools, translate the wording into a supported command in English, retaining every requested filter,
   identifier, quantity, value, unit, reason and negation. Examples are syntax, not actual record identifiers.
