@@ -600,6 +600,10 @@ def route_assistant_message(message, user, context=None, route_hint=None):
     message, question = prepare_read_request(message, user, context or {})
     if question:
         return _routed(question, "clarification")
+    from .sample_explanations import route_sample_explanations
+    explanation = route_sample_explanations(message, user, context)
+    if explanation:
+        return remember_read(message, _routed(explanation, "samples"))
     return remember_read(message, _route_assistant_message(message, user, context, route_hint))
 
 

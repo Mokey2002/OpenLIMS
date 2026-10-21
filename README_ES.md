@@ -2,13 +2,17 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.59.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.60.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
 o `development`, en ese orden. Una variable `VITE_OPENLIMS_VERSION` explícita
 prevalece sobre la versión normal. Al cambiar de versión, actualiza `VERSION`,
 regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
+
+## v0.60.0 — Explicaciones de muestras basadas en evidencia
+
+Después de `Summarize sample S-100`, pregunta **“Explícalo más simple”**, **“¿Por qué necesita atención?”**, **“¿Qué debo revisar primero?”** o **“¿Qué no sabemos?”**. Estas respuestas de lectura funcionan sin proveedor de IA, consultan registros actuales y accesibles, priorizan alertas registradas de trabajo/QC y distinguen evidencia de datos faltantes y causas científicas no establecidas. `In Spanish` / `In English` cambia el idioma y conserva el tipo de explicación. `same for S-102` repite la explicación elegida para otra muestra accesible. Consulta [explicaciones de muestras y seguimiento](#explicaciones-de-muestras-y-seguimiento) para ejemplos y límites. La versión, el pie de página generado y ambas guías se actualizan juntos.
 
 ## v0.59.0 — IA conversacional y respuestas con evidencia
 
@@ -560,6 +564,44 @@ Ollama u OpenAI son opciones del asistente de lenguaje natural, no dependencias 
 ---
 
 ## 9. Asistente de OpenLIMS
+
+### Explicaciones de muestras y seguimiento
+
+Funcionan con OpenLIMS Rules en ambas vistas del chat, sin proveedor de IA.
+Sustituye `S-100` por un ID exacto y accesible; usa comillas si contiene espacios.
+
+| Consulta directa | Seguimiento de una muestra seleccionada | Respuesta |
+|---|---|---|
+| `Explica la muestra S-100` | `Explícalo más simple` | Explicación breve de las alertas registradas y la primera comprobación sugerida. |
+| `Muestra la evidencia de la muestra S-100` | `¿Por qué necesita atención?` / `Muestra la evidencia` | Recuentos actuales y registros prioritarios con responsables, fechas, valores, rangos y notas de QC. |
+| `¿Qué debo revisar primero para la muestra S-100?` | `¿Qué debo revisar primero?` | Sugerencias ordenadas por fallos/QC, revisiones pendientes, vencimientos y falta de responsable. |
+| `¿Qué no sabemos de la muestra S-100?` | `¿Qué no sabemos?` | Valores, controles, notas y límites ausentes o inválidos, y limitaciones de la evidencia. |
+
+`In Spanish` / `In English` conserva el tipo de explicación. `Thanks` mantiene la
+muestra; `same for S-102` repite la explicación para otra muestra accesible y
+`Back to the previous sample` recupera una consulta reciente compatible.
+`Forget this conversation` borra el contexto. Si falta la selección o hay varios
+IDs contradictorios, se solicita una sola muestra. Se usan IDs estables y se
+verifican permisos en cada consulta, incluso para miembros de proyectos vinculados.
+
+Los recuentos pueden solaparse. Las alertas excluyen trabajos completados o
+cancelados; los resultados pueden ser históricos. La evidencia muestra hasta
+tres trabajos y tres resultados señalados; si no hay resultados señalados,
+muestra hasta tres recientes. Los datos desconocidos se revisan solo en los
+cinco resultados recientes y hasta tres prioritarios, sin duplicados, no en todos
+los resultados de la muestra. Las notas se limitan a 240 caracteres y se marcan
+como extractos. Se conservan valores cero/falso y se indican valores o límites
+inválidos. Estar fuera del rango configurado no inventa un fallo registrado de
+QC ni establece su causa científica. Un control de QC y una decisión de revisión
+son evidencias distintas.
+
+Las sugerencias no evalúan todas las dependencias ni autorizan liberar la muestra
+o modificar registros. Usa `What next for sample S-100?` para la guía de pipelines
+y consulta a un revisor autorizado para decisiones de QC. Estas explicaciones no
+guardan transcripciones ni copias de registros: la memoria de temas guarda solo
+IDs y operaciones de lectura permitidas. OpenAI/Ollama pueden usar la misma
+herramienta `sample_explanations`, con permisos comprobados y evidencia sin
+reescritura del modelo. No requiere migraciones ni nueva configuración del modelo.
 
 ### Resúmenes de muestras con evidencia
 

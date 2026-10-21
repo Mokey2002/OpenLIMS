@@ -22,6 +22,7 @@ COMMAND_TOOLS = {
     "work_items": ("workitem_operations", "route_workitem_operations", "Create sequencing work for samples in batch B-100; Assign today's sequencing work to maria; Show pending work items"),
     "guided_actions": ("guided_actions", "route_guided_action", "Assign step 1 for sample S-100 to maria; Add result concentration = 43 to step 1 for sample S-100 unit ng/uL"),
     "sample_guidance": ("sample_guidance", "route_sample_guidance", "What next for sample S-100?"),
+    "sample_explanations": ("sample_explanations", "route_sample_explanations", "Explain sample S-100; Show evidence for sample S-100; What should I check first for sample S-100?; What is still unknown about sample S-100?"),
     "project_workflows": ("project_workflows", "route_project_workflows", "Which samples in project ALPHA are overdue and unassigned?; Explain this query; Refresh results"),
     "monitoring": ("monitoring", "route_system_monitoring", "Show system status"),
     "identity": ("tools", "answer_current_user", "Who am I?"),
