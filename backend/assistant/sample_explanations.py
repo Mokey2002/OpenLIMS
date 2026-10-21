@@ -152,7 +152,11 @@ def _evidence_lines(briefing, t):
     lines = [t("Priority evidence (bounded lists; counts include older records):", "Evidencia prioritaria (listas limitadas; los recuentos incluyen registros antiguos):")]
     lines.append(t("Work shown: {} of {} flagged items.", "Trabajos mostrados: {} de {} señalados.").format(len(attention["work_items"]), attention["work_total"]))
     for item in attention["work_items"]:
+        labels = {"work failed": t("work failed", "trabajo fallido"), "overdue": t("overdue", "vencido"),
+                  "unassigned": t("unassigned", "sin asignar")}
+        flags = ", ".join(labels.get(reason, reason) for reason in item["reasons"])
         lines.append(f"- #{item['id']} / {item['name']} — {item['status']}; "
+                     + t("flags: {}; ", "alertas: {}; ").format(flags)
                      + t("owner: {}; deadline: {}.", "responsable: {}; vencimiento: {}.").format(
                          item["assigned_to"] or t("unassigned", "sin asignar"), item["due_at"] or t("not recorded", "no registrado")))
     # If no results are flagged, still show recent evidence without implying

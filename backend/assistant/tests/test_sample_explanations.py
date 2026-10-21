@@ -108,6 +108,18 @@ class SampleExplanationTests(APITestCase):
         unknowns = self.chat("What don't we know?", data["context"])
         self.assertIn("no QC failure reason recorded", unknowns["answer"])
 
+    def test_work_evidence_identifies_each_recorded_failure_qc_and_scheduling_flag(self):
+        self.work.status = WorkItem.STATUS_FAILED
+        self.work.qc_status = WorkItem.QC_RERUN_REQUIRED
+        self.work.assigned_to = None
+        self.work.due_at = timezone.now() - timedelta(hours=1)
+        self.work.save()
+        data = self.chat("Show evidence for sample EXPLAIN-1")
+        self.assertIn(f"#{self.work.pk} / Extraction", data["answer"])
+        self.assertIn("flags: work failed, QC RERUN_REQUIRED, overdue, unassigned", data["answer"])
+        spanish = self.chat("In Spanish", data["context"])
+        self.assertIn("alertas: trabajo fallido, QC RERUN_REQUIRED, vencido, sin asignar", spanish["answer"])
+
     def test_passed_check_does_not_grant_review_approval(self):
         self.result(qc_passed=True, qc_status=Result.QC_PENDING_REVIEW)
         data = self.chat("What should I check first for sample EXPLAIN-1?")
