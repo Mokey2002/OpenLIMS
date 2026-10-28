@@ -168,6 +168,7 @@ User question:
 
 def build_route_classifier_prompt(message, context=None):
     from .provider_tools import catalog_prompt
+    from .read_plans import catalog_prompt as read_catalog
     context = context or {}
     active_context = [
         key
@@ -175,6 +176,7 @@ def build_route_classifier_prompt(message, context=None):
         if context.get(key)
     ]
     route_descriptions = {
+        "read_plan": "two to four typed read-only operations combined in one request",
         "analytics": "safe allow-listed grouping, counting, rates, or ranked aggregate summaries",
         "attention": "general priorities, pending items, or what needs review",
         "barcode": "create or reprint sample barcode labels",
@@ -231,7 +233,15 @@ Rules:
 - Copy identifiers/names and scientific values from the user's request. Never invent identifiers, versions,
   defaults, QC reasons, recipients or experimental values. Do not silently drop unsupported conditions.
 - Omit missing required arguments so OpenLIMS asks for clarification. Do not guess from hidden records.
-- Request exactly one tool. Multi-action or unsupported requests use unknown; never send code, SQL,
+- For a multi-part READ-ONLY request, use this alternative shape:
+  {{"route":"read_plan","steps":[{{"operation":"sample_evidence","arguments":{{"sample":"EXACT_ID_FROM_REQUEST"}}}},{{"operation":"sop_search","arguments":{{"question":"EXACT_SOP_CLAUSE_FROM_REQUEST"}}}}],"confidence":0.95}}
+- Read-plan operations and their REQUIRED string arguments:
+{read_catalog()}
+- Use two to four steps, preserve every requested operation, filter and negation. All record identifiers
+  must appear explicitly in the current request. The SOP question must be copied verbatim from this request.
+  No context references, invented targets, cross-step result references, drafts, charts or writes in a read plan.
+  Use unknown if any part is unsupported or requests a change. Never quietly omit part of the request.
+- Otherwise request exactly one tool. Unsupported multi-action requests use unknown; never send code, SQL,
   confirmation tokens, user/permission overrides or executable payloads.
 - Never translate a preview or question into a mutation. Changes only produce server previews for explicit confirmation.
 - Select chart only when the user explicitly requests a visual.

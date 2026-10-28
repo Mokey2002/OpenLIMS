@@ -4,6 +4,7 @@ from .intent_matching import work_graph_metrics
 
 
 ASSISTANT_ROUTES = {
+    "read_plan",
     "tool",
     "analytics",
     "attention",
@@ -198,6 +199,9 @@ def validate_routing_plan(data, min_confidence=0.65):
     if data.get("route") == "tool":
         from .provider_tools import validate_tool_plan
         return validate_tool_plan(data, min_confidence)
+    if data.get("route") == "read_plan":
+        from .read_plans import validate_read_plan
+        return validate_read_plan(data, min_confidence)
     route = str(data.get("route") or "").strip().lower()
     if route not in ASSISTANT_ROUTES:
         return None

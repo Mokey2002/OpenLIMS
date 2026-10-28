@@ -2,13 +2,21 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.60.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.61.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
 o `development`, en ese orden. Una variable `VITE_OPENLIMS_VERSION` explícita
 prevalece sobre la versión normal. Al cambiar de versión, actualiza `VERSION`,
 regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
+
+## v0.61.0 — Consultas combinadas, fuentes y pasajes de SOP
+
+Combina de dos a cuatro consultas compatibles, por ejemplo **`Show evidence for sample S-100; show its history; show the SOP for concentration`**. El asistente conserva cada paso, su estado, respuesta y tabla de comparación. **Sources and scope / Fuentes y alcance** en ambos chats enlaza a muestras, resultados, trabajos señalados, importaciones vinculadas, experimentos y secciones completas de SOP accesibles. Los registros sin acceso o documentos sin coincidencias producen una respuesta parcial explícita. Cada paso comprueba permisos y consulta datos actuales de forma independiente; no representa una sola instantánea de la base de datos ni establece causas científicas.
+
+Las cláusulas completas compatibles en inglés funcionan sin proveedor. Con OpenAI/Ollama habilitado se pueden interpretar otras formas mediante el mismo plan de lectura tipado. Los identificadores y el tema del SOP deben aparecer explícitamente en la solicitud actual. Las cláusulas incompatibles, exclusiones, cambios o más de cuatro pasos requieren aclaración antes de ejecutar cualquier parte. Las acciones individuales conservan su confirmación. PostgreSQL ordena las secciones actuales, aprobadas y accesibles mediante búsqueda de texto completo y muestra pasajes coincidentes. No requiere servicios externos de embeddings ni migraciones.
+
+Consulta la [guía v0.61](docs/assistant-v061.md) para operaciones, límites y evaluación de calidad. Se comprueban hechos esperados, afirmaciones prohibidas, fuentes, operaciones y latencia sobre registros conocidos; no constituye una validación científica ni una medición de precisión de modelos reales. La versión, el pie generado y ambas guías se actualizan juntos.
 
 ## v0.60.0 — Explicaciones de muestras basadas en evidencia
 

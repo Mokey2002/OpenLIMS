@@ -14,6 +14,7 @@ REASON_LIMIT = 240
 
 
 def _result_evidence(result):
+    source = result.work_item.source_import_job
     value = result.value
     invalid_value = isinstance(value, float) and not math.isfinite(value)
     invalid_limits = any(
@@ -30,6 +31,9 @@ def _result_evidence(result):
         "value_invalid": invalid_value,
         "unit": result.unit,
         "work_item": result.work_item.name,
+        "work_item_id": result.work_item_id,
+        "source_import": ({"id": source.pk, "run_id": source.run_id,
+                           "instrument": source.instrument.code} if source else None),
         "qc_passed": result.qc_passed,
         "qc_status": result.qc_status,
         "created_at": result.created_at.isoformat(),
@@ -102,11 +106,11 @@ def sample_briefing(sample):
     result_total = totals.pop("flagged")
     recent = [
         _result_evidence(result)
-        for result in results.select_related("work_item").order_by("-created_at", "-pk")[:RECENT_RESULT_LIMIT]
+        for result in results.select_related("work_item__source_import_job__instrument").order_by("-created_at", "-pk")[:RECENT_RESULT_LIMIT]
     ]
     priority_results = [
         _result_evidence(result)
-        for result in results.filter(result_flags).select_related("work_item").order_by(
+        for result in results.filter(result_flags).select_related("work_item__source_import_job__instrument").order_by(
             Case(When(result_failure, then=Value(0)), default=Value(1), output_field=IntegerField()),
             "created_at", "pk",
         )[:ATTENTION_LIMIT]

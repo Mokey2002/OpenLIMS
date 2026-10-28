@@ -20,6 +20,7 @@ import AssistantClarification from "../components/AssistantClarification";
 import AssistantContextBar from "../components/AssistantContextBar";
 import AssistantFeedback from "../components/AssistantFeedback";
 import AssistantDraft from "../components/AssistantDraft";
+import AssistantEvidence from "../components/AssistantEvidence";
 import AssistantInterpretation from "../components/AssistantInterpretation";
 import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 import { OPENLIMS_VERSION } from "../version";
@@ -118,6 +119,8 @@ export default function Assistant() {
           content: data.project_workflows?.summary || data.answer || "No answer returned.",
           draft: data.draft || null,
           interpretation: data.interpretation || null,
+          citations: data.citations || [],
+          readPlan: data.read_plan || null,
           projectWorkflows: data.project_workflows || null,
           queryExplanation: data.query_explanation || null,
           links: data.links || [],
@@ -405,6 +408,7 @@ export default function Assistant() {
                     </div>
                   )}
 
+                  <AssistantEvidence citations={item.citations} readPlan={item.readPlan} />
                   {item.draft && <AssistantDraft draft={item.draft} />}
                   <AssistantInterpretation interpretation={item.interpretation} />
                   {item.suggestions?.length > 0 && (

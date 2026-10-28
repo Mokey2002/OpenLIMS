@@ -38,6 +38,7 @@ const DataMigration = lazyPage(() => import("./pages/DataMigration"));
 const Assistant = lazyPage(() => import("./pages/Assistant"));
 const MigrationJobDetail = lazyPage(() => import("./pages/MigrationJobDetail"));
 const SOPs = lazyPage(() => import("./pages/SOPs"));
+const SOPDetail = lazyPage(() => import("./pages/SOPDetail"));
 const Batches = lazyPage(() => import("./pages/Batches"));
 const QCReview = lazyPage(() => import("./pages/QCReview"));
 const WorkQueue = lazyPage(() => import("./pages/WorkQueue"));
@@ -83,6 +84,7 @@ export default function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="system-status" element={<SystemStatus />} />
             <Route path="sops" element={<SOPs />} />
+            <Route path="sops/:id" element={<SOPDetail />} />
             <Route path="batches" element={<Batches />} />
             <Route path="qc-review" element={<QCReview />} />
             <Route path="work-queue" element={<WorkQueue />} />

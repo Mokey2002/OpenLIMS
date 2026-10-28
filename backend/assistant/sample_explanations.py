@@ -236,7 +236,8 @@ def route_sample_explanations(message, user, context=None):
     lines += ["", t("Counts may overlap. Work flags exclude completed/cancelled items; results may be historical. QC checks and review decisions are separate.",
                      "Los recuentos pueden solaparse. Las alertas excluyen trabajo completado/cancelado; los resultados pueden ser históricos. Los controles y las decisiones de revisión de QC son distintos."),
               t("Read from current records. No records or approvals were changed.", "Consulta de registros actuales. No se cambiaron registros ni aprobaciones.")]
-    return response("\n".join(lines), sample_briefing=briefing,
+    from .evidence import sample_citations
+    return response("\n".join(lines), sample_briefing=briefing, citations=sample_citations(sample, briefing),
                     sample_explanation={"sample_id": sample.pk, "focus": focus, "language": language, "as_of": timezone.now().isoformat(),
                                         "signals": signals, "recommended_checks": checks, "unknowns": unknowns, "read_only": True},
                     context={"sample_id": sample.pk, "sample_code": sample.sample_id, "read_intent": INTENTS[focus], "explanation_language": language},

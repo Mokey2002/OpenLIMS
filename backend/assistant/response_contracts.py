@@ -66,6 +66,7 @@ def normalize_assistant_response(message, result):
             normalized.get("investigation")
             or normalized.get("comparison")
             or normalized.get("links")
+            or normalized.get("citations")
         ),
     }
     normalized["response_contract"] = {

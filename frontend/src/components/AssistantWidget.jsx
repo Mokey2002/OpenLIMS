@@ -13,6 +13,7 @@ import AssistantClarification from "./AssistantClarification";
 import AssistantContextBar from "./AssistantContextBar";
 import AssistantFeedback from "./AssistantFeedback";
 import AssistantDraft from "./AssistantDraft";
+import AssistantEvidence from "./AssistantEvidence";
 import AssistantInterpretation from "./AssistantInterpretation";
 import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 
@@ -127,6 +128,8 @@ export default function AssistantWidget() {
           content: data.project_workflows?.summary || data.answer || "No answer returned.",
           draft: data.draft || null,
           interpretation: data.interpretation || null,
+          citations: data.citations || [],
+          readPlan: data.read_plan || null,
           projectWorkflows: data.project_workflows || null,
           queryExplanation: data.query_explanation || null,
           links: data.links || [],
@@ -360,6 +363,7 @@ export default function AssistantWidget() {
                     </div>
                   )}
 
+                  <AssistantEvidence citations={item.citations} readPlan={item.readPlan} />
                   {item.draft && <AssistantDraft draft={item.draft} />}
                   <AssistantInterpretation interpretation={item.interpretation} />
                   {item.suggestions?.length > 0 && (

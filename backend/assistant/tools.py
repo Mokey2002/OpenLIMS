@@ -596,6 +596,11 @@ def route_assistant_message(message, user, context=None, route_hint=None):
         return _routed(response, "clarification")
     if restored:
         message = restored
+    from .read_plans import handle_read_plan
+    read_plan = handle_read_plan(message, user, route_hint if (route_hint or {}).get("route") == "read_plan" else None)
+    if read_plan is not None:
+        return _routed(read_plan, "read_plan", source=(route_hint or {}).get("provider", "rules"),
+                       confidence=(route_hint or {}).get("confidence", 1.0))
     from .natural_requests import prepare_read_request, remember_read
     message, question = prepare_read_request(message, user, context or {})
     if question:
