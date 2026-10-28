@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.60.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.61.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,14 @@
 ---
 
 ## Overview
+
+### v0.61.0 — Combined read-only answers, sources and SOP passages
+
+Combine two to four supported reads, for example **`Show evidence for sample S-100; show its history; show the SOP for concentration`**. OpenLIMS retains every step, its status, the recorded answer and any comparison table. **Sources and scope** in both chat views links to samples, results, flagged work, linked instrument imports, experiments and full accessible SOP sections. Missing targets and absent SOP matches produce an explicit partial answer. Each step checks access and reads current data independently; this is not a single database snapshot or a scientific causal analysis.
+
+Common complete English clauses work without a provider. OpenAI/Ollama can interpret other wording into the same typed read plan when enabled; all identifiers and the SOP topic must be explicit in the current request. Unsupported clauses, exclusions, changes and plans exceeding four steps require clarification before any part runs. Existing single-action confirmation flows remain separate. SOP retrieval ranks current approved accessible sections with PostgreSQL full-text search and shows matching passages rather than document prefixes. No external embedding service or database migration is required.
+
+See the [v0.61 guide](docs/assistant-v061.md) for supported operations, limits and the answer-quality command. The benchmark checks expected facts, forbidden claims, citations, operation coverage and latency on known records; it is not a live-model or scientific validation claim. Version, generated footer and both READMEs are updated together.
 
 ### v0.60.0 — Grounded sample explanations
 
@@ -1039,7 +1047,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.60.0**.
+`frontend/src/version.js` file. The current application version is **v0.61.0**.
 
 Footer source:
 

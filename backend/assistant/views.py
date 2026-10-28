@@ -135,10 +135,11 @@ class AssistantChatView(APIView):
                 context=context,
             )
             unmatched = result.pop("route_unmatched", False)
+            requires_read_plan = result.pop("requires_read_plan", False)
             if unmatched:
                 from .provider_conversation import classifier_context
                 route_hint = classify_route_with_llm(message, context=classifier_context(context, request.user, message))
-                if route_hint:
+                if route_hint and (not requires_read_plan or route_hint.get("route") == "read_plan"):
                     hinted_result = route_assistant_message(
                         message=message,
                         user=request.user,
@@ -146,6 +147,7 @@ class AssistantChatView(APIView):
                         route_hint=route_hint,
                     )
                     hinted_result.pop("route_unmatched", None)
+                    hinted_result.pop("requires_read_plan", None)
                     existing_routing = hinted_result.get("routing") or {}
                     hinted_result["routing"] = {
                         "source": f"{route_hint.get('provider', 'llm')}_fallback",

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import {
   Alert,
   Badge,
@@ -348,6 +348,7 @@ function resultDisplayValue(result) {
 }
 
 export default function SampleDetail() {
+  const { hash } = useLocation();
   const { id } = useParams();
 
   const [sample, setSample] = useState(null);
@@ -468,6 +469,11 @@ export default function SampleDetail() {
     return () => { loadGeneration.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    if (!sample || !/^#(?:result|work-item)-\d+$/.test(hash)) return;
+    document.getElementById(hash.slice(1))?.scrollIntoView({ block: "center" });
+  }, [hash, sample, workItems]);
 
   const projectId = sample?.project || sample?.project_id;
   const userCanWrite = canWrite(me) && sample?.can_modify !== false;
@@ -1341,7 +1347,7 @@ export default function SampleDetail() {
 
               <tbody>
                 {resultRows.map((result) => (
-                  <tr key={`${result.workItemId}-${result.id}`}>
+                  <tr key={`${result.workItemId}-${result.id}`} id={`result-${result.id}`}>
                     <td><a href={`#work-item-${result.workItemId}`}>{result.workItemName}</a></td>
                     <td>{result.workStatus} / {result.qcStatus || "Not reviewed"}</td>
                     <td>
