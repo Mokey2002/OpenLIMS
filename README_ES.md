@@ -2,13 +2,23 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.61.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.62.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
 o `development`, en ese orden. Una variable `VITE_OPENLIMS_VERSION` explícita
 prevalece sobre la versión normal. Al cambiar de versión, actualiza `VERSION`,
 regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
+
+## v0.62.0 — Consultas conversacionales, progreso y chats guardados
+
+Prueba **`Show QC failures for project ALPHA` → `Only yesterday` → `Compare those with last week` → `Explain the largest difference and link the supporting results`**. Las consultas tipadas conservan proyecto/muestra, filtros de QC, fechas y exclusiones por clave exacta. `Explain the second result` consulta de nuevo el resultado mostrado y comprueba el acceso actual. Un resumen breve elaborado por el backend muestra hallazgos, información desconocida y una comprobación siguiente, con evidencia y fuentes desplegables.
+
+Ambos chats incluyen progreso en directo, texto general de OpenAI/Ollama transmitido por fragmentos, Stop, Retry y conversaciones personales con nombre que puedes guardar, abrir, renombrar y eliminar. Las respuestas de laboratorio guardan referencias de consulta y recuperan registros accesibles actuales al abrirse; no repiten respuestas antiguas de laboratorio ni tokens de confirmación. La búsqueda de SOP combina texto completo de PostgreSQL con conceptos semánticos locales y reordenación, por ejemplo “too dilute” y “low concentration”, conservando los controles de aprobación, vigencia y permisos.
+
+La evaluación comprueba varios turnos, IDs exactos, URLs de fuentes, recuentos calculados, hallazgos mostrados y percentiles de latencia. Se pueden comparar proveedores/modelos configurados mediante una opción explícita. Los comentarios negativos propios vinculados a chats guardados pueden exportarse para preparar casos de regresión revisados manualmente. Las formas directas documentadas son en inglés; el proveedor opcional puede interpretar otras formulaciones. Consulta la [guía v0.62](docs/assistant-v062.md) para ejemplos, límites, cancelación y validación.
+
+**Actualización:** aplica la migración `assistant.0009` antes de iniciar la API nueva. `OPENLIMS_TIME_ZONE` controla las fechas relativas (predeterminado `UTC`). Programa `cleanup_assistant_requests` para eliminar estados caducados. La versión, el pie generado y ambas guías se actualizan juntos.
 
 ## v0.61.0 — Consultas combinadas, fuentes y pasajes de SOP
 

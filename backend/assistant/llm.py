@@ -6,6 +6,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from .routing import ASSISTANT_ROUTES, validate_routing_plan
+from .chat_progress import ChatCancelled, answer_streaming, emit, request_active, stream_answer
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +238,11 @@ Rules:
   {{"route":"read_plan","steps":[{{"operation":"sample_evidence","arguments":{{"sample":"EXACT_ID_FROM_REQUEST"}}}},{{"operation":"sop_search","arguments":{{"question":"EXACT_SOP_CLAUSE_FROM_REQUEST"}}}}],"confidence":0.95}}
 - Read-plan operations and their REQUIRED string arguments:
 {read_catalog()}
+- Result reads (project_results, sample_results and their _compare variants) also accept an optional step-level
+  "filters" object: qc = failed|passed|pending|rejected|approved|all; period = today|yesterday|this_week|last_week|last_7_days;
+  alternatively created_from/created_before = YYYY-MM-DD (end exclusive); keys/exclude_keys = exact result-key string lists.
+  Comparison variants require compare_period with one of those periods. These result operations may be a one-step plan.
+  No other filters are supported. Do not drop conditions, invent keys, mix period with absolute dates, or interpret sample controls without a recorded field.
 - Use two to four steps, preserve every requested operation, filter and negation. All record identifiers
   must appear explicitly in the current request. The SOP question must be copied verbatim from this request.
   No context references, invented targets, cross-step result references, drafts, charts or writes in a read plan.
@@ -276,12 +282,36 @@ def call_openai(prompt, *, system_message=None, history=None):
         model_input = ([{"role": "system", "content": system_message}] if system_message else [])
         model_input += list(history or []) + [{"role": "user", "content": prompt}]
 
-    response = client.responses.create(
-        model=getattr(settings, "OPENAI_MODEL", "gpt-5"),
-        input=model_input,
-        store=False,
-    )
-
+    if answer_streaming():
+        parts, completed = [], False
+        try:
+            with client.with_options(timeout=30, max_retries=0).responses.create(
+                model=getattr(settings, "OPENAI_MODEL", "gpt-5"), input=model_input, store=False,
+                stream=True, max_output_tokens=2000,
+            ) as stream:
+                for event in stream:
+                    if event.type == "response.output_text.delta":
+                        parts.append(event.delta)
+                        emit("delta", text=event.delta)
+                    elif event.type in {"error", "response.failed", "response.incomplete"}:
+                        raise ValueError("Provider response did not complete.")
+                    elif event.type == "response.completed":
+                        completed = True
+            if not completed:
+                raise ValueError("Provider stream ended before completion.")
+            return "".join(parts).strip()
+        finally:
+            client.close()
+    if request_active():
+        client = client.with_options(timeout=30, max_retries=0)
+    try:
+        response = client.responses.create(
+            model=getattr(settings, "OPENAI_MODEL", "gpt-5"), input=model_input, store=False,
+        )
+    finally:
+        if request_active():
+            client.close()
+    emit("checkpoint")
     return getattr(response, "output_text", "").strip()
 
 
@@ -294,7 +324,7 @@ def call_ollama(prompt, system_message=None, json_response=False, *, history=Non
 
     payload = {
         "model": model,
-        "stream": False,
+        "stream": answer_streaming(),
         "messages": [
             {
                 "role": "system",
@@ -324,8 +354,22 @@ def call_ollama(prompt, system_message=None, json_response=False, *, history=Non
         method="POST",
     )
 
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=min(timeout, 30) if request_active() else timeout) as response:
+        if answer_streaming():
+            parts = []
+            for line in response:
+                chunk = json.loads(line)
+                if chunk.get("error"):
+                    raise ValueError("Provider response did not complete.")
+                piece = chunk.get("message", {}).get("content", "")
+                if piece:
+                    parts.append(piece)
+                    emit("delta", text=piece)
+                if chunk.get("done"):
+                    return "".join(parts).strip()
+            raise ValueError("Provider stream ended unexpectedly.")
         raw = response.read().decode("utf-8")
+    emit("checkpoint")
 
     parsed = json.loads(raw)
     return parsed.get("message", {}).get("content", "").strip()
@@ -361,6 +405,7 @@ def classify_route_with_llm(message, context=None):
     provider = llm_provider()
     prompt = build_route_classifier_prompt(message, context=context)
     try:
+        emit("progress", message="Interpreting the requested operation")
         if provider == "openai":
             raw = call_openai(prompt)
         elif provider == "ollama":
@@ -378,6 +423,8 @@ def classify_route_with_llm(message, context=None):
         if result:
             result["provider"] = provider
         return result
+    except ChatCancelled:
+        raise
     except Exception as exc:
         logger.warning("OpenLIMS LLM route classification unavailable: %s", exc)
         return None
@@ -410,14 +457,16 @@ def enhance_with_llm(message, tool_result, *, history=None):
     )
 
     try:
-        if provider == "openai":
-            answer = call_openai(prompt, **conversation_options)
-            mode = "openai"
-        elif provider == "ollama":
-            answer = call_ollama(prompt, **conversation_options)
-            mode = "ollama"
-        else:
-            return fallback
+        emit("progress", message="Writing the answer")
+        with stream_answer(is_general):
+            if provider == "openai":
+                answer = call_openai(prompt, **conversation_options)
+                mode = "openai"
+            elif provider == "ollama":
+                answer = call_ollama(prompt, **conversation_options)
+                mode = "ollama"
+            else:
+                return fallback
 
         if not answer:
             return fallback
@@ -430,6 +479,8 @@ def enhance_with_llm(message, tool_result, *, history=None):
             "model_info": model_info_for(mode),
         }
 
+    except ChatCancelled:
+        raise
     except Exception as exc:
         logger.exception("OpenLIMS Assistant LLM fallback triggered: %s", exc)
 

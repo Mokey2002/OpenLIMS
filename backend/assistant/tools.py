@@ -597,7 +597,7 @@ def route_assistant_message(message, user, context=None, route_hint=None):
     if restored:
         message = restored
     from .read_plans import handle_read_plan
-    read_plan = handle_read_plan(message, user, route_hint if (route_hint or {}).get("route") == "read_plan" else None)
+    read_plan = handle_read_plan(message, user, route_hint if (route_hint or {}).get("route") == "read_plan" else None, context=context)
     if read_plan is not None:
         return _routed(read_plan, "read_plan", source=(route_hint or {}).get("provider", "rules"),
                        confidence=(route_hint or {}).get("confidence", 1.0))

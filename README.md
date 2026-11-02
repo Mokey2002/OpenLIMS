@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.61.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.62.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,16 @@
 ---
 
 ## Overview
+
+### v0.62.0 — Conversational result queries, live progress and saved chats
+
+Ask **`Show QC failures for project ALPHA` → `Only yesterday` → `Compare those with last week` → `Explain the largest difference and link the supporting results`**. Typed result queries preserve project/sample scope, QC filters, date windows and exact result-key exclusions. `Explain the second result` reopens that displayed identity with fresh access checks. A short backend-authored overview puts findings, unknowns and a next check above expandable evidence and citations.
+
+Both chat views support live progress, streamed general OpenAI/Ollama answers, Stop, explicit Retry, and personal named conversations with save/open/rename/delete. Saved laboratory turns retain query references and fetch current accessible records when reopened; historical laboratory answers and confirmation tokens are not replayed. SOP search adds local semantic concept matching and reranking to PostgreSQL full-text retrieval, including “too dilute” / “low concentration”, while preserving current/approved/access restrictions.
+
+Answer-quality checks now cover multi-turn conversations, exact result IDs, exact source URLs, computed counts, displayed findings and latency percentiles. Optional provider/model overrides benchmark configured routing providers; personal negative feedback linked to saved chats can be exported for manual regression-case review. See the [v0.62 guide](docs/assistant-v062.md) for examples, limits, cancellation behavior and validation commands.
+
+**Upgrade:** apply assistant migration `0009` before running the new API. `OPENLIMS_TIME_ZONE` controls relative date windows (default `UTC`). Schedule `cleanup_assistant_requests` to remove expired request state. The application version, generated footer and both READMEs are updated together.
 
 ### v0.61.0 — Combined read-only answers, sources and SOP passages
 
@@ -1047,7 +1057,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.61.0**.
+`frontend/src/version.js` file. The current application version is **v0.62.0**.
 
 Footer source:
 

@@ -149,6 +149,10 @@ export async function apiGet(path, { signal } = {}) {
   return response.json();
 }
 
+export function apiPostResponse(path, body, { signal } = {}) {
+  return request(path, { method: "POST", body: JSON.stringify(body), signal });
+}
+
 export async function apiGetAll(path, maxPages = 100, pageSize = 200) {
   const items = [];
   let next = withPageSize(path, pageSize);
@@ -166,10 +170,11 @@ export async function apiGetAll(path, maxPages = 100, pageSize = 200) {
   return items;
 }
 
-export async function apiPost(path, body) {
+export async function apiPost(path, body, { signal } = {}) {
   const response = await request(path, {
     method: "POST",
     body: JSON.stringify(body),
+    signal,
   });
   if (!response.ok) {
     const text = await response.text();
