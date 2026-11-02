@@ -64,7 +64,8 @@ def route_sop_assistant(message, user, context=None):
 
 
 def _ranked_documents(message, user):
-    terms = sorted(_terms(message))[:12]
+    from .sop_semantics import expanded_terms, rerank
+    terms = expanded_terms(message, sorted(_terms(message))[:12])
     queryset = _accessible_documents(user)
     if not terms:
         return [], terms
@@ -87,7 +88,8 @@ def _ranked_documents(message, user):
                           When(condition, then=Value(1)), default=Value(0), output_field=IntegerField())
                      for term, condition in zip(terms, predicates)), Value(0))
         queryset = queryset.filter(reduce(or_, predicates)).annotate(search_rank=score)
-    return list(queryset.order_by("-search_rank", "document_code", "section", "pk")[:3]), terms
+    candidates = list(queryset.order_by("-search_rank", "document_code", "section", "pk")[:24])
+    return rerank(candidates, message, terms), terms
 
 
 def _passage(content, terms, limit=600):
@@ -118,6 +120,7 @@ def _passage(content, terms, limit=600):
 
 
 def search_sops(message, user):
+    from .sop_semantics import CONCEPT_VERSION
     matches, terms = _ranked_documents(message, user)
     if not matches:
         return {
@@ -139,6 +142,7 @@ def search_sops(message, user):
             "version": document.version, "section": document.section,
             "excerpt": excerpt, "excerpt_truncated": truncated,
             "scope": "Search match from a current approved section, not proof that the procedure applies to this sample.",
+            "semantic_matches": getattr(document, "semantic_matches", []),
         })
         links.append({"label": citation, "url": url})
         Event.objects.create(
@@ -151,5 +155,6 @@ def search_sops(message, user):
         "answer": "\n".join(lines), "links": links, "citations": citations,
         "suggestions": ["Prepare a review assignment"] if "review" in message.lower() or "qc" in message.lower() else [],
         "skip_llm": True,
-        "sop_search": {"method": "full_text" if connection.vendor == "postgresql" else "keyword", "matches": len(matches)},
+        "sop_search": {"method": "full_text" if connection.vendor == "postgresql" else "keyword", "matches": len(matches),
+                       "semantic_mode": CONCEPT_VERSION, "candidate_limit": 24},
     }

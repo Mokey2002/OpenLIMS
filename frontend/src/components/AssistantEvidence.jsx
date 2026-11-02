@@ -11,6 +11,7 @@ export default function AssistantEvidence({ citations = [], readPlan = null }) {
       <div className="text-muted">{readPlan.as_of}</div>
       {readPlan.steps.map((step, index) => <div className="mt-2" key={index}>
         <strong>{index + 1}. {step.operation.replaceAll("_", " ")} — {step.status}</strong>
+        <pre className="text-wrap">{step.answer}</pre>
         {step.comparison && <ComparisonTable comparison={step.comparison} />}
       </div>)}
     </div>}

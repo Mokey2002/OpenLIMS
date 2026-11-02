@@ -411,3 +411,27 @@ class SavedWorkflowQuery(models.Model):
     class Meta:
         ordering = ["name", "pk"]
         constraints = [models.UniqueConstraint(fields=["owner", "name"], name="unique_saved_workflow_query_name")]
+
+
+class AssistantConversation(models.Model):
+    """Opt-in personal history. Lab turns retain query references, not answers."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="assistant_conversations")
+    name = models.CharField(max_length=80)
+    turns = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "pk"]
+        constraints = [models.UniqueConstraint(fields=["owner", "name"], name="assistant_conversation_owner_name")]
+
+
+class AssistantChatRequest(models.Model):
+    """Cross-process cancellation state. Contains no question or lab values."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="assistant_chat_requests")
+    status = models.CharField(max_length=16, default="RUNNING")
+    cancel_requested = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    finished_at = models.DateTimeField(null=True, blank=True)

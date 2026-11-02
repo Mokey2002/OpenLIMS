@@ -41,6 +41,7 @@ from .tools import route_assistant_message
 class AssistantChatSerializer(serializers.Serializer):
     message = serializers.CharField(max_length=2000)
     context = serializers.DictField(required=False, default=dict)
+    conversation_id = serializers.UUIDField(required=False, allow_null=True)
 
 
 class AssistantFeedbackSerializer(serializers.Serializer):
@@ -126,6 +127,13 @@ class AssistantChatView(APIView):
         serializer.is_valid(raise_exception=True)
         message = serializer.validated_data["message"]
         context = serializer.validated_data["context"]
+        conversation_id = serializer.validated_data.get("conversation_id")
+        if conversation_id:
+            from django.shortcuts import get_object_or_404
+            from .models import AssistantConversation
+            get_object_or_404(AssistantConversation, pk=conversation_id, owner=request.user)
+        from .chat_progress import emit
+        emit("progress", message="Understanding your request")
         message_hash = hashlib.sha256(message.encode("utf-8")).hexdigest()
 
         try:
@@ -163,6 +171,7 @@ class AssistantChatView(APIView):
             proposal = result.pop("pending_action", None)
 
             if proposal:
+                emit("checkpoint")
                 try:
                     action = propose_action(
                         user=request.user,
@@ -184,6 +193,7 @@ class AssistantChatView(APIView):
             result = normalize_assistant_response(message, result)
             history = recall_general(context, request.user) if result.get("response_type") == "general" else []
             result = enhance_with_llm(message=message, tool_result=result, history=history)
+            emit("checkpoint")
             remember_response(message, context, result, request.user)
             result = normalize_assistant_response(message, result)
             routing = result.get("routing") or {}
@@ -202,6 +212,11 @@ class AssistantChatView(APIView):
                 context_keys=sorted(result.get("context", {}).keys()),
             )
             result["interaction_id"] = str(interaction.id)
+            from .conversations import turn_token
+            result["save_turn_token"] = turn_token(request.user, message, result)
+            if conversation_id:
+                from .conversations import save_turn
+                save_turn(conversation_id, request.user, message, result)
             return Response(result, status=status.HTTP_200_OK)
         except Exception as exc:
             AssistantInteraction.objects.create(
@@ -328,6 +343,8 @@ class AssistantStatusView(APIView):
         return Response(
             {
                 **configured_model_info(),
+                "chat_streaming": True,
+                "saved_conversations": True,
                 "welcome_message": (
                     "Ask about samples, projects, QC, comparisons, inventory, "
                     "sequences, or system status. Suggestions below are based on "

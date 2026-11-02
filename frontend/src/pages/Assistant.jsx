@@ -1,3 +1,7 @@
+import AssistantConversations from "../components/AssistantConversations";
+import AssistantRequestStatus from "../components/AssistantRequestStatus";
+import useAssistantRequest from "../hooks/useAssistantRequest";
+import { assistantMessage } from "../assistantTransport";
 import WorkflowQueryBuilder from "../components/WorkflowQueryBuilder";
 import WorkflowQueryExplanation from "../components/WorkflowQueryExplanation";
 import { useEffect, useState } from "react";
@@ -34,6 +38,8 @@ function badgeVariantForProvider(provider) {
 export default function Assistant() {
   const [message, setMessage] = useState("");
   const [conversationContext, setConversationContext] = useState({});
+  const [conversationId, setConversationId] = useState(null);
+  const transport = useAssistantRequest();
   const [assistantStatus, setAssistantStatus] = useState(null);
   const [starterPrompts, setStarterPrompts] = useState(ASSISTANT_STARTER_PROMPTS);
   const [history, setHistory] = useState([
@@ -83,75 +89,39 @@ export default function Assistant() {
     loadAssistantStatus();
   }, []);
 
+  function selectConversation(data) {
+    transport.reset();
+    setConversationId(data.id);
+    if (data.history) {
+      setHistory(data.history.map(item => item.reply ? assistantMessage(item.reply) : item));
+      setConversationContext(data.context || {});
+    }
+  }
+
+  function newConversation() {
+    transport.reset();
+    setConversationId(null);
+    setHistory([]);
+    setConversationContext({});
+  }
+
   async function sendMessage(textOverride = "") {
     const text = (textOverride || message).trim();
-
-    if (!text) return;
-
-    setErr("");
-    setLoading(true);
-    setMessage("");
-
-    const nextHistory = [
-      ...history,
-      {
-        role: "user",
-        content: text,
-        links: [],
-        suggestions: [],
-      },
-    ];
-
+    if (!text || loading) return;
+    setErr(""); setLoading(true); setMessage("");
+    const previous = history.at(-1)?.role === "user" && history.at(-1)?.content === text ? history.slice(0, -1) : history;
+    const nextHistory = [...previous, { role: "user", content: text, links: [], suggestions: [] }];
     setHistory(nextHistory);
-
     try {
-      const data = await apiPost("/api/assistant/chat/", {
-        message: text,
-        context: conversationContext,
-      });
-
+      const data = await transport.run({ message: text, context: conversationContext, conversation_id: conversationId },
+        { streaming: Boolean(assistantStatus?.chat_streaming) });
       setConversationContext(data.context || {});
-
-      setHistory([
-        ...nextHistory,
-        {
-          role: "assistant",
-          content: data.project_workflows?.summary || data.answer || "No answer returned.",
-          draft: data.draft || null,
-          interpretation: data.interpretation || null,
-          citations: data.citations || [],
-          readPlan: data.read_plan || null,
-          projectWorkflows: data.project_workflows || null,
-          queryExplanation: data.query_explanation || null,
-          links: data.links || [],
-          suggestions: data.suggestions || [],
-          chart: data.chart || null,
-          comparison: data.comparison || null,
-          investigation: data.investigation || null,
-          clarification: data.clarification || null,
-          pendingAction: data.pending_action || null,
-          actionError: data.action_error || "",
-          mode: data.mode || "openlims",
-          llmError: data.llm_error || "",
-          modelInfo:
-            data.model_info || {
-              provider: "openlims",
-              model: "rules",
-              display_name: "OpenLIMS Rules",
-            },
-          interactionId: data.interaction_id || "",
-        },
-      ]);
-
-      if (data.model_info) {
-        setAssistantStatus(data.model_info);
-      }
+      setHistory([...nextHistory, assistantMessage(data)]);
+      if (data.model_info) setAssistantStatus(current => ({ ...current, ...data.model_info }));
     } catch (e) {
-      setErr(e.message || String(e));
+      if (e.name !== "AbortError") setErr(e.message || String(e));
       setHistory(nextHistory);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   function updateHistoryAction(index, pendingAction, actionError = "") {
@@ -264,6 +234,8 @@ export default function Assistant() {
 
       <Card className="app-card mb-4">
         <Card.Body>
+          <AssistantConversations conversationId={conversationId} onSelect={selectConversation} history={history} disabled={loading} onNew={newConversation} />
+          <AssistantRequestStatus transport={transport} loading={loading} onRetry={sendMessage} />
           <AssistantContextBar
             context={conversationContext}
             disabled={loading}

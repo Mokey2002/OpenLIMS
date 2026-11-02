@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .lab_helpers import response
+from .result_queries import QUERY_OPERATIONS, validate_filters
 
 MAX_STEPS = 4
 OPERATIONS = {
@@ -18,6 +19,7 @@ OPERATIONS = {
     "compare_runs": ("left", "right"),
     "sop_search": ("question",),
 }
+OPERATIONS.update(QUERY_OPERATIONS)
 IDENTIFIER = r'(?:"[^"\n]{1,128}"|[\w][\w.:/-]{0,127})'
 SEPARATOR = re.compile(
     r'\s*;\s*|\s*,?\s+(?:and\s+(?:then\s+)?|then\s+)'
@@ -39,11 +41,13 @@ def validate_read_plan(data, threshold=0.65):
     if type(confidence) not in (int, float) or not math.isfinite(confidence) or not threshold <= confidence <= 1:
         return None
     steps = data.get("steps")
-    if not isinstance(steps, list) or not 2 <= len(steps) <= MAX_STEPS:
+    if not isinstance(steps, list) or not 1 <= len(steps) <= MAX_STEPS:
+        return None
+    if len(steps) == 1 and (not isinstance(steps[0], dict) or steps[0].get("operation") not in QUERY_OPERATIONS):
         return None
     clean = []
     for step in steps:
-        if not isinstance(step, dict) or set(step) != {"operation", "arguments"}:
+        if not isinstance(step, dict) or not {"operation", "arguments"} <= set(step) or set(step) - {"operation", "arguments", "filters"}:
             return None
         operation, args = step["operation"], step["arguments"]
         if not isinstance(operation, str) or operation not in OPERATIONS:
@@ -55,7 +59,15 @@ def validate_read_plan(data, threshold=0.65):
                     or len(value) > (500 if key == "question" else 128)
                     or any(ord(c) < 32 or 0xD800 <= ord(c) <= 0xDFFF for c in value)):
                 return None
-        clean.append({"operation": operation, "arguments": {k: v.strip() for k, v in args.items()}})
+        if operation == "result_detail" and not re.fullmatch(r"[1-9]\d{0,17}", args["result_id"]):
+            return None
+        filters = validate_filters(step.get("filters", {}), operation)
+        if filters is None:
+            return None
+        entry = {"operation": operation, "arguments": {k: v.strip() for k, v in args.items()}}
+        if filters:
+            entry["filters"] = filters
+        clean.append(entry)
     return {"route": "read_plan", "steps": clean, "confidence": confidence, "accepted": True}
 
 
@@ -111,6 +123,11 @@ def parse_read_plan(message):
         if step is None and re.fullmatch(r"(?:what does the SOP say about|(?:show|find) (?:the )?(?:relevant )?SOP (?:for|about)) .+", part, re.I):
             step = {"operation": "sop_search", "arguments": {"question": part}}
         if step is None:
+            from .read_plan_memory import explicit_result_plan
+            parsed = explicit_result_plan(part)
+            if parsed:
+                step = parsed["steps"][0]
+        if step is None:
             return None
         steps.append(step)
     return validate_read_plan({"route": "read_plan", "steps": steps, "confidence": 1.0})
@@ -119,12 +136,23 @@ def parse_read_plan(message):
 def _grounded(plan, message):
     # Models may rearrange reads, but cannot invent record identities or silently
     # add hidden targets. This first version requires identifiers in this turn.
-    return all(re.search(r"(?<!\w)" + re.escape(value.rstrip('.!?')) + r"(?!\w)", message, re.I)
-               for step in plan["steps"] for value in step["arguments"].values())
+    tokens = {match.group(1).casefold() if match.group(1) is not None else match.group(2).rstrip('.!?').casefold()
+              for match in re.finditer(r'"([^"\n]+)"|([\w][\w.:/-]*)', message)}
+    for step in plan["steps"]:
+        for key, value in step["arguments"].items():
+            if key == "question":
+                if value.rstrip('.!?').casefold() not in message.casefold():
+                    return False
+            elif value.casefold() not in tokens and not (key == "result_id" and f"r-{value}" in tokens):
+                return False
+    return True
 
 
 def _read(step, user):
     operation, args = step["operation"], step["arguments"]
+    if operation in QUERY_OPERATIONS:
+        from .result_queries import read_results
+        return read_results(step, user)
     if operation.startswith("sample_"):
         from .sample_operations import _sample_queryset
         matches = list(_sample_queryset(user).filter(sample_id__iexact=args["sample"])[:2])
@@ -149,7 +177,8 @@ def _read(step, user):
                             + "\n".join(_result_line(row) for row in rows)
                             + "\nQC checks and review decisions are separate; results may be historical. This does not establish a scientific cause.",
                             citations=sample_citations(sample, briefing),
-                            context={"sample_id": sample.pk}, failure_results=rows)
+                            context={"sample_id": sample.pk}, failure_results=rows,
+                            selected_result_ids=[row["id"] for row in rows])
         from .sample_explanations import route_sample_explanations
         command = "Show evidence for sample" if operation == "sample_evidence" else "Explain sample"
         return route_sample_explanations(f'{command} "{sample.sample_id}"', user)
@@ -171,49 +200,85 @@ def _read(step, user):
             result["unavailable"] = True
         result["citations"] = [{"kind": "experiment", **link, "scope": "Current recorded run comparison; differences do not establish causes."}
                                for link in result.get("links", [])]
+        if result.get("comparison") and len(result.get("links", [])) == 2:
+            result["reference"] = {"kind": "experiments", "left": result["links"][0]["url"].split("experiment=", 1)[1],
+                                   "right": result["links"][1]["url"].split("experiment=", 1)[1]}
         return result
     from .sop_operations import search_sops
     return search_sops(args["question"], user)
 
 
-def handle_read_plan(message, user, plan=None):
+def handle_read_plan(message, user, plan=None, context=None, *, restored_plan=False):
+    from .read_plan_memory import KEY, explicit_result_plan, remember, resume
+    from .chat_progress import emit
+    resumed = False
+    if plan is None:
+        if restored_plan:
+            from .read_plan_memory import recall
+            state = recall(context, user)
+            plan, question = (state["plan"] if state else None), None
+        else:
+            plan, question = resume(message, context, user)
+        if question:
+            return response(question, clarification={"required": True}, context=context or {})
+        resumed = plan is not None
+        plan = plan or explicit_result_plan(message)
+        if plan is None and not is_compound_read(message) and re.match(r"(?:show|list|find)\s+(?:(?:failed|passed|pending|rejected|approved)\s+)?(?:QC\s+)?(?:results?|failures)\s+(?:for|in)\s+(?:sample|project)\b", message, re.I):
+            return response("I could not preserve every requested filter. Use a QC status and a supported date window, then narrow by an exact result key. "
+                            "No result query was run.", clarification={"required": True}, requires_read_plan=True)
     if plan is None and not is_compound_read(message):
         return None
     validated = validate_read_plan(plan) if plan is not None else parse_read_plan(message)
     # Never let a classifier drop a requested mutation/negation and execute a
     # convenient read-only subset. Single-action flows remain in their own path.
     unquoted = re.sub(r'"[^"\n]*"', '', message)
-    prohibited = any(re.match(r"(?:please\s+)?(?:approve|reject|assign|delete|archive|create|run|import|update|move)\b", clause, re.I)
-                     for clause in _clauses(unquoted)) or re.search(r"\b(?:do not|don't|except|excluding|without)\b", unquoted, re.I)
+    mutation = any(re.match(r"(?:please\s+)?(?:approve|reject|assign|delete|archive|create|run|import|update|move)\b", clause, re.I)
+                   for clause in _clauses(unquoted))
+    exclusion = re.search(r"\b(?:except|excluding|without)\b", unquoted, re.I)
+    typed_exclusion = validated and all(step["operation"] in QUERY_OPERATIONS and step.get("filters", {}).get("exclude_keys") for step in validated["steps"])
+    prohibited = mutation or re.search(r"\b(?:do not|don't)\b", unquoted, re.I) or (exclusion and not typed_exclusion)
     if prohibited:
         return response("Please separate changes or exclusions from this combined read request. "
                         "I have not run any part of it.", clarification={"required": True}, requires_read_plan=True)
-    if not validated or not _grounded(validated, message):
+    if not validated or (not resumed and not _grounded(validated, message)):
         return response("I need two to four complete supported read requests with exact sample IDs, project codes, or run IDs/titles. "
                         "Include the SOP topic explicitly. I have not run any part of this request. Changes must be requested separately.",
                         clarification={"required": True}, route_unmatched=plan is None,
                         requires_read_plan=True)
-    steps, citations, links = [], [], []
-    context = {}
+    steps, citations, links, result_ids = [], [], [], []
+    next_context = {}
     for step in validated["steps"]:
+        emit("progress", message=f"Reading {step['operation'].replace('_', ' ')}", step=len(steps) + 1, total=len(validated["steps"]))
         result = _read(step, user)
+        emit("checkpoint")
         unavailable = result.get("unavailable", False)
         entry = {**step, "status": "unavailable" if unavailable else "completed", "answer": result["answer"],
-                 "citations": result.get("citations", []), "comparison": result.get("comparison")}
+                 "citations": result.get("citations", []), "comparison": result.get("comparison"),
+                 "result_query": result.get("result_query"), "sample_briefing": result.get("sample_briefing")}
+        target_context = result.get("context", {})
+        entry["reference"] = result.get("reference") or next(({"kind": kind, "id": target_context[kind + "_id"]}
+                                   for kind in ["sample", "project"] if target_context.get(kind + "_id")), None)
         steps.append(entry)
         citations.extend(entry["citations"])
         links.extend(result.get("links", []))
+        result_ids.extend(result.get("selected_result_ids", []))
         if not unavailable:
-            context = result.get("context") or context
+            next_context = result.get("context") or next_context
     # Ambiguous multi-record follow-ups must ask again instead of picking the last record.
     sample_ids = {entry["arguments"]["sample"].casefold() for entry in steps if "sample" in entry["arguments"]}
     project_ids = {entry["arguments"]["project"].casefold() for entry in steps if "project" in entry["arguments"]}
     if len(sample_ids) > 1 or len(project_ids) > 1 or (sample_ids and project_ids):
-        context = {}
+        next_context = {}
     unique_citations = list({(c.get("kind"), c.get("url"), c.get("label")): c for c in citations}.values())
+    token = remember(validated, result_ids, user)
+    if token:
+        next_context[KEY] = token
+    from .answer_overview import build_overview
+    overview = build_overview(steps, unique_citations)
     return response("\n\n".join(f"{i}. {entry['operation'].replace('_', ' ').capitalize()} — {entry['status']}\n{entry['answer']}"
                                for i, entry in enumerate(steps, 1)),
-                    context=context, citations=unique_citations,
+                    context=next_context, citations=unique_citations, answer_overview=overview,
+                    read_plan_spec=validated,
                     links=list({link["url"]: link for link in links}.values()),
                     read_plan={"read_only": True, "as_of": timezone.now().isoformat(), "steps": steps,
                                "partial": any(entry["status"] != "completed" for entry in steps),

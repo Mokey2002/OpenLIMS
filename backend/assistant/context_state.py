@@ -68,6 +68,10 @@ def sanitize_context(context):
     general = context.get(CONTEXT_KEY)
     if isinstance(general, str) and len(general) <= MAX_TOKEN_CHARS:
         sanitized[CONTEXT_KEY] = general
+    from .read_plan_memory import KEY, MAX_TOKEN
+    plan = context.get(KEY)
+    if isinstance(plan, str) and len(plan) <= MAX_TOKEN:
+        sanitized[KEY] = plan
     return sanitized
 
 

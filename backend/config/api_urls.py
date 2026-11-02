@@ -1,4 +1,6 @@
 from assistant.saved_queries import SavedWorkflowQueriesView, SavedWorkflowQueryDetailView
+from assistant.conversations import ConversationsView, ConversationDetailView
+from assistant.streaming import AssistantChatStreamView, AssistantChatCancelView
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 from samples.views import (
@@ -216,6 +218,10 @@ urlpatterns = router.urls + [
     path("assistant/saved-queries/", SavedWorkflowQueriesView.as_view(), name="assistant-saved-queries"),
     path("assistant/saved-queries/<int:pk>/", SavedWorkflowQueryDetailView.as_view(), name="assistant-saved-query-detail"),
     path("assistant/chat/", AssistantChatView.as_view(), name="assistant-chat"),
+    path("assistant/chat/stream/", AssistantChatStreamView.as_view(), name="assistant-chat-stream"),
+    path("assistant/chat/requests/<uuid:pk>/cancel/", AssistantChatCancelView.as_view(), name="assistant-chat-cancel"),
+    path("assistant/conversations/", ConversationsView.as_view(), name="assistant-conversations"),
+    path("assistant/conversations/<uuid:pk>/", ConversationDetailView.as_view(), name="assistant-conversation"),
     path(
         "assistant/interactions/<uuid:interaction_id>/feedback/",
         AssistantFeedbackView.as_view(),
