@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.67.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.68.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,17 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras del asistente | Detalles |
 | --- | --- | --- |
-| **v0.67.0** | Registro y asignación guiados, preguntas por campos obligatorios, tarea atómica confirmada y recibos actualizados. | [Guía v0.67](docs/assistant-v067.md) |
+| **v0.68.0** | Carga de archivos de instrumentos, revisión de mapeo, validación/recibos por fila, protección de repeticiones y recuperación desde el chat. | [Guía v0.68](docs/assistant-v068.md) |
+| **v0.67.0** | Registro y asignación guiados, preguntas por campos obligatorios, tarea atómica confirmada y recibos actualizados. | [Guía v0.67](docs/assistant-v067.md) · [PR #185](https://github.com/Mokey2002/OpenLIMS/pull/185) |
 | **v0.66.0** | Consultas corteses, seguimiento por fechas, corrección de registros, filtros de página y contexto conservado tras aclaraciones. | [Guía v0.66](docs/assistant-v066.md) · [PR #184](https://github.com/Mokey2002/OpenLIMS/pull/184) |
-| **v0.65.0** | Contexto visible de la página de muestra/proyecto, apertura explícita del chat completo, correcciones atómicas y filtros por mes calendario. | [Guía v0.65](docs/assistant-v065.md) · [PR #183](https://github.com/Mokey2002/OpenLIMS/pull/183) |
+
+## v0.68.0 — Importa datos de instrumentos desde el chat
+
+Elige **`Import instrument data`** o pide **`Import this sequencer file into project ALPHA`**. Adjunta un CSV/TSV UTF-8, selecciona el mapeo configurado del instrumento, el proyecto y el ID de la corrida. Revisa tipos/límites y decide si se omiten filas exactamente repetidas o se conservan como réplicas. La validación contabiliza todas las filas antes de la vista previa; cargar el archivo todavía no importa mediciones.
+
+Tras confirmar, Celery importa las filas válidas de forma atómica y muestra el recibo en ambos chats: filas recibidas, importadas, rechazadas, repeticiones omitidas y resultados creados. Descarga el informe completo por fila. Repetir el mismo instrumento, corrida y archivo recupera la importación existente; confirmar o entregar el trabajo otra vez no duplica sus mediciones. **Show my instrument imports**, **Revalidate and preview** y **Resume queued import** permiten recuperar la tarea sin navegar por pestañas. Se verifican otra vez archivo, mapeo, muestras y permisos antes de procesar.
+
+Corrige también el bloqueo del registro v0.67 por comprobar una bandera `samples` inexistente con la aplicación normal de funciones habilitada, y rechaza números no finitos tanto en la vista previa como al procesar. Consulta la [guía v0.68](docs/assistant-v068.md) para formatos, API, contabilidad y recuperación. Reconstruye API/frontend y reinicia Celery. Versión/pie **v0.68.0**; ambas guías conservan solo **v0.68, v0.67 y v0.66**. Sin nueva migración, servicio, descarga de modelo ni automatización de programación.
 
 ## v0.67.0 — Completa registros y asignaciones desde el chat
 
@@ -24,7 +32,7 @@ Elige **`Register samples and assign them`** y responde las preguntas sobre cant
 
 Al confirmar se registra y asigna todo el conjunto en una transacción. Se comprueban otra vez permisos, responsable, formularios e IDs. Los conflictos o errores revierten la tarea; repetir la confirmación de una acción completada devuelve su recibo. Ambos chats muestran el resultado y actualizan el estado del servidor tras una confirmación fallida o interrumpida. Esta tarea se completa sin navegar por pestañas. La asignación afecta al responsable de la muestra; los pasos y trabajos tienen sus propios comandos de asignación.
 
-El borrador está firmado, vinculado al usuario y caduca a los 30 minutos. Cancélalo o cambia de tema antes de la vista previa; después usa el botón Cancel de la propuesta. Los metadatos compartidos se aplican a todas las muestras nuevas. Rules y los conectores de ambos proveedores usan los mismos servicios y confirmaciones. Las frases nuevas son en inglés. Consulta la [guía v0.67](docs/assistant-v067.md). Versión/pie **v0.67.0**; ambas guías conservan solo las actualizaciones **v0.67, v0.66 y v0.65**. Sin nueva migración, dependencia ni automatización programada.
+El borrador está firmado, vinculado al usuario y caduca a los 30 minutos. Cancélalo o cambia de tema antes de la vista previa; después usa el botón Cancel de la propuesta. Los metadatos compartidos se aplican a todas las muestras nuevas. Rules y los conectores de ambos proveedores usan los mismos servicios y confirmaciones. Las frases nuevas son en inglés. Consulta la [guía v0.67](docs/assistant-v067.md). Versión/pie **v0.67.0**; ambas guías conservan solo las tres últimas actualizaciones. Sin nueva migración, dependencia ni automatización programada.
 
 ## v0.66.0 — Conversaciones más naturales y correcciones fiables
 
@@ -34,19 +42,13 @@ Las consultas de página aceptan filtros completos compatibles, por ejemplo **`C
 
 El seguimiento de una explicación general conserva su tema en las páginas del laboratorio; `Explain this sample` selecciona explícitamente la muestra de la página. Estas interacciones funcionan en modo Rules. La conversación general libre requiere OpenAI/Ollama configurado; las pruebas automáticas no miden la fluidez de un modelo en vivo. Las frases nuevas documentadas son en inglés. Consulta la [guía v0.66](docs/assistant-v066.md). Sin migración, dependencia ni modelo nuevos.
 
-## v0.65.0 — Preguntas sobre la página y correcciones naturales
-
-En una página de muestra/proyecto cargada, el asistente muestra el contexto **Use this sample/project**, que se puede desactivar, y preguntas como **`Why is this blocked?`** y **`Show results for this sample`**. **Open assistant with this record** abre el chat completo con la selección explícita. El servidor comprueba permisos en cada lectura; las preguntas generales y los identificadores explícitos conservan su significado. El contexto de página no selecciona destinos para escrituras. Las lecturas guardadas consultan datos actuales y referencias estables incluso tras cambios de nombre.
-
-Corrige una investigación con **`No, use last month and exclude key control`** o **`Actually, use sample S-102 and this month`**. Los cambios compatibles se aplican juntos, conservando los demás filtros, el período comparado y el enfoque. “Controls” sin clave exacta, condiciones incompatibles y mutaciones requieren aclaración sin ejecutar una consulta parcial. `last month` / `previous month` y `this month` usan meses calendario de la zona horaria de la aplicación. Las frases directas documentadas son en inglés. Consulta la [guía v0.65](docs/assistant-v065.md) para ejemplos, API y límites. Sin migración, dependencia ni modelo nuevos; versión, pie y ambas guías están sincronizados.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.67.0`
+**Versión de desarrollo actual:** `v0.68.0`
 
 **Demo:** http://35.164.28.250
 

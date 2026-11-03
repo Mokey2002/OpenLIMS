@@ -281,7 +281,7 @@ def _create_migration_mappings(action):
 def _queue_import(action):
     job_id = action.payload.get("import_job_id")
     job = (
-        ImportJob.objects.select_related("project", "instrument")
+        ImportJob.objects.select_for_update(of=("self",)).select_related("project", "instrument")
         .filter(id=job_id)
         .first()
     )
@@ -297,6 +297,16 @@ def _queue_import(action):
         )
     if not job.uploaded_file:
         raise AssistantActionError("The import job has no uploaded file.")
+    if job.summary.get("assistant_upload"):
+        from imports.assistant_uploads import deliver_import, digest, validate_prepared
+        if action.payload.get("prepared_digest") != digest(job.summary["assistant_upload"]):
+            raise AssistantActionError("This preview was replaced. Revalidate the import before confirming.")
+        validate_prepared(job, action.requested_by)
+        job.summary = {**job.summary, "awaiting_assistant_confirmation": False, "queued_by_action_id": str(action.pk)}
+        job.progress_message = "Confirmed; queued for validated instrument import"
+        job.save(update_fields=["summary", "progress_message"])
+        transaction.on_commit(lambda: deliver_import(job.pk, str(action.pk)))
+        return AssistantAction.STATUS_QUEUED, {"operation": "IMPORT_INSTRUMENT_DATA", "import_job_id": job.pk, "job_status": "PENDING"}
     if job.project_id:
         validate_sample_project_assignment(action.requested_by, job.project)
 

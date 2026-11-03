@@ -12,7 +12,7 @@ from custom_fields.models import FieldDefinition, FieldValue
 from projects.models import Project
 from samples.access import validate_sample_project_assignment
 from samples.models import Sample
-from .lab_helpers import enabled, response
+from .lab_helpers import response
 from .natural_requests import normalize_request
 from .registration_input import _validate_json, parse_registration_fields
 from .sample_operations import (
@@ -190,8 +190,6 @@ def route_registration_task(message, user, context=None):
         return None
     if not user.is_active or not _write_user(user):
         return response("Only an active Tech or Admin can register and assign samples.")
-    if not enabled("samples"):
-        return response("Sample management is disabled. No registration task was started.")
     if not started and text.lower() in {"cancel", "never mind", "start over", "reset conversation", "forget this conversation"}:
         return response("Registration draft discarded. No samples were created.")
     if started:
@@ -267,8 +265,6 @@ def execute_registration_task(action):
     payload, user = action.payload, action.requested_by
     if not user.is_active or not _write_user(user):
         raise ValueError("Your write permission changed. Request a fresh preview.")
-    if not enabled("samples"):
-        raise ValueError("Sample management is disabled. No samples were created.")
     project = _project(payload.get("project_id"), user)
     if not project:
         raise ValueError("Project unavailable or write access changed. Request a fresh preview.")

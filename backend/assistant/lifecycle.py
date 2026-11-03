@@ -13,6 +13,7 @@ def finish_queued_action(
     succeeded,
     error_message="",
     result_updates=None,
+    action_id=None,
 ):
     """Finish the queued assistant action associated with a background job.
 
@@ -24,6 +25,8 @@ def finish_queued_action(
         "status": AssistantAction.STATUS_QUEUED,
         f"result__{result_key}": result_id,
     }
+    if action_id is not None:
+        lookup["pk"] = action_id
 
     with transaction.atomic():
         action = (

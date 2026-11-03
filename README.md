@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.67.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.68.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,17 @@
 
 | Version | Assistant improvements | Details |
 | --- | --- | --- |
-| **v0.67.0** | Guided sample registration and assignment, required-field questions, one atomic confirmed task and refreshed action receipts. | [v0.67 guide](docs/assistant-v067.md) |
+| **v0.68.0** | Instrument file uploads, mapping review, row validation/receipts, repeat protection and queue recovery directly in chat. | [v0.68 guide](docs/assistant-v068.md) |
+| **v0.67.0** | Guided sample registration and assignment, required-field questions, one atomic confirmed task and refreshed action receipts. | [v0.67 guide](docs/assistant-v067.md) · [PR #185](https://github.com/Mokey2002/OpenLIMS/pull/185) |
 | **v0.66.0** | Polite result requests, short date follow-ups, record corrections, filtered page reads and retained context after clarification. | [v0.66 guide](docs/assistant-v066.md) · [PR #184](https://github.com/Mokey2002/OpenLIMS/pull/184) |
-| **v0.65.0** | Visible sample/project page context, explicit full-chat handoff, atomic natural corrections and calendar-month filters. | [v0.65 guide](docs/assistant-v065.md) · [PR #183](https://github.com/Mokey2002/OpenLIMS/pull/183) |
+
+### v0.68.0 — Import instrument data from chat
+
+Choose **`Import instrument data`** or ask **`Import this sequencer file into project ALPHA`**. Attach a UTF-8 CSV/TSV export, select the instrument's configured mapping, choose the project and supply the instrument run ID. Review column types/limits and choose whether exact repeated rows should be skipped or retained as replicates. Validation accounts for every data row before showing a confirmation preview; no measurements are imported at upload time.
+
+After confirmation, a Celery job imports the validated rows atomically and shows a receipt in either chat view: rows received, imported, rejected, repeated rows skipped and results created. Download the complete row report. The same instrument/run ID and file recover the existing import; repeat confirmation and worker redelivery preserve its measurement set. **Show my instrument imports**, **Revalidate and preview**, and **Resume queued import** let you recover without navigating tabs. The file, mapping, row targets and write access are rechecked before processing.
+
+Also fixes v0.67 registration being blocked by a nonexistent core `samples` feature flag when production feature enforcement is enabled, and rejects non-finite numeric import values consistently in preview and processing. See the [v0.68 guide](docs/assistant-v068.md) for supported files, API, row-accounting rules and recovery. Rebuild the API/frontend and restart the Celery worker. Version/footer are **v0.68.0**; both READMEs retain only **v0.68, v0.67 and v0.66** release updates. No new migration, service, model download or scheduled coding automation.
 
 ### v0.67.0 — Complete registration and assignment in chat
 
@@ -43,7 +51,7 @@ Choose **`Register samples and assign them`**, then answer the assistant's quest
 
 Confirm in chat to create and assign the entire set in one transaction. Access, assignee eligibility, forms and IDs are checked again. A conflict or validation failure rolls back the task; confirming the same completed action again returns its receipt. Both chat views show the result message and refresh the server's action status after a failed or interrupted confirmation. No tab navigation is required for this task. Assignment sets the sample assignee; pipeline/work-item assignments have their own chat commands.
 
-The guided draft is signed, user-bound and expires after 30 minutes. Cancel it or change topics before preview; use the preview's Cancel button to cancel a proposal. Metadata values apply to every new sample in the task. Rules mode and both provider bridges use the same services and confirmation controls. See the [v0.67 guide](docs/assistant-v067.md) for a walkthrough, validation and limits. Version/footer are **v0.67.0** and both READMEs retain only **v0.67, v0.66 and v0.65** release updates. No new migration, dependency or scheduled automation.
+The guided draft is signed, user-bound and expires after 30 minutes. Cancel it or change topics before preview; use the preview's Cancel button to cancel a proposal. Metadata values apply to every new sample in the task. Rules mode and both provider bridges use the same services and confirmation controls. See the [v0.67 guide](docs/assistant-v067.md) for a walkthrough, validation and limits. Version/footer are **v0.67.0** and both READMEs retain only the latest three release updates. No new migration, dependency or scheduled automation.
 
 ### v0.66.0 — More natural conversations and reliable corrections
 
@@ -53,19 +61,13 @@ Page reads accept complete supported filters, for example **`Can I see the faile
 
 General explanation follow-ups keep their topic on lab pages; an explicit `Explain this sample` still selects the page record. These interactions work in Rules mode. Free-form general conversation requires a configured OpenAI/Ollama provider; automated checks are not a live-model fluency score. See the [v0.66 guide](docs/assistant-v066.md) for the conversation walkthrough, validation and limits. No migration, dependency or model is added.
 
-### v0.65.0 — Page-aware questions and natural corrections
-
-On a loaded sample/project page, the assistant shows a removable **Use this sample/project** context and quick questions such as **`Why is this blocked?`** and **`Show results for this sample`**. **Open assistant with this record** transfers the selected record to the full assistant. The server rechecks access, keeps explicit targets and general questions separate, and never uses page context to select a write target. Saved page reads fetch current data and follow stable record references after renames.
-
-Correct a signed result investigation with **`No, use last month and exclude key control`** or **`Actually, use sample S-102 and this month`**. Supported changes apply together while preserving unrelated filters, the comparison period and answer focus. Ambiguous “controls”, conflicting conditions and mutations require clarification without a partial query. `last month` / `previous month` and `this month` use calendar boundaries in the application timezone. See the [v0.65 guide](docs/assistant-v065.md) for supported phrases, API payloads and limits. No migration, dependency or model is added; version, footer and both READMEs are synchronized.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.67.0`.
+**Current development version:** `v0.68.0`.
 
 ## Deployment Access
 
@@ -946,7 +948,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.67.0**.
+`frontend/src/version.js` file. The current application version is **v0.68.0**.
 
 Footer source:
 

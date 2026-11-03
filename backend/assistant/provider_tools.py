@@ -4,6 +4,7 @@ from importlib import import_module
 
 # Public catalog doubles as the dispatch allow-list. No model-supplied module names.
 COMMAND_TOOLS = {
+    "instrument_import": ("instrument_imports", "route_instrument_import", "Import instrument data; Import this sequencer file into project ALPHA; Show my instrument imports; Show instrument import #123"),
     "sample_registration": ("registration_tasks", "route_registration_task", "Register samples and assign them; Register 10 DNA samples in project ALPHA and assign them to maria"),
     "analytics": ("analytics", "route_safe_analytics", "Group samples by project; Which instrument has the highest QC failure rate?"),
     "attention": ("attention", "route_attention_summary", "What needs attention?"),

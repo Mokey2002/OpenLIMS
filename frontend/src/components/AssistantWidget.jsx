@@ -22,6 +22,8 @@ import AssistantInterpretation from "./AssistantInterpretation";
 import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 import { useAssistantPage } from "../assistantPageContext";
 import AssistantPageBar from "./AssistantPageBar";
+import AssistantInstrumentUpload from "./AssistantInstrumentUpload";
+import AssistantImportReceipt from "./AssistantImportReceipt";
 
 const DEMO_ASSISTANT_NOTE =
   "Public demo note: this hosted demo uses OpenLIMS Rules because server resources are limited. Self-hosted deployments can enable OpenAI or Ollama.";
@@ -41,6 +43,7 @@ export default function AssistantWidget() {
   const transport = useAssistantRequest();
   const [assistantStatus, setAssistantStatus] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState("");
   const [err, setErr] = useState("");
   const [history, setHistory] = useState([
@@ -112,7 +115,7 @@ export default function AssistantWidget() {
 
   async function sendMessage(textOverride = "") {
     const text = (textOverride || message).trim();
-    if (!text || loading) return;
+    if (!text || loading || importBusy || actionBusy) return;
     setErr(""); setLoading(true); setMessage("");
     const previous = history.at(-1)?.role === "user" && history.at(-1)?.content === text ? history.slice(0, -1) : history;
     const nextHistory = [...previous, { role: "user", content: text, links: [], suggestions: [] }];
@@ -141,6 +144,11 @@ export default function AssistantWidget() {
           : item
       )
     );
+  }
+
+  function receiveImport(index, data) {
+    setConversationContext(data.context || {});
+    setHistory(current => current.map((item, position) => position === index ? assistantMessage(data) : item));
   }
 
   async function handleAction(index, pendingAction, operation) {
@@ -196,15 +204,15 @@ export default function AssistantWidget() {
           </div>
 
           <div className="assistant-widget-body">
-            {assistantStatus?.page_context && <AssistantPageBar onRun={sendMessage} disabled={loading} onOpen={() => setOpen(false)} />}
-            <WorkflowQueryBuilder context={conversationContext} onRun={sendMessage} disabled={loading} />
-            <AssistantConversations conversationId={conversationId} onSelect={selectConversation} history={history} disabled={loading} onNew={newConversation} />
+            {assistantStatus?.page_context && <AssistantPageBar onRun={sendMessage} disabled={loading || importBusy || Boolean(actionBusy)} onOpen={() => setOpen(false)} />}
+            <WorkflowQueryBuilder context={conversationContext} onRun={sendMessage} disabled={loading || importBusy || Boolean(actionBusy)} />
+            <AssistantConversations conversationId={conversationId} onSelect={selectConversation} history={history} disabled={loading || importBusy || Boolean(actionBusy)} onNew={newConversation} />
             <AssistantRequestStatus transport={transport} loading={loading} onRetry={sendMessage} />
             <AssistantContextBar
               context={conversationContext}
               onRun={sendMessage}
               compact
-              disabled={loading}
+              disabled={loading || importBusy || Boolean(actionBusy)}
               onClear={() => setConversationContext({})}
             />
 
@@ -250,7 +258,7 @@ export default function AssistantWidget() {
                   {item.clarification && (
                     <AssistantClarification
                       clarification={item.clarification}
-                      disabled={loading}
+                      disabled={loading || importBusy || Boolean(actionBusy)}
                       onChoose={sendMessage}
                     />
                   )}
@@ -273,6 +281,13 @@ export default function AssistantWidget() {
                     </Alert>
                   )}
 
+                  {item.instrumentImportForm && <AssistantInstrumentUpload config={item.instrumentImportForm}
+                    onPrepared={data => receiveImport(index, data)} onBusy={setImportBusy} disabled={loading || importBusy || Boolean(actionBusy)} />}
+                  {item.instrumentImportJob && !item.pendingAction && <AssistantImportReceipt jobId={item.instrumentImportJob.id}
+                    initialJob={item.instrumentImportJob} actionStatus={item.instrumentImportJob.action?.status}
+                    onActionUpdate={action => updateHistoryAction(index, action)} onPrepared={data => receiveImport(index, data)}
+                    onBusy={setImportBusy} disabled={loading || importBusy || Boolean(actionBusy)} />}
+
                   {item.pendingAction && (
                     <Alert variant="warning" className="mt-2 mb-2 py-2">
                       <div className="fw-semibold">{item.pendingAction.status === "PROPOSED" ? "Confirmation required" : "Action status"}</div>
@@ -293,14 +308,15 @@ export default function AssistantWidget() {
                       >
                         {item.pendingAction.status}
                       </Badge>
-                      <AssistantActionPreview action={item.pendingAction} />
+                      <AssistantActionPreview action={item.pendingAction} onActionUpdate={action => updateHistoryAction(index, action)}
+                        onPrepared={data => receiveImport(index, data)} onBusy={setImportBusy} disabled={loading || importBusy || Boolean(actionBusy)} />
                       {item.pendingAction.status === "PROPOSED" && (
                         <div className="d-flex gap-2 mt-2">
                           <Button
                             size="sm"
                             variant="dark"
                             disabled={
-                              actionBusy === item.pendingAction.confirmation_token
+                              importBusy || actionBusy === item.pendingAction.confirmation_token
                             }
                             onClick={() =>
                               handleAction(index, item.pendingAction, "confirm")
@@ -312,7 +328,7 @@ export default function AssistantWidget() {
                             size="sm"
                             variant="outline-secondary"
                             disabled={
-                              actionBusy === item.pendingAction.confirmation_token
+                              importBusy || actionBusy === item.pendingAction.confirmation_token
                             }
                             onClick={() =>
                               handleAction(index, item.pendingAction, "cancel")
@@ -351,7 +367,7 @@ export default function AssistantWidget() {
                           size="sm"
                           variant="outline-secondary"
                           className="me-2 mb-2"
-                          disabled={loading}
+                          disabled={loading || importBusy || Boolean(actionBusy)}
                           onClick={() => sendMessage(suggestion)}
                         >
                           {suggestion}
@@ -391,7 +407,7 @@ export default function AssistantWidget() {
             <Form.Control
               size="sm"
               value={message}
-              disabled={loading}
+              disabled={loading || importBusy || Boolean(actionBusy)}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Ask OpenLIMS..."
             />
@@ -399,7 +415,7 @@ export default function AssistantWidget() {
               size="sm"
               type="submit"
               variant="dark"
-              disabled={loading || !message.trim()}
+              disabled={loading || importBusy || Boolean(actionBusy) || !message.trim()}
             >
               Send
             </Button>

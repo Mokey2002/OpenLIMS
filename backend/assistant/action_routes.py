@@ -194,6 +194,10 @@ def propose_import(message, user):
             "skip_llm": True,
         }
 
+    if job.summary.get("assistant_upload"):
+        from .instrument_imports import job_reply
+        return job_reply(job, user)
+
     if not (job.summary or {}).get("awaiting_assistant_confirmation"):
         return {
             "answer": (

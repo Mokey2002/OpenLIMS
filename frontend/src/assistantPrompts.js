@@ -1,4 +1,5 @@
 export const ASSISTANT_STARTER_PROMPTS = [
+  "Import instrument data",
   "Register samples and assign them",
   "What needs attention?",
   "Show samples needing QC review",

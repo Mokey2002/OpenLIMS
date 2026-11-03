@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, Badge, Button, Table } from "react-bootstrap";
 import { apiDownload } from "../api";
+import AssistantImportReceipt from "./AssistantImportReceipt";
 
 function displayValue(value) {
   if (value === null || value === undefined || value === "") return "—";
@@ -15,7 +16,7 @@ function recordValues(values) {
     .join(" · ");
 }
 
-export default function AssistantActionPreview({ action }) {
+export default function AssistantActionPreview({ action, onActionUpdate, onPrepared, onBusy, disabled }) {
   const [downloadError, setDownloadError] = useState("");
   const [downloading, setDownloading] = useState(false);
   const preview = action?.preview || {};
@@ -132,7 +133,9 @@ export default function AssistantActionPreview({ action }) {
         </>
       )}
 
-      {result.operation && (
+      {preview.instrument_import && <AssistantImportReceipt key={action.id} jobId={preview.import_job_id} actionStatus={action.status}
+        onActionUpdate={onActionUpdate} onPrepared={onPrepared} onBusy={onBusy} disabled={disabled} />}
+      {result.operation && !preview.instrument_import && (
         <Alert
           variant={result.failed_count ? "warning" : "success"}
           className="py-2 mb-0"

@@ -125,7 +125,6 @@ def without_empty(*suggestions):
 
 
 def assistant_starter_suggestions(user):
-    from .lab_helpers import enabled
     lot_code = InventoryLot.objects.order_by("lot_code").values_list("lot_code", flat=True).first() if _authenticated(user) else None
     failed_samples = accessible_failed_sample_ids(user, limit=1)
     failed_sample_prompt = (
@@ -139,7 +138,8 @@ def assistant_starter_suggestions(user):
         work_item__source_import_job__isnull=False,
     ).exists()
     return without_empty(
-        "Register samples and assign them" if _authenticated(user) and user.is_active and (is_admin(user) or is_tech(user)) and enabled("samples") else None,
+        "Register samples and assign them" if _authenticated(user) and user.is_active and (is_admin(user) or is_tech(user)) else None,
+        "Import instrument data" if _authenticated(user) and user.is_active and (is_admin(user) or is_tech(user)) else None,
         "What needs attention?",
         project_prompt(user, "Review data quality for project"),
         f"Preview quarantine impact for lot {lot_code}" if lot_code else None,
