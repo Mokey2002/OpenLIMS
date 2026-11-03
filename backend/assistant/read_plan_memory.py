@@ -62,10 +62,19 @@ def resume(message, context, user):
     # Filtering or changing targets after a drill-down applies to the parent query.
     if all(step["operation"] == "result_detail" for step in plan["steps"]) and state.get("trail"):
         plan = copy.deepcopy(state["trail"][-1])
-    if re.fullmatch(r"explain (?:the )?(?:largest|biggest) (?:difference|change)(?: and link (?:the )?(?:supporting )?results)?", text):
-        if any(step["operation"].endswith("_compare") for step in plan["steps"]):
-            return plan, None
-        return None, "Which two periods should I compare? Start with a result list, then ask to compare it with last week."
+    focus_match = re.fullmatch(r"(?:explain|show|compare) (?:the )?(?:(?:qc )?failure[- ]rates?(?: differences?)?|(numeric|measurement|count) differences?)(?: and link (?:the )?(?:supporting )?results)?", text)
+    overview = text in {"show comparison overview", "explain comparison overview"}
+    largest = re.fullmatch(r"explain (?:the )?(?:largest|biggest) (?:difference|change)(?: and link (?:the )?(?:supporting )?results)?", text)
+    if focus_match or overview or largest:
+        comparisons = [step for step in plan["steps"] if step["operation"].endswith("_compare")]
+        if len(comparisons) != 1:
+            return None, "Choose one sample or project result comparison first. Start with a result list, then ask to compare it with last week."
+        focus = "overview" if overview else "counts" if largest else {"numeric": "numeric", "measurement": "numeric", "count": "counts"}.get(focus_match[1], "qc_rates")
+        comparisons[0]["focus"] = focus
+        plan["steps"] = comparisons
+        return plan, None
+    if re.match(r"(?:explain|show|compare) (?:the )?(?:qc )?(?:failure[- ]rates?|numeric|measurements?|counts?|comparison overview)\b", text):
+        return None, "Choose count differences, failure-rate differences, or numeric differences for the current comparison. Change a filter in a separate request; no result query was run."
     result_steps = [step for step in plan["steps"] if step["operation"] in {
         "project_results", "sample_results", "project_results_compare", "sample_results_compare", "sample_failures"}]
     detail = re.fullmatch(r"(?:explain|show|open) (?:the )?(first|second|third|fourth|\d+)(?:st|nd|rd|th)? result", text)
@@ -116,6 +125,7 @@ def resume(message, context, user):
             filters.pop(key, None)
         if clear[1] == "comparison":
             step["operation"] = step["operation"].removesuffix("_compare")
+            step.pop("focus", None)
     # A follow-up changes the selected query, not unrelated reads in the earlier plan.
     plan["steps"] = [step]
     return plan, None

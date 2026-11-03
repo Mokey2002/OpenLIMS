@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from .lab_helpers import response
 from .result_queries import QUERY_OPERATIONS, validate_filters
+from .comparison_explanations import COMPARISON_FOCI
 
 MAX_STEPS = 4
 OPERATIONS = {
@@ -43,11 +44,12 @@ def validate_read_plan(data, threshold=0.65):
     steps = data.get("steps")
     if not isinstance(steps, list) or not 1 <= len(steps) <= MAX_STEPS:
         return None
-    if len(steps) == 1 and (not isinstance(steps[0], dict) or steps[0].get("operation") not in QUERY_OPERATIONS):
+    if len(steps) == 1 and (not isinstance(steps[0], dict) or not isinstance(steps[0].get("operation"), str)
+                            or steps[0]["operation"] not in QUERY_OPERATIONS):
         return None
     clean = []
     for step in steps:
-        if not isinstance(step, dict) or not {"operation", "arguments"} <= set(step) or set(step) - {"operation", "arguments", "filters"}:
+        if not isinstance(step, dict) or not {"operation", "arguments"} <= set(step) or set(step) - {"operation", "arguments", "filters", "focus"}:
             return None
         operation, args = step["operation"], step["arguments"]
         if not isinstance(operation, str) or operation not in OPERATIONS:
@@ -67,6 +69,11 @@ def validate_read_plan(data, threshold=0.65):
         entry = {"operation": operation, "arguments": {k: v.strip() for k, v in args.items()}}
         if filters:
             entry["filters"] = filters
+        if "focus" in step:
+            focus = step["focus"]
+            if (not operation.endswith("_compare") or not isinstance(focus, str) or focus not in COMPARISON_FOCI):
+                return None
+            entry["focus"] = focus
         clean.append(entry)
     return {"route": "read_plan", "steps": clean, "confidence": confidence, "accepted": True}
 
@@ -275,7 +282,7 @@ def handle_read_plan(message, user, plan=None, context=None, *, restored_plan=Fa
     project_ids = {entry["arguments"]["project"].casefold() for entry in steps if "project" in entry["arguments"]}
     if len(sample_ids) > 1 or len(project_ids) > 1 or (sample_ids and project_ids):
         next_context = {}
-    unique_citations = list({(c.get("kind"), c.get("url"), c.get("label")): c for c in citations}.values())
+    unique_citations = list({(c.get("kind"), c.get("url"), c.get("label"), c.get("scope")): c for c in citations}.values())
     token = remember(validated, result_ids, user, previous=recall(context, user))
     if token:
         next_context[KEY] = token

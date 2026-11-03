@@ -2,13 +2,19 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.63.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.64.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
 o `development`, en ese orden. Una variable `VITE_OPENLIMS_VERSION` explícita
 prevalece sobre la versión normal. Al cambiar de versión, actualiza `VERSION`,
 regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
+
+## v0.64.0 — Comparaciones con diferencias explicadas
+
+El resumen principal muestra tasas de fallos con su denominador evaluado, resultados sin evaluar, cambios en puntos porcentuales y diferencias de medias con recuentos de valores registrados y unidades compatibles. Prueba **`Show failed results for project ALPHA yesterday` → `Compare those with this week` → `Explain failure-rate differences` → `Explain numeric differences`**. Ambos chats incluyen **Comparison answer focus** para elegir resumen, recuentos, tasas de QC o mediciones numéricas, conservando filtros y contexto firmado.
+
+Las diferencias de QC se calculan antes del redondeo y se ordenan entre todos los grupos antes del límite de tabla. Las diferencias de medias también preceden al redondeo mostrado. Las comparaciones sin evaluaciones, unidades o valores en ambas ventanas se muestran como no disponibles. Se explican ventanas solapadas, duraciones diferentes y el alcance agregado de las fuentes; los resultados descriptivos no establecen causas ni significancia estadística. Las conversaciones guardadas consultan datos accesibles actuales. Consulta la [guía v0.64](docs/assistant-v064.md) para ejemplos y límites. No requiere migración, dependencia ni modelo nuevo; versión, pie generado y ambas guías están sincronizados.
 
 ## v0.63.0 — Explicaciones de resultados e investigaciones mejoradas
 

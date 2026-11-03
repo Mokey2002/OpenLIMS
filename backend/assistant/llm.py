@@ -243,6 +243,7 @@ Rules:
   alternatively created_from/created_before = YYYY-MM-DD (end exclusive); keys/exclude_keys = exact result-key string lists.
   instrument = exact instrument profile code (import provenance); operator = exact result entered-by username.
   Comparison variants require compare_period with one of those periods. These result operations may be a one-step plan.
+  Comparison steps also accept focus = overview|counts|qc_rates|numeric to choose the explanation without changing any filters.
   No other filters are supported. Do not drop conditions, invent keys, mix period with absolute dates, or interpret sample controls without a recorded field.
 - Use two to four steps, preserve every requested operation, filter and negation. All record identifiers
   must appear explicitly in the current request. The SOP question must be copied verbatim from this request.

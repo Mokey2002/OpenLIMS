@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.63.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.64.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,12 @@
 ---
 
 ## Overview
+
+### v0.64.0 — Comparison answers with meaningful differences
+
+The main comparison answer now shows actual failed/assessed QC rates, unassessed counts, changes in percentage points, and numeric mean differences with recorded-value counts and compatible units. Try **`Show failed results for project ALPHA yesterday` → `Compare those with this week` → `Explain failure-rate differences` → `Explain numeric differences`**. Both chat views include a **Comparison answer focus** selector for overview, counts, QC rates and numeric measurements; switching focus preserves the query filters and signed investigation context.
+
+QC differences use unrounded proportions and are ranked across all groups before the table limit. Mean differences are calculated before display rounding. Missing assessments, absent units and one-sided cohorts remain explicitly unavailable. The answer discloses overlapping windows, differing durations, aggregate source scope and limits on interpretation. Saved focused comparisons refresh current accessible data. See the [v0.64 guide](docs/assistant-v064.md) for examples, validation and scope. No new migration, dependency or model is required; the version, generated footer and both READMEs are updated together.
 
 ### v0.63.0 — Result explanations and stronger investigations
 
@@ -1065,7 +1071,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.63.0**.
+`frontend/src/version.js` file. The current application version is **v0.64.0**.
 
 Footer source:
 

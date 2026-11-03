@@ -45,7 +45,7 @@ export default function ComparisonTable({ comparison }) {
           <thead>
             <tr>
               {columns.map((column) => (
-                <th key={column.key}>{column.label || column.key}</th>
+                <th scope="col" key={column.key}>{column.label || column.key}</th>
               ))}
             </tr>
           </thead>

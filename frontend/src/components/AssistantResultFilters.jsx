@@ -3,6 +3,7 @@ import { Button, Form } from "react-bootstrap";
 
 const LABELS = { qc: "QC", period: "Date", created_from: "From", created_before: "Before", keys: "Keys", exclude_keys: "Excluded keys", instrument: "Instrument", operator: "Entered by", compare_period: "Compare with" };
 const CLEAR = { period: "date", created_from: "date", created_before: "date", exclude_keys: "excluded keys", compare_period: "comparison" };
+const FOCUS_COMMANDS = { overview: "Show comparison overview", counts: "Explain count differences", qc_rates: "Explain failure-rate differences", numeric: "Explain numeric differences" };
 
 export default function AssistantResultFilters({ context, onRun, disabled }) {
   const [field, setField] = useState("instrument");
@@ -24,6 +25,11 @@ export default function AssistantResultFilters({ context, onRun, disabled }) {
     {navigation?.can_return && <Button size="sm" variant="outline-primary" disabled={disabled}
       onClick={() => onRun(navigation.comparison ? "Back to comparison" : "Back to results")}>Back to {navigation.comparison ? "comparison" : "results"}</Button>}
     {query && <>
+      {query.filters?.compare_period && <Form.Select size="sm" className="mb-2" aria-label="Comparison answer focus"
+        disabled={disabled} value={query.focus || "overview"} onChange={event => onRun(FOCUS_COMMANDS[event.target.value])}>
+        <option value="overview">Comparison overview</option><option value="counts">Result counts</option>
+        <option value="qc_rates">QC failure rates</option><option value="numeric">Numeric measurements</option>
+      </Form.Select>}
       <div className="d-flex flex-wrap gap-1" aria-label="Active result filters">
         {Object.entries(query.filters || {}).map(([key, item]) => LABELS[key] && <Button key={key} size="sm" variant="outline-secondary"
           disabled={disabled} aria-label={`Remove ${LABELS[key]} filter`} onClick={() => onRun(`Clear ${CLEAR[key] || key} filter`)}>
