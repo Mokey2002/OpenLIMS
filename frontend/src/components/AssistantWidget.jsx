@@ -199,6 +199,7 @@ export default function AssistantWidget() {
             <AssistantRequestStatus transport={transport} loading={loading} onRetry={sendMessage} />
             <AssistantContextBar
               context={conversationContext}
+              onRun={sendMessage}
               compact
               disabled={loading}
               onClear={() => setConversationContext({})}

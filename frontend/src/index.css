@@ -358,6 +358,7 @@ body {
 
 .assistant-context-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -369,6 +370,7 @@ body {
 }
 
 .assistant-context-copy {
+  flex: 1;
   min-width: 0;
 }
 

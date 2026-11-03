@@ -2,6 +2,8 @@ import re
 
 
 ALLOWED_CONTEXT_KEYS = {
+    "result_query_context",
+    "investigation_navigation",
     "explanation_language",
     "read_intent",
     "awaiting_read",

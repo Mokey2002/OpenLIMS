@@ -10,13 +10,20 @@ def build_overview(steps, citations):
             continue
         facts = step.get("result_query")
         briefing = step.get("sample_briefing")
-        if facts:
+        if facts and step["operation"] == "result_detail":
+            from .result_queries import explain_result
+            text, missing = explain_result(facts["rows"][0])
+            unknowns.extend(missing)
+            next_checks.append("Review the cited result and its recorded provenance before deciding on follow-up work.")
+        elif facts:
             text = (f"{facts['target']}: {facts['total']} matching results; {facts['failed']} failed checks and "
                     f"{facts['rejected']} rejected reviews. Showing {facts['shown']}. Window: {facts['window']}. {facts['filter_summary']}.")
             if facts.get("differences"):
                 row = facts["differences"][0]
                 text += f" Largest count difference: {row['key']}, {row['selected']} versus {row['comparison']} ({row['difference']:+d})."
-                unknowns.append("Count differences do not identify their cause. Windows can have different durations; this is not a failure-rate comparison.")
+                unknowns.append("Count differences do not identify their cause. Windows can have different durations; the count difference is not a failure-rate comparison.")
+            if facts.get("statistics"):
+                text += " QC rates use assessed checks, with unassessed results reported separately; numeric summaries are grouped by analysis, work type, key and compatible units."
             if facts["shown"] < facts["total"]:
                 unknowns.append(f"Only {facts['shown']} of {facts['total']} results are displayed; narrow the filters to inspect the rest.")
             next_checks.append("Open the cited results and review their recorded values, QC decisions, and provenance.")

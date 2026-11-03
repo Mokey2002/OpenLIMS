@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.62.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.63.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,14 @@
 ---
 
 ## Overview
+
+### v0.63.0 — Result explanations and stronger investigations
+
+Result drill-downs now display actual values, units, configured reference limits, QC checks, review decisions, recorded reasons and instrument provenance in the overview. **`Explain the first result` → `Back to comparison` → `Apply the same filters to project BETA`** keeps the investigation path and reloads current accessible records. Both chat views show removable filters and an editor for QC, date ranges, exact result keys, instrument codes and entered-by usernames; **`Show results for project ALPHA since Friday from instrument SEQ-1 by operator alice`** works without a model.
+
+Period comparisons add assessed-check failure rates, unassessed counts, percentage-point differences and finite numeric summaries separated by analysis/work type/key and compatible units. Optional offline Sentence Transformers embeddings retrieve and rerank overlapping SOP chunks after permission filtering; unavailable models fall back to existing lexical/concept search. No model weights or extra dependency are installed by default.
+
+Evaluation supports 30-turn cases, nested computed-fact expectations, forbidden overview claims, and **`--live-provider --force-provider --require-provider`** to exercise a configured model without silent rules-only passes. See the [v0.63 guide](docs/assistant-v063.md) for exact filter semantics, statistical limits, local-model setup and evaluation commands. Automated provider/embedding tests use simulated responses; live model accuracy has not been measured here. No new database migration is required. Version, generated footer and both READMEs are updated together.
 
 ### v0.62.0 — Conversational result queries, live progress and saved chats
 
@@ -1057,7 +1065,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.62.0**.
+`frontend/src/version.js` file. The current application version is **v0.63.0**.
 
 Footer source:
 

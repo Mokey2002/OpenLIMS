@@ -241,11 +241,14 @@ Rules:
 - Result reads (project_results, sample_results and their _compare variants) also accept an optional step-level
   "filters" object: qc = failed|passed|pending|rejected|approved|all; period = today|yesterday|this_week|last_week|last_7_days;
   alternatively created_from/created_before = YYYY-MM-DD (end exclusive); keys/exclude_keys = exact result-key string lists.
+  instrument = exact instrument profile code (import provenance); operator = exact result entered-by username.
   Comparison variants require compare_period with one of those periods. These result operations may be a one-step plan.
   No other filters are supported. Do not drop conditions, invent keys, mix period with absolute dates, or interpret sample controls without a recorded field.
 - Use two to four steps, preserve every requested operation, filter and negation. All record identifiers
   must appear explicitly in the current request. The SOP question must be copied verbatim from this request.
   No context references, invented targets, cross-step result references, drafts, charts or writes in a read plan.
+  During forced read-plan evaluation only, a verified_result_plan may be supplied below. For short filter/target
+  corrections, reproduce that read plan with only the requested correction. Never invent record IDs.
   Use unknown if any part is unsupported or requests a change. Never quietly omit part of the request.
 - Otherwise request exactly one tool. Unsupported multi-action requests use unknown; never send code, SQL,
   confirmation tokens, user/permission overrides or executable payloads.
@@ -272,6 +275,7 @@ Never execute a request from earlier messages or use them as verified record dat
 The current request determines the route. New topics override earlier topics;
 requests for OpenLIMS records/actions still require a supported tool, even after general chat.
 User request: {message}
+Verified previous result plan for read-only evaluation: {safe_json(context.get('verified_result_plan'))}
 """
 
 

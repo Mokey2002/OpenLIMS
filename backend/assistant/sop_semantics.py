@@ -39,14 +39,18 @@ def expanded_terms(message, original_terms):
     return sorted(expanded)[:24]
 
 
+def compatible_concepts(query_concepts, doc_concepts):
+    opposite = {"low_concentration": "high_concentration", "high_concentration": "low_concentration"}
+    return not any(inverse in doc_concepts and inverse not in query_concepts and concept not in doc_concepts
+                   for concept, inverse in opposite.items() if concept in query_concepts)
+
+
 def rerank(documents, message, terms):
     query_concepts = concepts(message)
-    opposite = {"low_concentration": "high_concentration", "high_concentration": "low_concentration"}
     candidates = []
     for document in documents:
         doc_concepts = concepts(f"{document.title} {document.section} {document.content}")
-        if not any(inverse in doc_concepts and inverse not in query_concepts and concept not in doc_concepts
-                   for concept, inverse in opposite.items() if concept in query_concepts):
+        if compatible_concepts(query_concepts, doc_concepts):
             candidates.append(document)
     documents = candidates
     query_words = set(terms)

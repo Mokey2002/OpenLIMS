@@ -209,7 +209,7 @@ def _read(step, user):
 
 
 def handle_read_plan(message, user, plan=None, context=None, *, restored_plan=False):
-    from .read_plan_memory import KEY, explicit_result_plan, remember, resume
+    from .read_plan_memory import KEY, explicit_result_plan, recall, remember, resume
     from .chat_progress import emit
     resumed = False
     if plan is None:
@@ -224,7 +224,7 @@ def handle_read_plan(message, user, plan=None, context=None, *, restored_plan=Fa
         resumed = plan is not None
         plan = plan or explicit_result_plan(message)
         if plan is None and not is_compound_read(message) and re.match(r"(?:show|list|find)\s+(?:(?:failed|passed|pending|rejected|approved)\s+)?(?:QC\s+)?(?:results?|failures)\s+(?:for|in)\s+(?:sample|project)\b", message, re.I):
-            return response("I could not preserve every requested filter. Use a QC status and a supported date window, then narrow by an exact result key. "
+            return response("I could not preserve every requested filter. Use a QC status, a supported date window, an exact result key, instrument code or entered-by username. "
                             "No result query was run.", clarification={"required": True}, requires_read_plan=True)
     if plan is None and not is_compound_read(message):
         return None
@@ -240,6 +240,11 @@ def handle_read_plan(message, user, plan=None, context=None, *, restored_plan=Fa
     if prohibited:
         return response("Please separate changes or exclusions from this combined read request. "
                         "I have not run any part of it.", clarification={"required": True}, requires_read_plan=True)
+    if (not validated and isinstance(plan, dict) and isinstance(plan.get("steps"), list)
+            and any(isinstance(step.get("operation"), str) and step["operation"] in QUERY_OPERATIONS
+                    for step in plan["steps"] if isinstance(step, dict))):
+        return response("The result filters are invalid or conflicting. Check the date range (start inclusive, end exclusive), QC status, keys, instrument code and entered-by username. No result query was run.",
+                        clarification={"required": True}, context=(context or {}) if resumed else {}, requires_read_plan=True)
     if not validated or (not resumed and not _grounded(validated, message)):
         return response("I need two to four complete supported read requests with exact sample IDs, project codes, or run IDs/titles. "
                         "Include the SOP topic explicitly. I have not run any part of this request. Changes must be requested separately.",
@@ -255,6 +260,7 @@ def handle_read_plan(message, user, plan=None, context=None, *, restored_plan=Fa
         entry = {**step, "status": "unavailable" if unavailable else "completed", "answer": result["answer"],
                  "citations": result.get("citations", []), "comparison": result.get("comparison"),
                  "result_query": result.get("result_query"), "sample_briefing": result.get("sample_briefing")}
+        entry["statistics_tables"] = result.get("statistics_tables", [])
         target_context = result.get("context", {})
         entry["reference"] = result.get("reference") or next(({"kind": kind, "id": target_context[kind + "_id"]}
                                    for kind in ["sample", "project"] if target_context.get(kind + "_id")), None)
@@ -270,9 +276,14 @@ def handle_read_plan(message, user, plan=None, context=None, *, restored_plan=Fa
     if len(sample_ids) > 1 or len(project_ids) > 1 or (sample_ids and project_ids):
         next_context = {}
     unique_citations = list({(c.get("kind"), c.get("url"), c.get("label")): c for c in citations}.values())
-    token = remember(validated, result_ids, user)
+    token = remember(validated, result_ids, user, previous=recall(context, user))
     if token:
         next_context[KEY] = token
+    if len(steps) == 1 and steps[0]["operation"] == "result_detail":
+        state = recall(next_context, user)
+        if state and state.get("trail"):
+            next_context["investigation_navigation"] = {"can_return": True, "comparison": any(
+                step["operation"].endswith("_compare") for plan in state["trail"] for step in plan["steps"])}
     from .answer_overview import build_overview
     overview = build_overview(steps, unique_citations)
     return response("\n\n".join(f"{i}. {entry['operation'].replace('_', ' ').capitalize()} — {entry['status']}\n{entry['answer']}"

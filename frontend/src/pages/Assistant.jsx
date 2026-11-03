@@ -238,6 +238,7 @@ export default function Assistant() {
           <AssistantRequestStatus transport={transport} loading={loading} onRetry={sendMessage} />
           <AssistantContextBar
             context={conversationContext}
+            onRun={sendMessage}
             disabled={loading}
             onClear={() => setConversationContext({})}
           />
