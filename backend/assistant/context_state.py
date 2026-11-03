@@ -2,6 +2,7 @@ import re
 
 
 ALLOWED_CONTEXT_KEYS = {
+    "workflow_guide",
     "instrument_import_job_id",
     "result_query_context",
     "investigation_navigation",

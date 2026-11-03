@@ -64,6 +64,8 @@ def turn_descriptor(user, message, reply):
         entry.update(kind="general", answer=reply["answer"][:8000])
     elif reply.get("page_read_reference"):
         entry.update(kind="page_read", reference=copy.deepcopy(reply["page_read_reference"]))
+    elif reply.get("workflow_plan"):
+        entry.update(kind="workflow_guide", sample_id=reply["workflow_plan"]["sample_id"])
     elif reply.get("read_plan_spec"):
         from .read_plan_memory import recall
         state = recall(reply.get("context", {}), user)
@@ -104,6 +106,14 @@ def restore(conversation, user):
             reply = restore_page_read(turn["reference"], user)
             context = reply.get("context", {})
             general = []
+            reply["save_turn_token"] = turn_token(user, turn["question"], reply)
+            history.append({"role": "assistant", "reply": reply})
+        elif turn["kind"] == "workflow_guide":
+            from .workflow_guide import guide_reply
+            from .sample_operations import _sample_queryset
+            sample = _sample_queryset(user).filter(pk=turn["sample_id"]).first()
+            reply = guide_reply(sample, user) if sample else {"answer": "Earlier workflow records are unavailable or no longer accessible.", "context": {}}
+            context, general = reply.get("context", {}), []
             reply["save_turn_token"] = turn_token(user, turn["question"], reply)
             history.append({"role": "assistant", "reply": reply})
         elif turn["kind"] == "read":

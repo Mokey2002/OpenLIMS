@@ -98,6 +98,56 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
             self.http("/api/v1/assistant/chat/stream/", {"message": "Who am I?", "request_id": request_id})
         self.assertEqual(error.exception.code, 409)
 
+    def test_real_streamed_workflow_preparation_through_human_qc(self):
+        from pipelines.models import AnalysisDefinition, ProcedureDefinition, PipelineTemplate, PipelineTemplateStep
+
+        sample = self.result.work_item.sample
+        template = PipelineTemplate.objects.create(code="LIVE-PREP", name="Live sequencing preparation")
+        for position, code in [(1, "LIVE-EXTRACTION"), (2, "SEQUENCING")]:
+            analysis = AnalysisDefinition.objects.create(code=code, name=code,
+                required_fields=[{"key": "checked", "value_type": "BOOLEAN", "required": True}] if position == 1 else [])
+            procedure = ProcedureDefinition.objects.create(code=code, name=code, analysis=analysis)
+            PipelineTemplateStep.objects.create(template=template, position=position, procedure=procedure, requires_qc=position == 1)
+
+        def get_plan():
+            with self.http(f"/api/v1/assistant/workflows/{sample.pk}/") as response:
+                return json.load(response)
+
+        def propose(operation, **fields):
+            with self.http(f"/api/v1/assistant/workflows/{sample.pk}/actions/", {"operation": operation,
+                    "plan_digest": get_plan()["plan_digest"], **fields}) as response:
+                return json.load(response)["pending_action"]
+
+        def confirm(action):
+            with self.http(f"/api/v1/assistant/actions/{action['confirmation_token']}/confirm/", {"confirm": True}) as response:
+                self.assertEqual(json.load(response)["status"], "COMPLETED")
+
+        with self.http("/api/v1/assistant/chat/stream/", {"message": f"Help me prepare sample {sample.sample_id} for sequencing",
+                "request_id": str(uuid.uuid4())}) as response:
+            stream = response.read().decode()
+        reply = json.loads(stream.split("event: complete\ndata: ", 1)[1].split("\n\n", 1)[0])
+        self.assertEqual(reply["workflow_plan"]["readiness"], "needs_workflow")
+        confirm(propose("WORKFLOW_START", template_id=template.pk))
+        step = sample.pipeline_runs.get().steps.get(position=1)
+        with self.http("/api/v1/assistant/chat/", {"message": f"Add result checked = false to work item #{step.work_item_id} for sample {sample.sample_id}",
+                "context": reply["context"]}) as response:
+            entry = json.load(response)
+        self.assertIn("workflow_plan", entry)
+        confirm(entry["pending_action"])
+        confirm(propose("WORKFLOW_COMPLETE", step_id=step.pk))
+        self.assertEqual(get_plan()["steps"][0]["status"], "AWAITING_QC")
+        reviewer = get_user_model().objects.create_user(username="live-workflow-reviewer")
+        reviewer.groups.add(Group.objects.get_or_create(name="qc_reviewer")[0])
+        self.project.members.add(reviewer)
+        self.token = str(AccessToken.for_user(reviewer))
+        confirm(propose("WORKFLOW_REVIEW", step_id=step.pk, decision="APPROVED", reason="Reviewed the actual recorded evidence."))
+        self.assertEqual(get_plan()["readiness"], "available")
+        self.assertEqual(Result.objects.get(work_item_id=step.work_item_id).qc_status, "PENDING_REVIEW")
+        self.project.members.remove(reviewer)
+        with self.assertRaises(HTTPError) as error:
+            get_plan()
+        self.assertEqual(error.exception.code, 404)
+
     def test_real_http_stream_accepts_page_reference_and_rechecks_revoked_access(self):
         sample = self.result.work_item.sample
         page = {"kind": "sample", "record_id": str(sample.public_id)}

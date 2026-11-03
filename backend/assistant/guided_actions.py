@@ -170,6 +170,14 @@ def execute_guided_action(action):
     if (work.sample_id != sample.pk or (step and (step.work_item_id != work.pk or step.pipeline_run_id != run.pk or run.sample_id != sample.pk))
             or _snapshot(work, sample, step) != expected or not _eligible(work, step)):
         raise ValueError("The work, sample, or pipeline changed after preview. Request a fresh preview.")
+    if payload.get("workflow_digest"):
+        from .workflow_actions import require_access, state
+        require_access(action.requested_by, sample)
+        current_run, steps, fingerprint = state(sample)
+        positions = {row.position: row for row in steps}
+        if (fingerprint != payload["workflow_digest"] or not step or not current_run or current_run.pk != run.pk
+                or any(pos not in positions or positions[pos].status not in {"COMPLETED", "SKIPPED"} for pos in step.dependency_positions)):
+            raise ValueError("The guided workflow or its dependencies changed. Refresh the checklist and request a fresh preview.")
     operation = payload["operation"]
     if operation == "GUIDED_ASSIGN":
         person = get_user_model().objects.get(pk=payload["target_user_id"])

@@ -91,6 +91,8 @@ def propose_action(user, action_type, summary, payload):
 
 
 def _user_can_execute(user, action):
+    if action.action_type == AssistantAction.ACTION_WORK_ITEM_OPERATION and (action.payload or {}).get("operation") == "WORKFLOW_REVIEW":
+        return bool(user.is_active and is_qc_reviewer(user))
     if action.action_type == AssistantAction.ACTION_QC_REVIEW:
         operation = (action.payload or {}).get("operation")
         if operation in {"APPROVE", "REJECT", "REOPEN"}:
@@ -416,6 +418,8 @@ def confirm_action(token, user):
                 return action
 
             if not _user_can_execute(user, action):
+                if action.action_type == AssistantAction.ACTION_WORK_ITEM_OPERATION and (action.payload or {}).get("operation") == "WORKFLOW_REVIEW":
+                    raise AssistantActionError("Only a current authorized QC reviewer or admin can confirm this workflow QC decision.")
                 if action.action_type == AssistantAction.ACTION_QC_REVIEW:
                     action.status = AssistantAction.STATUS_FAILED
                     action.error_message = (
