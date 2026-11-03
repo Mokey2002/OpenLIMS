@@ -68,9 +68,11 @@ function AssistantSession({ initialPage }) {
   const [actionBusy, setActionBusy] = useState("");
   const [err, setErr] = useState("");
 
-  async function loadAssistantStatus() {
-    try {
-      const data = await apiGet("/api/assistant/status/");
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    apiGet("/api/assistant/status/", { signal: controller.signal }).then(data => {
+      if (!active) return;
       setAssistantStatus(data);
       setStarterPrompts(data.suggestions || ASSISTANT_STARTER_PROMPTS);
       setHistory((current) => {
@@ -84,17 +86,15 @@ function AssistantSession({ initialPage }) {
           ...current.slice(1),
         ];
       });
-    } catch {
+    }, () => {
+      if (!active) return;
       setAssistantStatus({
         provider: "openlims",
         model: "rules",
         display_name: "OpenLIMS Rules",
       });
-    }
-  }
-
-  useEffect(() => {
-    loadAssistantStatus();
+    });
+    return () => { active = false; controller.abort(); };
   }, []);
 
   function selectConversation(data) {
@@ -134,6 +134,9 @@ function AssistantSession({ initialPage }) {
   }
 
   function updateHistoryAction(index, pendingAction, actionError = "") {
+    if (pendingAction.result?.context) {
+      setConversationContext(current => ({ ...current, ...pendingAction.result.context }));
+    }
     setHistory((current) =>
       current.map((item, itemIndex) =>
         itemIndex === index
@@ -152,18 +155,13 @@ function AssistantSession({ initialPage }) {
         `/api/assistant/actions/${pendingAction.confirmation_token}/confirm/`,
         { confirm: true }
       );
-      if (updated.result?.context) {
-        setConversationContext((current) => ({
-          ...current,
-          ...updated.result.context,
-        }));
-      }
       updateHistoryAction(index, updated);
     } catch (e) {
+      const latest = await apiGet(`/api/assistant/actions/${pendingAction.confirmation_token}/`).catch(() => pendingAction);
       updateHistoryAction(
         index,
-        pendingAction,
-        e.message || String(e)
+        latest,
+        ["COMPLETED", "QUEUED", "CANCELLED"].includes(latest.status) ? "" : latest.error_message || e.message || String(e)
       );
     } finally {
       setActionBusy("");
@@ -181,10 +179,11 @@ function AssistantSession({ initialPage }) {
       );
       updateHistoryAction(index, updated);
     } catch (e) {
+      const latest = await apiGet(`/api/assistant/actions/${pendingAction.confirmation_token}/`).catch(() => pendingAction);
       updateHistoryAction(
         index,
-        pendingAction,
-        e.message || String(e)
+        latest,
+        ["COMPLETED", "QUEUED", "CANCELLED"].includes(latest.status) ? "" : latest.error_message || e.message || String(e)
       );
     } finally {
       setActionBusy("");
@@ -316,7 +315,7 @@ function AssistantSession({ initialPage }) {
                       <Card.Body>
                         <div className="d-flex justify-content-between align-items-start gap-3">
                           <div>
-                            <div className="fw-semibold">Confirmation required</div>
+                            <div className="fw-semibold">{item.pendingAction.status === "PROPOSED" ? "Confirmation required" : "Action status"}</div>
                             <div>{item.pendingAction.summary}</div>
                             <small className="text-muted">
                               Status: {item.pendingAction.status}

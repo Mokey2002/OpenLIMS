@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.66.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.67.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,15 +14,23 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras del asistente | Detalles |
 | --- | --- | --- |
-| **v0.66.0** | Consultas corteses, seguimiento por fechas, corrección de registros, filtros de página y contexto conservado tras aclaraciones. | [Guía v0.66](docs/assistant-v066.md) |
+| **v0.67.0** | Registro y asignación guiados, preguntas por campos obligatorios, tarea atómica confirmada y recibos actualizados. | [Guía v0.67](docs/assistant-v067.md) |
+| **v0.66.0** | Consultas corteses, seguimiento por fechas, corrección de registros, filtros de página y contexto conservado tras aclaraciones. | [Guía v0.66](docs/assistant-v066.md) · [PR #184](https://github.com/Mokey2002/OpenLIMS/pull/184) |
 | **v0.65.0** | Contexto visible de la página de muestra/proyecto, apertura explícita del chat completo, correcciones atómicas y filtros por mes calendario. | [Guía v0.65](docs/assistant-v065.md) · [PR #183](https://github.com/Mokey2002/OpenLIMS/pull/183) |
-| **v0.64.0** | Enfoque de comparación, denominadores reales de QC, diferencias de medias, precisión y alcance de fuentes agregadas. | [Guía v0.64](docs/assistant-v064.md) · [PR #182](https://github.com/Mokey2002/OpenLIMS/pull/182) |
+
+## v0.67.0 — Completa registros y asignaciones desde el chat
+
+Elige **`Register samples and assign them`** y responde las preguntas sobre cantidad, proyecto, tipo de muestra, responsable y campos obligatorios. También puedes empezar con **`Register 10 DNA samples in project ALPHA and assign them to maria`** y completar los metadatos que falten. `me` selecciona al usuario autenticado. Se validan los campos personalizados y los formularios de ingreso publicados, incluidos los campos condicionales, antes de mostrar una vista previa con los IDs, valores compartidos y responsable de las muestras.
+
+Al confirmar se registra y asigna todo el conjunto en una transacción. Se comprueban otra vez permisos, responsable, formularios e IDs. Los conflictos o errores revierten la tarea; repetir la confirmación de una acción completada devuelve su recibo. Ambos chats muestran el resultado y actualizan el estado del servidor tras una confirmación fallida o interrumpida. Esta tarea se completa sin navegar por pestañas. La asignación afecta al responsable de la muestra; los pasos y trabajos tienen sus propios comandos de asignación.
+
+El borrador está firmado, vinculado al usuario y caduca a los 30 minutos. Cancélalo o cambia de tema antes de la vista previa; después usa el botón Cancel de la propuesta. Los metadatos compartidos se aplican a todas las muestras nuevas. Rules y los conectores de ambos proveedores usan los mismos servicios y confirmaciones. Las frases nuevas son en inglés. Consulta la [guía v0.67](docs/assistant-v067.md). Versión/pie **v0.67.0**; ambas guías conservan solo las actualizaciones **v0.67, v0.66 y v0.65**. Sin nueva migración, dependencia ni automatización programada.
 
 ## v0.66.0 — Conversaciones más naturales y correcciones fiables
 
 Prueba **`Could you show me the failed results for project ALPHA from yesterday?`**, **`What about last month?`**, **`Could you compare those with last week?`** y **`Please explain the numeric differences`**. Las expresiones corteses se normalizan antes de interpretar las consultas de resultados. **`Just the failed ones, please`** conserva el registro y las fechas. **`No, I meant S-102`** / **`Sorry, I meant S-102`** corrigen el registro de una única consulta firmada, conservando los filtros y el enfoque; se comprueban los permisos otra vez.
 
-Las consultas de página aceptan filtros completos compatibles, por ejemplo **`Can I see the failed results for this sample from yesterday?`**. Al guardar y reabrir, se conservan los filtros y la referencia estable, consultando datos actuales. Las condiciones desconocidas o mezcladas con escrituras piden aclaración sin ejecutar una parte ni perder la investigación anterior. Ambas guías contienen exactamente las tres últimas actualizaciones: **v0.66, v0.65 y v0.64**; se eliminaron las secciones anteriores y se corrigieron las etiquetas de versión obsoletas.
+Las consultas de página aceptan filtros completos compatibles, por ejemplo **`Can I see the failed results for this sample from yesterday?`**. Al guardar y reabrir, se conservan los filtros y la referencia estable, consultando datos actuales. Las condiciones desconocidas o mezcladas con escrituras piden aclaración sin ejecutar una parte ni perder la investigación anterior. El historial de las guías se limita a las tres versiones más recientes; se corrigieron las etiquetas de versión obsoletas.
 
 El seguimiento de una explicación general conserva su tema en las páginas del laboratorio; `Explain this sample` selecciona explícitamente la muestra de la página. Estas interacciones funcionan en modo Rules. La conversación general libre requiere OpenAI/Ollama configurado; las pruebas automáticas no miden la fluidez de un modelo en vivo. Las frases nuevas documentadas son en inglés. Consulta la [guía v0.66](docs/assistant-v066.md). Sin migración, dependencia ni modelo nuevos.
 
@@ -32,19 +40,13 @@ En una página de muestra/proyecto cargada, el asistente muestra el contexto **U
 
 Corrige una investigación con **`No, use last month and exclude key control`** o **`Actually, use sample S-102 and this month`**. Los cambios compatibles se aplican juntos, conservando los demás filtros, el período comparado y el enfoque. “Controls” sin clave exacta, condiciones incompatibles y mutaciones requieren aclaración sin ejecutar una consulta parcial. `last month` / `previous month` y `this month` usan meses calendario de la zona horaria de la aplicación. Las frases directas documentadas son en inglés. Consulta la [guía v0.65](docs/assistant-v065.md) para ejemplos, API y límites. Sin migración, dependencia ni modelo nuevos; versión, pie y ambas guías están sincronizados.
 
-## v0.64.0 — Comparaciones con diferencias explicadas
-
-El resumen principal muestra tasas de fallos con su denominador evaluado, resultados sin evaluar, cambios en puntos porcentuales y diferencias de medias con recuentos de valores registrados y unidades compatibles. Prueba **`Show failed results for project ALPHA yesterday` → `Compare those with this week` → `Explain failure-rate differences` → `Explain numeric differences`**. Ambos chats incluyen **Comparison answer focus** para elegir resumen, recuentos, tasas de QC o mediciones numéricas, conservando filtros y contexto firmado.
-
-Las diferencias de QC se calculan antes del redondeo y se ordenan entre todos los grupos antes del límite de tabla. Las diferencias de medias también preceden al redondeo mostrado. Las comparaciones sin evaluaciones, unidades o valores en ambas ventanas se muestran como no disponibles. Se explican ventanas solapadas, duraciones diferentes y el alcance agregado de las fuentes; los resultados descriptivos no establecen causas ni significancia estadística. Las conversaciones guardadas consultan datos accesibles actuales. Consulta la [guía v0.64](docs/assistant-v064.md) para ejemplos y límites. No requiere migración, dependencia ni modelo nuevo; versión, pie generado y ambas guías están sincronizados.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.66.0`
+**Versión de desarrollo actual:** `v0.67.0`
 
 **Demo:** http://35.164.28.250
 

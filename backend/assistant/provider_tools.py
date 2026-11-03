@@ -4,6 +4,7 @@ from importlib import import_module
 
 # Public catalog doubles as the dispatch allow-list. No model-supplied module names.
 COMMAND_TOOLS = {
+    "sample_registration": ("registration_tasks", "route_registration_task", "Register samples and assign them; Register 10 DNA samples in project ALPHA and assign them to maria"),
     "analytics": ("analytics", "route_safe_analytics", "Group samples by project; Which instrument has the highest QC failure rate?"),
     "attention": ("attention", "route_attention_summary", "What needs attention?"),
     "barcode": ("barcode_operations", "route_barcode_operations", "Create barcode labels for batch B-100; Reprint barcode labels for sample S-100"),
@@ -119,6 +120,9 @@ def dispatch_tool(plan, user, context=None):
             result = fn(command, user)
         else:
             result = fn(command, user, context=context or {})
+        if tool == "sample_registration" and result is None:
+            from .sample_operations import route_sample_management
+            result = route_sample_management(command, user, context=context or {})
     if not result:
         return response("That wording is not supported by the selected feature. Please specify the exact action and identifiers; nothing was changed.", clarification={"required": True})
     # Preserve deterministic evidence, drafts and server-generated confirmation

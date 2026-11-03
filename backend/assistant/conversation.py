@@ -142,6 +142,8 @@ def route_conversation_utility(message, user=None):
             "I can list project samples with missing fields, workflow blockers, QC gates "
             "or available work: Which samples in project DEMO-360 are blocked, and why? "
             "I can compare or investigate records, create charts when requested, and "
+            "complete a guided registration and sample assignment: try 'Register samples and assign them'. "
+            "I ask for missing details and show one combined preview before confirmation. I can "
             "preview supported actions for explicit confirmation, including assigning a "
             "sample pipeline step and adding an unreviewed result. Try: Assign step 1 "
             "for sample DEMO-360-001 to maria. I can also answer "

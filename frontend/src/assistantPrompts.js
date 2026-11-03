@@ -1,4 +1,5 @@
 export const ASSISTANT_STARTER_PROMPTS = [
+  "Register samples and assign them",
   "What needs attention?",
   "Show samples needing QC review",
   "Compare two samples",

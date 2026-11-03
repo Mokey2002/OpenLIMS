@@ -594,6 +594,10 @@ def route_assistant_message(message, user, context=None, route_hint=None, page_c
     page_read = route_page_read(message, user, page_context, context=context)
     if page_read is not None:
         return _routed(page_read, "page_read")
+    from .registration_tasks import route_registration_task
+    task = route_registration_task(message, user, context)
+    if task is not None:
+        return _routed(task, "samples")
     from .dialogue_memory import resume_topic
     restored, response = resume_topic(message, user, context or {})
     if response:

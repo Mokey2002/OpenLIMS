@@ -351,6 +351,7 @@ class AssistantStatusView(APIView):
                 "chat_streaming": True,
                 "saved_conversations": True,
                 "page_context": True,
+                "sample_registration_tasks": True,
                 "welcome_message": (
                     "Ask about samples, projects, QC, comparisons, inventory, "
                     "sequences, or system status. Suggestions below are based on "

@@ -60,9 +60,11 @@ export default function AssistantWidget() {
 
   const bottomRef = useRef(null);
 
-  async function loadAssistantStatus() {
-    try {
-      const data = await apiGet("/api/assistant/status/");
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    apiGet("/api/assistant/status/", { signal: controller.signal }).then(data => {
+      if (!active) return;
       setAssistantStatus(data);
       setHistory((current) => {
         if (!current.length || current[0].role !== "assistant") return current;
@@ -75,17 +77,15 @@ export default function AssistantWidget() {
           ...current.slice(1),
         ];
       });
-    } catch {
+    }, () => {
+      if (!active) return;
       setAssistantStatus({
         provider: "openlims",
         model: "rules",
         display_name: "OpenLIMS Rules",
       });
-    }
-  }
-
-  useEffect(() => {
-    loadAssistantStatus();
+    });
+    return () => { active = false; controller.abort(); };
   }, []);
 
   useEffect(() => {
@@ -131,6 +131,9 @@ export default function AssistantWidget() {
   }
 
   function updateHistoryAction(index, pendingAction, actionError = "") {
+    if (pendingAction.result?.context) {
+      setConversationContext(current => ({ ...current, ...pendingAction.result.context }));
+    }
     setHistory((current) =>
       current.map((item, itemIndex) =>
         itemIndex === index
@@ -149,15 +152,10 @@ export default function AssistantWidget() {
         `/api/assistant/actions/${pendingAction.confirmation_token}/${operation}/`,
         body
       );
-      if (updated.result?.context) {
-        setConversationContext((current) => ({
-          ...current,
-          ...updated.result.context,
-        }));
-      }
       updateHistoryAction(index, updated);
     } catch (e) {
-      updateHistoryAction(index, pendingAction, e.message || String(e));
+      const latest = await apiGet(`/api/assistant/actions/${pendingAction.confirmation_token}/`).catch(() => pendingAction);
+      updateHistoryAction(index, latest, ["COMPLETED", "QUEUED", "CANCELLED"].includes(latest.status) ? "" : latest.error_message || e.message || String(e));
     } finally {
       setActionBusy("");
     }
@@ -277,7 +275,7 @@ export default function AssistantWidget() {
 
                   {item.pendingAction && (
                     <Alert variant="warning" className="mt-2 mb-2 py-2">
-                      <div className="fw-semibold">Confirmation required</div>
+                      <div className="fw-semibold">{item.pendingAction.status === "PROPOSED" ? "Confirmation required" : "Action status"}</div>
                       <div className="small mb-2">{item.pendingAction.summary}</div>
                       <Badge
                         bg={

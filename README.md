@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.66.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.67.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,15 +33,23 @@
 
 | Version | Assistant improvements | Details |
 | --- | --- | --- |
-| **v0.66.0** | Polite result requests, short date follow-ups, record corrections, filtered page reads and retained context after clarification. | [v0.66 guide](docs/assistant-v066.md) |
+| **v0.67.0** | Guided sample registration and assignment, required-field questions, one atomic confirmed task and refreshed action receipts. | [v0.67 guide](docs/assistant-v067.md) |
+| **v0.66.0** | Polite result requests, short date follow-ups, record corrections, filtered page reads and retained context after clarification. | [v0.66 guide](docs/assistant-v066.md) · [PR #184](https://github.com/Mokey2002/OpenLIMS/pull/184) |
 | **v0.65.0** | Visible sample/project page context, explicit full-chat handoff, atomic natural corrections and calendar-month filters. | [v0.65 guide](docs/assistant-v065.md) · [PR #183](https://github.com/Mokey2002/OpenLIMS/pull/183) |
-| **v0.64.0** | Comparison focus, actual QC denominators and mean differences, precise rounding and aggregate source scopes. | [v0.64 guide](docs/assistant-v064.md) · [PR #182](https://github.com/Mokey2002/OpenLIMS/pull/182) |
+
+### v0.67.0 — Complete registration and assignment in chat
+
+Choose **`Register samples and assign them`**, then answer the assistant's questions about count, project, sample type, assignee and configured required fields. Or start with **`Register 10 DNA samples in project ALPHA and assign them to maria`** and supply any missing metadata. `me` selects the authenticated user. The assistant validates legacy custom fields and published intake forms, including conditional fields, before showing one preview of the generated IDs, shared values and sample assignee.
+
+Confirm in chat to create and assign the entire set in one transaction. Access, assignee eligibility, forms and IDs are checked again. A conflict or validation failure rolls back the task; confirming the same completed action again returns its receipt. Both chat views show the result message and refresh the server's action status after a failed or interrupted confirmation. No tab navigation is required for this task. Assignment sets the sample assignee; pipeline/work-item assignments have their own chat commands.
+
+The guided draft is signed, user-bound and expires after 30 minutes. Cancel it or change topics before preview; use the preview's Cancel button to cancel a proposal. Metadata values apply to every new sample in the task. Rules mode and both provider bridges use the same services and confirmation controls. See the [v0.67 guide](docs/assistant-v067.md) for a walkthrough, validation and limits. Version/footer are **v0.67.0** and both READMEs retain only **v0.67, v0.66 and v0.65** release updates. No new migration, dependency or scheduled automation.
 
 ### v0.66.0 — More natural conversations and reliable corrections
 
 Ask **`Could you show me the failed results for project ALPHA from yesterday?`**, then **`What about last month?`**, **`Could you compare those with last week?`**, and **`Please explain the numeric differences`**. Courtesy wording is normalized before typed result routing. **`Just the failed ones, please`** retains the selected record and dates. **`No, I meant S-102`** / **`Sorry, I meant S-102`** correct the record within one signed result query while preserving filters and comparison focus; access is checked again.
 
-Page reads accept complete supported filters, for example **`Can I see the failed results for this sample from yesterday?`**. Saved page queries retain those filters and stable record references, then reload current data. Unsupported filters and mixed read/write requests ask for clarification without running a subset or losing the previous investigation. Both READMEs contain exactly the latest three release updates: **v0.66, v0.65 and v0.64**; older release sections have been removed. Also corrects stale development-version labels.
+Page reads accept complete supported filters, for example **`Can I see the failed results for this sample from yesterday?`**. Saved page queries retain those filters and stable record references, then reload current data. Unsupported filters and mixed read/write requests ask for clarification without running a subset or losing the previous investigation. The README release history is limited to the latest three versions. Also corrects stale development-version labels.
 
 General explanation follow-ups keep their topic on lab pages; an explicit `Explain this sample` still selects the page record. These interactions work in Rules mode. Free-form general conversation requires a configured OpenAI/Ollama provider; automated checks are not a live-model fluency score. See the [v0.66 guide](docs/assistant-v066.md) for the conversation walkthrough, validation and limits. No migration, dependency or model is added.
 
@@ -51,19 +59,13 @@ On a loaded sample/project page, the assistant shows a removable **Use this samp
 
 Correct a signed result investigation with **`No, use last month and exclude key control`** or **`Actually, use sample S-102 and this month`**. Supported changes apply together while preserving unrelated filters, the comparison period and answer focus. Ambiguous “controls”, conflicting conditions and mutations require clarification without a partial query. `last month` / `previous month` and `this month` use calendar boundaries in the application timezone. See the [v0.65 guide](docs/assistant-v065.md) for supported phrases, API payloads and limits. No migration, dependency or model is added; version, footer and both READMEs are synchronized.
 
-### v0.64.0 — Comparison answers with meaningful differences
-
-The main comparison answer now shows actual failed/assessed QC rates, unassessed counts, changes in percentage points, and numeric mean differences with recorded-value counts and compatible units. Try **`Show failed results for project ALPHA yesterday` → `Compare those with this week` → `Explain failure-rate differences` → `Explain numeric differences`**. Both chat views include a **Comparison answer focus** selector for overview, counts, QC rates and numeric measurements; switching focus preserves the query filters and signed investigation context.
-
-QC differences use unrounded proportions and are ranked across all groups before the table limit. Mean differences are calculated before display rounding. Missing assessments, absent units and one-sided cohorts remain explicitly unavailable. The answer discloses overlapping windows, differing durations, aggregate source scope and limits on interpretation. Saved focused comparisons refresh current accessible data. See the [v0.64 guide](docs/assistant-v064.md) for examples, validation and scope. No new migration, dependency or model is required; the version, generated footer and both READMEs are updated together.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.66.0`.
+**Current development version:** `v0.67.0`.
 
 ## Deployment Access
 
@@ -944,7 +946,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.66.0**.
+`frontend/src/version.js` file. The current application version is **v0.67.0**.
 
 Footer source:
 

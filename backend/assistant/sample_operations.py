@@ -1246,6 +1246,10 @@ def _propose_assign_batch(message, user, context):
 def route_sample_management(message, user, context=None):
     text = str(message or "").strip()
     context = context or {}
+    from .registration_tasks import route_registration_task
+    task = route_registration_task(message, user, context)
+    if task is not None:
+        return task
 
     if re.search(
         r"\b(?:delete|destroy|permanently\s+remove)\b.*\bsamples?\b",
