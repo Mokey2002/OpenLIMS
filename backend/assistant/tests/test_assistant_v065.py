@@ -57,7 +57,7 @@ class AssistantV065Tests(APITestCase):
         reply = self.chat("Could you please summarize this sample?", page=self.page())
         self.assertEqual(reply["page_context_used"]["label"], "QUALITY-1")
         with patch("assistant.page_context._read") as read:
-            rejected = self.chat("Show results for this sample yesterday", page=self.page())
+            rejected = self.chat("Show results for this sample that look unusual", page=self.page())
         self.assertTrue(rejected["clarification"])
         self.assertNotIn("read_plan", rejected)
         read.assert_not_called()

@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.65.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.66.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,17 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras del asistente | Detalles |
 | --- | --- | --- |
-| **v0.65.0** | Contexto visible de la página de muestra/proyecto, apertura explícita del chat completo, correcciones atómicas y filtros por mes calendario. | [Guía v0.65](docs/assistant-v065.md) |
+| **v0.66.0** | Consultas corteses, seguimiento por fechas, corrección de registros, filtros de página y contexto conservado tras aclaraciones. | [Guía v0.66](docs/assistant-v066.md) |
+| **v0.65.0** | Contexto visible de la página de muestra/proyecto, apertura explícita del chat completo, correcciones atómicas y filtros por mes calendario. | [Guía v0.65](docs/assistant-v065.md) · [PR #183](https://github.com/Mokey2002/OpenLIMS/pull/183) |
 | **v0.64.0** | Enfoque de comparación, denominadores reales de QC, diferencias de medias, precisión y alcance de fuentes agregadas. | [Guía v0.64](docs/assistant-v064.md) · [PR #182](https://github.com/Mokey2002/OpenLIMS/pull/182) |
-| **v0.63.0** | Explicaciones de resultados, investigaciones conservadas, filtros editables, estadísticas, embeddings locales opcionales y evaluación ampliada. | [Guía v0.63](docs/assistant-v063.md) · [PR #181](https://github.com/Mokey2002/OpenLIMS/pull/181) |
+
+## v0.66.0 — Conversaciones más naturales y correcciones fiables
+
+Prueba **`Could you show me the failed results for project ALPHA from yesterday?`**, **`What about last month?`**, **`Could you compare those with last week?`** y **`Please explain the numeric differences`**. Las expresiones corteses se normalizan antes de interpretar las consultas de resultados. **`Just the failed ones, please`** conserva el registro y las fechas. **`No, I meant S-102`** / **`Sorry, I meant S-102`** corrigen el registro de una única consulta firmada, conservando los filtros y el enfoque; se comprueban los permisos otra vez.
+
+Las consultas de página aceptan filtros completos compatibles, por ejemplo **`Can I see the failed results for this sample from yesterday?`**. Al guardar y reabrir, se conservan los filtros y la referencia estable, consultando datos actuales. Las condiciones desconocidas o mezcladas con escrituras piden aclaración sin ejecutar una parte ni perder la investigación anterior. Ambas guías contienen exactamente las tres últimas actualizaciones: **v0.66, v0.65 y v0.64**; se eliminaron las secciones anteriores y se corrigieron las etiquetas de versión obsoletas.
+
+El seguimiento de una explicación general conserva su tema en las páginas del laboratorio; `Explain this sample` selecciona explícitamente la muestra de la página. Estas interacciones funcionan en modo Rules. La conversación general libre requiere OpenAI/Ollama configurado; las pruebas automáticas no miden la fluidez de un modelo en vivo. Las frases nuevas documentadas son en inglés. Consulta la [guía v0.66](docs/assistant-v066.md). Sin migración, dependencia ni modelo nuevos.
 
 ## v0.65.0 — Preguntas sobre la página y correcciones naturales
 
@@ -30,164 +38,13 @@ El resumen principal muestra tasas de fallos con su denominador evaluado, result
 
 Las diferencias de QC se calculan antes del redondeo y se ordenan entre todos los grupos antes del límite de tabla. Las diferencias de medias también preceden al redondeo mostrado. Las comparaciones sin evaluaciones, unidades o valores en ambas ventanas se muestran como no disponibles. Se explican ventanas solapadas, duraciones diferentes y el alcance agregado de las fuentes; los resultados descriptivos no establecen causas ni significancia estadística. Las conversaciones guardadas consultan datos accesibles actuales. Consulta la [guía v0.64](docs/assistant-v064.md) para ejemplos y límites. No requiere migración, dependencia ni modelo nuevo; versión, pie generado y ambas guías están sincronizados.
 
-## v0.63.0 — Explicaciones de resultados e investigaciones mejoradas
-
-El resumen de un resultado muestra valor, unidad, límites de referencia, comprobación de QC, decisión de revisión, motivos registrados y procedencia del instrumento. **`Explain the first result` → `Back to comparison` → `Apply the same filters to project BETA`** conserva la investigación y consulta datos accesibles actuales. Ambos chats muestran filtros que se pueden quitar y un editor de QC, fechas, claves exactas, códigos de instrumento y usuario que introdujo el resultado. **`Show results for project ALPHA since Friday from instrument SEQ-1 by operator alice`** funciona sin modelo; las fechas se refieren a la creación del resultado, y el operador a `Result.entered_by`.
-
-Las comparaciones añaden tasas de fallos sobre comprobaciones evaluadas, recuentos sin evaluar, diferencias en puntos porcentuales y resúmenes numéricos finitos separados por análisis, tipo de trabajo, clave y unidades compatibles. Los embeddings opcionales de Sentence Transformers procesan fragmentos de SOP localmente después de comprobar permisos; si el modelo no está disponible, se usa la búsqueda existente. No se instalan pesos ni dependencias adicionales por defecto.
-
-La evaluación admite 30 turnos, comprobaciones de hechos calculados, afirmaciones prohibidas en el resumen y **`--live-provider --force-provider --require-provider`** para probar un modelo configurado sin aprobar casos que solo usaron reglas. Consulta la [guía v0.63](docs/assistant-v063.md) para ejemplos, límites estadísticos, configuración local y comandos. Las pruebas automáticas simulan proveedores y embeddings; no se ha medido aquí la precisión de un modelo real. No requiere una migración nueva. La versión, el pie generado y ambas guías están sincronizados.
-
-## v0.62.0 — Consultas conversacionales, progreso y chats guardados
-
-Prueba **`Show QC failures for project ALPHA` → `Only yesterday` → `Compare those with last week` → `Explain the largest difference and link the supporting results`**. Las consultas tipadas conservan proyecto/muestra, filtros de QC, fechas y exclusiones por clave exacta. `Explain the second result` consulta de nuevo el resultado mostrado y comprueba el acceso actual. Un resumen breve elaborado por el backend muestra hallazgos, información desconocida y una comprobación siguiente, con evidencia y fuentes desplegables.
-
-Ambos chats incluyen progreso en directo, texto general de OpenAI/Ollama transmitido por fragmentos, Stop, Retry y conversaciones personales con nombre que puedes guardar, abrir, renombrar y eliminar. Las respuestas de laboratorio guardan referencias de consulta y recuperan registros accesibles actuales al abrirse; no repiten respuestas antiguas de laboratorio ni tokens de confirmación. La búsqueda de SOP combina texto completo de PostgreSQL con conceptos semánticos locales y reordenación, por ejemplo “too dilute” y “low concentration”, conservando los controles de aprobación, vigencia y permisos.
-
-La evaluación comprueba varios turnos, IDs exactos, URLs de fuentes, recuentos calculados, hallazgos mostrados y percentiles de latencia. Se pueden comparar proveedores/modelos configurados mediante una opción explícita. Los comentarios negativos propios vinculados a chats guardados pueden exportarse para preparar casos de regresión revisados manualmente. Las formas directas documentadas son en inglés; el proveedor opcional puede interpretar otras formulaciones. Consulta la [guía v0.62](docs/assistant-v062.md) para ejemplos, límites, cancelación y validación.
-
-**Actualización:** aplica la migración `assistant.0009` antes de iniciar la API nueva. `OPENLIMS_TIME_ZONE` controla las fechas relativas (predeterminado `UTC`). Programa `cleanup_assistant_requests` para eliminar estados caducados. La versión, el pie generado y ambas guías se actualizan juntos.
-
-## v0.61.0 — Consultas combinadas, fuentes y pasajes de SOP
-
-Combina de dos a cuatro consultas compatibles, por ejemplo **`Show evidence for sample S-100; show its history; show the SOP for concentration`**. El asistente conserva cada paso, su estado, respuesta y tabla de comparación. **Sources and scope / Fuentes y alcance** en ambos chats enlaza a muestras, resultados, trabajos señalados, importaciones vinculadas, experimentos y secciones completas de SOP accesibles. Los registros sin acceso o documentos sin coincidencias producen una respuesta parcial explícita. Cada paso comprueba permisos y consulta datos actuales de forma independiente; no representa una sola instantánea de la base de datos ni establece causas científicas.
-
-Las cláusulas completas compatibles en inglés funcionan sin proveedor. Con OpenAI/Ollama habilitado se pueden interpretar otras formas mediante el mismo plan de lectura tipado. Los identificadores y el tema del SOP deben aparecer explícitamente en la solicitud actual. Las cláusulas incompatibles, exclusiones, cambios o más de cuatro pasos requieren aclaración antes de ejecutar cualquier parte. Las acciones individuales conservan su confirmación. PostgreSQL ordena las secciones actuales, aprobadas y accesibles mediante búsqueda de texto completo y muestra pasajes coincidentes. No requiere servicios externos de embeddings ni migraciones.
-
-Consulta la [guía v0.61](docs/assistant-v061.md) para operaciones, límites y evaluación de calidad. Se comprueban hechos esperados, afirmaciones prohibidas, fuentes, operaciones y latencia sobre registros conocidos; no constituye una validación científica ni una medición de precisión de modelos reales. La versión, el pie generado y ambas guías se actualizan juntos.
-
-## v0.60.0 — Explicaciones de muestras basadas en evidencia
-
-Después de `Summarize sample S-100`, pregunta **“Explícalo más simple”**, **“¿Por qué necesita atención?”**, **“¿Qué debo revisar primero?”** o **“¿Qué no sabemos?”**. Estas respuestas de lectura funcionan sin proveedor de IA, consultan registros actuales y accesibles, priorizan alertas registradas de trabajo/QC y distinguen evidencia de datos faltantes y causas científicas no establecidas. `In Spanish` / `In English` cambia el idioma y conserva el tipo de explicación. `same for S-102` repite la explicación elegida para otra muestra accesible. Consulta [explicaciones de muestras y seguimiento](#explicaciones-de-muestras-y-seguimiento) para ejemplos y límites. La versión, el pie de página generado y ambas guías se actualizan juntos.
-
-## v0.59.0 — IA conversacional y respuestas con evidencia
-
-- **IA más conversacional ([PR #176](https://github.com/Mokey2002/OpenLIMS/pull/176)):** OpenAI y Ollama reciben un historial breve y verificado del chat general. Respuestas como `Explain that more simply`, `Give me an example` y `Explain that in Spanish` conservan la pregunta y respuesta anteriores. Ambos proveedores reciben instrucciones para responder directamente, usar ejemplos y expresar incertidumbre. Consulta [conversación general y seguimiento](#conversación-general-y-seguimiento) para configuración, límites y comandos de reinicio.
-- **Prioridades de muestras y evidencia de QC ([PR #173](https://github.com/Mokey2002/OpenLIMS/pull/173)):** `Summarize sample S-100` muestra la evidencia de trabajo y QC antes de los metadatos. Incluye hasta tres trabajos y tres resultados que necesitan atención, incluso fallos antiguos fuera de los cinco resultados más recientes, con responsables, fechas límite, motivos de QC registrados, notas de revisión y límites de referencia configurados. Las sugerencias consultan datos actuales y vuelven a comprobar el acceso. `Compare result R-42 with its reference range` abre el resultado indicado sin contexto previo de resultado; sustituye los IDs de ejemplo por registros accesibles.
-- **Recuperación de descargas de imágenes en CI ([PR #174](https://github.com/Mokey2002/OpenLIMS/pull/174)):** los errores `context deadline exceeded` del daemon de Docker ahora utilizan los reintentos limitados y el registro alternativo configurado explícitamente. CI ya no se detiene en la primera aparición de este timeout transitorio. Los errores permanentes y el agotamiento de los intentos del registro alternativo siguen haciendo fallar el trabajo. Consulta [las pruebas de descarga de imágenes](#pruebas-de-descarga-de-imágenes-en-ci).
-
-## v0.58.0 — Volver a temas anteriores de conversación
-
-El asistente conserva hasta cinco consultas compatibles recientes de muestras/proyectos en el chat. Prueba **“Show samples in project ALPHA” → “What happened to sample S-102?” → “Show system status” → “Go back to the previous project”**. **“Back to the previous topic”** recupera la consulta anterior y **“What were we talking about?”** muestra los temas accesibles recientes.
-
-Corrige una consulta con **“No, I meant BETA”**, **“Actually BETA”** o **“Sorry, I meant project BETA”**. **“Forget this conversation”** borra el contexto. La memoria guarda IDs y tipos de consulta de lectura permitidos en un token firmado, vinculado al usuario y con caducidad de una hora renovada durante el chat. Cada recuperación vuelve a comprobar permisos y consulta datos actuales; omite registros sin acceso. Cubre las siete consultas de muestras/proyectos, sin repetir escrituras ni guardar una transcripción completa. No requiere migraciones.
-
-## v0.57.0 — Lenguaje más natural y repetición de consultas
-
-Prueba **“Dame un resumen del proyecto ALPHA”**, **“Muéstrame las muestras de ese proyecto”**, **“Could you please give me a quick overview of project ALPHA?”** o **“Show me my priorities”**. Se reutilizan los mismos servicios con permisos y los adaptadores de proveedores; las respuestas siguen principalmente en inglés.
-
-Para resúmenes/historial/ubicación/secuencias de muestras y resúmenes/listas/calidad de proyectos, **“same for BETA”** o **“what about sample S-102?”** repite la consulta anterior compatible. **“Summarize a project” → “ALPHA”** permite responder con el identificador faltante; usa comillas para nombres con espacios. Se comprueban permisos y ambigüedad en cada lectura. Esta memoria solo selecciona consultas de lectura, nunca repite escrituras. **“What should I do next?”** muestra trabajo personal si no hay muestra seleccionada y orientación de la muestra si la hay. No garantiza comprender cualquier frase.
-
-## v0.56.0 — Respuestas breves y continuidad de conversación
-
-Si el asistente ofrece opciones de muestras, resultados, QC, fallos o inventario, responde con el nombre mostrado, su número o **“the second one”**. Las opciones se reconstruyen con comandos del servidor. **“Thanks”**, **“okay”** y **“got it”** conservan el contexto para seguir consultando, graficando o exportando; **“start over”** borra la elección pendiente. Una solicitud explícita nueva cambia de tema.
-
-Usa **“Summarize this project”**, **“Preview quarantine impact for that lot”** o compara el resultado seleccionado con su rango de referencia. Los IDs inválidos, contradictorios o múltiples requieren aclaración. Las consultas vuelven a comprobar permisos y las escrituras siguen requiriendo confirmación. Son mejoras para conversaciones compatibles, no memoria ilimitada ni respuestas garantizadas a cualquier pregunta.
-
-## v0.55.1 — Seguimiento entre funciones de muestras
-
-Después de **“Summarize sample S-100”**, pregunta **“Show its history”**, **“Where is it stored?”**, **“Who last moved it?”**, **“What's next?”** o **“Show its sequences”**. Estos comandos de lectura usan un ID estable y vuelven a comprobar permisos; varias muestras, IDs inválidos o contexto contradictorio requieren aclaración. Historial/secuencias conservan la muestra y las revisiones de calidad conservan el proyecto. Las búsquedas de secuencias con muestra explícita requieren un ID exacto y accesible; si no se resuelve, no se amplía la búsqueda. El seguimiento está limitado a estas formas compatibles, no es memoria de conversación ilimitada.
-
-## v0.55.0 — Resúmenes y seguimiento de proyectos
-
-Pregunta **“Summarize project ALPHA”** y después **“Show me samples in that project”** o **“Who is assigned work in that project?”**. Estos comandos en inglés funcionan sin modelo y mediante el adaptador compartido de OpenAI/Ollama. El resumen muestra miembros, estados de muestras, trabajo por responsable, vencimientos, trabajo sin asignar, fallos y QC rechazado/repetición. Cada turno vuelve a verificar los permisos. Incluye muestras primarias y vinculadas accesibles (hasta 100 en la lista). Los indicadores excluyen trabajo completado/cancelado; no evalúan todas las dependencias.
-
-## v0.54.0 — Prioridades personales y continuidad de conversación
-
-Pregunta **“What do I need to work on?”**, **“Show my tasks”** o **“¿En qué debo trabajar hoy?”** sin habilitar un proveedor de IA. Se muestran hasta 100 trabajos accesibles, asignados al usuario actual y sin finalizar, ordenados por vencimiento, con alertas y enlaces. Excluye trabajo ajeno, sin asignar, completado o cancelado; incluye fechas futuras y trabajos sin fecha. No es una evaluación completa de dependencias ni de tareas QC. Una lista vacía no significa que todo el laboratorio esté al día. Las respuestas de estas nuevas funciones están principalmente en inglés.
-
-Las nueve funciones directas de lectura/borrador ahora preguntan por un dato faltante a la vez. El relevo acepta `me` como usuario actual, y después pregunta quién recibe el trabajo. Los IDs/nombres de usuario cortos se resuelven sin otra llamada al modelo; usa comillas para títulos con espacios. Con OpenAI/Ollama, respuestas como `same for BETA` reciben los argumentos verificados de la solicitud anterior. Un tema nuevo empieza de cero; `never mind` o `start over` descarta ese contexto.
-
-El estado está firmado, vinculado al usuario y caduca a los 30 minutos. Guarda argumentos, no resultados, y vuelve a comprobar permisos. No autoriza cambios ni permite repetir escrituras; las confirmaciones siguen vigentes. Las dos vistas muestran la interpretación con etiquetas más claras, sin JSON crudo. Las pruebas de proveedores usan respuestas simuladas. No requiere migración.
-
-## v0.53.0 — Conexiones compartidas para OpenAI y Ollama
-
-Cuando las reglas no resuelven una solicitud, cualquiera de los proveedores configurados puede devolver una petición de función validada. OpenLIMS la ejecuta con el usuario autenticado y el contexto existente. Habilita el LLM y su enrutamiento, y configura credenciales/modelo de OpenAI o URL/modelo de Ollama. El modo de solo reglas sigue disponible.
-
-El catálogo compartido cubre 32 entradas: historial de muestras, experimentos relacionados, planificación de reactivos, actualizaciones de proyecto, impacto de cuarentena, calidad de datos, borradores de flujos, relevos y comparación de experimentos; además de adaptadores para análisis, prioridades, códigos de barras, cálculos, gráficos, comparaciones, trabajos confirmados, inventario, investigaciones, notificaciones, QC, informes, muestras/registro, secuencias, SOP, trabajos, asignaciones/resultados guiados, orientación de muestras, consultas de workflows, estado del sistema, identidad, búsqueda de registros y migraciones.
-
-Por ejemplo, “Ayuda a Maria a continuar el trabajo de Peter” puede interpretarse como un relevo entre los usuarios `peter` y `maria`. Se comprueban permisos, funciones habilitadas y ambigüedad. Si faltan datos, se pide repetir la solicitud completa; no se guardan automáticamente respuestas libres de aclaración. Los comandos interpretados deben coincidir con el parser existente. La calidad de interpretación depende del modelo.
-
-Ambas vistas muestran la interpretación del proveedor y sus argumentos. OpenLIMS genera los resultados y puede conservar la etiqueta Rules: el modelo interpreta y OpenLIMS ejecuta. Los cambios requieren la confirmación existente; los flujos requieren guardado explícito. El modelo no confirma acciones, ejecuta SQL/código ni define permisos. La búsqueda global de migraciones mediante esta conexión exige administrador.
-
-Las pruebas usan respuestas simuladas de ambos proveedores; no son una evaluación de precisión con modelos en vivo. Una prueba detecta nuevos routers sin conexión explícita. No requiere migración.
-
-## v0.52.1 — Prueba de privacidad de investigaciones determinista
-
-Corrige un fallo intermitente de CI: los dígitos de un resultado privado (`9999`) podían aparecer en una marca de tiempo ajena. La prueba reproduce esa marca de tiempo y comprueba IDs/valores de resultados, registros comparativos y totales, en lugar de buscar dígitos en toda la respuesta. No cambia el comportamiento ni los permisos de la aplicación; no requiere migración.
-
-## v0.52.0 — Borradores de flujos, relevos y comparación de experimentos
-
-Las tres funciones restantes están disponibles en ambas vistas del chat. Los comandos se escriben en inglés:
-
-- **Borradores de flujos:** un administrador puede pedir `Create a workflow with EXTRACT@1, QC@1, SEQUENCE@2, REVIEW@1`, usando códigos/versiones activos reales (o nombres exactos). Si falta un procedimiento o es ambiguo, se solicita aclaración. Pulsa **Revisar flujo en el diseñador**, ingresa código/nombre, revisa dependencias, controles QC, condiciones y automatización, y guarda explícitamente. El borrador empieza inactivo, con dependencias secuenciales y sin inferir controles QC ni automatizaciones. Se comprueban las versiones al abrirlo. Editar el texto del chat solo cambia la nota copiable. Máximo: 30 pasos.
-- **Relevos:** `Prepare peter's handover for maria` requiere nombres de usuario activos exactos. Genera un borrador editable de hasta 100 trabajos asignados sin finalizar, visibles para quien consulta y ambas personas, con vencimientos y alertas de atraso, fallo o QC rechazado/repetición. Excluye trabajos completados/cancelados; las dependencias y bloqueos no registrados requieren revisión manual. No envía mensajes ni reasigna trabajo. Comprueba nuevamente el acceso antes de compartirlo.
-- **Comparaciones:** `Compare runs <ID-público-experimento> and <ID-público-experimento>` también acepta títulos exactos únicos. Requiere acceso a ambos experimentos y el cuaderno habilitado. Compara definiciones actuales de pasos, parámetros/estado registrados, lotes vinculados y bloques de resultados estructurados (incluido QC si se registró allí). Alinea por posición: revisa si cambió el orden. Los datos ausentes son desconocidos; un enlace no demuestra consumo ni una diferencia demuestra causalidad. Excluye texto libre, revisiones históricas y QC externo. Límites por experimento: 50 pasos, 100 lotes, 50 bloques; 4.000 caracteres visibles por valor. Indica comparaciones parciales.
-
-No requiere migración de base de datos. Las instrucciones de instalación siguen vigentes.
-
-## v0.51.0 — Vista previa de impacto y revisión de calidad de datos
-
-Dos informes de solo lectura están disponibles en ambas vistas del chat, con tablas de evidencia, enlaces y sugerencias basadas en registros existentes. Los comandos se escriben en inglés:
-
-- **Impacto de cuarentena:** `What would be affected if we quarantine lot LOT-12?` o `Preview quarantine impact for lot LOT-12`. Revisa reservas activas accesibles, consumo registrado y enlaces de la revisión actual del cuaderno. Distingue dependencias previstas de uso anterior y muestra el estado del trabajo/experimento. No pone el lote en cuarentena ni concluye que sus resultados sean inválidos. La evidencia del cuaderno requiere que esté habilitado y que todos los destinos vinculados sean accesibles. Muestra hasta 25 filas por categoría e indica si el informe es parcial; las filas no representan muestras únicas.
-- **Calidad de datos del proyecto:** `Check project ALPHA for suspicious records` o `Review data quality for project ALPHA`. Señala IDs similares al ignorar mayúsculas y puntuación, metadatos obligatorios ausentes, formularios de ingreso inválidos (incluidos campos condicionales), unidades diferentes/ausentes para el mismo análisis/tipo de trabajo y campo de resultado, y fechas o vencimientos inusuales. Son indicaciones para revisar, no conclusiones científicas ni correcciones automáticas. Se aceptan unidades conocidas compatibles y valores válidos cero/falso.
-
-La revisión examina hasta 250 muestras del proyecto principal, 1.000 trabajos y 1.000 resultados, ordenados por ID, y muestra hasta 100 hallazgos. Indica los límites y si la revisión es parcial. Repetir la consulta vuelve a comprobar registros y permisos. No requiere migración de base de datos.
-
-## v0.50.2 — Respuestas de registro estables y valores seguros
-
-Las respuestas de registro conservan el ID del proyecto: cambiar o reutilizar un código no redirige la solicitud, y la puntuación del código ya no impide responder. Se comprueban nuevamente el rol y el acceso en cada respuesta. Tras actualizar, reinicia los registros pendientes de v0.50.1 o anteriores: su contexto basado solo en el código ya no se reanuda.
-
-Se rechazan claves JSON duplicadas, caracteres nulos, Unicode inválido y números no finitos antes de proponer; los valores se vuelven a validar al confirmar. Los números demasiado grandes generan un mensaje de validación. Se mantiene el soporte de Unicode válido y puntuación entre comillas. No requiere migración de base de datos.
-
-## v0.50.1 — Registro y cálculo de stock más robustos
-
-El registro rechaza solicitudes negadas, instrucciones adicionales, campos duplicados y listas mal formadas. Usa comillas JSON para conservar comas o puntuación: `Register 2 plasma samples in project ALPHA with source="blood, frozen."`. Puedes corregir los campos con otra respuesta `with ...`; se vuelven a comprobar los permisos. Antes de crear registros se validan los IDs y el tipo de muestra guardados en la propuesta. Los IDs generados demasiado largos se rechazan en la vista previa.
-
-El cálculo de reactivos vuelve a validar cantidades y unidades configuradas, incluso si se importaron sin validación de formularios. Stock inválido, unidades incompatibles o reservas superiores al stock producen un resultado **desconocido**. Las reservas liberadas no se descuentan. Este parche no requiere migración de base de datos.
-
-## v0.50.0 — Cinco ayudas de IA para el laboratorio
-
-Los nuevos comandos se escriben en inglés:
-
-- `What happened to sample S-100?`: últimos 50 eventos de auditoría/custodia, responsables y estado actual del trabajo y QC, con enlace a la muestra. No reconstruye eventos ausentes.
-- `Find similar experiments about plasma extraction`: busca todas las palabras en títulos, contenido actual y nombres de plantillas accesibles; muestra hasta 20 experimentos accesibles. Requiere el cuaderno habilitado. Es una búsqueda por palabras, no una evaluación de equivalencia científica.
-- `Plan reagents for 30 samples using procedure EXTRACT version 1`: calcula las cantidades configuradas y el stock activo no vencido, descontando reservas y convirtiendo unidades compatibles. No reserva stock ni incluye controles, repeticiones o pérdidas no configuradas.
-- `Register 12 plasma samples in project ALPHA`: solicita campos obligatorios; responde `with source=blood` usando los nombres de tus campos y todos los valores obligatorios. Presenta una vista previa y exige confirmación explícita. Vuelve a comprobar permisos y campos al confirmar.
-- `Write a short progress update for project ALPHA`: genera un borrador editable en ambas vistas del chat, con enlace al proyecto y botón para copiar. Describe registros actuales del proyecto principal; no envía mensajes. Las ediciones quedan en la vista actual.
-
-**Actualización:** después de reconstruir la API, ejecuta `docker compose -f deploy/docker-compose.yml run --rm api python manage.py migrate`. En Django admin (`/admin/`), abre **Pipelines → Procedure definitions**, selecciona el procedimiento y versión y configura **Procedure reagent requirements**: artículo de inventario, cantidad positiva por muestra y unidad compatible. Guarda antes de pedir el cálculo. Si faltan cantidades, el asistente lo indica; no las deduce de instrucciones de texto.
-
-## v0.49.5 — Vistas previas de asignación de IA más fiables
-
-Al confirmar una asignación se vuelven a comprobar la fecha límite, el tipo de trabajo, la muestra y el proyecto principal, además del estado y responsable. Los elementos modificados se omiten y requieren una vista previa nueva; también deben regenerarse las vistas antiguas que no contienen estos datos. Las solicitudes de más de 100 trabajos piden reducir la selección en vez de tomar solo los primeros 100. Si se indican varios responsables, se solicita uno por acción.
-
-Las solicitudes de operaciones de trabajo con negación, fechas no admitidas o acciones mezcladas piden aclaración en vez de ignorar condiciones. No se generan propuestas para proyectos repetidos ni usuarios inactivos. Las asignaciones entre varios proyectos conservan su alcance al confirmar. Las listas muestran el total de coincidencias e indican el límite de visualización de 100 elementos.
-
-Las listas y propuestas de asignación respetan el proyecto indicado. Los proyectos desconocidos, inaccesibles o ambiguos requieren un código o nombre exacto, sin ampliar la búsqueda. La carga de trabajo muestra solo registros visibles para quien consulta; la confirmación rechaza trabajos que cambiaron de proyecto. También se corrigen los filtros combinados de trabajo vencido y sin asignar, y el regreso a gráficos de estado de muestras.
-
-Los gráficos de trabajo aceptan solicitudes corteses, métricas en distinto orden y una sola métrica. Al quitar el último registro seleccionado, se solicita una nueva selección en vez de ampliar la búsqueda. Un proyecto indicado explícitamente en una solicitud de gráfico reemplaza la selección anterior. Las listas de trabajo sin asignar incluyen elementos vencidos y sin fecha, salvo que se pida **today**. Se mantienen los controles de acceso.
-
-Corrige **Graph overdue and unassigned work** tras revisar bloqueos: conserva el proyecto, grafica conteos actuales y ya no interpreta trabajo sin asignar como una orden de asignación.
-
-Guarda consultas de flujo con nombre en tu cuenta y ábrelas desde ambas vistas del chat. Carga una consulta en el constructor, ajústala y ejecútala con registros actuales. Solo se guardan los ajustes; los permisos se verifican al ejecutar. Incluye límite de 20 consultas y eliminación confirmada. Consulta la [guía](docs/assistant-project-workflows.md#personal-saved-questions).
-
-## v0.48.0 — Crea y reutiliza consultas de IA
-
-Usa el **constructor visual de consultas** en ambas vistas del chat: elige proyecto, filtros, Y/O, responsable y alcance, revisa la pregunta y ejecútala. Los accesos rápidos incluyen tu trabajo vencido, trabajo próximo a vencer sin asignar y problemas de QC. **Usa los mismos filtros en proyecto CODIGO** reutiliza una consulta con permisos actualizados y resultados desde la primera página. Disponible en español e inglés. Consulta la [guía](docs/assistant-project-workflows.md#build-and-reuse-workflow-questions).
-
-## v0.47.0 — Entiende tu consulta de IA
-
-Usa **Explica esta consulta** para ver el significado de los filtros, la lógica Y/O, el alcance, el responsable y las ventanas actuales de vencimiento. La explicación bilingüe verifica permisos, conserva la paginación y no revisa muestras. Disponible en ambas vistas del chat. Consulta la [guía de explicaciones](docs/assistant-project-workflows.md#query-explanations).
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.54.0`
+**Versión de desarrollo actual:** `v0.66.0`
 
 **Demo:** http://35.164.28.250
 

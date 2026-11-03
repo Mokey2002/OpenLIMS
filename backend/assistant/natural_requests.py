@@ -21,10 +21,20 @@ READS = {
 
 def normalize_request(message):
     text = str(message or '').strip().replace('’', "'").lstrip('¿¡').rstrip('?! .')
-    text = re.sub(r'^(?:hey|hi|hello)[,!]\s*', '', text, flags=re.I)
-    text = re.sub(r'^(?:can|could|would) you\s+(?:please\s+)?', '', text, flags=re.I)
-    text = re.sub(r'^(?:please|por favor)[, ]+', '', text, flags=re.I)
+    # Peel complete courtesy prefixes without dropping any requested conditions.
+    # Repeating this also handles "Hi, could you please ..." and is idempotent.
+    for _ in range(4):
+        previous = text
+        text = re.sub(r'^(?:hey|hi|hello|thanks|thank you)[,!:]\s*', '', text, flags=re.I)
+        text = re.sub(r'^(?:can|could|would) you\s+(?:please\s+)?', '', text, flags=re.I)
+        text = re.sub(r'^(?:please|por favor)[, ]+', '', text, flags=re.I)
+        text = re.sub(r'^(?:actually|instead),?\s+(?=(?:show|list|find|summarize|explain)\b)', '', text, flags=re.I)
+        if text == previous:
+            break
     text = re.sub(r',\s*(?:please|por favor)$', '', text, flags=re.I)
+    text = re.sub(r"^(?:can I see|I'd like to see|I would like to see)\s+", 'show ', text, flags=re.I)
+    text = re.sub(r'^(show|list|find)\s+(?:me\s+)?(?:the\s+)?(?=(?:(?:failed|passed|pending|rejected|approved)\s+)?(?:QC\s+)?results?\b)',
+                  r'\1 ', text, flags=re.I)
     aliases = [
         (r'(?:give me|show me) (?:a |the )?(?:quick )?(?:summary|overview|rundown) (?:of|for) (project|sample) (.+)', lambda m: f'Summarize {m[1]} {m[2]}'),
         (r'how is (project|sample) (.+) doing', lambda m: f'Summarize {m[1]} {m[2]}'),

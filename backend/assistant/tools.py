@@ -586,14 +586,14 @@ def _hint_clarification(route_hint, user):
 
 
 def route_assistant_message(message, user, context=None, route_hint=None, page_context=None):
-    from .page_context import route_page_read
-    page_read = route_page_read(message, user, page_context)
-    if page_read is not None:
-        return _routed(page_read, "page_read")
     from .general_conversation import resume as resume_general
     general_followup = resume_general(message, context or {}, user)
     if general_followup:
         return _routed(general_followup, "general")
+    from .page_context import route_page_read
+    page_read = route_page_read(message, user, page_context, context=context)
+    if page_read is not None:
+        return _routed(page_read, "page_read")
     from .dialogue_memory import resume_topic
     restored, response = resume_topic(message, user, context or {})
     if response:

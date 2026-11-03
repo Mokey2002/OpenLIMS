@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.65.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.66.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,17 @@
 
 | Version | Assistant improvements | Details |
 | --- | --- | --- |
-| **v0.65.0** | Visible sample/project page context, explicit full-chat handoff, atomic natural corrections and calendar-month filters. | [v0.65 guide](docs/assistant-v065.md) |
+| **v0.66.0** | Polite result requests, short date follow-ups, record corrections, filtered page reads and retained context after clarification. | [v0.66 guide](docs/assistant-v066.md) |
+| **v0.65.0** | Visible sample/project page context, explicit full-chat handoff, atomic natural corrections and calendar-month filters. | [v0.65 guide](docs/assistant-v065.md) · [PR #183](https://github.com/Mokey2002/OpenLIMS/pull/183) |
 | **v0.64.0** | Comparison focus, actual QC denominators and mean differences, precise rounding and aggregate source scopes. | [v0.64 guide](docs/assistant-v064.md) · [PR #182](https://github.com/Mokey2002/OpenLIMS/pull/182) |
-| **v0.63.0** | Recorded result explanations, retained investigations, editable filters, descriptive statistics, optional local SOP embeddings and stronger evaluation. | [v0.63 guide](docs/assistant-v063.md) · [PR #181](https://github.com/Mokey2002/OpenLIMS/pull/181) |
+
+### v0.66.0 — More natural conversations and reliable corrections
+
+Ask **`Could you show me the failed results for project ALPHA from yesterday?`**, then **`What about last month?`**, **`Could you compare those with last week?`**, and **`Please explain the numeric differences`**. Courtesy wording is normalized before typed result routing. **`Just the failed ones, please`** retains the selected record and dates. **`No, I meant S-102`** / **`Sorry, I meant S-102`** correct the record within one signed result query while preserving filters and comparison focus; access is checked again.
+
+Page reads accept complete supported filters, for example **`Can I see the failed results for this sample from yesterday?`**. Saved page queries retain those filters and stable record references, then reload current data. Unsupported filters and mixed read/write requests ask for clarification without running a subset or losing the previous investigation. Both READMEs contain exactly the latest three release updates: **v0.66, v0.65 and v0.64**; older release sections have been removed. Also corrects stale development-version labels.
+
+General explanation follow-ups keep their topic on lab pages; an explicit `Explain this sample` still selects the page record. These interactions work in Rules mode. Free-form general conversation requires a configured OpenAI/Ollama provider; automated checks are not a live-model fluency score. See the [v0.66 guide](docs/assistant-v066.md) for the conversation walkthrough, validation and limits. No migration, dependency or model is added.
 
 ### v0.65.0 — Page-aware questions and natural corrections
 
@@ -49,162 +57,13 @@ The main comparison answer now shows actual failed/assessed QC rates, unassessed
 
 QC differences use unrounded proportions and are ranked across all groups before the table limit. Mean differences are calculated before display rounding. Missing assessments, absent units and one-sided cohorts remain explicitly unavailable. The answer discloses overlapping windows, differing durations, aggregate source scope and limits on interpretation. Saved focused comparisons refresh current accessible data. See the [v0.64 guide](docs/assistant-v064.md) for examples, validation and scope. No new migration, dependency or model is required; the version, generated footer and both READMEs are updated together.
 
-### v0.63.0 — Result explanations and stronger investigations
-
-Result drill-downs now display actual values, units, configured reference limits, QC checks, review decisions, recorded reasons and instrument provenance in the overview. **`Explain the first result` → `Back to comparison` → `Apply the same filters to project BETA`** keeps the investigation path and reloads current accessible records. Both chat views show removable filters and an editor for QC, date ranges, exact result keys, instrument codes and entered-by usernames; **`Show results for project ALPHA since Friday from instrument SEQ-1 by operator alice`** works without a model.
-
-Period comparisons add assessed-check failure rates, unassessed counts, percentage-point differences and finite numeric summaries separated by analysis/work type/key and compatible units. Optional offline Sentence Transformers embeddings retrieve and rerank overlapping SOP chunks after permission filtering; unavailable models fall back to existing lexical/concept search. No model weights or extra dependency are installed by default.
-
-Evaluation supports 30-turn cases, nested computed-fact expectations, forbidden overview claims, and **`--live-provider --force-provider --require-provider`** to exercise a configured model without silent rules-only passes. See the [v0.63 guide](docs/assistant-v063.md) for exact filter semantics, statistical limits, local-model setup and evaluation commands. Automated provider/embedding tests use simulated responses; live model accuracy has not been measured here. No new database migration is required. Version, generated footer and both READMEs are updated together.
-
-### v0.62.0 — Conversational result queries, live progress and saved chats
-
-Ask **`Show QC failures for project ALPHA` → `Only yesterday` → `Compare those with last week` → `Explain the largest difference and link the supporting results`**. Typed result queries preserve project/sample scope, QC filters, date windows and exact result-key exclusions. `Explain the second result` reopens that displayed identity with fresh access checks. A short backend-authored overview puts findings, unknowns and a next check above expandable evidence and citations.
-
-Both chat views support live progress, streamed general OpenAI/Ollama answers, Stop, explicit Retry, and personal named conversations with save/open/rename/delete. Saved laboratory turns retain query references and fetch current accessible records when reopened; historical laboratory answers and confirmation tokens are not replayed. SOP search adds local semantic concept matching and reranking to PostgreSQL full-text retrieval, including “too dilute” / “low concentration”, while preserving current/approved/access restrictions.
-
-Answer-quality checks now cover multi-turn conversations, exact result IDs, exact source URLs, computed counts, displayed findings and latency percentiles. Optional provider/model overrides benchmark configured routing providers; personal negative feedback linked to saved chats can be exported for manual regression-case review. See the [v0.62 guide](docs/assistant-v062.md) for examples, limits, cancellation behavior and validation commands.
-
-**Upgrade:** apply assistant migration `0009` before running the new API. `OPENLIMS_TIME_ZONE` controls relative date windows (default `UTC`). Schedule `cleanup_assistant_requests` to remove expired request state. The application version, generated footer and both READMEs are updated together.
-
-### v0.61.0 — Combined read-only answers, sources and SOP passages
-
-Combine two to four supported reads, for example **`Show evidence for sample S-100; show its history; show the SOP for concentration`**. OpenLIMS retains every step, its status, the recorded answer and any comparison table. **Sources and scope** in both chat views links to samples, results, flagged work, linked instrument imports, experiments and full accessible SOP sections. Missing targets and absent SOP matches produce an explicit partial answer. Each step checks access and reads current data independently; this is not a single database snapshot or a scientific causal analysis.
-
-Common complete English clauses work without a provider. OpenAI/Ollama can interpret other wording into the same typed read plan when enabled; all identifiers and the SOP topic must be explicit in the current request. Unsupported clauses, exclusions, changes and plans exceeding four steps require clarification before any part runs. Existing single-action confirmation flows remain separate. SOP retrieval ranks current approved accessible sections with PostgreSQL full-text search and shows matching passages rather than document prefixes. No external embedding service or database migration is required.
-
-See the [v0.61 guide](docs/assistant-v061.md) for supported operations, limits and the answer-quality command. The benchmark checks expected facts, forbidden claims, citations, operation coverage and latency on known records; it is not a live-model or scientific validation claim. Version, generated footer and both READMEs are updated together.
-
-### v0.60.0 — Grounded sample explanations
-
-After `Summarize sample S-100`, ask **“Explain that more simply”**, **“Why does this sample need attention?”**, **“What should I check first?”**, or **“What don't we know?”**. These read-only answers work without an AI provider, reload current accessible records, prioritize recorded QC/work flags, and distinguish evidence from missing information and unestablished scientific causes. English and Spanish explanations are supported; `In Spanish` / `In English` switches language while keeping the explanation focus. `same for S-102` repeats the chosen explanation for another accessible sample. See [sample explanations and follow-ups](#sample-explanations-and-follow-ups) for examples and limits. The application version, generated footer, and both READMEs are updated together.
-
-### v0.59.0 — Conversational AI and evidence-based answers
-
-- **More conversational AI ([PR #176](https://github.com/Mokey2002/OpenLIMS/pull/176)):** OpenAI and Ollama now receive a short, verified general-chat history, so follow-ups such as `Explain that more simply`, `Give me an example`, and `Explain that in Spanish` retain the earlier question and answer. Both providers receive the same guidance for direct answers, useful examples, and explicit uncertainty. See [general conversation and follow-ups](#general-conversation-and-follow-ups) for setup, limits, and reset commands.
-- **Sample priorities and QC evidence ([PR #173](https://github.com/Mokey2002/OpenLIMS/pull/173)):** `Summarize sample S-100` puts work and QC evidence before metadata. It shows up to three work items and three results needing attention, including older failures outside the five most recent results, with owners, deadlines, recorded QC reasons, review notes, and configured reference limits. Suggestions reload current records and recheck access. `Compare result R-42 with its reference range` now opens the selected result without requiring prior result context; replace the example IDs with accessible records.
-- **CI image-download recovery ([PR #174](https://github.com/Mokey2002/OpenLIMS/pull/174)):** Docker daemon `context deadline exceeded` errors now use the existing bounded retries and explicitly configured fallback registry. CI no longer stops on the first occurrence of this transient timeout. Permanent errors and exhausted fallback attempts still fail the job. See [Testing](#-testing) for the image-pull regression command.
-
-### v0.58.0 — Returning to earlier conversation topics
-
-The assistant retains up to five recent supported sample/project read tasks in the current chat. Try **“Show samples in project ALPHA” → “What happened to sample S-102?” → “Show system status” → “Go back to the previous project”**. It restores the earlier read task and fetches current records. **“Back to the previous topic”** restores the previous read task, and **“What were we talking about?”** lists recent accessible tasks with suggestions to reopen them.
-
-Correct the current read with **“No, I meant BETA”**, **“Actually BETA”**, or **“Sorry, I meant project BETA”**. **“Forget this conversation”** clears chat context. Memory stores only record IDs and allow-listed read-task names in a signed, user-bound token with a one-hour expiry refreshed during chats. Access is rechecked, renamed records use their current names, and revoked/inaccessible records are omitted. This covers the seven sample/project reads above; it does not replay writes or retain a full transcript. No database migration is required.
-
-### v0.57.0 — More natural requests and repeatable read tasks
-
-Try **“Could you please give me a quick overview of project ALPHA?”**, **“How is project ALPHA doing?”**, **“Which samples are in project ALPHA?”**, or **“Show me my priorities”**. Supported Spanish inputs include **“Dame un resumen del proyecto ALPHA”** and **“Muéstrame las muestras de ese proyecto”**; responses remain primarily English. These forms share the existing permission-filtered handlers and provider command adapters.
-
-For sample summaries/history/location/sequences and project summaries/sample lists/data-quality reviews, **“same for BETA”** or **“what about sample S-102?”** repeats the previous supported read task. **“Summarize a project” → “ALPHA”** asks for the missing identifier and accepts a short reply (quote names containing spaces). Records are resolved exactly and access is checked again; missing, ambiguous or inaccessible records require clarification. Task memory selects only fixed read operations and cannot replay writes. **“What should I do next?”** shows your work list when no sample is selected and sample guidance when one is selected. Extra filters are retained, not silently discarded. This expands supported wording and short follow-ups; it does not guarantee interpretation of every phrase.
-
-### v0.56.0 — Clarification replies and conversation continuity
-
-When the assistant offers sample, result, QC, failure, or inventory choices, reply with the displayed name, number, or **“the second one”**. Choices are rebuilt from server-owned commands; client-provided commands are never replayed. **“Thanks”**, **“okay”**, and **“got it”** keep the current task, so a comparison can still be graphed/exported afterward. **“Start over”** clears a pending choice; a new specific request switches topics.
-
-Project follow-ups include **“Summarize this project”** and, when only a project is selected, **“Summarize it”**. After a single-lot inventory result, ask **“Preview quarantine impact for that lot”**; multiple lots require clarification. QC reference-range comparisons accept one selected result and safely reject malformed or conflicting IDs. Unresolved record follow-ups offer relevant next questions while retaining their context. Permissions are checked when records are read; writes still require confirmation. These improvements cover supported conversation paths, not unlimited memory or guaranteed answers to every question.
-
-### v0.55.1 — Follow-ups across sample features
-
-After **“Summarize sample S-100”**, you can ask **“Show its history”**, **“Where is it stored?”**, **“Who last moved it?”**, **“What's next?”**, or **“Show its sequences”**. These read-only follow-ups use one stable sample ID, recheck access, and ask for clarification for missing/conflicting/multiple samples. History and sequence reads retain the selected sample; project data-quality reviews retain the project for sample-list follow-ups. Existing deterministic commands get a chance to handle requests before provider continuation fallback. Sequence lookup/summary now requires an exact, unambiguous accessible sample when one is specified; an unresolved ID cannot expand the search to all accessible sequences. General sequence searches still work. This is bounded follow-up support, not unrestricted conversational memory.
-
-### v0.55.0 — Project briefings and follow-ups
-
-Ask **“Summarize project ALPHA”**, then **“Show me samples in that project”** or **“Who is assigned work in that project?”**. These requests work without a model and through the shared OpenAI/Ollama record-search adapter. Briefings show project members, sample statuses, work by assignee, overdue work, unassigned work, failures and rejected/rerun QC. Follow-ups retain the project ID and recheck access every turn. Sample lists include accessible primary and linked samples (up to 100); assignments refer to work items in the briefing and samples in the sample list. Attention counts exclude completed/cancelled work and are not a full dependency assessment.
-
-### v0.54.0 — Personal work priorities and conversational follow-ups
-
-Ask **“What do I need to work on?”**, **“What's on my plate?”**, or **“Show my tasks”** without enabling an AI provider. The assistant shows up to 100 accessible unfinished work items assigned to the signed-in user, earliest deadlines first, with overdue/failure/QC-review flags and sample links. Unassigned and other people's work are excluded; completed/cancelled work is excluded. Future/undated work is included. This is a work list, not a complete dependency or QC task assessment. An empty list does not mean the whole lab has no pending work.
-
-For the nine direct read/draft features connected in v0.53.0, missing inputs now trigger one plain-language question at a time. For example, the handover helper asks whose work to cover, accepts `me`, then asks who is taking over. Exact short IDs/usernames work without another model call; quote multi-word titles. With OpenAI/Ollama enabled, follow-ups such as `same for BETA` receive the verified previous feature arguments. New topics start fresh, and `never mind` or `start over` clears this feature context.
-
-Conversation state is signed, tied to the requesting user and expires after 30 minutes. Every resumed feature rechecks current permissions. It stores request arguments, not result snapshots, and never authorizes changes. Write-command adapters do not receive this replay context; previews/confirmations remain unchanged. Both chat views use friendlier interpretation labels instead of raw JSON. Model follow-up tests use simulated responses, not a live-model quality benchmark. No migration is required.
-
-### v0.53.0 — Shared OpenAI/Ollama feature dispatch
-
-When rule matching cannot resolve a request, either configured provider can now return a validated feature request. OpenLIMS dispatches it with the authenticated user and existing conversation context. Enable the assistant LLM and LLM routing settings, then configure OpenAI credentials/model or the Ollama URL/model. Rules-only mode remains available.
-
-The shared catalog covers 32 entries: direct connections for sample history, related experiments, reagent planning, project updates, quarantine-impact previews, data-quality reviews, workflow drafts, shift handovers and run comparisons; command adapters for analytics, attention, barcodes, calculations, charts, comparisons, confirmed jobs, inventory, investigations, notifications, QC, reports, samples/registration, sequences, SOPs, work items, guided assignments/results, sample guidance, project workflow queries, monitoring, identity, record search and migration search.
-
-For example, a provider can interpret “Help Maria take over Peter's unfinished work” as a handover with source `peter` and recipient `maria`. Existing features recheck permissions, feature flags and record ambiguity. Missing required inputs ask for a complete request with those details; free-form clarification follow-ups are not automatically stored. Model-generated commands must still match the selected legacy parser. Unsupported conditions should produce clarification, not invented functionality; recognition quality depends on the configured model.
-
-Both chat surfaces show an expandable provider interpretation, including the selected feature and arguments. Results remain deterministic and can retain the OpenLIMS Rules label: the provider interprets, while OpenLIMS executes. Writes only produce the existing server-generated confirmation previews; workflow drafts require explicit saving in the designer. The model cannot confirm an action, execute SQL/code, or supply permissions. Global legacy migration search through this bridge is admin-only.
-
-Validation uses mocked provider responses to exercise both adapters and backend execution; it is not a live-model accuracy benchmark. A catalog coverage regression detects newly added assistant routers without an explicit dispatch connection. No database migration is required.
-
-### v0.52.1 — Deterministic investigation privacy regression
-
-Fixes an intermittent CI test failure: the digits of a private result (`9999`) could appear in an unrelated timestamp. The investigation test now reproduces that timestamp and checks actual result IDs/values, peer records and aggregate counts instead of scanning the entire response for digits. Application behavior and permissions are unchanged; no migration is required.
-
-### v0.52.0 — Workflow drafts, handovers and run comparisons
-
-The remaining collaboration helpers work in both assistant chat views:
-
-- **Workflow drafts:** an administrator can ask `Create a workflow with EXTRACT@1, QC@1, SEQUENCE@2, REVIEW@1`. Replace these examples with existing active procedure codes/versions (or exact names). Missing or ambiguous procedures stop the draft. Click **Review workflow in designer**, enter a code/name, review dependencies, QC gates, conditions and automation, then save explicitly. Drafts start inactive, use sequential dependencies and never infer QC gates or automation. The designer rechecks procedure versions; text edits in chat change only the copyable note. Up to 30 steps are supported.
-- **Shift handovers:** `Prepare peter's handover for maria` uses exact active usernames. The editable draft lists up to 100 unfinished assigned work items visible to the requester and both participants, with deadlines, overdue flags and failed/rejected/rerun QC review flags. Completed/cancelled work is excluded. Dependencies and unrecorded blockers need manual review. Nothing is sent or reassigned; recheck permissions before sharing a copied draft.
-- **Run comparisons:** `Compare runs <experiment-public-ID> and <experiment-public-ID>` also accepts unique exact titles. Both experiments must be accessible and the notebook feature enabled. Tables compare current workflow definitions, recorded parameters/status, linked lot identities and current structured result blocks (including QC if recorded there). Steps/blocks align by position, so review changed ordering. Missing data is unknown; links do not prove consumption and differences do not establish causes. Free text, historical revisions and external QC are excluded. Limits: 50 steps, 100 lots, 50 result blocks per run, 4,000 displayed characters per value; partial comparisons are marked.
-
-No database migration is required. Existing installation instructions below still apply.
-
-### v0.51.0 — AI impact previews and data-quality reviews
-
-Two new read-only reports work in both assistant chat views, with evidence tables, record links and prompts based on existing records:
-
-- **Lot quarantine impact:** ask `What would be affected if we quarantine lot LOT-12?` or `Preview quarantine impact for lot LOT-12`. Reviews accessible active reservations, recorded consumption and current notebook links. Distinguishes planned dependencies from past use, shows work/experiment status, and links the affected records. It does not quarantine anything or infer that past results failed. Notebook evidence requires the notebook feature and access to each linked target. Shows at most 25 rows per evidence category, with a partial-preview notice; rows are evidence, not unique specimen counts.
-- **Project data-quality review:** ask `Check project ALPHA for suspicious records` or `Review data quality for project ALPHA`. Flags sample IDs differing only by case/punctuation as possible duplicates, missing required custom metadata, invalid saved intake forms (including conditional fields), differing/missing result units within the same analysis/work type and result key, and unusual timestamps/deadlines. Each finding is a review prompt, not a scientific conclusion or automatic correction. Known compatible units and valid zero/false metadata are accepted.
-
-Quality reviews scan up to 250 primary-project samples, 1,000 related work items and 1,000 results, in ID order, displaying at most 100 findings. Partial scans and display limits are explicit; a clean scanned subset is not certification of the entire project. Rerunning checks current records and permissions. No database migration is required for this release.
-
-### v0.50.2 — Stable registration follow-ups and database-safe values
-
-Registration follow-ups retain the project ID, so renamed/reused codes cannot redirect a pending request and punctuation in project codes no longer breaks replies. Every follow-up rechecks role and project access. After upgrading, restart any unfinished registration from v0.50.1 or earlier; its code-only context is no longer safe to resume.
-
-Duplicate keys inside JSON objects, null characters, invalid Unicode and non-finite values are rejected before a proposal and checked again at confirmation. Oversized numeric fields return a validation message rather than an error. Normal Unicode text and quoted punctuation remain supported. No database migration is required.
-
-### v0.50.1 — Stricter registration and stock estimates
-
-Sample registration rejects negated/embedded requests, duplicate fields, malformed field lists and trailing instructions. Use JSON quotes for values containing commas or significant punctuation: `Register 2 plasma samples in project ALPHA with source="blood, frozen."`. Correct invalid fields with another `with ...` reply; project permissions are checked again. Confirmation validates frozen sample IDs and sample type before creating records. Overlong generated IDs are rejected at preview time.
-
-Reagent planning revalidates configured quantities/units even if imported without form validation. Invalid stock, incompatible reservation units or reservations exceeding stock produce an **unknown** estimate, never a claim that stock is sufficient. Released reservations remain excluded. No database migration is needed for this patch.
-
-### v0.50.0 — Five practical AI lab helpers
-
-- **Sample history:** `What happened to sample S-100?` summarizes the latest 50 audit/custody events, actors and current work/QC state, with a link to the sample. Missing events are not reconstructed.
-- **Related experiments:** `Find similar experiments about plasma extraction` searches titles, current notebook content and accessible template names. Every keyword must match; results are limited to 20 accessible experiments. This is keyword search, not a claim of scientific equivalence. The notebook feature must be enabled.
-- **Reagent planning:** `Plan reagents for 30 samples using procedure EXTRACT version 1` calculates configured quantities against active, unexpired stock after reservations, converting compatible units. Missing configuration or ambiguous versions ask for clarification. It does not reserve stock or include unconfigured controls, repeats or waste.
-- **Sample registration:** `Register 12 plasma samples in project ALPHA` asks for required custom fields, then shows a preview. Reply `with source=blood` (using your configured field names and all required values). Only explicit confirmation creates samples. Role, project access and required fields are checked again; the existing bulk limit applies.
-- **Project updates:** `Write a short progress update for project ALPHA` creates an editable draft in either chat view, with a source project link and a copy button. Counts describe current primary-project records. Nothing is sent; edits remain in the current chat view.
-
-**Upgrade/configuration:** run `docker compose -f deploy/docker-compose.yml run --rm api python manage.py migrate` after rebuilding the API. In Django admin (`/admin/`), open **Pipelines → Procedure definitions**, select the correct procedure/version, and add **Procedure reagent requirements** with inventory item, positive quantity per sample and compatible unit. Save before requesting a reagent plan. No reagent quantities are guessed or extracted from prose SOPs. Existing installation steps below still apply.
-
-### v0.49.5 — Reliable AI assignment previews
-
-Assignment confirmations now recheck the previewed deadline, work type, sample, and primary project as well as status and assignee. Changed items are skipped with a request for a fresh preview; older previews without these details must also be regenerated. Requests above the 100-item assignment limit ask you to narrow the selection instead of silently taking the first 100. Requests naming multiple assignees ask for one assignee per action.
-
-Work-operation requests with unsupported negation, date filters, or mixed actions ask for clarification instead of ignoring those conditions. Repeated project scopes and inactive assignees cannot produce assignment previews. Multi-project assignments retain their intended scope through confirmation. Work lists report the full matching count and explicitly disclose the 100-item display limit.
-
-Work lists and assignment previews honor an explicitly named project. Unknown, inaccessible, or ambiguous project selections ask for an exact code or name instead of broadening the request. Assignment workload counts include only records visible to the requester; confirmation rejects work that moved out of the selected project. Combined overdue/unassigned filters and switching back to sample-status graphs are also corrected.
-
-Work graphs accept polite requests and reversed metric order, and can show only overdue or only unassigned work. Removing the last selected record asks for a new selection instead of broadening the search. Explicit project selections in graph follow-ups replace the prior selection. Unassigned-work lists include overdue and undated items unless you explicitly request **today**. All reads continue to respect access permissions.
-
-Fixes the bottleneck follow-up **Graph overdue and unassigned work**: it retains the selected project, charts current work counts, and no longer mistakes unassigned work for an assignment command.
-
-Save named workflow questions to your account and reopen them from either chat view. Load a question into the builder, adjust it, then explicitly run it against current records. Only query settings are saved; permissions are checked again when running. Includes a 20-question limit and confirmed deletion. See the [saved questions guide](docs/assistant-project-workflows.md#personal-saved-questions).
-
-### v0.48.0 — Build and reuse AI workflow questions
-
-Use the **visual workflow query builder** in either chat view: choose a project, filters, AND/OR, assignee and scope, preview the question, then run it. Quick starts cover your overdue work, unassigned work due soon and QC problems. **Use the same filters in project CODE** transfers an existing query with fresh access checks and results from page one. English and Spanish supported. See the [builder and reuse guide](docs/assistant-project-workflows.md#build-and-reuse-workflow-questions).
-
-### v0.47.0 — Understand your AI query
-
-Use **Explain this query** to see filter meanings, AND/OR logic, scope, work ownership and current deadline windows. The bilingual explanation rechecks access, preserves pagination and performs no sample scan. Available in both chat views. See the [query explanation guide](docs/assistant-project-workflows.md#query-explanations).
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.54.0 — Personal work priorities and conversational follow-ups`.
+**Current development version:** `v0.66.0`.
 
 ## Deployment Access
 
@@ -1085,7 +944,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.65.0**.
+`frontend/src/version.js` file. The current application version is **v0.66.0**.
 
 Footer source:
 

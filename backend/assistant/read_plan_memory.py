@@ -65,7 +65,8 @@ def resume(message, context, user):
     result_steps = [step for step in plan["steps"] if step["operation"] in {
         "project_results", "sample_results", "project_results_compare", "sample_results_compare", "sample_failures"}]
     from .result_corrections import parse_correction
-    correction, question = parse_correction(original) if result_steps else (None, None)
+    target_kind = next(iter(result_steps[0]["arguments"])) if len(result_steps) == 1 else None
+    correction, question = parse_correction(original, target_kind=target_kind) if result_steps else (None, None)
     if question:
         return None, question
     if correction:
@@ -115,12 +116,13 @@ def resume(message, context, user):
     switch = re.fullmatch(r'(?:apply (?:the )?same filters to|same filters for|same for|what about) (sample|project) ("[^"\n]{1,128}"|[\w.:/-]{1,128})', original, re.I)
     clear = re.fullmatch(r"clear (date|qc|keys|excluded keys|instrument|operator|comparison) filter", text)
     from .result_filter_language import parse_filters
+    filter_text = re.sub(r"^(?:and|what about|how about)\s+", "", original, flags=re.I)
     try:
-        changes = parse_filters(original)
+        changes = parse_filters(filter_text)
     except ValueError:
         changes = None
     if not any([changes, compare, switch, clear]):
-        if re.match(r"(?:only|since|from|excluding|exclude|without|clear .* filter|apply .*filters)\b", text):
+        if re.match(r"(?:only|just|since|from|excluding|exclude|without|clear .* filter|apply .*filters)\b", text):
             return None, "I could not preserve every requested filter. No result query was run. Use an exact date range, weekday, QC status, result key, instrument code or operator username."
         return None, None
     if len(result_steps) != 1:

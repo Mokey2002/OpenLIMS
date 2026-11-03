@@ -216,6 +216,8 @@ def _read(step, user):
 
 
 def handle_read_plan(message, user, plan=None, context=None, *, restored_plan=False):
+    from .natural_requests import normalize_request
+    message = normalize_request(message)
     from .read_plan_memory import KEY, explicit_result_plan, recall, remember, resume
     from .chat_progress import emit
     resumed = False
