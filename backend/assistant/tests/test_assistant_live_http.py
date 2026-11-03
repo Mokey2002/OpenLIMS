@@ -106,3 +106,25 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
         denied = stream()
         self.assertTrue(denied["clarification"])
         self.assertNotIn("45.0", str(denied))
+
+    def test_natural_filtered_page_conversation_over_real_streaming_http(self):
+        sample = self.result.work_item.sample
+        context = {}
+        for message, expected_period in [
+            ("Hi, could you show me the failed results for this sample from today?", "today"),
+            ("What about last month?", "last_month"),
+            ("Thanks! Could you compare those with last week?", "last_month"),
+        ]:
+            with self.http("/api/v1/assistant/chat/stream/", {"message": message, "context": context,
+                      "page_context": {"kind": "sample", "record_id": str(sample.public_id)},
+                      "request_id": str(uuid.uuid4())}) as response:
+                body = response.read().decode()
+            self.assertNotIn("event: error", body)
+            reply = json.loads(body.split("event: complete\ndata: ", 1)[1].split("\n\n", 1)[0])
+            step = reply["read_plan_spec"]["steps"][0]
+            self.assertEqual(step["arguments"], {"sample": "LIVE-CHAT-1"})
+            self.assertEqual(step["filters"]["period"], expected_period)
+            self.assertEqual(step["filters"]["qc"], "failed")
+            context = reply["context"]
+        self.assertEqual(step["operation"], "sample_results_compare")
+        self.assertEqual(step["filters"]["compare_period"], "last_week")

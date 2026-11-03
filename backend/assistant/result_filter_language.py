@@ -19,7 +19,7 @@ def parse_filters(text):
         ("operator", rf"(?:only |by )?operator ({IDENTIFIER})"),
         ("exclude_keys", rf"(?:exclude|excluding|except|without) (?:the )?(?:result )?keys? ({KEY}(?:\s*,\s*{KEY})*)"),
         ("keys", rf"only (?:the )?(?:result )?keys? ({KEY}(?:\s*,\s*{KEY})*)"),
-        ("qc", r"only (failed|passed|pending|rejected|approved|all)(?: QC)?(?: (?:ones|results|checks))?"),
+        ("qc", r"(?:only|just) (?:the )?(failed|passed|pending|rejected|approved|all)(?: QC)?(?: (?:ones|results|checks))?"),
         ("period", rf"(?:only from |only |from |for )?({PERIOD})"),
     ]
     while remaining:

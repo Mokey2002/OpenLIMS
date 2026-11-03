@@ -127,7 +127,8 @@ class GeneralConversationTests(APITestCase):
 
     def test_natural_followups_and_recap_stay_in_general_chat(self):
         first = self.general()
-        for message in ["Why?", "Give me an example", "Tell me more", "Make it shorter", "Explain that in Spanish", "What were we talking about?"]:
+        for message in ["Why?", "Give me an example", "Tell me more", "Make it shorter", "Explain that in Spanish", "What were we talking about?",
+                        "Hi, could you please explain that more simply?", "Thanks! Can you tell me more?", "Can I see an example?"]:
             with self.subTest(message=message), override_settings(OPENLIMS_ASSISTANT_LLM_PROVIDER="ollama"), \
                     patch("assistant.views.classify_route_with_llm") as classifier, \
                     patch("assistant.llm.call_ollama", return_value="A useful follow-up explanation.") as model:
@@ -143,6 +144,29 @@ class GeneralConversationTests(APITestCase):
                 patch("assistant.views.classify_route_with_llm", return_value={"route": "general", "confidence": .9}) as classifier:
             self.chat("Could you walk through those stages with an analogy?", first["context"])
         self.assertEqual(classifier.call_args.kwargs["context"]["verified_general_history"], recall(first["context"], self.user))
+
+    @override_settings(OPENLIMS_ENFORCE_FEATURE_FLAGS=False)
+    def test_general_explanation_keeps_its_topic_on_a_lab_page_but_explicit_page_reads_still_work(self):
+        page = {"kind": "sample", "record_id": str(self.sample.public_id)}
+        for provider in ["openai", "ollama"]:
+            with self.subTest(provider=provider), override_settings(OPENLIMS_ASSISTANT_LLM_PROVIDER=provider):
+                first = self.general(provider)
+                with patch("assistant.views.classify_route_with_llm") as classifier, \
+                        patch(f"assistant.llm.call_{provider}", return_value="A simpler explanation of photosynthesis.") as model:
+                    reply = self.client.post("/api/assistant/chat/", {"message": "Could you explain this?",
+                        "context": first["context"], "page_context": page}, format="json")
+                self.assertEqual(reply.status_code, 200, reply.data)
+                self.assertEqual(reply.data["response_type"], "general")
+                self.assertNotIn("page_context_used", reply.data)
+                self.assertEqual(model.call_args.kwargs["history"], recall(first["context"], self.user))
+                classifier.assert_not_called()
+                with patch(f"assistant.llm.call_{provider}") as model:
+                    explicit = self.client.post("/api/assistant/chat/", {"message": "Explain this sample",
+                        "context": first["context"], "page_context": page}, format="json")
+                self.assertEqual(explicit.status_code, 200, explicit.data)
+                self.assertEqual(explicit.data["page_context_used"]["label"], "GENERAL-S-1")
+                self.assertNotIn(CONTEXT_KEY, explicit.data["context"])
+                model.assert_not_called()
 
     def test_courtesy_keeps_history_without_recording_filler(self):
         first = self.general()

@@ -65,8 +65,8 @@ def recall(context, user):
 
 def resume(message, context, user):
     """Recognize bounded explanation follow-ups, never commands or lab reads."""
-    text = str(message or "").strip().rstrip(".!? ")
-    text = re.sub(r"^(?:(?:can|could|would) you\s+)?(?:please\s+)?", "", text, flags=re.I)
+    from .natural_requests import normalize_request
+    text = normalize_request(message)
     if FOLLOW_UP.fullmatch(text) and recall(context, user):
         from .conversation import general_question_result
         return general_question_result()

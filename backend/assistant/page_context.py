@@ -36,6 +36,10 @@ TASKS = {
     "history": r"(?:show (?:the )?history (?:for|of)|what happened to) (?:this|this sample)",
     "samples": r"(?:show|list) (?:the )?samples in (?:this|this project)",
 }
+PAGE_RESULTS = re.compile(
+    r"(?:show|list|find)(?: me)? (?:the )?(?:(failed|passed|pending|rejected|approved) )?(?:QC )?results? "
+    r"(?:for|of|in) (?:this|the current|the open)(?: (?:sample|project|record))?(?=\s|$)(.*)", re.I,
+)
 
 
 def _resolve(page, user):
@@ -51,7 +55,7 @@ def _unavailable():
                     context={}, replace_context=True, clarification={"required": True})
 
 
-def _read(task, page, user):
+def _read(task, page, user, filters=None):
     record = _resolve(page, user)
     if record is None:
         return _unavailable()
@@ -61,7 +65,7 @@ def _read(task, page, user):
         from .read_plans import handle_read_plan
         from .read_plan_memory import KEY, remember
         plan = {"route": "read_plan", "confidence": 1.0, "steps": [
-            {"operation": f"{kind}_results", "arguments": {kind: label}}]}
+            {"operation": f"{kind}_results", "arguments": {kind: label}, "filters": filters or {}}]}
         result = handle_read_plan("read current page results", user, context={KEY: remember(plan, [], user)}, restored_plan=True)
     elif kind == "project":
         from .project_conversation import project_briefing, project_sample_list
@@ -82,6 +86,8 @@ def _read(task, page, user):
         return _unavailable()
     result["replace_context"] = True
     result["page_read_reference"] = {"kind": kind, "record_id": str(record.public_id), "task": task}
+    if filters:
+        result["page_read_reference"]["filters"] = filters
     result["page_context_used"] = {"kind": kind, "record_id": str(record.public_id), "label": label}
     if task != "results":
         result.setdefault("citations", []).append({"kind": kind, "id": record.pk, "label": label,
@@ -90,7 +96,7 @@ def _read(task, page, user):
     return result
 
 
-def route_page_read(message, user, page):
+def route_page_read(message, user, page, context=None):
     if not page:
         return None
     from .natural_requests import normalize_request
@@ -99,14 +105,32 @@ def route_page_read(message, user, page):
                or re.search(r"\bthis\b(?=\s*(?:$|[?.!;,]|and\b|because\b))", text, re.I))
     if deictic and re.search(r"(?:^|;\s*|\band\s+)(?:please\s+)?(?:approve|reject|assign|delete|archive|create|run|import|update|move|complete)\b", text, re.I):
         return response("For a change, name the exact record and request the action explicitly. Page context is only used for supported reads; no action preview was created.",
-                        context={}, replace_context=True, clarification={"required": True})
+                        context=context or {}, clarification={"required": True})
     task = next((task for task, pattern in TASKS.items() if re.fullmatch(pattern, text, re.I)), None)
+    filters = {}
+    result_request = PAGE_RESULTS.fullmatch(text)
+    if result_request:
+        from .result_filter_language import parse_filters
+        from .result_queries import validate_filters
+        qc, suffix = result_request.groups()
+        try:
+            filters = parse_filters(suffix)
+        except ValueError:
+            filters = None
+        if filters is not None and qc:
+            filters = None if "qc" in filters else {"qc": qc.lower(), **filters}
+        if filters is not None:
+            filters = validate_filters(filters, f"{page['kind']}_results")
+        if filters is None:
+            return response("I could not preserve every requested page filter. Use a supported date window, QC status, exact result key, instrument code or operator username. "
+                            "No query was run; the previous conversation is retained.", context=context or {}, clarification={"required": True})
+        task = "results"
     if task is None:
         if re.search(r"\b(?:this|the current|the open) (?:sample|project|record)\b", text, re.I):
             kind = page["kind"]
-            return response(f"Use one supported page read, such as 'Summarize this {kind}' or 'Show results for this {kind}'. "
-                            "Apply result filters in a following correction; no page query was run.",
-                            context={}, replace_context=True, clarification={"required": True})
+            return response(f"Try 'Summarize this {kind}' or 'Show results for this {kind} yesterday'. "
+                            "I could not interpret the complete request, so no page query was run.",
+                            context=context or {}, clarification={"required": True})
         return None
     kind = page["kind"]
     explicit_kind = re.search(r"\b(?:this|the current|the open) (sample|project)\b", text, re.I)
@@ -114,8 +138,8 @@ def route_page_read(message, user, page):
             or kind == "project" and task in {"evidence", "guidance", "history"}
             or kind == "sample" and task == "samples"):
         return response("The requested read does not match the open page. Open the relevant sample/project or give its exact identifier.",
-                        context={}, replace_context=True, clarification={"required": True})
-    return _read(task, page, user)
+                        context=context or {}, clarification={"required": True})
+    return _read(task, page, user, filters)
 
 
 def restore_page_read(reference, user):
@@ -127,4 +151,8 @@ def restore_page_read(reference, user):
     serializer = AssistantPageContextSerializer(data={key: reference.get(key) for key in ["kind", "record_id"]})
     if not serializer.is_valid():
         return _unavailable()
-    return _read(task, serializer.validated_data, user)
+    from .result_queries import validate_filters
+    filters = validate_filters(reference.get("filters", {}), f"{kind}_results")
+    if filters is None or filters and task != "results":
+        return _unavailable()
+    return _read(task, serializer.validated_data, user, filters)
