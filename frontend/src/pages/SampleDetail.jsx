@@ -14,6 +14,7 @@ import { apiGet, apiGetAll, apiPatch, apiPost, apiPostForm } from "../api";
 import { canWrite, readOnlyMessage } from "../authz";
 import SampleValuesEditor from "../components/SampleValuesEditor";
 import WorkflowStepForm from "../components/WorkflowStepForm";
+import { useAssistantPageRecord } from "../assistantPageContext";
 
 function statusVariant(status) {
   switch (status) {
@@ -352,6 +353,7 @@ export default function SampleDetail() {
   const { id } = useParams();
 
   const [sample, setSample] = useState(null);
+  useAssistantPageRecord("sample", sample);
   const [allowed, setAllowed] = useState([]);
   const [events, setEvents] = useState([]);
   const [workItems, setWorkItems] = useState([]);

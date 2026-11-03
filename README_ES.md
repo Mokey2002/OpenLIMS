@@ -2,13 +2,27 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.64.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.65.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
 o `development`, en ese orden. Una variable `VITE_OPENLIMS_VERSION` explícita
 prevalece sobre la versión normal. Al cambiar de versión, actualiza `VERSION`,
 regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
+
+## Tres versiones recientes
+
+| Versión | Mejoras del asistente | Detalles |
+| --- | --- | --- |
+| **v0.65.0** | Contexto visible de la página de muestra/proyecto, apertura explícita del chat completo, correcciones atómicas y filtros por mes calendario. | [Guía v0.65](docs/assistant-v065.md) |
+| **v0.64.0** | Enfoque de comparación, denominadores reales de QC, diferencias de medias, precisión y alcance de fuentes agregadas. | [Guía v0.64](docs/assistant-v064.md) · [PR #182](https://github.com/Mokey2002/OpenLIMS/pull/182) |
+| **v0.63.0** | Explicaciones de resultados, investigaciones conservadas, filtros editables, estadísticas, embeddings locales opcionales y evaluación ampliada. | [Guía v0.63](docs/assistant-v063.md) · [PR #181](https://github.com/Mokey2002/OpenLIMS/pull/181) |
+
+## v0.65.0 — Preguntas sobre la página y correcciones naturales
+
+En una página de muestra/proyecto cargada, el asistente muestra el contexto **Use this sample/project**, que se puede desactivar, y preguntas como **`Why is this blocked?`** y **`Show results for this sample`**. **Open assistant with this record** abre el chat completo con la selección explícita. El servidor comprueba permisos en cada lectura; las preguntas generales y los identificadores explícitos conservan su significado. El contexto de página no selecciona destinos para escrituras. Las lecturas guardadas consultan datos actuales y referencias estables incluso tras cambios de nombre.
+
+Corrige una investigación con **`No, use last month and exclude key control`** o **`Actually, use sample S-102 and this month`**. Los cambios compatibles se aplican juntos, conservando los demás filtros, el período comparado y el enfoque. “Controls” sin clave exacta, condiciones incompatibles y mutaciones requieren aclaración sin ejecutar una consulta parcial. `last month` / `previous month` y `this month` usan meses calendario de la zona horaria de la aplicación. Las frases directas documentadas son en inglés. Consulta la [guía v0.65](docs/assistant-v065.md) para ejemplos, API y límites. Sin migración, dependencia ni modelo nuevos; versión, pie y ambas guías están sincronizados.
 
 ## v0.64.0 — Comparaciones con diferencias explicadas
 

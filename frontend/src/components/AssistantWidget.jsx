@@ -20,6 +20,8 @@ import AssistantDraft from "./AssistantDraft";
 import AssistantEvidence from "./AssistantEvidence";
 import AssistantInterpretation from "./AssistantInterpretation";
 import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
+import { useAssistantPage } from "../assistantPageContext";
+import AssistantPageBar from "./AssistantPageBar";
 
 const DEMO_ASSISTANT_NOTE =
   "Public demo note: this hosted demo uses OpenLIMS Rules because server resources are limited. Self-hosted deployments can enable OpenAI or Ollama.";
@@ -31,6 +33,7 @@ function badgeVariantForProvider(provider) {
 }
 
 export default function AssistantWidget() {
+  const page = useAssistantPage()?.page;
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [conversationContext, setConversationContext] = useState({});
@@ -115,7 +118,8 @@ export default function AssistantWidget() {
     const nextHistory = [...previous, { role: "user", content: text, links: [], suggestions: [] }];
     setHistory(nextHistory);
     try {
-      const data = await transport.run({ message: text, context: conversationContext, conversation_id: conversationId },
+      const data = await transport.run({ message: text, context: conversationContext, conversation_id: conversationId,
+        ...(page && assistantStatus?.page_context ? { page_context: { kind: page.kind, record_id: page.record_id } } : {}) },
         { streaming: Boolean(assistantStatus?.chat_streaming) });
       setConversationContext(data.context || {});
       setHistory([...nextHistory, assistantMessage(data)]);
@@ -194,6 +198,7 @@ export default function AssistantWidget() {
           </div>
 
           <div className="assistant-widget-body">
+            {assistantStatus?.page_context && <AssistantPageBar onRun={sendMessage} disabled={loading} onOpen={() => setOpen(false)} />}
             <WorkflowQueryBuilder context={conversationContext} onRun={sendMessage} disabled={loading} />
             <AssistantConversations conversationId={conversationId} onSelect={selectConversation} history={history} disabled={loading} onNew={newConversation} />
             <AssistantRequestStatus transport={transport} loading={loading} onRetry={sendMessage} />

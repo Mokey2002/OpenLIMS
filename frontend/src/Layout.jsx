@@ -17,6 +17,7 @@ import { OPENLIMS_VERSION } from "./version";
 import { useLanguage } from "./i18n";
 import RouteContent from "./components/RouteContent";
 import AssistantWidget from "./components/AssistantWidget";
+import AssistantPageProvider from "./components/AssistantPageProvider";
 
 const FAVORITES_KEY = "openlims_favorites";
 
@@ -253,9 +254,11 @@ export default function Layout() {
         </Container>
       </Navbar>
 
-      <Container fluid className="px-4 pb-5"><RouteContent /></Container>
-      <footer className="app-footer-version">OpenLIMS {OPENLIMS_VERSION}</footer>
-      {assistantHelperEnabled && <AssistantWidget />}
+      <AssistantPageProvider>
+        <Container fluid className="px-4 pb-5"><RouteContent /></Container>
+        <footer className="app-footer-version">OpenLIMS {OPENLIMS_VERSION}</footer>
+        {assistantHelperEnabled && <AssistantWidget />}
+      </AssistantPageProvider>
     </>
   );
 }

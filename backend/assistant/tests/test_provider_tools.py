@@ -32,7 +32,10 @@ class ProviderContractTests(SimpleTestCase):
         # These are orchestration/clarification or wrappers whose individual
         # features are registered as direct tools above, not executable actions.
         internal = {"route_assistant_message", "route_assistant_clarification", "route_conversation_utility",
-                    "route_lab_helpers", "route_lab_reviews", "route_lab_collaboration"}
+                    "route_lab_helpers", "route_lab_reviews", "route_lab_collaboration", "route_page_read"}
+        # Page reads consume a validated client page reference and dispatch the
+        # existing permission-scoped read services; models cannot supply it.
+        self.assertIsNone(validate_tool_plan(plan("page_read", command="Summarize this sample")))
         self.assertEqual(routers - connected - internal, set())
 
     def test_both_providers_expose_every_registered_feature(self):

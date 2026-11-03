@@ -15,7 +15,7 @@ QUERY_OPERATIONS = {
     "project_results_compare": ("project",), "sample_results_compare": ("sample",),
     "result_detail": ("result_id",),
 }
-PERIODS = {"today", "yesterday", "this_week", "last_week", "last_7_days"}
+PERIODS = {"today", "yesterday", "this_week", "last_week", "last_7_days", "this_month", "last_month"}
 QC_FILTERS = {"failed", "passed", "pending", "rejected", "approved", "all"}
 FILTER_KEYS = {"period", "created_from", "created_before", "qc", "keys", "exclude_keys", "compare_period", "instrument", "operator"}
 ROW_LIMIT = 20
@@ -64,12 +64,16 @@ def validate_filters(filters, operation):
 def period_dates(period):
     today = timezone.localdate()
     monday = today - timedelta(days=today.weekday())
+    month_start = today.replace(day=1)
+    last_month_start = (month_start - timedelta(days=1)).replace(day=1)
     return {
         "today": (today, today + timedelta(days=1)),
         "yesterday": (today - timedelta(days=1), today),
         "this_week": (monday, today + timedelta(days=1)),
         "last_week": (monday - timedelta(days=7), monday),
         "last_7_days": (today - timedelta(days=6), today + timedelta(days=1)),
+        "this_month": (month_start, today + timedelta(days=1)),
+        "last_month": (last_month_start, month_start),
     }[period]
 
 

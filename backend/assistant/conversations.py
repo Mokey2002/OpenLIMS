@@ -62,6 +62,8 @@ def turn_descriptor(user, message, reply):
     entry = {"question": message, "kind": "unavailable", "interaction_id": reply.get("interaction_id")}
     if reply.get("response_type") == "general" and reply.get("llm_enabled"):
         entry.update(kind="general", answer=reply["answer"][:8000])
+    elif reply.get("page_read_reference"):
+        entry.update(kind="page_read", reference=copy.deepcopy(reply["page_read_reference"]))
     elif reply.get("read_plan_spec"):
         from .read_plan_memory import recall
         state = recall(reply.get("context", {}), user)
@@ -97,7 +99,14 @@ def restore(conversation, user):
     context, history, general = {}, [], []
     for turn in conversation.turns:
         history.append({"role": "user", "content": turn["question"]})
-        if turn["kind"] == "read":
+        if turn["kind"] == "page_read":
+            from .page_context import restore_page_read
+            reply = restore_page_read(turn["reference"], user)
+            context = reply.get("context", {})
+            general = []
+            reply["save_turn_token"] = turn_token(user, turn["question"], reply)
+            history.append({"role": "assistant", "reply": reply})
+        elif turn["kind"] == "read":
             plan = _restore_references(turn["plan"], user)
             if plan:
                 trail = [restored for candidate in turn.get("trail", []) if (restored := _restore_references(candidate, user))]

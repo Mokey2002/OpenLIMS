@@ -62,6 +62,32 @@ def resume(message, context, user):
     # Filtering or changing targets after a drill-down applies to the parent query.
     if all(step["operation"] == "result_detail" for step in plan["steps"]) and state.get("trail"):
         plan = copy.deepcopy(state["trail"][-1])
+    result_steps = [step for step in plan["steps"] if step["operation"] in {
+        "project_results", "sample_results", "project_results_compare", "sample_results_compare", "sample_failures"}]
+    from .result_corrections import parse_correction
+    correction, question = parse_correction(original) if result_steps else (None, None)
+    if question:
+        return None, question
+    if correction:
+        if len(result_steps) != 1:
+            return None, "Which result query should I correct? Start with one sample or project result list."
+        step = result_steps[0]
+        if step["operation"] == "sample_failures":
+            step.update(operation="sample_results", filters={"qc": "failed"})
+        filters = step.setdefault("filters", {})
+        changes = correction["filters"]
+        if "period" in changes or "created_from" in changes:
+            for key in ["period", "created_from", "created_before"]:
+                filters.pop(key, None)
+        if "exclude_keys" in changes:
+            changes["exclude_keys"] = list(dict.fromkeys(filters.get("exclude_keys", []) + changes["exclude_keys"]))
+        filters.update(changes)
+        if correction["target"]:
+            target = correction["target"]
+            step["arguments"] = {target["kind"]: target["identifier"]}
+            step["operation"] = target["kind"] + "_results" + ("_compare" if step["operation"].endswith("_compare") else "")
+        plan["steps"] = [step]
+        return plan, None
     focus_match = re.fullmatch(r"(?:explain|show|compare) (?:the )?(?:(?:qc )?failure[- ]rates?(?: differences?)?|(numeric|measurement|count) differences?)(?: and link (?:the )?(?:supporting )?results)?", text)
     overview = text in {"show comparison overview", "explain comparison overview"}
     largest = re.fullmatch(r"explain (?:the )?(?:largest|biggest) (?:difference|change)(?: and link (?:the )?(?:supporting )?results)?", text)
@@ -75,8 +101,6 @@ def resume(message, context, user):
         return plan, None
     if re.match(r"(?:explain|show|compare) (?:the )?(?:qc )?(?:failure[- ]rates?|numeric|measurements?|counts?|comparison overview)\b", text):
         return None, "Choose count differences, failure-rate differences, or numeric differences for the current comparison. Change a filter in a separate request; no result query was run."
-    result_steps = [step for step in plan["steps"] if step["operation"] in {
-        "project_results", "sample_results", "project_results_compare", "sample_results_compare", "sample_failures"}]
     detail = re.fullmatch(r"(?:explain|show|open) (?:the )?(first|second|third|fourth|\d+)(?:st|nd|rd|th)? result", text)
     if detail:
         index = {"first": 1, "second": 2, "third": 3, "fourth": 4}.get(detail[1])
@@ -86,7 +110,8 @@ def resume(message, context, user):
             return None, "Choose a result number from the displayed results."
         return {"route": "read_plan", "confidence": 1.0, "steps": [
             {"operation": "result_detail", "arguments": {"result_id": str(ids[index - 1])}}]}, None
-    compare = re.fullmatch(r"compare (?:those |these |them |those results |these results )?with (today|yesterday|last week|this week|last 7 days)", text)
+    from .result_filter_language import PERIOD
+    compare = re.fullmatch(r"compare (?:those |these |them |those results |these results )?with (" + PERIOD + r")", text)
     switch = re.fullmatch(r'(?:apply (?:the )?same filters to|same filters for|same for|what about) (sample|project) ("[^"\n]{1,128}"|[\w.:/-]{1,128})', original, re.I)
     clear = re.fullmatch(r"clear (date|qc|keys|excluded keys|instrument|operator|comparison) filter", text)
     from .result_filter_language import parse_filters
@@ -113,7 +138,7 @@ def resume(message, context, user):
         filters.update(changes)
     if compare:
         step["operation"] = step["operation"].removesuffix("_compare") + "_compare"
-        filters["compare_period"] = compare[1].replace(" ", "_")
+        filters["compare_period"] = compare[1].replace("previous month", "last month").replace(" ", "_")
     if switch:
         kind, target = switch.groups()
         kind = kind.lower()

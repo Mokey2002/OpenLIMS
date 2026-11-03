@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.64.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.65.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -28,6 +28,20 @@
 ---
 
 ## Overview
+
+### Recent three releases
+
+| Version | Assistant improvements | Details |
+| --- | --- | --- |
+| **v0.65.0** | Visible sample/project page context, explicit full-chat handoff, atomic natural corrections and calendar-month filters. | [v0.65 guide](docs/assistant-v065.md) |
+| **v0.64.0** | Comparison focus, actual QC denominators and mean differences, precise rounding and aggregate source scopes. | [v0.64 guide](docs/assistant-v064.md) · [PR #182](https://github.com/Mokey2002/OpenLIMS/pull/182) |
+| **v0.63.0** | Recorded result explanations, retained investigations, editable filters, descriptive statistics, optional local SOP embeddings and stronger evaluation. | [v0.63 guide](docs/assistant-v063.md) · [PR #181](https://github.com/Mokey2002/OpenLIMS/pull/181) |
+
+### v0.65.0 — Page-aware questions and natural corrections
+
+On a loaded sample/project page, the assistant shows a removable **Use this sample/project** context and quick questions such as **`Why is this blocked?`** and **`Show results for this sample`**. **Open assistant with this record** transfers the selected record to the full assistant. The server rechecks access, keeps explicit targets and general questions separate, and never uses page context to select a write target. Saved page reads fetch current data and follow stable record references after renames.
+
+Correct a signed result investigation with **`No, use last month and exclude key control`** or **`Actually, use sample S-102 and this month`**. Supported changes apply together while preserving unrelated filters, the comparison period and answer focus. Ambiguous “controls”, conflicting conditions and mutations require clarification without a partial query. `last month` / `previous month` and `this month` use calendar boundaries in the application timezone. See the [v0.65 guide](docs/assistant-v065.md) for supported phrases, API payloads and limits. No migration, dependency or model is added; version, footer and both READMEs are synchronized.
 
 ### v0.64.0 — Comparison answers with meaningful differences
 
@@ -1071,7 +1085,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.64.0**.
+`frontend/src/version.js` file. The current application version is **v0.65.0**.
 
 Footer source:
 
