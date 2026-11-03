@@ -36,12 +36,14 @@ from .serializers import NotificationSubscriptionSerializer, SOPDocumentSerializ
 from .suggestions import assistant_starter_suggestions
 from .response_contracts import normalize_assistant_response
 from .tools import route_assistant_message
+from .page_context import AssistantPageContextSerializer
 
 
 class AssistantChatSerializer(serializers.Serializer):
     message = serializers.CharField(max_length=2000)
     context = serializers.DictField(required=False, default=dict)
     conversation_id = serializers.UUIDField(required=False, allow_null=True)
+    page_context = AssistantPageContextSerializer(required=False, allow_null=True)
 
 
 class AssistantFeedbackSerializer(serializers.Serializer):
@@ -127,6 +129,7 @@ class AssistantChatView(APIView):
         serializer.is_valid(raise_exception=True)
         message = serializer.validated_data["message"]
         context = serializer.validated_data["context"]
+        page_kwargs = {"page_context": serializer.validated_data["page_context"]} if serializer.validated_data.get("page_context") else {}
         conversation_id = serializer.validated_data.get("conversation_id")
         if conversation_id:
             from django.shortcuts import get_object_or_404
@@ -141,6 +144,7 @@ class AssistantChatView(APIView):
                 message=message,
                 user=request.user,
                 context=context,
+                **page_kwargs,
             )
             unmatched = result.pop("route_unmatched", False)
             requires_read_plan = result.pop("requires_read_plan", False)
@@ -153,6 +157,7 @@ class AssistantChatView(APIView):
                         user=request.user,
                         context=context,
                         route_hint=route_hint,
+                        **page_kwargs,
                     )
                     hinted_result.pop("route_unmatched", None)
                     hinted_result.pop("requires_read_plan", None)
@@ -345,6 +350,7 @@ class AssistantStatusView(APIView):
                 **configured_model_info(),
                 "chat_streaming": True,
                 "saved_conversations": True,
+                "page_context": True,
                 "welcome_message": (
                     "Ask about samples, projects, QC, comparisons, inventory, "
                     "sequences, or system status. Suggestions below are based on "

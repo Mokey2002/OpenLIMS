@@ -13,7 +13,7 @@ import {
   Form,
   Spinner,
 } from "react-bootstrap";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import AssistantChart from "../components/AssistantChart";
 import ProjectWorkflowTable from "../components/ProjectWorkflowTable";
@@ -28,6 +28,8 @@ import AssistantEvidence from "../components/AssistantEvidence";
 import AssistantInterpretation from "../components/AssistantInterpretation";
 import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 import { OPENLIMS_VERSION } from "../version";
+import { pageSelection } from "../assistantPageContext";
+import AssistantPageBar from "../components/AssistantPageBar";
 
 function badgeVariantForProvider(provider) {
   if (provider === "openai") return "primary";
@@ -36,6 +38,12 @@ function badgeVariantForProvider(provider) {
 }
 
 export default function Assistant() {
+  const location = useLocation();
+  return <AssistantSession key={location.key} initialPage={location.state?.assistantPage} />;
+}
+
+function AssistantSession({ initialPage }) {
+  const [selectedPage, setSelectedPage] = useState(() => pageSelection(initialPage));
   const [message, setMessage] = useState("");
   const [conversationContext, setConversationContext] = useState({});
   const [conversationId, setConversationId] = useState(null);
@@ -113,7 +121,8 @@ export default function Assistant() {
     const nextHistory = [...previous, { role: "user", content: text, links: [], suggestions: [] }];
     setHistory(nextHistory);
     try {
-      const data = await transport.run({ message: text, context: conversationContext, conversation_id: conversationId },
+      const data = await transport.run({ message: text, context: conversationContext, conversation_id: conversationId,
+        ...(selectedPage && assistantStatus?.page_context ? { page_context: { kind: selectedPage.kind, record_id: selectedPage.record_id } } : {}) },
         { streaming: Boolean(assistantStatus?.chat_streaming) });
       setConversationContext(data.context || {});
       setHistory([...nextHistory, assistantMessage(data)]);
@@ -235,6 +244,7 @@ export default function Assistant() {
       <Card className="app-card mb-4">
         <Card.Body>
           <AssistantConversations conversationId={conversationId} onSelect={selectConversation} history={history} disabled={loading} onNew={newConversation} />
+          {assistantStatus?.page_context && <AssistantPageBar selection={selectedPage} onClear={() => setSelectedPage(null)} onRun={sendMessage} disabled={loading} />}
           <AssistantRequestStatus transport={transport} loading={loading} onRetry={sendMessage} />
           <AssistantContextBar
             context={conversationContext}

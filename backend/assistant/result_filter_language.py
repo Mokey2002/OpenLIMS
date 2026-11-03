@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 from django.utils import timezone
 
-PERIOD = r"today|yesterday|last week|this week|last 7 days"
+PERIOD = r"today|yesterday|last week|this week|last 7 days|last month|this month|previous month"
 IDENTIFIER = r"[\w.@+:/-]{1,128}"
 KEY = r"[\w.:/-]{1,64}"
 WEEKDAYS = "monday tuesday wednesday thursday friday saturday sunday".split()
@@ -38,7 +38,7 @@ def parse_filters(text):
             elif kind in {"keys", "exclude_keys"}:
                 values[kind] = [value.strip() for value in match[1].split(",")]
             elif kind in {"period", "qc"}:
-                values[kind] = match[1].lower().replace(" ", "_")
+                values[kind] = match[1].lower().replace("previous month", "last month").replace(" ", "_")
             else:
                 values[kind] = match[1]
             if filters.keys() & values.keys():

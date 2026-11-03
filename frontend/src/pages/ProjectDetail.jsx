@@ -16,6 +16,7 @@ import ProjectSequences from "../components/ProjectSequences";
 import { canWrite, isAdmin, readOnlyMessage } from "../authz";
 import "./ProjectDetail.css";
 import { filterProjectSamples } from "./projectWorkspace";
+import { useAssistantPageRecord } from "../assistantPageContext";
 
 function formatTimestamp(ts) {
   if (!ts) return "-";
@@ -156,6 +157,7 @@ function ProjectWorkspace({ id }) {
   const [sampleQuery, setSampleQuery] = useState("");
 
   const [project, setProject] = useState(null);
+  useAssistantPageRecord("project", project);
   const [samples, setSamples] = useState([]);
   const [sampleCustomFields, setSampleCustomFields] = useState({});
   const [workItems, setWorkItems] = useState([]);

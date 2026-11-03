@@ -90,3 +90,19 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
         with self.assertRaises(HTTPError) as error:
             self.http("/api/v1/assistant/chat/stream/", {"message": "Who am I?", "request_id": request_id})
         self.assertEqual(error.exception.code, 409)
+
+    def test_real_http_stream_accepts_page_reference_and_rechecks_revoked_access(self):
+        sample = self.result.work_item.sample
+        page = {"kind": "sample", "record_id": str(sample.public_id)}
+        def stream():
+            with self.http("/api/v1/assistant/chat/stream/", {"message": "Show results for this sample", "page_context": page,
+                      "request_id": str(uuid.uuid4())}) as response:
+                text = response.read().decode()
+            return json.loads(text.split("event: complete\ndata: ", 1)[1].split("\n\n", 1)[0])
+        reply = stream()
+        self.assertEqual(reply["page_context_used"]["record_id"], str(sample.public_id))
+        self.assertIn("45.0", reply["answer"])
+        self.project.members.remove(self.user)
+        denied = stream()
+        self.assertTrue(denied["clarification"])
+        self.assertNotIn("45.0", str(denied))

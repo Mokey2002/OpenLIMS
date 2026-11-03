@@ -239,7 +239,7 @@ Rules:
 - Read-plan operations and their REQUIRED string arguments:
 {read_catalog()}
 - Result reads (project_results, sample_results and their _compare variants) also accept an optional step-level
-  "filters" object: qc = failed|passed|pending|rejected|approved|all; period = today|yesterday|this_week|last_week|last_7_days;
+  "filters" object: qc = failed|passed|pending|rejected|approved|all; period = today|yesterday|this_week|last_week|last_7_days|this_month|last_month;
   alternatively created_from/created_before = YYYY-MM-DD (end exclusive); keys/exclude_keys = exact result-key string lists.
   instrument = exact instrument profile code (import provenance); operator = exact result entered-by username.
   Comparison variants require compare_period with one of those periods. These result operations may be a one-step plan.
