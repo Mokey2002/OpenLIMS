@@ -2,13 +2,21 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.62.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.63.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
 o `development`, en ese orden. Una variable `VITE_OPENLIMS_VERSION` explícita
 prevalece sobre la versión normal. Al cambiar de versión, actualiza `VERSION`,
 regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
+
+## v0.63.0 — Explicaciones de resultados e investigaciones mejoradas
+
+El resumen de un resultado muestra valor, unidad, límites de referencia, comprobación de QC, decisión de revisión, motivos registrados y procedencia del instrumento. **`Explain the first result` → `Back to comparison` → `Apply the same filters to project BETA`** conserva la investigación y consulta datos accesibles actuales. Ambos chats muestran filtros que se pueden quitar y un editor de QC, fechas, claves exactas, códigos de instrumento y usuario que introdujo el resultado. **`Show results for project ALPHA since Friday from instrument SEQ-1 by operator alice`** funciona sin modelo; las fechas se refieren a la creación del resultado, y el operador a `Result.entered_by`.
+
+Las comparaciones añaden tasas de fallos sobre comprobaciones evaluadas, recuentos sin evaluar, diferencias en puntos porcentuales y resúmenes numéricos finitos separados por análisis, tipo de trabajo, clave y unidades compatibles. Los embeddings opcionales de Sentence Transformers procesan fragmentos de SOP localmente después de comprobar permisos; si el modelo no está disponible, se usa la búsqueda existente. No se instalan pesos ni dependencias adicionales por defecto.
+
+La evaluación admite 30 turnos, comprobaciones de hechos calculados, afirmaciones prohibidas en el resumen y **`--live-provider --force-provider --require-provider`** para probar un modelo configurado sin aprobar casos que solo usaron reglas. Consulta la [guía v0.63](docs/assistant-v063.md) para ejemplos, límites estadísticos, configuración local y comandos. Las pruebas automáticas simulan proveedores y embeddings; no se ha medido aquí la precisión de un modelo real. No requiere una migración nueva. La versión, el pie generado y ambas guías están sincronizados.
 
 ## v0.62.0 — Consultas conversacionales, progreso y chats guardados
 

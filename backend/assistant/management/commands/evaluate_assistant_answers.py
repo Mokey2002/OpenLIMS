@@ -16,6 +16,8 @@ class Command(BaseCommand):
         parser.add_argument("--live-provider", action="store_true", help="Allow the configured provider to interpret unsupported compound wording; may incur provider charges.")
         parser.add_argument("--provider", choices=["openai", "ollama"], help="Provider to benchmark with --live-provider.")
         parser.add_argument("--model", help="Model to benchmark with --live-provider.")
+        parser.add_argument("--force-provider", action="store_true", help="Ask the real configured provider to produce a read plan on every turn, including recognized wording.")
+        parser.add_argument("--require-provider", action="store_true", help="Fail cases that did not use a provider or failed to return a valid route.")
 
     def handle(self, *args, **options):
         try:
@@ -44,4 +46,4 @@ class Command(BaseCommand):
             from assistant.llm import assistant_llm_routing_enabled
             if not assistant_llm_routing_enabled():
                 raise ValueError("Live evaluation requires an enabled, configured routing provider.")
-        return evaluate_cases(cases, user, live_provider=options["live_provider"])
+        return evaluate_cases(cases, user, live_provider=options["live_provider"], force_provider=options["force_provider"], require_provider=options["require_provider"])

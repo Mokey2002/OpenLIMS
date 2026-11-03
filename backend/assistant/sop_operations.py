@@ -2,6 +2,7 @@ import re
 from functools import reduce
 from operator import or_
 
+from django.conf import settings
 from django.db import connection
 from django.db.models import Case, IntegerField, Q, Value, When
 from core.permissions import is_admin
@@ -121,17 +122,39 @@ def _passage(content, terms, limit=600):
 
 def search_sops(message, user):
     from .sop_semantics import CONCEPT_VERSION
-    matches, terms = _ranked_documents(message, user)
+    from .sop_embeddings import rank_documents
+    embedded = rank_documents(_accessible_documents(user), message)
+    retrieval = {"semantic_mode": CONCEPT_VERSION, "candidate_limit": 24}
+    if embedded is None:
+        matches, terms = _ranked_documents(message, user)
+        if getattr(settings, "OPENLIMS_SOP_EMBEDDING_MODEL_PATH", ""):
+            retrieval["embedding_fallback"] = True
+    else:
+        matches, retrieval = embedded
+        terms = sorted(_terms(message))[:12]
+    search_limits = []
+    if retrieval.get("candidate_limit_reached"):
+        search_limits.append(f"Semantic search checked only the {retrieval['candidate_limit']} most recently updated accessible sections. Older sections may also be relevant.")
+    if retrieval.get("section_chunk_limit_reached"):
+        search_limits.append("One or more inspected sections exceeded the chunk limit; search did not inspect their entire text. Open the full sections.")
     if not matches:
         return {
-            "answer": "The approved OpenLIMS documentation available to you does not contain an answer to that question.",
+            "answer": (("No matching passage was found in the inspected current approved documentation available to you. Try different wording or review the SOP library. "
+                        + " ".join(search_limits)) if embedded is not None else
+                       "The approved OpenLIMS documentation available to you does not contain an answer to that question."),
             "links": [], "citations": [], "skip_llm": True, "unavailable": True,
-            "sop_search": {"method": "full_text" if connection.vendor == "postgresql" else "keyword", "matches": 0},
+            "sop_search": {"method": "local_embeddings" if embedded is not None else "full_text" if connection.vendor == "postgresql" else "keyword", "matches": 0, **retrieval},
         }
     lines = ["Approved documentation answer:", "Relevant passages from current approved sections (review the full section before applying instructions):", ""]
     citations, links = [], []
     for document in matches:
-        excerpt, truncated = _passage(getattr(document, "matched_passage", document.content), terms)
+        if hasattr(document, "semantic_passage"):
+            # A paraphrase may share no words with its best semantic chunk. Do
+            # not recenter/crop that chunk using the unmatched query vocabulary.
+            excerpt = document.semantic_passage[:2000]
+            truncated = len(excerpt) < len(document.semantic_passage)
+        else:
+            excerpt, truncated = _passage(getattr(document, "matched_passage", document.content), terms)
         truncated = truncated or len(excerpt) < len(" ".join(document.content.split()))
         citation = f"{document.document_code} version {document.version}, section {document.section}"
         lines.extend([f"According to {citation}:", excerpt, ""])
@@ -143,6 +166,8 @@ def search_sops(message, user):
             "excerpt": excerpt, "excerpt_truncated": truncated,
             "scope": "Search match from a current approved section, not proof that the procedure applies to this sample.",
             "semantic_matches": getattr(document, "semantic_matches", []),
+            "matched_chunk": getattr(document, "semantic_chunk", None),
+            "section_chunk_limit_reached": getattr(document, "semantic_content_truncated", False),
         })
         links.append({"label": citation, "url": url})
         Event.objects.create(
@@ -151,10 +176,10 @@ def search_sops(message, user):
                      "section": document.section, "question": str(message)[:500]},
         )
     lines.append("This answer is informational only; no OpenLIMS action was executed.")
+    lines.extend(search_limits)
     return {
         "answer": "\n".join(lines), "links": links, "citations": citations,
         "suggestions": ["Prepare a review assignment"] if "review" in message.lower() or "qc" in message.lower() else [],
         "skip_llm": True,
-        "sop_search": {"method": "full_text" if connection.vendor == "postgresql" else "keyword", "matches": len(matches),
-                       "semantic_mode": CONCEPT_VERSION, "candidate_limit": 24},
+        "sop_search": {"method": "local_embeddings" if embedded is not None else "full_text" if connection.vendor == "postgresql" else "keyword", "matches": len(matches), **retrieval},
     }

@@ -28,6 +28,36 @@ class ConversationInfoSerializer(ConversationNameSerializer):
     updated_at = serializers.DateTimeField(required=False)
 
 
+def _save_references(plan, user):
+    from .sample_operations import _sample_queryset
+    from .lab_reviews import _projects
+    plan = copy.deepcopy(plan)
+    for step in plan["steps"]:
+        for kind, records, field in [("sample", _sample_queryset(user), "sample_id"), ("project", _projects(user), "code")]:
+            if kind in step["arguments"]:
+                matches = list(records.filter(**{field + "__iexact": step["arguments"][kind]})[:2])
+                if len(matches) == 1:
+                    step["saved_reference"] = {"kind": kind, "id": matches[0].pk}
+    return plan
+
+
+def _restore_references(plan, user):
+    from .sample_operations import _sample_queryset
+    from .lab_reviews import _projects
+    plan = copy.deepcopy(plan)
+    for step in plan["steps"]:
+        reference = step.pop("saved_reference", None)
+        if reference and reference["kind"] in {"sample", "project"}:
+            kind = reference["kind"]
+            record = (_sample_queryset(user) if kind == "sample" else _projects(user)).filter(pk=reference["id"]).first()
+            if record is None:
+                return None
+            step["arguments"][kind] = record.sample_id if kind == "sample" else record.code
+        elif reference and reference["kind"] == "experiments":
+            step["arguments"] = {"left": reference["left"], "right": reference["right"]}
+    return plan
+
+
 def turn_descriptor(user, message, reply):
     entry = {"question": message, "kind": "unavailable", "interaction_id": reply.get("interaction_id")}
     if reply.get("response_type") == "general" and reply.get("llm_enabled"):
@@ -40,6 +70,7 @@ def turn_descriptor(user, message, reply):
             # Store stable server-resolved target identities; never stale values.
             for step, result in zip(entry["plan"]["steps"], reply["read_plan"]["steps"]):
                 step["saved_reference"] = result.get("reference")
+            entry["trail"] = [_save_references(plan, user) for plan in state.get("trail", [])]
     return entry
 
 
@@ -67,23 +98,10 @@ def restore(conversation, user):
     for turn in conversation.turns:
         history.append({"role": "user", "content": turn["question"]})
         if turn["kind"] == "read":
-            from .sample_operations import _sample_queryset
-            from .lab_reviews import _projects
-            plan = copy.deepcopy(turn["plan"])
-            accessible = True
-            for step in plan["steps"]:
-                reference = step.pop("saved_reference", None)
-                if reference and reference["kind"] in {"sample", "project"}:
-                    kind = reference["kind"]
-                    record = (_sample_queryset(user) if kind == "sample" else _projects(user)).filter(pk=reference["id"]).first()
-                    if record is None:
-                        accessible = False
-                        break
-                    step["arguments"][kind] = record.sample_id if kind == "sample" else record.code
-                elif reference and reference["kind"] == "experiments":
-                    step["arguments"] = {"left": reference["left"], "right": reference["right"]}
-            if accessible:
-                token = remember(plan, [], user)
+            plan = _restore_references(turn["plan"], user)
+            if plan:
+                trail = [restored for candidate in turn.get("trail", []) if (restored := _restore_references(candidate, user))]
+                token = remember(plan, [], user, previous={"plan": plan, "trail": trail})
                 # Signed server references permit replay without relying on old labels.
                 reply = handle_read_plan("refresh saved read", user, context={KEY: token}, restored_plan=True)
             else:

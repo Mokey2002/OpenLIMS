@@ -52,6 +52,12 @@ export function describeAssistantContext(context) {
     return null;
   }
 
+  if (context.result_query_context?.target) {
+    const query = context.result_query_context;
+    return { kind: "result_query", label: `${titleCase(query.kind)} results · ${query.target}`,
+      detail: "Filters apply to recorded results. Dates use result creation time; operator means the person who entered the result." };
+  }
+
   const projectWorkflows = context.project_workflows;
   if (projectWorkflows?.project_code) {
     return {

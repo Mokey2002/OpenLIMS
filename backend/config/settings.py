@@ -241,6 +241,11 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:1143
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
 OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "60"))
 
+# Optional CPU-only, offline SOP retrieval. Install requirements-sop-embeddings.txt
+# and mount a pre-downloaded Sentence Transformers model at this absolute path.
+OPENLIMS_SOP_EMBEDDING_MODEL_PATH = os.getenv("OPENLIMS_SOP_EMBEDDING_MODEL_PATH", "")
+OPENLIMS_SOP_EMBEDDING_MIN_SCORE = env.float("OPENLIMS_SOP_EMBEDDING_MIN_SCORE", default=0.35)
+
 # Account invitations. Configure SMTP before enabling invitation delivery.
 OPENLIMS_EMAIL_ENABLED = env.bool("OPENLIMS_EMAIL_ENABLED", default=False)
 OPENLIMS_PUBLIC_URL = os.getenv("OPENLIMS_PUBLIC_URL", "")

@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from results.models import Result
 from .lab_helpers import response
-from .sample_briefing import _result_evidence, _result_line
+from .sample_briefing import _result_evidence, _result_line, _reference_evidence
 from .sample_operations import _sample_queryset
 
 QUERY_OPERATIONS = {
@@ -17,7 +17,7 @@ QUERY_OPERATIONS = {
 }
 PERIODS = {"today", "yesterday", "this_week", "last_week", "last_7_days"}
 QC_FILTERS = {"failed", "passed", "pending", "rejected", "approved", "all"}
-FILTER_KEYS = {"period", "created_from", "created_before", "qc", "keys", "exclude_keys", "compare_period"}
+FILTER_KEYS = {"period", "created_from", "created_before", "qc", "keys", "exclude_keys", "compare_period", "instrument", "operator"}
 ROW_LIMIT = 20
 
 
@@ -33,6 +33,9 @@ def validate_filters(filters, operation):
                 return None
         elif key == "qc":
             if not isinstance(value, str) or value not in QC_FILTERS:
+                return None
+        elif key in {"instrument", "operator"}:
+            if not isinstance(value, str) or not re.fullmatch(r"[\w.@+:/-]{1,128}", value):
                 return None
         elif key in {"keys", "exclude_keys"}:
             if (not isinstance(value, list) or not 1 <= len(value) <= 10
@@ -96,6 +99,10 @@ def apply_filters(queryset, filters):
         queryset = queryset.filter(key__in=filters["keys"])
     if filters.get("exclude_keys"):
         queryset = queryset.exclude(key__in=filters["exclude_keys"])
+    if filters.get("instrument"):
+        queryset = queryset.filter(work_item__source_import_job__instrument__code=filters["instrument"])
+    if filters.get("operator"):
+        queryset = queryset.filter(entered_by__username=filters["operator"])
     return queryset, filters
 
 
@@ -103,6 +110,29 @@ def _window_label(filters):
     start = filters.get("created_from", "any start date")
     end = filters.get("created_before", "no end date")
     return f"{start} to {end} (end exclusive; {timezone.get_current_timezone_name()})"
+
+
+def explain_result(row):
+    """Explain recorded evidence, keeping automated checks and human review separate."""
+    lines = [_result_line(row).removeprefix("- "), _reference_evidence(row)]
+    missing = []
+    for key, label in [("qc_failure_reason", "QC reason"), ("qc_review_note", "review note")]:
+        if row[key]:
+            excerpt = " (excerpt)" if row[key + "_truncated"] else ""
+            lines.append(f"Recorded {label}{excerpt}: {row[key]}")
+        elif key == "qc_failure_reason" and row["qc_passed"] is False:
+            missing.append("No QC failure reason is recorded.")
+        elif key == "qc_review_note" and row["qc_status"] == Result.QC_REJECTED:
+            missing.append("No QC review note is recorded.")
+    source = row.get("source_import")
+    lines.append(f"Provenance: instrument {source['instrument']}, run {source['run_id']}, import #{source['id']}."
+                 if source else "No instrument import is linked to this work item.")
+    if row["qc_passed"] is None:
+        missing.append("The QC check has not been evaluated.")
+    if row["reference_comparison"] in {"invalid_limits", "not_numeric", "not_configured"}:
+        missing.append("A valid numeric reference comparison is unavailable.")
+    lines.append("A recorded QC reason is not independent proof of a scientific cause. QC checks and review decisions are separate; no release approval is inferred.")
+    return "\n".join(lines), missing
 
 
 def read_results(step, user):
@@ -128,6 +158,7 @@ def read_results(step, user):
         target = matches[0]
         queryset = Result.objects.filter(work_item__sample=target)
         context, target_label = {"sample_id": target.pk}, target.sample_id
+    base_queryset = queryset
     queryset, resolved = apply_filters(queryset, filters)
     total = queryset.count()
     if operation == "result_detail" and not total:
@@ -147,14 +178,15 @@ def read_results(step, user):
     facts = {"target": target_label, "total": total, "shown": len(rows), **totals, "filters": resolved,
              "window": _window_label(resolved), "rows": rows}
     facts["filter_summary"] = f"QC: {resolved.get('qc', 'all')}; keys: {', '.join(resolved.get('keys', [])) or 'all'}; excluded keys: {', '.join(resolved.get('exclude_keys', [])) or 'none'}"
+    facts["filter_summary"] += f"; instrument: {resolved.get('instrument', 'all')}; result entered by: {resolved.get('operator', 'all')}"
     answer += "\n" + facts["filter_summary"] + "."
     table = None
+    statistics_tables = []
     if operation.endswith("_compare"):
         other_filters = {k: v for k, v in resolved.items() if k not in {"created_from", "created_before", "compare_period"}}
         other_filters["period"] = resolved["compare_period"]
         # Reconstruct the same permission-scoped base before changing only time.
-        base = Result.objects.filter(work_item__sample__in=project_samples(target, user)) if operation.startswith("project_") else Result.objects.filter(work_item__sample=target)
-        other, other_filters = apply_filters(base, other_filters)
+        other, other_filters = apply_filters(base_queryset, other_filters)
         left = {row["key"]: row["count"] for row in queryset.values("key").annotate(count=Count("pk"))}
         right = {row["key"]: row["count"] for row in other.values("key").annotate(count=Count("pk"))}
         differences = sorted([{"key": key, "selected": left.get(key, 0), "comparison": right.get(key, 0),
@@ -179,6 +211,15 @@ def read_results(step, user):
         if differences:
             largest = differences[0]
             answer += f"\nLargest absolute count difference: {largest['key']}: {largest['selected']} versus {largest['comparison']} ({largest['difference']:+d}). This does not establish a cause."
+        from .result_statistics import compare_statistics
+        facts["statistics"], statistics_tables = compare_statistics(base_queryset, resolved, other_filters)
+        answer += "\nQC failure rates below use all assessed checks with the same non-QC filters. Numeric summaries use the selected QC filter; incompatible units and analyses stay separate."
+    if operation == "result_detail":
+        detail, missing = explain_result(rows[0])
+        answer = detail + ("\nWhat remains unknown: " + " ".join(missing) if missing else "")
+    else:
+        context["result_query_context"] = {"kind": "project" if operation.startswith("project_") else "sample",
+                                            "target": target_label, "filters": filters}
     answer += "\nQC checks and review decisions are separate. This does not establish scientific causality or release approval."
-    return response(answer, context=context, result_query=facts, citations=citations, comparison=table,
+    return response(answer, context=context, result_query=facts, citations=citations, comparison=table, statistics_tables=statistics_tables,
                     selected_result_ids=[row["id"] for row in rows])

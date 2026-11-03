@@ -1,11 +1,13 @@
 import { Button } from "react-bootstrap";
 import { describeAssistantContext } from "../assistantContext";
+import AssistantResultFilters from "./AssistantResultFilters";
 
 export default function AssistantContextBar({
   context,
   onClear,
   compact = false,
   disabled = false,
+  onRun,
 }) {
   const summary = describeAssistantContext(context);
   if (!summary) return null;
@@ -34,6 +36,7 @@ export default function AssistantContextBar({
       >
         Clear
       </Button>
+      {onRun && <AssistantResultFilters context={context} onRun={onRun} disabled={disabled} />}
     </div>
   );
 }

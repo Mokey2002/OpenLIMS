@@ -1,0 +1,2 @@
+# Optional offline SOP retrieval; install in the API image only when enabled.
+sentence-transformers>=5.1,<6.0

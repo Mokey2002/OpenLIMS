@@ -13,6 +13,7 @@ export default function AssistantEvidence({ citations = [], readPlan = null }) {
         <strong>{index + 1}. {step.operation.replaceAll("_", " ")} — {step.status}</strong>
         <pre className="text-wrap">{step.answer}</pre>
         {step.comparison && <ComparisonTable comparison={step.comparison} />}
+        {step.statistics_tables?.map((table, tableIndex) => <ComparisonTable key={tableIndex} comparison={table} />)}
       </div>)}
     </div>}
     <ul className="mt-2">
