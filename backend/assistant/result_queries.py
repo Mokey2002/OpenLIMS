@@ -213,13 +213,25 @@ def read_results(step, user):
             answer += f"\nLargest absolute count difference: {largest['key']}: {largest['selected']} versus {largest['comparison']} ({largest['difference']:+d}). This does not establish a cause."
         from .result_statistics import compare_statistics
         facts["statistics"], statistics_tables = compare_statistics(base_queryset, resolved, other_filters)
-        answer += "\nQC failure rates below use all assessed checks with the same non-QC filters. Numeric summaries use the selected QC filter; incompatible units and analyses stay separate."
+        from .comparison_explanations import explain_comparison, window_scope
+        facts["comparison_scope"] = window_scope(resolved, other_filters)
+        facts["comparison_explanation"] = explain_comparison(facts, step.get("focus", "overview"))
+        explanation = facts["comparison_explanation"]
+        answer += "\n\n" + explanation["text"] + "\nWhat remains unknown: " + " ".join(explanation["unknowns"])
+        kind = "project" if operation.startswith("project_") else "sample"
+        citations.append({"kind": kind, "id": target.pk, "label": f"{target_label} · comparison aggregate scope",
+                          "url": f"/{'projects' if kind == 'project' else 'samples'}/{target.pk}",
+                          "scope": "Aggregates use all currently accessible matching records, not just the displayed result examples. "
+                                   f"Selected: {_window_label(resolved)}. Comparison: {_window_label(other_filters)}. "
+                                   f"{facts['filter_summary']}. QC rates remove only the QC status filter; numeric summaries retain it."})
     if operation == "result_detail":
         detail, missing = explain_result(rows[0])
         answer = detail + ("\nWhat remains unknown: " + " ".join(missing) if missing else "")
     else:
         context["result_query_context"] = {"kind": "project" if operation.startswith("project_") else "sample",
                                             "target": target_label, "filters": filters}
+        if operation.endswith("_compare"):
+            context["result_query_context"]["focus"] = step.get("focus", "overview")
     answer += "\nQC checks and review decisions are separate. This does not establish scientific causality or release approval."
     return response(answer, context=context, result_query=facts, citations=citations, comparison=table, statistics_tables=statistics_tables,
                     selected_result_ids=[row["id"] for row in rows])

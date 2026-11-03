@@ -15,6 +15,13 @@ def build_overview(steps, citations):
             text, missing = explain_result(facts["rows"][0])
             unknowns.extend(missing)
             next_checks.append("Review the cited result and its recorded provenance before deciding on follow-up work.")
+        elif facts and facts.get("comparison_explanation"):
+            explanation = facts["comparison_explanation"]
+            text = explanation["text"]
+            unknowns.extend(explanation["unknowns"])
+            next_checks.extend(explanation["next_checks"])
+            if facts["shown"] < facts["total"]:
+                unknowns.append(f"Only {facts['shown']} of {facts['total']} selected results are displayed; aggregates include all matching records.")
         elif facts:
             text = (f"{facts['target']}: {facts['total']} matching results; {facts['failed']} failed checks and "
                     f"{facts['rejected']} rejected reviews. Showing {facts['shown']}. Window: {facts['window']}. {facts['filter_summary']}.")
