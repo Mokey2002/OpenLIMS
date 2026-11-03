@@ -326,6 +326,9 @@ def _queue_report(action):
 
 
 def _create_samples(action):
+    if (action.payload or {}).get("registration_task") is True:
+        from .registration_tasks import execute_registration_task
+        return AssistantAction.STATUS_COMPLETED, execute_registration_task(action)
     return AssistantAction.STATUS_COMPLETED, execute_create_samples(action)
 
 

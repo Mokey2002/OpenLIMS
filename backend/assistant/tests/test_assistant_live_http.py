@@ -128,3 +128,24 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
             context = reply["context"]
         self.assertEqual(step["operation"], "sample_results_compare")
         self.assertEqual(step["filters"]["compare_period"], "last_week")
+
+    @override_settings(OPENLIMS_ENFORCE_FEATURE_FLAGS=False, OPENLIMS_ASSISTANT_LLM_ENABLED=False)
+    def test_real_streamed_registration_previews_then_confirms_and_retries_without_duplicates(self):
+        original = Sample.objects.count()
+        with self.http("/api/v1/assistant/chat/stream/", {"message": "Register 2 DNA samples in project LIVE-CHAT and assign them to me",
+                  "request_id": str(uuid.uuid4())}) as response:
+            body = response.read().decode()
+        reply = json.loads(body.split("event: complete\ndata: ", 1)[1].split("\n\n", 1)[0])
+        self.assertEqual(Sample.objects.count(), original)
+        action = reply["pending_action"]
+        self.assertEqual(action["preview"]["proposed_values"]["assigned_to"], self.user.username)
+        path = f"/api/v1/assistant/actions/{action['confirmation_token']}/confirm/"
+        with self.http(path, {"confirm": True}) as response:
+            confirmed = json.load(response)
+        self.assertEqual(confirmed["status"], "COMPLETED")
+        ids = confirmed["result"]["context"]["sample_ids"]
+        self.assertEqual(Sample.objects.filter(pk__in=ids, assigned_to=self.user, project=self.project).count(), 2)
+        with self.http(path, {"confirm": True}) as response:
+            retried = json.load(response)
+        self.assertEqual(retried["result"]["context"]["sample_ids"], ids)
+        self.assertEqual(Sample.objects.count(), original + 2)

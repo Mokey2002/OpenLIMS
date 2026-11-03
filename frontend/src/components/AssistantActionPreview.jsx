@@ -137,6 +137,7 @@ export default function AssistantActionPreview({ action }) {
           variant={result.failed_count ? "warning" : "success"}
           className="py-2 mb-0"
         >
+          {result.message && <p className="mb-2">{result.message}</p>}
           <div className="d-flex gap-2 flex-wrap mb-1">
             <Badge bg="success">Succeeded: {result.succeeded_count || 0}</Badge>
             <Badge bg={result.failed_count ? "danger" : "secondary"}>

@@ -74,6 +74,10 @@ def sanitize_context(context):
     plan = context.get(KEY)
     if isinstance(plan, str) and len(plan) <= MAX_TOKEN:
         sanitized[KEY] = plan
+    from .registration_tasks import KEY as TASK_KEY, MAX_TOKEN as MAX_TASK_TOKEN
+    task = context.get(TASK_KEY)
+    if isinstance(task, str) and len(task) <= MAX_TASK_TOKEN:
+        sanitized[TASK_KEY] = task
     return sanitized
 
 
