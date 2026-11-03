@@ -172,16 +172,11 @@ class AssistantV067Tests(APITestCase):
         action = AssistantAction.objects.get(pk=reply["pending_action"]["id"])
         self.assertEqual(action.payload["custom_fields"], {"source": "blood"})
 
-    def test_disabled_sample_feature_blocks_new_tasks_and_confirmation(self):
-        with patch("assistant.registration_tasks.enabled", return_value=False):
-            self.assertNotIn(KEY, self.chat("Register samples and assign them")["context"])
+    @override_settings(OPENLIMS_ENFORCE_FEATURE_FLAGS=True)
+    def test_core_registration_remains_available_with_production_feature_enforcement(self):
         reply = self.proposal()
-        original = Sample.objects.count()
-        with patch("assistant.registration_tasks.enabled", return_value=False):
-            failed = self.confirm(reply, 400)
-        self.assertEqual(failed["status"], "FAILED")
-        self.assertIn("disabled", failed["error_message"])
-        self.assertEqual(Sample.objects.count(), original)
+        self.assertEqual(self.confirm(reply)["result"]["succeeded_count"], 2)
+        self.assertIn("Register samples and assign them", self.client.get("/api/assistant/status/").data["suggestions"])
 
     def test_draft_role_revocation_and_archived_intake_types_do_not_create_proposals(self):
         draft = self.chat("Register samples and assign them")

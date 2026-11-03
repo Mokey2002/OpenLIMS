@@ -212,6 +212,10 @@ export async function apiPostForm(path, formData) {
   return response.json();
 }
 
+export function apiPostFormResponse(path, formData, { signal } = {}) {
+  return request(path, { method: "POST", body: formData, signal });
+}
+
 export async function apiPatchForm(path, formData) {
   const response = await request(path, { method: "PATCH", body: formData });
   if (!response.ok) {

@@ -30,6 +30,8 @@ import { ASSISTANT_STARTER_PROMPTS } from "../assistantPrompts";
 import { OPENLIMS_VERSION } from "../version";
 import { pageSelection } from "../assistantPageContext";
 import AssistantPageBar from "../components/AssistantPageBar";
+import AssistantInstrumentUpload from "../components/AssistantInstrumentUpload";
+import AssistantImportReceipt from "../components/AssistantImportReceipt";
 
 function badgeVariantForProvider(provider) {
   if (provider === "openai") return "primary";
@@ -65,6 +67,7 @@ function AssistantSession({ initialPage }) {
     },
   ]);
   const [loading, setLoading] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState("");
   const [err, setErr] = useState("");
 
@@ -115,7 +118,7 @@ function AssistantSession({ initialPage }) {
 
   async function sendMessage(textOverride = "") {
     const text = (textOverride || message).trim();
-    if (!text || loading) return;
+    if (!text || loading || importBusy || actionBusy) return;
     setErr(""); setLoading(true); setMessage("");
     const previous = history.at(-1)?.role === "user" && history.at(-1)?.content === text ? history.slice(0, -1) : history;
     const nextHistory = [...previous, { role: "user", content: text, links: [], suggestions: [] }];
@@ -144,6 +147,11 @@ function AssistantSession({ initialPage }) {
           : item
       )
     );
+  }
+
+  function receiveImport(index, data) {
+    setConversationContext(data.context || {});
+    setHistory(current => current.map((item, position) => position === index ? assistantMessage(data) : item));
   }
 
   async function confirmAssistantAction(index, pendingAction) {
@@ -242,13 +250,13 @@ function AssistantSession({ initialPage }) {
 
       <Card className="app-card mb-4">
         <Card.Body>
-          <AssistantConversations conversationId={conversationId} onSelect={selectConversation} history={history} disabled={loading} onNew={newConversation} />
-          {assistantStatus?.page_context && <AssistantPageBar selection={selectedPage} onClear={() => setSelectedPage(null)} onRun={sendMessage} disabled={loading} />}
+          <AssistantConversations conversationId={conversationId} onSelect={selectConversation} history={history} disabled={loading || importBusy || Boolean(actionBusy)} onNew={newConversation} />
+          {assistantStatus?.page_context && <AssistantPageBar selection={selectedPage} onClear={() => setSelectedPage(null)} onRun={sendMessage} disabled={loading || importBusy || Boolean(actionBusy)} />}
           <AssistantRequestStatus transport={transport} loading={loading} onRetry={sendMessage} />
           <AssistantContextBar
             context={conversationContext}
             onRun={sendMessage}
-            disabled={loading}
+            disabled={loading || importBusy || Boolean(actionBusy)}
             onClear={() => setConversationContext({})}
           />
 
@@ -287,7 +295,7 @@ function AssistantSession({ initialPage }) {
                   {item.clarification && (
                     <AssistantClarification
                       clarification={item.clarification}
-                      disabled={loading}
+                      disabled={loading || importBusy || Boolean(actionBusy)}
                       onChoose={sendMessage}
                     />
                   )}
@@ -309,6 +317,13 @@ function AssistantSession({ initialPage }) {
                       {item.actionError}
                     </Alert>
                   )}
+
+                  {item.instrumentImportForm && <AssistantInstrumentUpload config={item.instrumentImportForm}
+                    onPrepared={data => receiveImport(index, data)} onBusy={setImportBusy} disabled={loading || importBusy || Boolean(actionBusy)} />}
+                  {item.instrumentImportJob && !item.pendingAction && <AssistantImportReceipt jobId={item.instrumentImportJob.id}
+                    initialJob={item.instrumentImportJob} actionStatus={item.instrumentImportJob.action?.status}
+                    onActionUpdate={action => updateHistoryAction(index, action)} onPrepared={data => receiveImport(index, data)}
+                    onBusy={setImportBusy} disabled={loading || importBusy || Boolean(actionBusy)} />}
 
                   {item.pendingAction && (
                     <Card className="mt-3 mb-3 border-warning">
@@ -339,7 +354,8 @@ function AssistantSession({ initialPage }) {
                           </Badge>
                         </div>
 
-                        <AssistantActionPreview action={item.pendingAction} />
+                        <AssistantActionPreview action={item.pendingAction} onActionUpdate={action => updateHistoryAction(index, action)}
+                          onPrepared={data => receiveImport(index, data)} onBusy={setImportBusy} disabled={loading || importBusy || Boolean(actionBusy)} />
 
                         {item.pendingAction.status === "PROPOSED" && (
                           <div className="d-flex gap-2 mt-3">
@@ -347,7 +363,7 @@ function AssistantSession({ initialPage }) {
                               size="sm"
                               variant="warning"
                               disabled={
-                                actionBusy === item.pendingAction.confirmation_token
+                                importBusy || actionBusy === item.pendingAction.confirmation_token
                               }
                               onClick={() =>
                                 confirmAssistantAction(index, item.pendingAction)
@@ -362,7 +378,7 @@ function AssistantSession({ initialPage }) {
                               size="sm"
                               variant="outline-secondary"
                               disabled={
-                                actionBusy === item.pendingAction.confirmation_token
+                                importBusy || actionBusy === item.pendingAction.confirmation_token
                               }
                               onClick={() =>
                                 cancelAssistantAction(index, item.pendingAction)
@@ -401,7 +417,7 @@ function AssistantSession({ initialPage }) {
                           size="sm"
                           variant="outline-secondary"
                           className="me-2 mb-2"
-                          disabled={loading}
+                          disabled={loading || importBusy || Boolean(actionBusy)}
                           onClick={() => sendMessage(suggestion)}
                         >
                           {suggestion}
@@ -428,20 +444,20 @@ function AssistantSession({ initialPage }) {
             )}
           </div>
 
-          <WorkflowQueryBuilder context={conversationContext} onRun={sendMessage} disabled={loading} />
+          <WorkflowQueryBuilder context={conversationContext} onRun={sendMessage} disabled={loading || importBusy || Boolean(actionBusy)} />
           <Form onSubmit={submit} className="mt-3">
             <div className="d-flex gap-2">
               <Form.Control
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Compare samples or projects, graph results, find outliers..."
-                disabled={loading}
+                disabled={loading || importBusy || Boolean(actionBusy)}
               />
 
               <Button
                 type="submit"
                 variant="dark"
-                disabled={loading || !message.trim()}
+                disabled={loading || importBusy || Boolean(actionBusy) || !message.trim()}
               >
                 Send
               </Button>
@@ -460,7 +476,7 @@ function AssistantSession({ initialPage }) {
                 key={prompt}
                 size="sm"
                 variant="outline-dark"
-                disabled={loading}
+                disabled={loading || importBusy || Boolean(actionBusy)}
                 onClick={() => sendMessage(prompt)}
               >
                 {prompt}

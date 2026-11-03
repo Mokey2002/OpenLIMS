@@ -36,7 +36,7 @@ from .serializers import (
     InstrumentColumnMappingSerializer,
     InstrumentProfileSerializer,
 )
-from .tasks import process_import_job, process_rows
+from .tasks import process_import_job, process_rows, validate_mapped_value
 from .csv_utils import get_csv_dict_reader
 
 
@@ -96,6 +96,24 @@ class ImportJobViewSet(viewsets.ModelViewSet):
     serializer_class = ImportJobSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
+    def _lock_editable_job(self, pk):
+        job = ImportJob.objects.select_for_update().get(pk=pk)
+        if job.summary.get("assistant_upload"):
+            raise serializers.ValidationError({
+                "detail": "Keep this assistant import's run identity and receipt. Use its chat revalidation or recovery controls."
+            })
+        return job
+
+    def perform_update(self, serializer):
+        with transaction.atomic():
+            self._lock_editable_job(serializer.instance.pk)
+            serializer.save()
+
+    def perform_destroy(self, instance):
+        with transaction.atomic():
+            self._lock_editable_job(instance.pk)
+            instance.delete()
+
     def get_queryset(self):
         queryset = (
             ImportJob.objects.select_related("instrument", "uploaded_by", "project")
@@ -132,55 +150,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         return project
 
     def _validate_mapped_value(self, mapping, raw_value):
-        if raw_value in (None, ""):
-            return {"ok": True, "normalized": None}
-
-        raw_value = str(raw_value).strip()
-
-        if mapping.value_type == "NUMBER":
-            try:
-                val = float(raw_value)
-            except ValueError:
-                return {"ok": False, "reason": f"Invalid NUMBER '{raw_value}'"}
-
-            if mapping.min_value is not None and val < mapping.min_value:
-                return {"ok": False, "reason": "Below min_value"}
-
-            if mapping.max_value is not None and val > mapping.max_value:
-                return {"ok": False, "reason": "Above max_value"}
-
-            return {"ok": True, "normalized": val}
-
-        if mapping.value_type == "STRING":
-            if mapping.allowed_values:
-                allowed = [str(v) for v in mapping.allowed_values]
-                if raw_value not in allowed:
-                    return {"ok": False, "reason": "Invalid allowed value"}
-
-            return {"ok": True, "normalized": raw_value}
-
-        if mapping.value_type == "BOOLEAN":
-            val = raw_value.lower()
-
-            if val not in [
-                "true",
-                "1",
-                "yes",
-                "pass",
-                "ok",
-                "false",
-                "0",
-                "no",
-                "fail",
-            ]:
-                return {"ok": False, "reason": "Invalid boolean"}
-
-            return {
-                "ok": True,
-                "normalized": val in ["true", "1", "yes", "pass", "ok"],
-            }
-
-        return {"ok": True, "normalized": raw_value}
+        return validate_mapped_value(mapping, raw_value)
 
     def _parse_preview(self, instrument, uploaded_file, project=None):
         mappings = {m.source_column: m for m in instrument.column_mappings.all()}
@@ -891,6 +861,8 @@ class ImportJobViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="retry")
     def retry(self, request, pk=None):
         job = self.get_object()
+        if job.summary.get("assistant_upload"):
+            return Response({"detail": "Revalidate this import in the assistant before retrying."}, status=status.HTTP_400_BAD_REQUEST)
 
         if job.source_type != "UPLOAD":
             return Response(

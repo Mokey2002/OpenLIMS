@@ -1,8 +1,9 @@
 import csv
 import io
+import math
 
 from celery import shared_task
-from django.db import transaction
+from django.db import OperationalError, transaction
 
 from core.realtime import broadcast_job_update
 from events.models import Event
@@ -48,8 +49,10 @@ def validate_mapped_value(mapping, raw_value):
     if mapping.value_type == "NUMBER":
         try:
             val = float(raw_value)
-        except ValueError:
+        except (ValueError, OverflowError):
             return {"ok": False, "reason": f"Invalid NUMBER '{raw_value}'"}
+        if not math.isfinite(val):
+            return {"ok": False, "reason": "Numeric values must be finite."}
 
         if mapping.min_value is not None and val < mapping.min_value:
             return {"ok": False, "reason": "Below min_value"}
@@ -88,9 +91,10 @@ def validate_mapped_value(mapping, raw_value):
     return {"ok": True, "normalized": raw_value}
 
 
-def process_rows(job, rows, actor=None):
+def process_rows(job, rows, actor=None, *, mappings=None):
     instrument = job.instrument
-    mappings = {m.source_column: m for m in instrument.column_mappings.all()}
+    if mappings is None:
+        mappings = {m.source_column: m for m in instrument.column_mappings.all()}
 
     rows_processed = 0
     samples_matched = 0
@@ -294,6 +298,9 @@ def process_rows(job, rows, actor=None):
 
 @shared_task
 def process_import_job(job_id):
+    if ImportJob.objects.filter(pk=job_id, summary__has_key="assistant_upload").exists():
+        from .assistant_uploads import process_prepared_job
+        return process_prepared_job(job_id)
     # Claim the job once. Celery redelivery, eager test execution, or a delayed
     # duplicate message must not create a second work item/result set.
     with transaction.atomic():
@@ -422,3 +429,9 @@ def process_import_job(job_id):
             )
 
         raise
+
+
+@shared_task(acks_late=True, reject_on_worker_lost=True, autoretry_for=(OperationalError, OSError), retry_backoff=True, retry_kwargs={"max_retries": 5})
+def process_assistant_import_job(job_id, action_id):
+    from .assistant_uploads import process_prepared_job
+    return process_prepared_job(job_id, action_id)

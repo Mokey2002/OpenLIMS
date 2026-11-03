@@ -586,6 +586,10 @@ def _hint_clarification(route_hint, user):
 
 
 def route_assistant_message(message, user, context=None, route_hint=None, page_context=None):
+    from .instrument_imports import route_instrument_import
+    instrument_import = route_instrument_import(message, user, context)
+    if instrument_import is not None:
+        return _routed(instrument_import, "imports")
     from .general_conversation import resume as resume_general
     general_followup = resume_general(message, context or {}, user)
     if general_followup:

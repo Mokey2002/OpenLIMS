@@ -3,6 +3,7 @@ import json
 import html
 import re
 import uuid
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import ProxyHandler, Request, build_opener
 
@@ -25,6 +26,10 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
 
     @classmethod
     def setUpClass(cls):
+        # The live server inherits this publication stub; test jobs must never
+        # reach a development worker configured for a different database.
+        cls._import_publication = patch("imports.tasks.process_assistant_import_job.delay", return_value=None)
+        cls._import_publication.start()
         # pytest-django has already selected the test database. Tell Channels
         # its explicit name so the child does not add a second "test_" prefix.
         cls._test_name = settings.DATABASES["default"]["TEST"].get("NAME")
@@ -32,6 +37,7 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
         try:
             super().setUpClass()
         except Exception:
+            cls._import_publication.stop()
             settings.DATABASES["default"]["TEST"]["NAME"] = cls._test_name
             raise
 
@@ -40,6 +46,7 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
         try:
             super().tearDownClass()
         finally:
+            cls._import_publication.stop()
             settings.DATABASES["default"]["TEST"]["NAME"] = cls._test_name
 
     def setUp(self):
@@ -149,3 +156,37 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
             retried = json.load(response)
         self.assertEqual(retried["result"]["context"]["sample_ids"], ids)
         self.assertEqual(Sample.objects.count(), original + 2)
+
+    def test_real_multipart_instrument_upload_confirmation_and_complete_row_receipt(self):
+        from imports.models import InstrumentColumnMapping, InstrumentProfile
+        from imports.assistant_uploads import process_prepared_job
+        profile = InstrumentProfile.objects.create(code="LIVE-UPLOAD", name="Live upload", sample_id_column="sample_id")
+        InstrumentColumnMapping.objects.create(instrument=profile, source_column="concentration", target_key="concentration", value_type="NUMBER")
+        boundary = "openlims-live-upload-boundary"
+        parts = []
+        for key, value in {"instrument": profile.pk, "project": self.project.pk, "run_id": "LIVE-RUN-1", "skip_duplicates": "true"}.items():
+            parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode())
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="uploaded_file"; filename="instrument.csv"\r\nContent-Type: text/csv\r\n\r\n'.encode()
+            + b"sample_id,concentration\nLIVE-UPLOAD-1,5\nLIVE-UPLOAD-1,5\nLIVE-UPLOAD-BAD,NaN\nLIVE-UPLOAD-2,0\n"
+            + f'\r\n--{boundary}--\r\n'.encode())
+        request = Request(self.live_server_url + "/api/v1/assistant/instrument-imports/", data=b"".join(parts),
+            headers={"Authorization": f"Bearer {self.token}", "Content-Type": f"multipart/form-data; boundary={boundary}"})
+        with self.opener.open(request, timeout=15) as response:
+            reply = json.load(response)
+        job_id = reply["instrument_import_job"]["id"]
+        self.assertFalse(WorkItem.objects.filter(source_import_job_id=job_id).exists())
+        action = reply["pending_action"]
+        with self.http(f"/api/v1/assistant/actions/{action['confirmation_token']}/confirm/", {"confirm": True}) as response:
+            self.assertEqual(json.load(response)["status"], "QUEUED")
+        process_prepared_job(job_id, action["id"])
+        with self.http(f"/api/v1/assistant/instrument-imports/{job_id}/") as response:
+            receipt = json.load(response)
+        self.assertEqual(receipt["status"], "COMPLETED")
+        self.assertEqual(receipt["counts"]["rows_received"], 4)
+        self.assertEqual(receipt["counts"]["rows_imported"], 2)
+        self.assertEqual(receipt["counts"]["rows_rejected"], 1)
+        self.assertEqual(receipt["counts"]["duplicates_skipped"], 1)
+        self.assertEqual(receipt["counts"]["rows_accounted"], 4)
+        self.assertEqual(receipt["action"]["status"], "COMPLETED")
+        with self.http(f"/api/v1/assistant/instrument-imports/{job_id}/report/") as response:
+            self.assertEqual(len(response.read().decode("utf-8-sig").splitlines()), 5)
