@@ -91,6 +91,8 @@ def propose_action(user, action_type, summary, payload):
 
 
 def _user_can_execute(user, action):
+    if action.action_type == AssistantAction.ACTION_LAB_OPERATION and (action.payload or {}).get('operation') == 'NOTEBOOK_DRAFT':
+        return bool(user.is_active and user.is_authenticated)
     if action.action_type == AssistantAction.ACTION_WORK_ITEM_OPERATION and (action.payload or {}).get("operation") == "WORKFLOW_REVIEW":
         return bool(user.is_active and is_qc_reviewer(user))
     if action.action_type == AssistantAction.ACTION_QC_REVIEW:
@@ -372,7 +374,13 @@ def _notification_management(action):
     return AssistantAction.STATUS_COMPLETED, execute_notification_management(action)
 
 
+def _lab_operation(action):
+    from .lab_operations import execute_lab_operation
+    return execute_lab_operation(action)
+
+
 EXECUTORS = {
+    AssistantAction.ACTION_LAB_OPERATION: _lab_operation,
     AssistantAction.ACTION_RUN_BLAST: _run_blast,
     AssistantAction.ACTION_RUN_ALIGNMENT: _run_alignment,
     AssistantAction.ACTION_CREATE_MIGRATION_MAPPINGS: _create_migration_mappings,

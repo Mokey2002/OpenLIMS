@@ -291,6 +291,82 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
         with self.http(f"/api/v1/assistant/instrument-imports/{job_id}/report/") as response:
             self.assertEqual(len(response.read().decode("utf-8-sig").splitlines()), 5)
 
+        # Repair the rejected third data row through real authenticated HTTP;
+        # the two successful original rows must never be retried.
+        with self.http(f"/api/v1/assistant/import-repairs/{job_id}/") as response:
+            self.assertEqual(json.load(response)["rows"][0]["row"], 3)
+        before = Result.objects.count()
+        fields = {"parent_id": job_id, "corrections": [{"row": 3, "values": {"concentration": "7"}}]}
+        with self.http("/api/v1/assistant/lab-operations/preview/", {"kind": "repair", "fields": fields}) as response:
+            repair = json.load(response)
+        self.assertEqual(Result.objects.count(), before)
+        child_id = repair["instrument_import_job"]["id"]
+        action = repair["pending_action"]
+        with self.http(f"/api/v1/assistant/actions/{action['confirmation_token']}/confirm/", {"confirm": True}) as response:
+            self.assertEqual(json.load(response)["status"], "QUEUED")
+        process_prepared_job(child_id, action["id"])
+        with self.http(f"/api/v1/assistant/instrument-imports/{child_id}/") as response:
+            repaired = json.load(response)
+        self.assertEqual(repaired["counts"]["rows_imported"], 1)
+        self.assertEqual(repaired["repair"]["source_rows"], [3])
+        self.assertEqual(Result.objects.count(), before + 1)
+
+    @override_settings(OPENLIMS_ENFORCE_FEATURE_FLAGS=False, OPENLIMS_ASSISTANT_LLM_ENABLED=False)
+    def test_real_http_batch_handover_resources_and_notebook(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from imports.models import InstrumentProfile
+        from inventory.models import InventoryItem, InventoryLot, InstrumentBooking
+        from notebook.models import Notebook, Experiment
+        from notifications.models import Notification
+        from pipelines.models import PipelineRun, PipelineStepRun, PipelineTemplate
+
+        recipient = get_user_model().objects.create_user(username="live-recipient")
+        recipient.groups.add(Group.objects.get_or_create(name="tech")[0])
+        self.project.members.add(recipient)
+        work = self.result.work_item
+
+        def execute(kind, fields):
+            with self.http("/api/v1/assistant/lab-operations/preview/", {"kind": kind, "fields": fields}) as response:
+                action = json.load(response)["pending_action"]
+            with self.http(f"/api/v1/assistant/actions/{action['confirmation_token']}/confirm/", {"confirm": True}) as response:
+                result = json.load(response)
+            self.assertEqual(result["status"], "COMPLETED", result)
+            return result["result"]
+
+        with self.http("/api/v1/assistant/chat/stream/", {"message": "Manage batch work", "request_id": str(uuid.uuid4())}) as response:
+            events = response.read().decode()
+        reply = json.loads(events.split("event: complete\ndata: ", 1)[1].split("\n\n", 1)[0])
+        self.assertEqual(reply["lab_operation_form"]["kind"], "batch")
+        self.assertFalse(work.assigned_to_id)
+        execute("batch", {"project": self.project.code, "scope": "unassigned", "assign_to": "me"})
+        work.refresh_from_db()
+        self.assertEqual(work.assigned_to_id, self.user.pk)
+        execute("handover", {"project": self.project.code, "source": "me", "recipient": recipient.username})
+        work.refresh_from_db()
+        self.assertEqual(work.assigned_to_id, recipient.pk)
+        self.assertEqual(work.status, "PENDING")
+        self.assertEqual(Notification.objects.filter(user=recipient).count(), 1)
+
+        profile = InstrumentProfile.objects.create(code="HTTP-SEQ", name="Sequencer")
+        item = InventoryItem.objects.create(code="HTTP-BUFFER", name="Buffer", category="REAGENT", default_unit="ml")
+        lot = InventoryLot.objects.create(item=item, lot_code="HTTP-LOT", quantity=20, unit="ml")
+        start = timezone.now() + timedelta(days=2)
+        resource = execute("resources", {"project": self.project.code, "instrument": profile.code,
+            "starts_at": start.isoformat(), "ends_at": (start + timedelta(hours=1)).isoformat(),
+            "stocks": [{"lot": lot.lot_code, "quantity": "2", "unit": "ml"}]})
+        self.assertEqual(InstrumentBooking.objects.get(pk=resource["booking_id"]).status, "ACTIVE")
+        execute("resources", {"project": self.project.code, "mode": "cancel", "booking_id": resource["booking_id"]})
+        self.assertEqual(lot.reservations.get().status, "RELEASED")
+
+        notebook = Notebook.objects.create(name="HTTP lab notes", scope="PROJECT", project=self.project, owner=self.user)
+        template = PipelineTemplate.objects.create(code="HTTP-PREP", name="HTTP preparation")
+        run = PipelineRun.objects.create(sample=work.sample, template=template, template_code=template.code, template_name=template.name, started_by=self.user)
+        PipelineStepRun.objects.create(pipeline_run=run, position=1, name="Extract", procedure_code="EXTRACT", procedure_version="2", work_item=work)
+        draft = execute("notebook", {"project": self.project.code, "source_kind": "pipeline", "source_id": run.pk,
+            "notebook_id": notebook.pk, "title": "HTTP run evidence"})
+        self.assertEqual(Experiment.objects.get(pk=draft["experiment_id"]).status, "DRAFT")
+
     def test_natural_followups_and_recovery_over_real_streaming_http(self):
         def chat(message, context=None):
             with self.http('/api/v1/assistant/chat/stream/', {

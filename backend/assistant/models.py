@@ -22,6 +22,7 @@ class AssistantAction(models.Model):
     ACTION_LABEL_GENERATION = "LABEL_GENERATION"
     ACTION_COMPLIANCE_REPORT = "COMPLIANCE_REPORT"
     ACTION_NOTIFICATION_MANAGEMENT = "NOTIFICATION_MANAGEMENT"
+    ACTION_LAB_OPERATION = "LAB_OPERATION"
 
     ACTION_CHOICES = [
         (ACTION_RUN_BLAST, "Run BLAST"),
@@ -37,6 +38,7 @@ class AssistantAction(models.Model):
         (ACTION_LABEL_GENERATION, "Label generation"),
         (ACTION_COMPLIANCE_REPORT, "Compliance report"),
         (ACTION_NOTIFICATION_MANAGEMENT, "Notification management"),
+        (ACTION_LAB_OPERATION, "Chat laboratory operation"),
     ]
 
     STATUS_PROPOSED = "PROPOSED"

@@ -356,6 +356,7 @@ class AssistantStatusView(APIView):
                 "guided_workflows": True,
                 "daily_work_actions": True,
                 "project_qc_investigations": True,
+                "lab_operations": True,
                 "welcome_message": (
                     "Ask about samples, projects, QC, comparisons, inventory, "
                     "sequences, or system status. Suggestions below are based on "

@@ -167,6 +167,7 @@ def process_rows(job, rows, actor=None, *, mappings=None):
                 action="CREATED",
                 actor=actor,
                 payload={
+                    **({'assistant_action_id': job.summary.get('queued_by_action_id')} if job.summary.get('assistant_upload') else {}),
                     "sample_id": sample.id,
                     "sample_code": sample.sample_id,
                     "source": "instrument_import",
@@ -193,6 +194,7 @@ def process_rows(job, rows, actor=None, *, mappings=None):
                     action="UPDATED",
                     actor=actor,
                     payload={
+                        **({'assistant_action_id': job.summary.get('queued_by_action_id')} if job.summary.get('assistant_upload') else {}),
                         "sample_id": sample.id,
                         "sample_code": sample.sample_id,
                         "source": "instrument_import",

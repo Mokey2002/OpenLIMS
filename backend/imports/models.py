@@ -109,3 +109,15 @@ class ImportJob(models.Model):
 
     def __str__(self):
         return f"ImportJob {self.id} - {self.instrument.code}"
+
+
+class ImportRowRepair(models.Model):
+    """One current repair import per original data row; measurements stay immutable."""
+    parent = models.ForeignKey(ImportJob, on_delete=models.PROTECT, related_name='row_repairs')
+    row_number = models.PositiveIntegerField()
+    child = models.ForeignKey(ImportJob, on_delete=models.PROTECT, related_name='repaired_source_rows')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['parent', 'row_number'], name='unique_current_import_row_repair')]

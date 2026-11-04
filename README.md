@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.71.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.72.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,17 @@
 
 | Version | Assistant improvements | Details |
 | --- | --- | --- |
-| **v0.71.0** | Natural conversation follow-ups, retained live read scopes, grounded QC explanations and application concept help. | [v0.71 guide](docs/assistant-v071.md) |
+| **v0.72.0** | Confirmed batch metadata changes, instrument/reagent reservations, rejected-row repairs, run-based notebook drafts and shift handovers in both chat views. | [v0.72 guide](docs/assistant-v072.md) |
+| **v0.71.0** | Natural conversation follow-ups, retained live read scopes, grounded QC explanations and application concept help. | [v0.71 guide](docs/assistant-v071.md) · [PR #189](https://github.com/Mokey2002/OpenLIMS/pull/189) |
 | **v0.70.0** | Actionable daily priorities and project QC investigations with audited PDF/CSV evidence reports and current-access checks. | [v0.70 guide](docs/assistant-v070.md) · [PR #188](https://github.com/Mokey2002/OpenLIMS/pull/188) |
-| **v0.69.0** | Live multi-step sequencing preparation, requirements/evidence, in-chat step forms, completion and human QC decisions with confirmed actions. | [v0.69 guide](docs/assistant-v069.md) · [PR #187](https://github.com/Mokey2002/OpenLIMS/pull/187) |
+
+### v0.72.0 — Five lab workflows without leaving chat
+
+Use **Manage batch work**, **Reserve resources**, **Repair rejected import rows**, **Draft a notebook from a run**, or **Prepare a shift handover**. Both chat views provide current project/run/stock choices and inline fields, followed by the existing confirmation controls and per-record receipts. Natural commands include **“Assign ALPHA’s unassigned work to Maria and set Friday deadlines”** and **“Hand my unfinished ALPHA work to Maria”**; the assistant asks for exact missing times rather than inventing a deadline.
+
+Batch updates change eligible assignment/deadline metadata together, with exclusions disclosed and workflow/QC gates preserved. Instrument slots and reagent quantities are reserved atomically; conflicting slots, expired/quarantined lots, stale stock and incompatible units are refused. Cancellation releases active linked reservations without reversing consumed stock. Row repairs create a validated child import from selected rejected rows, preserve the original file/results, and track each source row to prevent duplicate or superseded retries. Notebook drafts use actual results, configured procedure versions, native revisions and source links, and remain **Draft**; their audience must have source access. Handovers reassign eligible unfinished work and optionally deliver the previewed internal notification.
+
+Current permissions and evidence are rechecked at confirmation. PostgreSQL race tests and a database exclusion constraint protect booking conflicts; assistant-generated audit records are visible to their requester and administrators. See the [v0.72 guide](docs/assistant-v072.md) for limits, APIs and examples. Apply **four migrations**, rebuild API/frontend, and restart Celery workers with the same backend release. The booking migration enables PostgreSQL’s bundled `btree_gist` extension and needs suitable database privileges. Version/footer: **v0.72.0**. Both READMEs retain exactly **v0.72, v0.71 and v0.70** release updates. No new Python/Node dependency, service, scheduled coding automation, email integration or physical instrument control is added.
 
 ### v0.71.0 — More natural conversations and reliable follow-ups
 
@@ -43,7 +51,7 @@ Ask **“Why that one?”** after daily priorities, **“Which ones failed?”**
 
 Concept questions such as **“Explain the difference between a sample and a work item”** return application definitions instead of searching for records. Short example/explanation follow-ups and saved concept conversations work without a language model. Informal help, courtesy wording, project overviews and returning to a recent named project are supported. Conversation reset closes the topic; existing action previews retain their explicit Cancel controls.
 
-Version/footer are **v0.71.0**. Both READMEs retain exactly **v0.71, v0.70 and v0.69** release updates. See the [v0.71 guide](docs/assistant-v071.md) for examples and validation. These fixes support the rules-based assistant; open-ended general conversation still requires an enabled OpenAI/Ollama provider. Live-model fluency was not verified in the disabled-provider development environment. Rebuild the API and frontend images; no migration or new dependency.
+Version/footer are **v0.71.0**. The latest three release updates are listed above. See the [v0.71 guide](docs/assistant-v071.md) for examples and validation. These fixes support the rules-based assistant; open-ended general conversation still requires an enabled OpenAI/Ollama provider. Live-model fluency was not verified in the disabled-provider development environment. Rebuild the API and frontend images; no migration or new dependency.
 
 ### v0.70.0 — Daily work and project QC investigations in chat
 
@@ -53,21 +61,13 @@ Ask **`Investigate ALPHA’s QC failures and export a report`**. The assistant r
 
 Both panels refresh current records and recover interrupted confirmations; saved views reread data without replaying actions. Scope/row limits are explicit. See the [v0.70 guide](docs/assistant-v070.md) for commands, APIs, date semantics, permissions and report limits. Version/footer **v0.70.0**; the latest three release updates are listed above. Rebuild/restart API and the production web/frontend image to install the updated NGINX rules; no new migration, dependency or scheduled automation.
 
-### v0.69.0 — Prepare a sample through a guided workflow
-
-Ask **`Help me prepare sample S-100 for sequencing`**, or choose **Help me prepare a sample for sequencing** and supply its exact ID. The assistant builds a live checklist from the sample's configured pipeline: dependencies, missing results and step-form fields, recorded measurements, work assignees and workflow QC gates. It explains blockers and shows supported actions inside both chat views.
-
-Choose an existing template when no run is active; assign work, record actual results and step-form values, preview work completion, and let an authorized human reviewer submit a QC decision with a reason. Each change has its own preview and confirmation. Current requirements, evidence, permissions and frozen identities are checked again before execution; the checklist refreshes afterward. Separate result-level QC reviews remain separate, and separation-of-duties rules prevent self-approval when configured.
-
-**Refresh preparation**, **What should I do next?** and **Why is preparation blocked?** reread current records. An available configured SEQUENCING step is reported without claiming scientific suitability or starting an instrument. See the [v0.69 guide](docs/assistant-v069.md) for scope, recovery, API and validation. Version/footer are **v0.69.0**; both READMEs retain exactly the latest three release updates. No new migration, dependency or scheduled automation.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.71.0`.
+**Current development version:** `v0.72.0`.
 
 ## Deployment Access
 
@@ -969,7 +969,7 @@ An explicit `VITE_OPENLIMS_VERSION` overrides the normal release version.
 
 OpenLIMS can run locally, on a private lab server, on a VM, or on cloud infrastructure.
 
-`deploy/docker-compose.prod.yml` provides the production-style stack introduced in v0.28.1. v0.29.0 improves runtime efficiency on that stack with reusable PostgreSQL connections, optional Redis-backed Django caching, gzip compression, immutable hashed-asset caching, route-level frontend code splitting, and larger bounded API pages. The production stack runs Django under Daphne, serves the built React frontend through Nginx, keeps PostgreSQL and Redis internal by default, persists database/cache/media/static data, includes health checks, and exposes the web service on `${OPENLIMS_HTTP_PORT:-8080}`. Ollama remains optional through the `llm` Compose profile.
+`deploy/docker-compose.prod.yml` provides the production-style stack with reusable PostgreSQL connections, optional Redis-backed Django caching, gzip compression, immutable hashed-asset caching, route-level frontend code splitting, and larger bounded API pages. The production stack runs Django under Daphne, serves the built React frontend through Nginx, keeps PostgreSQL and Redis internal by default, persists database/cache/media/static data, includes health checks, and exposes the web service on `${OPENLIMS_HTTP_PORT:-8080}`. Ollama remains optional through the `llm` Compose profile.
 
 For a new installation, follow the [installation steps](#installation) and [server configuration](#server-deployment), including administrator creation. Keep an existing installation's `deploy/.env`; do not copy the template over it. Use `--env-file deploy/.env` with the production Compose commands so the configured host port is read consistently.
 
@@ -1095,7 +1095,7 @@ Planned and future improvements include:
 - Assistant calculations for safe counts, averages, percentages, and summaries
 - Continued query-count, large-dataset, workflow, reporting, and browser performance regression improvements
 
-See [`docs/performance_scalability_v029.md`](docs/performance_scalability_v029.md) for the v0.29.0 performance and scalability implementation notes and [`docs/product_hardening_v0281.md`](docs/product_hardening_v0281.md) for the v0.28.1 product-hardening notes.
+See [`docs/performance_scalability_v029.md`](docs/performance_scalability_v029.md) for performance and scalability implementation notes and [`docs/product_hardening_v0281.md`](docs/product_hardening_v0281.md) for product-hardening notes.
 
 ---
 

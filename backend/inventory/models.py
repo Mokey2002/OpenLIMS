@@ -350,6 +350,26 @@ class InventoryReservation(PublicIDModel):
             )
 
 
+class InstrumentBooking(PublicIDModel):
+    """Exclusive application-managed instrument time, reserved through one service."""
+    instrument = models.ForeignKey('imports.InstrumentProfile', on_delete=models.PROTECT, related_name='bookings')
+    project = models.ForeignKey('projects.Project', on_delete=models.PROTECT, related_name='instrument_bookings')
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField()
+    status = models.CharField(max_length=16, choices=[('ACTIVE', 'Active'), ('CANCELLED', 'Cancelled')], default='ACTIVE')
+    note = models.CharField(max_length=500, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='instrument_bookings')
+    action = models.OneToOneField('assistant.AssistantAction', on_delete=models.PROTECT, related_name='instrument_booking')
+    reservations = models.ManyToManyField(InventoryReservation, blank=True, related_name='instrument_bookings')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['starts_at', 'pk']
+        indexes = [models.Index(fields=['instrument', 'status', 'starts_at'], name='instrument_booking_window_idx')]
+        constraints = [models.CheckConstraint(condition=models.Q(ends_at__gt=models.F('starts_at')), name='instrument_booking_positive_time')]
+
+
 class BarcodeIdentity(PublicIDModel):
     barcode = models.CharField(max_length=128, unique=True)
     content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT)

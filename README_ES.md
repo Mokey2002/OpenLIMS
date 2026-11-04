@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.71.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.72.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,17 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras del asistente | Detalles |
 | --- | --- | --- |
-| **v0.71.0** | Seguimientos naturales, conservación de consultas vigentes, explicaciones QC basadas en evidencia y ayuda sobre conceptos. | [Guía v0.71](docs/assistant-v071.md) |
+| **v0.72.0** | Cambios por lote, reservas de instrumentos/reactivos, reparación de filas rechazadas, borradores de cuaderno y relevos desde ambos chats. | [Guía v0.72](docs/assistant-v072.md) |
+| **v0.71.0** | Seguimientos naturales, conservación de consultas vigentes, explicaciones QC basadas en evidencia y ayuda sobre conceptos. | [Guía v0.71](docs/assistant-v071.md) · [PR #189](https://github.com/Mokey2002/OpenLIMS/pull/189) |
 | **v0.70.0** | Prioridades diarias accionables e investigaciones QC por proyecto con informes PDF/CSV auditados y permisos actualizados. | [Guía v0.70](docs/assistant-v070.md) · [PR #188](https://github.com/Mokey2002/OpenLIMS/pull/188) |
-| **v0.69.0** | Preparación guiada para secuenciación, requisitos/evidencia, formularios, finalización y decisiones humanas de QC con confirmación. | [Guía v0.69](docs/assistant-v069.md) · [PR #187](https://github.com/Mokey2002/OpenLIMS/pull/187) |
+
+## v0.72.0 — Cinco flujos de laboratorio sin salir del chat
+
+Usa **Manage batch work**, **Reserve resources**, **Repair rejected import rows**, **Draft a notebook from a run** o **Prepare a shift handover**. Ambos chats incluyen selectores actuales, formularios integrados, vistas previas, confirmación y recibos por registro. También aceptan **“Assign ALPHA’s unassigned work to Maria and set Friday deadlines”** y **“Hand my unfinished ALPHA work to Maria”**; solicitan fechas y horas exactas cuando faltan.
+
+Los cambios por lote y relevos conservan estados, dependencias y decisiones QC. Las reservas de instrumentos/reactivos son atómicas y rechazan conflictos, cantidades insuficientes, cuarentena, caducidad y unidades incompatibles. Cancelar libera reservas activas sin revertir consumos. La reparación crea una importación hija con filas rechazadas seleccionadas y registra su procedencia para evitar duplicados; no cambia el archivo ni las mediciones originales. Los cuadernos se crean como **Draft** con datos reales, versiones de procedimientos, revisiones y vínculos nativos; sus lectores deben tener acceso a las muestras de origen. El relevo puede incluir la notificación interna revisada.
+
+Se verifican permisos y evidencia al confirmar. PostgreSQL protege conflictos de reservas también mediante una restricción de exclusión; la auditoría generada por el asistente se limita a su solicitante y administradores. Consulta la [guía v0.72](docs/assistant-v072.md) para límites y API. Aplica **cuatro migraciones**, reconstruye API/frontend y reinicia Celery con la misma versión. La migración activa la extensión incluida `btree_gist` y requiere permisos adecuados en PostgreSQL. Versión/pie **v0.72.0**. Ambos README conservan exactamente **v0.72, v0.71 y v0.70**. Sin dependencia Python/Node, servicio, automatización de programación, correo externo ni control físico de instrumentos nuevos. Las frases nuevas documentadas están en inglés.
 
 ## v0.71.0 — Conversaciones y seguimientos más naturales
 
@@ -24,7 +32,7 @@ Después de las prioridades diarias, pregunta **“Why that one?”**; después 
 
 **“Explain the difference between a sample and a work item”** explica conceptos sin buscar registros. Los ejemplos y las conversaciones guardadas sobre conceptos funcionan sin modelo de lenguaje. También mejora la ayuda informal, las correcciones y el regreso a un proyecto reciente. Reiniciar la conversación cierra el tema; cada propuesta conserva su botón Cancel para cancelar la acción. Las frases nuevas documentadas están en inglés.
 
-Versión/pie **v0.71.0**. Ambos README conservan exactamente **v0.71, v0.70 y v0.69**. Consulta la [guía v0.71](docs/assistant-v071.md) para ejemplos y validación. La conversación general abierta requiere OpenAI/Ollama habilitado; no se verificó fluidez con un proveedor real porque está deshabilitado en el entorno de desarrollo. Reconstruye API y frontend; sin migración ni dependencia nueva.
+Versión/pie **v0.71.0**. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía v0.71](docs/assistant-v071.md) para ejemplos y validación. La conversación general abierta requiere OpenAI/Ollama habilitado; no se verificó fluidez con un proveedor real porque está deshabilitado en el entorno de desarrollo. Reconstruye API y frontend; sin migración ni dependencia nueva.
 
 ## v0.70.0 — Trabajo diario e investigaciones QC por proyecto desde el chat
 
@@ -34,21 +42,13 @@ Pide **`Investigate ALPHA’s QC failures and export a report`**. El asistente c
 
 Ambos paneles actualizan registros y recuperan confirmaciones interrumpidas; las vistas guardadas consultan datos actuales sin repetir acciones. Los límites son explícitos. Las frases nuevas documentadas están en inglés. Consulta la [guía v0.70](docs/assistant-v070.md). Versión/pie **v0.70.0**; las tres actualizaciones más recientes se indican arriba. Reconstruye/reinicia API y la imagen web/frontend de producción para instalar las reglas NGINX; sin nueva migración, dependencia ni automatización programada.
 
-## v0.69.0 — Prepara una muestra con un flujo guiado
-
-Pide **`Help me prepare sample S-100 for sequencing`** o elige **Help me prepare a sample for sequencing** e indica su ID exacto. Ambos chats muestran una lista actual del pipeline configurado: dependencias, resultados y campos faltantes, mediciones registradas, responsables y controles de QC del trabajo. El asistente explica bloqueos y ofrece acciones compatibles dentro del chat.
-
-Selecciona una plantilla existente si no hay una ejecución activa; asigna trabajo, registra resultados reales y valores del formulario, prepara su finalización y permite que un revisor autorizado registre su decisión de QC con motivo. Cada cambio exige vista previa y confirmación. Se verifican otra vez requisitos, evidencia, permisos e identidades antes de ejecutar, y después se actualiza la lista. La revisión de resultados individuales sigue siendo independiente; se respeta la separación de funciones para evitar autoaprobación cuando está configurada.
-
-**Refresh preparation**, **What should I do next?** y **Why is preparation blocked?** consultan los registros actuales. Un paso SEQUENCING disponible indica disponibilidad en el flujo configurado, sin certificar idoneidad científica ni iniciar un instrumento. Las frases nuevas documentadas están en inglés. Consulta la [guía v0.69](docs/assistant-v069.md) para alcance, recuperación, API y pruebas. Versión/pie **v0.69.0**; ambas guías conservan exactamente las tres últimas actualizaciones. Sin nueva migración, dependencia ni automatización programada.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.71.0`
+**Versión de desarrollo actual:** `v0.72.0`
 
 **Demo:** http://35.164.28.250
 
