@@ -4,6 +4,7 @@ from importlib import import_module
 
 # Public catalog doubles as the dispatch allow-list. No model-supplied module names.
 COMMAND_TOOLS = {
+    "lab_concepts": ("lab_concepts", "route_lab_concepts", "Explain the difference between a sample and a work item; What is a result?; Give me a simple example"),
     "daily_work": ("daily_work", "route_daily_work", "What should I work on today?; Only actionable; Show daily unassigned work; Show my work in project ALPHA"),
     "project_investigation": ("project_investigations", "route_project_investigation", "Investigate project ALPHA QC failures and export a report; Group by instrument; Export this investigation as CSV"),
     "workflow_guide": ("workflow_guide", "route_workflow_guide", "Help me prepare sample S-100 for sequencing; Refresh preparation; Why is preparation blocked?"),

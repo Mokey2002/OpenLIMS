@@ -80,14 +80,24 @@ def remember_topics(message, previous, result, user):
 
 def resume_topic(message, user, context):
     text = normalize_request(message)
-    if re.fullmatch(r'(?:forget (?:this|our) conversation|clear (?:the )?conversation|start a new conversation|start over|reset (?:the )?conversation)', text, re.I):
-        return None, response('Okay, we can start fresh. What would you like to work on?', clear_dialogue_memory=True)
+    if re.fullmatch(r'(?:forget (?:this|our) conversation|clear (?:the )?conversation|start a new conversation|start over|reset (?:the )?conversation|cancel|never mind|forget that)', text, re.I):
+        return None, response('Okay, we can start fresh. What would you like to work on? Any existing action preview has its own Cancel button.',
+                              clear_dialogue_memory=True, replace_context=True)
     recap = re.fullmatch(r'what were we (?:talking about|discussing)|where were we|recap (?:our|this) conversation', text, re.I)
     back = re.fullmatch(r'(?:go |take me )?back to (?:the )?(?:previous|last) (project|sample|topic)', text, re.I)
-    if not recap and not back:
+    named = re.fullmatch(r'(?:go |take me )?back to (?:(project|sample) )?([\w.:/-]{1,64})', text, re.I) if not back else None
+    # Result-list/comparison navigation belongs to the signed read-plan trail.
+    if named and not named[1] and named[2].casefold() in {'comparison', 'results', 'result'}:
+        return None, None
+    if not recap and not back and not named:
         return None, None
     topics = [(topic, resolve_topic(topic, user)) for topic in load_topics(context, user)]
     topics = [(topic, resolved) for topic, resolved in topics if resolved]
+    if named:
+        for topic, resolved in reversed(topics):
+            if (not named[1] or named[1].lower() == resolved['kind']) and named[2].casefold() == resolved['identifier'].casefold():
+                return resolved['command'], None
+        return None, response('That earlier topic is unavailable. Give an accessible project code or sample ID and the task to run.', replace_context=True)
     if recap:
         if not topics:
             return None, response('I do not have a recent accessible sample or project topic to recap. Which record should we look at?')

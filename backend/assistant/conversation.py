@@ -17,7 +17,7 @@ OPENLIMS_SUGGESTIONS = [
 def is_courtesy_reply(message):
     return bool(re.fullmatch(
         r"(?:thanks|thank you|thanks a lot|great thanks|okay thanks|ok thanks|"
-        r"okay|ok|got it|understood)[.! ]*",
+        r"okay|ok|got it|understood|hi|hey|hello|how are you|how are you doing|how's it going)[.?! ]*",
         str(message or "").strip(), re.I,
     ))
 
@@ -100,6 +100,8 @@ def _is_help_question(message, normalized):
         [
             "what can you do",
             "how can you help",
+            "what can you help me with",
+            "what can you help with",
             "what questions can i ask",
             "show me your capabilities",
             "what are your capabilities",
@@ -160,6 +162,9 @@ def route_conversation_utility(message, user=None):
         return _utility_response(
             "Hello! What would you like to check in OpenLIMS?"
         )
+
+    if normalized in {"how are you", "how are you doing", "how's it going"}:
+        return _utility_response("I'm ready to help. What would you like to work on in OpenLIMS?")
 
     if normalized in {"okay", "ok", "got it", "understood"}:
         return _utility_response("Okay. What would you like to check next?")

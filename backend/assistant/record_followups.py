@@ -9,7 +9,9 @@ SAMPLE_READS = [
     (r'what happened to (?:it|this sample|that sample)', 'What happened to sample {code}'),
     (r'where is (?:it|this sample|that sample)(?: stored)?', 'Where is sample {code}'),
     (r'who last moved (?:it|this sample|that sample)', 'Who last moved sample {code}'),
-    (r"(?:what(?:'s| is)? next|what should I do next)(?: for (?:it|this sample|that sample))?", 'What next for sample {code}?'),
+    (r"(?:what(?:'s| is)? next|what (?:should I|do I need to|can I) do next)(?: for (?:it|this sample|that sample))?", 'What next for sample {code}?'),
+    (r"what(?:'s| is) blocking (?:it|this sample|that sample)", 'What next for sample {code}?'),
+    (r"(?:what about|show(?: me)?) (?:its|this sample's|that sample's) QC", 'Show evidence for sample {code}'),
     (r'(?:show|find|list|show me) (?:its sequences|sequences for (?:it|this sample|that sample))', 'Find sequences for sample {code}'),
 ]
 

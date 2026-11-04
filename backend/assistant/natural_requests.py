@@ -26,7 +26,7 @@ def normalize_request(message):
     for _ in range(4):
         previous = text
         text = re.sub(r'^(?:hey|hi|hello|thanks|thank you)[,!:]\s*', '', text, flags=re.I)
-        text = re.sub(r'^(?:can|could|would) you\s+(?:please\s+)?', '', text, flags=re.I)
+        text = re.sub(r'^(?:can|could|would) (?:you|u)\s+(?:please\s+)?', '', text, flags=re.I)
         text = re.sub(r'^(?:please|por favor)[, ]+', '', text, flags=re.I)
         text = re.sub(r'^(?:actually|instead),?\s+(?=(?:show|list|find|summarize|explain)\b)', '', text, flags=re.I)
         if text == previous:
@@ -36,6 +36,10 @@ def normalize_request(message):
     text = re.sub(r'^(show|list|find)\s+(?:me\s+)?(?:the\s+)?(?=(?:(?:failed|passed|pending|rejected|approved)\s+)?(?:QC\s+)?results?\b)',
                   r'\1 ', text, flags=re.I)
     aliases = [
+        (r"what(?:'s| is|s) (?:going on|happening) with (project|sample) (.+)", lambda m: f'Summarize {m[1]} {m[2]}'),
+        (r'(?:show|list)(?: me)? my (?:work|tasks|assignments) again', lambda m: 'Show my work'),
+        (r'(?:show|list)(?: me)? (?:its|this project\'s|that project\'s) samples', lambda m: 'Show samples in that project'),
+        (r'(?:show|list)(?: me)? overdue samples in (?:project )?([\w.:/-]{1,64})', lambda m: f'Show daily overdue work in project {m[1]}'),
         (r'(?:give me|show me) (?:a |the )?(?:quick )?(?:summary|overview|rundown) (?:of|for) (project|sample) (.+)', lambda m: f'Summarize {m[1]} {m[2]}'),
         (r'how is (project|sample) (.+) doing', lambda m: f'Summarize {m[1]} {m[2]}'),
         (r'(?:what|which) samples (?:are|do we have) in (project .+|(?:that|this|the) project)', lambda m: f'Show samples in {m[1]}'),
@@ -96,6 +100,10 @@ def prepare_read_request(message, user, context):
     continuation = re.fullmatch(r'(?:same for|what about|how about|and for|(?:no,? )?I meant|actually,?(?: I meant)?|sorry,? I meant)\s+(?:(sample|project)\s+)?(.+)', text, re.I)
     target = None
     if isinstance(previous, str) and previous in READS and continuation:
+        # "What about its QC?" asks about the selected record; "its QC" is
+        # not a replacement identifier. Quoted literal names remain explicit.
+        if re.match(r'(?:it|its|this|that|these|those|the)\b', continuation[2], re.I):
+            return text, None
         intent = previous
         if continuation[1] and continuation[1].lower() != READS[intent][0]:
             return text, response('Do you want a sample or project review? Please name the task and record.')

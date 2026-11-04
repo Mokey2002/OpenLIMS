@@ -586,6 +586,10 @@ def _hint_clarification(route_hint, user):
 
 
 def route_assistant_message(message, user, context=None, route_hint=None, page_context=None):
+    from .lab_concepts import route_lab_concepts
+    concept = route_lab_concepts(message, user, context=context)
+    if concept is not None:
+        return _routed(concept, "general")
     from .project_investigations import route_project_investigation
     investigation = route_project_investigation(message, user, context)
     if investigation is not None:
@@ -656,6 +660,10 @@ def _route_assistant_message(message, user, context=None, route_hint=None):
         return _routed(question, "samples")
     if resolved:
         message = resolved
+        from .sample_explanations import route_sample_explanations
+        explanation = route_sample_explanations(message, user, context)
+        if explanation:
+            return _routed(explanation, "samples")
     from .project_conversation import project_request
     project_result = project_request(message, user, context)
     if project_result:
@@ -920,6 +928,11 @@ def _route_assistant_message(message, user, context=None, route_hint=None):
     if continued:
         return _routed(continued, "tool")
 
+    from .conversation_recovery import recover_unknown_context
+    recovered = recover_unknown_context(user, context)
+    if recovered is not None:
+        recovered["route_unmatched"] = True
+        return _routed(recovered, "unknown", confidence=0)
     if context and re.search(r"\b(?:it|its|this|that|those|them|same)\b", query, re.I):
         next_questions = []
         if context.get("sample_id") or context.get("sample_ids"):
