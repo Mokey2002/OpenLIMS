@@ -141,6 +141,10 @@ export default function AssistantActionPreview({ action, onActionUpdate, onPrepa
           className="py-2 mb-0"
         >
           {result.message && <p className="mb-2">{result.message}</p>}
+          {result.details?.length > 0 && <Table size="sm" responsive bordered><thead><tr><th>Record</th><th>Outcome</th><th>Details</th></tr></thead>
+            <tbody>{result.details.map((row, index) => <tr key={row.id || index}><td>{row.label}</td><td>{row.outcome}</td>
+              <td>{displayValue(Object.fromEntries(Object.entries(row).filter(([key]) => !["label", "outcome", "id"].includes(key))))}</td></tr>)}</tbody></Table>}
+          {typeof result.url === "string" && result.url.startsWith("/") && !result.url.startsWith("//") && <a href={result.url}>Open created record</a>}
           <div className="d-flex gap-2 flex-wrap mb-1">
             <Badge bg="success">Succeeded: {result.succeeded_count || 0}</Badge>
             <Badge bg={result.failed_count ? "danger" : "secondary"}>

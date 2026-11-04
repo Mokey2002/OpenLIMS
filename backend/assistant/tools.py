@@ -586,6 +586,10 @@ def _hint_clarification(route_hint, user):
 
 
 def route_assistant_message(message, user, context=None, route_hint=None, page_context=None):
+    from .lab_operations import route_lab_operations
+    operation = route_lab_operations(message, user, context)
+    if operation is not None:
+        return _routed(operation, 'lab_operations')
     from .lab_concepts import route_lab_concepts
     concept = route_lab_concepts(message, user, context=context)
     if concept is not None:

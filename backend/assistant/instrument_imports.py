@@ -47,9 +47,17 @@ def latest_action(job, user):
 
 def public_job(job, user):
     frozen = job.summary[MARKER]
+    repair_current = True
+    if job.summary.get('repair'):
+        from imports.assistant_uploads import validate_repair_claim
+        try:
+            validate_repair_claim(job)
+        except ValueError:
+            repair_current = False
     action = latest_action(job, user)
     pending = bool(job.summary.get("awaiting_assistant_confirmation"))
     return {"id": job.pk, "instrument": frozen["config"]["code"], "project": job.project.code, "run_id": job.run_id,
+            "repair": job.summary.get('repair'),
             "filename": frozen.get("filename", os.path.basename(job.uploaded_file.name)), "status": job.status,
             "state": "awaiting_confirmation" if pending else "queued_or_running" if job.status == "PENDING" else job.status.lower(),
             "counts": job.summary.get("receipt", frozen["counts"]), "planned_counts": frozen["counts"],
@@ -58,7 +66,8 @@ def public_job(job, user):
             "row_report": job.summary.get("row_report", [])[:50], "report_total": frozen["counts"]["rows_received"],
             "download_url": f"/api/assistant/instrument-imports/{job.pk}/report/",
             "error": job.summary.get("error") or job.summary.get("queue_error", ""), "action": serialize_action(action) if action else None,
-            "can_revalidate": bool(job.uploaded_by_id == user.pk and user.is_active and (is_admin(user) or is_tech(user)) and job.status in {"FAILED", "PENDING"}),
+            "can_repair": bool(job.uploaded_by_id == user.pk and user.is_active and (is_admin(user) or is_tech(user)) and job.status in {'COMPLETED', 'FAILED'} and frozen['counts']['rows_rejected']),
+            "can_revalidate": bool(repair_current and job.uploaded_by_id == user.pk and user.is_active and (is_admin(user) or is_tech(user)) and job.status in {"FAILED", "PENDING"}),
             "can_resume": bool(job.uploaded_by_id == user.pk and user.is_active and (is_admin(user) or is_tech(user)) and
                 (job.status == "PENDING" and not pending or job.status == "COMPLETED" and action and action.status == "QUEUED"))}
 
@@ -74,6 +83,14 @@ def job_reply(job, user):
 
 
 def prepare(job, analysis, user, skip_duplicates):
+    repair = job.summary.get('repair')
+    if repair:
+        from imports.assistant_uploads import validate_repair_claim
+        validate_repair_claim(job)
+        if analysis['counts']['rows_received'] != len(repair['source_rows']) or analysis['file_sha256'] != repair.get('child_file_sha256'):
+            raise ValidationError({'detail': 'The corrected file identity changed. Prepare a new correction from the original import.'})
+        if analysis['counts']['rows_rejected']:
+            raise ValidationError({'detail': 'Some corrected rows remain invalid. Prepare revised corrections from the original import; no partial repair was queued.'})
     if not analysis["accepted"]:
         raise ValidationError({"detail": "No rows are importable. Correct the rejected rows and validate again.", "validation": {
             "counts": analysis["counts"], "row_report": analysis["report"][:50]}})
@@ -84,6 +101,8 @@ def prepare(job, analysis, user, skip_duplicates):
     frozen.update(owner_id=user.pk, project_id=job.project_id, instrument_id=job.instrument_id, run_id=job.run_id, skip_duplicates=skip_duplicates)
     frozen["filename"] = getattr(job, "source_filename", job.summary.get(MARKER, {}).get("filename", os.path.basename(job.uploaded_file.name)))
     job.summary = {MARKER: frozen, "awaiting_assistant_confirmation": True, "row_report": analysis["report"]}
+    if repair:
+        job.summary['repair'] = repair
     job.status, job.progress_current, job.progress_total = "PENDING", 0, analysis["counts"]["rows_received"]
     job.progress_message = "Validated; awaiting confirmation in chat"
     job.save()
@@ -98,6 +117,11 @@ def prepare(job, analysis, user, skip_duplicates):
                      "proposed": {"Results": row["result_cells"], "Note": row["reason"]}} for row in analysis["report"][:20]],
         "warnings": ["Preview shows the first 20 rows; the downloadable report accounts for every data row.",
                      "Unmapped columns are ignored: " + ", ".join(analysis["unmapped_columns"])] if analysis["unmapped_columns"] else ["Preview shows the first 20 rows; the downloadable report accounts for every data row."]}
+    if repair:
+        preview['proposed_values'].update({'Original import': repair['parent_id'], 'Original run': repair['parent_run_id'], 'Original data rows': repair['source_rows']})
+        preview['warnings'].append('This is a corrected child import. Original files, imported measurements and receipts are unchanged; only selected rejected rows are retried.')
+        for index, row in enumerate(preview['records']):
+            row['label'] = f"Original data row {repair['source_rows'][index]} → repair data row {index + 1}"
     action = propose_action(user, "QUEUE_IMPORT", f"Import {counts['rows_to_import']} validated rows from {job.instrument.code}, run {job.run_id}",
                             {"import_job_id": job.pk, "prepared_digest": digest(frozen), "preview": preview})
     job.summary["prepared_action_id"] = str(action.pk)

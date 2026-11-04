@@ -1,4 +1,5 @@
 import AssistantConversations from "./AssistantConversations";
+import AssistantLabOperation from "./AssistantLabOperation";
 import AssistantRequestStatus from "./AssistantRequestStatus";
 import useAssistantRequest from "../hooks/useAssistantRequest";
 import { assistantMessage } from "../assistantTransport";
@@ -68,6 +69,7 @@ export default function AssistantWidget() {
   const workflowIndex = history.findLastIndex(item => item.workflowPlan);
   const dailyIndex = history.findLastIndex(item => item.dailyWork);
   const investigationIndex = history.findLastIndex(item => item.projectInvestigation);
+  const labOperationIndex = history.findLastIndex(item => item.labOperationForm);
   const workflowRevision = history.map(item => item.pendingAction ? `${item.pendingAction.id}:${item.pendingAction.status}` : "").join(";");
 
   useEffect(() => {
@@ -293,6 +295,9 @@ export default function AssistantWidget() {
                     </Alert>
                   )}
 
+                  {index === labOperationIndex && item.labOperationForm && conversationContext.lab_operation && <AssistantLabOperation
+                    key={JSON.stringify(item.labOperationForm)} initial={item.labOperationForm} revision={workflowRevision}
+                    onPrepared={receiveWorkflow} onBusy={setImportBusy} disabled={loading || importBusy || Boolean(actionBusy)} />}
                   {index === dailyIndex && item.dailyWork && conversationContext.daily_work && <AssistantDailyWork initial={item.dailyWork}
                     revision={workflowRevision} onContext={setConversationContext} onPrepared={receiveWorkflow} onBusy={setImportBusy} disabled={loading || importBusy || Boolean(actionBusy)} />}
                   {index === investigationIndex && item.projectInvestigation && conversationContext.project_investigation && <AssistantProjectInvestigation initial={item.projectInvestigation}

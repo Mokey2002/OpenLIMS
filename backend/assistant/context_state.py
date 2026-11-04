@@ -2,6 +2,7 @@ import re
 
 
 ALLOWED_CONTEXT_KEYS = {
+    "lab_operation",
     "lab_concept",
     "daily_work",
     "project_investigation",

@@ -65,6 +65,8 @@ def turn_descriptor(user, message, reply):
         entry.update(kind="general", answer=reply["answer"][:8000])
     elif reply.get("lab_concept"):
         entry.update(kind="lab_concept", concept=copy.deepcopy(reply["lab_concept"]))
+    elif reply.get('context', {}).get('lab_operation'):
+        entry.update(kind='lab_operation', spec=copy.deepcopy(reply['context']['lab_operation']))
     elif reply.get("page_read_reference"):
         entry.update(kind="page_read", reference=copy.deepcopy(reply["page_read_reference"]))
     elif reply.get("workflow_plan"):
@@ -123,6 +125,19 @@ def restore(conversation, user):
             context, general = reply.get("context", {}), []
             reply["save_turn_token"] = turn_token(user, turn["question"], reply)
             history.append({"role": "assistant", "reply": reply})
+        elif turn['kind'] == 'lab_operation':
+            from .lab_operations import form_reply
+            from .lab_operation_common import project_for_user
+            try:
+                spec = turn['spec']
+                if spec.get('defaults', {}).get('project'):
+                    project_for_user(spec['defaults']['project'], user)
+                reply = form_reply(spec['kind'], spec.get('defaults', {}))
+            except (ValueError, ValidationError):
+                reply = {'answer': 'The earlier operation is unavailable. Start with an accessible project.', 'context': {}}
+            context, general = reply.get('context', {}), []
+            reply['save_turn_token'] = turn_token(user, turn['question'], reply)
+            history.append({'role': 'assistant', 'reply': reply})
         elif turn["kind"] == "workflow_guide":
             from .workflow_guide import guide_reply
             from .sample_operations import _sample_queryset

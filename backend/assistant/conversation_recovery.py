@@ -10,6 +10,21 @@ def recover_unknown_context(user, context):
     if not context:
         return None
     try:
+        if 'lab_operation' in context:
+            from .lab_operations import form_reply
+            from .lab_operation_common import project_for_user
+            spec = context['lab_operation']
+            if not isinstance(spec, dict) or not isinstance(spec.get('kind'), str):
+                raise ValueError()
+            defaults = spec.get('defaults', {})
+            if not isinstance(defaults, dict):
+                raise ValueError()
+            if defaults.get('project'):
+                project_for_user(defaults['project'], user)
+            reply = form_reply(spec['kind'], defaults)
+            reply.pop('lab_operation_form', None)
+            reply.update(answer='Your inline operation form is still selected. Review its fields and choose the preview button; nothing was executed.', clarification={'required': True})
+            return reply
         if "daily_work" in context:
             from .daily_work import daily_reply
             reply = daily_reply(user, context["daily_work"])

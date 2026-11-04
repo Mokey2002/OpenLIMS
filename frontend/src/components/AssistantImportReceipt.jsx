@@ -45,6 +45,7 @@ export default function AssistantImportReceipt({ jobId, initialJob = null, actio
     {job && <>
       <strong>Import #{job.id}: {job.state.replaceAll("_", " ")}</strong>
       <div>{job.instrument} · {job.project} · run {job.run_id} · {job.filename}</div>
+      {job.repair && <p>Corrected copy of import #{job.repair.parent_id}, original run {job.repair.parent_run_id}; original data rows {job.repair.source_rows.join(", ")}. The original file and imported measurements are unchanged.</p>}
       {job.error && <Alert variant="warning" className="mt-2">{job.error}</Alert>}
       <Table size="sm" bordered className="my-2"><tbody>
         <tr><th>Rows received</th><td>{counts.rows_received ?? job.planned_counts?.rows_received}</td></tr>
@@ -64,6 +65,11 @@ export default function AssistantImportReceipt({ jobId, initialJob = null, actio
           <tbody>{job.row_report.map(row => <tr key={row.row}><td>{row.row}</td><td>{row.sample_id}</td><td>{row.status}</td><td>{row.reason}</td></tr>)}</tbody></Table>
       </details>
       <Button size="sm" variant="outline-secondary" className="me-1" disabled={busy} onClick={async () => { try { await apiDownload(job.download_url, `instrument-import-${jobId}.csv`); } catch { setError("Could not download the report. Check your connection and access."); } }}>Download row report</Button>
+      {job.can_repair && onPrepared && <Button size="sm" variant="outline-primary" className="me-1" disabled={busy || disabled} onClick={() => onPrepared({
+        answer: "Select rejected rows and enter their actual corrections. Validation prepares a child import; measurements require confirmation.",
+        lab_operation_form: { kind: "repair", title: "Repair rejected import rows", help: "Choose the rejected rows to correct. Imported rows cannot be retried here.", defaults: { parent_id: jobId } },
+        context: { lab_operation: { kind: "repair", defaults: { parent_id: jobId } } }
+      })}>Repair rejected rows</Button>}
       {job.can_revalidate && onPrepared && <Button size="sm" variant="outline-primary" className="me-1" disabled={busy || disabled} onClick={() => command("revalidate")}>Revalidate and preview</Button>}
       {job.can_resume && <Button size="sm" variant="outline-primary" className="me-1" disabled={busy || disabled} onClick={() => command("resume")}>{job.status === "COMPLETED" ? "Finalize import receipt" : "Resume queued import"}</Button>}
     </>}

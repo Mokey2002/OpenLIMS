@@ -1,4 +1,5 @@
 from assistant.saved_queries import SavedWorkflowQueriesView, SavedWorkflowQueryDetailView
+from assistant.lab_operations import LabOperationOptionsView, LabOperationPreviewView, ImportRepairRowsView
 from assistant.workflow_guide import WorkflowGuideView, WorkflowActionView
 from assistant.daily_work import DailyWorkView, DailyWorkActionView
 from assistant.project_investigations import ProjectQCView, ProjectQCExportView
@@ -224,6 +225,9 @@ urlpatterns = router.urls + [
     path("assistant/saved-queries/", SavedWorkflowQueriesView.as_view(), name="assistant-saved-queries"),
     path("assistant/saved-queries/<int:pk>/", SavedWorkflowQueryDetailView.as_view(), name="assistant-saved-query-detail"),
     path("assistant/daily-work/", DailyWorkView.as_view(), name="assistant-daily-work"),
+    path("assistant/lab-operations/options/", LabOperationOptionsView.as_view(), name="assistant-lab-operation-options"),
+    path("assistant/lab-operations/preview/", LabOperationPreviewView.as_view(), name="assistant-lab-operation-preview"),
+    path("assistant/import-repairs/<int:pk>/", ImportRepairRowsView.as_view(), name="assistant-import-repair-rows"),
     path("assistant/daily-work/actions/", DailyWorkActionView.as_view(), name="assistant-daily-work-action"),
     path("assistant/project-investigations/<int:pk>/", ProjectQCView.as_view(), name="assistant-project-investigation"),
     path("assistant/project-investigations/<int:pk>/export/", ProjectQCExportView.as_view(), name="assistant-project-investigation-export"),

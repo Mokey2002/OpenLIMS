@@ -170,7 +170,28 @@ def read_file(job):
     return raw
 
 
+def validate_repair_claim(job):
+    repair = job.summary.get('repair')
+    if not repair:
+        return
+    from .models import ImportRowRepair
+    rows = repair.get('source_rows', [])
+    if not isinstance(rows, list) or not 1 <= len(rows) <= 20 or any(type(row) is not int or not 1 <= row <= 10000 for row in rows):
+        raise ValueError('Invalid repair source-row identity.')
+    parent = ImportJob.objects.filter(pk=repair.get('parent_id')).first()
+    if (not parent or parent.project_id != job.project_id or parent.instrument_id != job.instrument_id
+            or parent.uploaded_by_id != job.uploaded_by_id
+            or parent.summary.get(MARKER, {}).get('owner_id') != job.uploaded_by_id
+            or parent.summary.get(MARKER, {}).get('file_sha256') != repair.get('parent_file_sha256')
+            or not rows or len(set(rows)) != len(rows)
+            or ImportRowRepair.objects.filter(parent=parent, child=job, row_number__in=rows).count() != len(rows)):
+        raise ValueError('This repair was superseded or its source identity changed. Return to the original import and prepare a current correction.')
+    if job.summary.get(MARKER) and job.summary[MARKER].get('file_sha256') != repair.get('child_file_sha256'):
+        raise ValueError('The corrected file identity changed. Prepare a new correction from the original import.')
+
+
 def validate_prepared(job, user):
+    validate_repair_claim(job)
     frozen = job.summary.get(MARKER) or {}
     if (not frozen or frozen.get("owner_id") != user.pk or job.uploaded_by_id != user.pk
             or frozen.get("project_id") != job.project_id or frozen.get("instrument_id") != job.instrument_id
@@ -217,7 +238,7 @@ def process_prepared_job(job_id, expected_action_id=None):
                 job.progress_message = "Import completed; all file rows accounted for"
                 job.save(update_fields=["status", "summary", "progress_current", "progress_total", "progress_message"])
                 Event.objects.create(entity_type="ImportJob", entity_id=str(job.pk), action="RESULTS_IMPORTED", actor=job.uploaded_by,
-                                     payload={"instrument_code": job.instrument.code, "run_id": job.run_id, **receipt})
+                                     payload={"assistant_action_id": attempt, "instrument_code": job.instrument.code, "run_id": job.run_id, **receipt})
     except Exception as exc:
         error = str(exc) if isinstance(exc, (ValueError, ValidationError)) else "Import failed during processing. No measurements were committed; revalidate the import."
         # The data transaction has rolled back before recording the failure.
@@ -252,9 +273,12 @@ def process_prepared_job(job_id, expected_action_id=None):
 def report_csv(job):
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["data_row", "sample_id", "status", "reason", "result_cells"])
+    source_rows = job.summary.get('repair', {}).get('source_rows', [])
+    writer.writerow(["data_row", "sample_id", "status", "reason", "result_cells"] + (['original_import', 'original_data_row'] if source_rows else []))
     rows = job.summary.get("row_report", [])
     for row in rows:
         values = [row.get(key, "") for key in ["row", "sample_id", "status", "reason", "result_cells"]]
+        if source_rows:
+            values += [job.summary['repair']['parent_id'], source_rows[row['row'] - 1]]
         writer.writerow(["'" + value if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")) else value for value in values])
     return output.getvalue().encode("utf-8-sig")

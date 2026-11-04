@@ -9,6 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.permissions import (
+    is_admin,
     IsAdminOnly,
     IsAuthenticatedReadOnlyAdminWrite,
 )
@@ -45,6 +46,11 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
             .all()
             .order_by("-timestamp")
         )
+        # Assistant previews/receipts can contain project data. Their native
+        # ownership boundary also applies when reading the shared audit feed.
+        if not is_admin(self.request.user):
+            private = Q(entity_type__iexact='AssistantAction') | Q(payload__has_key='assistant_action_id')
+            queryset = queryset.exclude(private & ~Q(actor=self.request.user))
 
         entity_type = self.request.query_params.get("entity_type")
         action_value = self.request.query_params.get("action")
