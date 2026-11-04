@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.70.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.71.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,17 @@
 
 | Version | Assistant improvements | Details |
 | --- | --- | --- |
-| **v0.70.0** | Actionable daily priorities and project QC investigations with audited PDF/CSV evidence reports and current-access checks. | [v0.70 guide](docs/assistant-v070.md) |
+| **v0.71.0** | Natural conversation follow-ups, retained live read scopes, grounded QC explanations and application concept help. | [v0.71 guide](docs/assistant-v071.md) |
+| **v0.70.0** | Actionable daily priorities and project QC investigations with audited PDF/CSV evidence reports and current-access checks. | [v0.70 guide](docs/assistant-v070.md) · [PR #188](https://github.com/Mokey2002/OpenLIMS/pull/188) |
 | **v0.69.0** | Live multi-step sequencing preparation, requirements/evidence, in-chat step forms, completion and human QC decisions with confirmed actions. | [v0.69 guide](docs/assistant-v069.md) · [PR #187](https://github.com/Mokey2002/OpenLIMS/pull/187) |
-| **v0.68.0** | Instrument file uploads, mapping review, row validation/receipts, repeat protection and queue recovery directly in chat. | [v0.68 guide](docs/assistant-v068.md) · [PR #186](https://github.com/Mokey2002/OpenLIMS/pull/186) |
+
+### v0.71.0 — More natural conversations and reliable follow-ups
+
+Ask **“Why that one?”** after daily priorities, **“Which ones failed?”** or **“Why?”** after a QC investigation, and **“What do I need to do next?”** after selecting a sample. These follow-ups now use fresh, permission-checked evidence. Daily owner/project filters survive natural scope changes; project corrections keep investigation filters without repeating an export proposal. Unrecognized follow-ups retain the last valid read scope and offer specific next steps; unavailable or revoked scopes are cleared.
+
+Concept questions such as **“Explain the difference between a sample and a work item”** return application definitions instead of searching for records. Short example/explanation follow-ups and saved concept conversations work without a language model. Informal help, courtesy wording, project overviews and returning to a recent named project are supported. Conversation reset closes the topic; existing action previews retain their explicit Cancel controls.
+
+Version/footer are **v0.71.0**. Both READMEs retain exactly **v0.71, v0.70 and v0.69** release updates. See the [v0.71 guide](docs/assistant-v071.md) for examples and validation. These fixes support the rules-based assistant; open-ended general conversation still requires an enabled OpenAI/Ollama provider. Live-model fluency was not verified in the disabled-provider development environment. Rebuild the API and frontend images; no migration or new dependency.
 
 ### v0.70.0 — Daily work and project QC investigations in chat
 
@@ -43,7 +51,7 @@ Ask **`What should I work on today?`** to review priorities grounded in recorded
 
 Ask **`Investigate ALPHA’s QC failures and export a report`**. The assistant reviews accessible primary/linked project samples, separates automated checks, human result reviews and work-item QC gates, shows actual evidence and direct instrument provenance, and offers an audited PDF/CSV export. Rates name their assessed-check denominator; overlapping failure/rejection flags count once per result. The export preview freezes the project, filters and time window and rereads evidence at confirmation. Downloads recheck project/source-sample access, including for the creator; direct artifact media paths are blocked, and failed report generation cleans up stored files.
 
-Both panels refresh current records and recover interrupted confirmations; saved views reread data without replaying actions. Scope/row limits are explicit. See the [v0.70 guide](docs/assistant-v070.md) for commands, APIs, date semantics, permissions and report limits. Version/footer **v0.70.0**; both READMEs contain exactly **v0.70, v0.69 and v0.68** release updates. Rebuild/restart API and the production web/frontend image to install the updated NGINX rules; no new migration, dependency or scheduled automation.
+Both panels refresh current records and recover interrupted confirmations; saved views reread data without replaying actions. Scope/row limits are explicit. See the [v0.70 guide](docs/assistant-v070.md) for commands, APIs, date semantics, permissions and report limits. Version/footer **v0.70.0**; the latest three release updates are listed above. Rebuild/restart API and the production web/frontend image to install the updated NGINX rules; no new migration, dependency or scheduled automation.
 
 ### v0.69.0 — Prepare a sample through a guided workflow
 
@@ -53,21 +61,13 @@ Choose an existing template when no run is active; assign work, record actual re
 
 **Refresh preparation**, **What should I do next?** and **Why is preparation blocked?** reread current records. An available configured SEQUENCING step is reported without claiming scientific suitability or starting an instrument. See the [v0.69 guide](docs/assistant-v069.md) for scope, recovery, API and validation. Version/footer are **v0.69.0**; both READMEs retain exactly the latest three release updates. No new migration, dependency or scheduled automation.
 
-### v0.68.0 — Import instrument data from chat
-
-Choose **`Import instrument data`** or ask **`Import this sequencer file into project ALPHA`**. Attach a UTF-8 CSV/TSV export, select the instrument's configured mapping, choose the project and supply the instrument run ID. Review column types/limits and choose whether exact repeated rows should be skipped or retained as replicates. Validation accounts for every data row before showing a confirmation preview; no measurements are imported at upload time.
-
-After confirmation, a Celery job imports the validated rows atomically and shows a receipt in either chat view: rows received, imported, rejected, repeated rows skipped and results created. Download the complete row report. The same instrument/run ID and file recover the existing import; repeat confirmation and worker redelivery preserve its measurement set. **Show my instrument imports**, **Revalidate and preview**, and **Resume queued import** let you recover without navigating tabs. The file, mapping, row targets and write access are rechecked before processing.
-
-Also fixes v0.67 registration being blocked by a nonexistent core `samples` feature flag when production feature enforcement is enabled, and rejects non-finite numeric import values consistently in preview and processing. See the [v0.68 guide](docs/assistant-v068.md) for supported files, API, row-accounting rules and recovery. Rebuild the API/frontend and restart the Celery worker. Version/footer are **v0.68.0**; both READMEs retain only the latest three release updates. No new migration, service, model download or scheduled coding automation.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.70.0`.
+**Current development version:** `v0.71.0`.
 
 ## Deployment Access
 

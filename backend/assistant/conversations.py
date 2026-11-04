@@ -63,6 +63,8 @@ def turn_descriptor(user, message, reply):
     entry = {"question": message, "kind": "unavailable", "interaction_id": reply.get("interaction_id")}
     if reply.get("response_type") == "general" and reply.get("llm_enabled"):
         entry.update(kind="general", answer=reply["answer"][:8000])
+    elif reply.get("lab_concept"):
+        entry.update(kind="lab_concept", concept=copy.deepcopy(reply["lab_concept"]))
     elif reply.get("page_read_reference"):
         entry.update(kind="page_read", reference=copy.deepcopy(reply["page_read_reference"]))
     elif reply.get("workflow_plan"):
@@ -111,6 +113,14 @@ def restore(conversation, user):
             reply = restore_page_read(turn["reference"], user)
             context = reply.get("context", {})
             general = []
+            reply["save_turn_token"] = turn_token(user, turn["question"], reply)
+            history.append({"role": "assistant", "reply": reply})
+        elif turn["kind"] == "lab_concept":
+            from .lab_concepts import explain_concepts
+            reply = explain_concepts(turn["concept"]["keys"], example=turn["concept"].get("example", False))
+            if reply is None:
+                reply = {"answer": "Ask the concept question again.", "context": {}}
+            context, general = reply.get("context", {}), []
             reply["save_turn_token"] = turn_token(user, turn["question"], reply)
             history.append({"role": "assistant", "reply": reply})
         elif turn["kind"] == "workflow_guide":

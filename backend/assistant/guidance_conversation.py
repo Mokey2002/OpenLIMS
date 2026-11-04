@@ -2,7 +2,7 @@
 import re
 
 
-NEXT = re.compile(r"what(?:'s| is)? next|what should I do|next steps?|why.*blocked|explain.*(?:workflow|pipeline)|qué sigue|qu[eé].*hacer|pr[oó]ximo.*paso|por qu[eé].*bloquead|explica.*(?:flujo|pipeline)|what.*holding.*up|what.*(?:missing|left to do)|how.*(?:proceed|continue)|qu[eé] falta|qu[eé].*impide|c[oó]mo.*continu", re.I)
+NEXT = re.compile(r"what(?:'s| is)? next|what should I do|what (?:do I need to|can I) do next|next steps?|why.*blocked|what(?:'s| is).*blocking|explain.*(?:workflow|pipeline)|qué sigue|qu[eé].*hacer|pr[oó]ximo.*paso|por qu[eé].*bloquead|explica.*(?:flujo|pipeline)|what.*holding.*up|what.*(?:missing|left to do)|how.*(?:proceed|continue)|qu[eé] falta|qu[eé].*impide|c[oó]mo.*continu", re.I)
 OWNER = re.compile(r"who.*(?:assigned|responsible|review)|qui[eé]n.*(?:asignad|responsable|revisa)", re.I)
 STEP = re.compile(r"\b(?:step|paso)\s+(\d+)\b", re.I)
 WRITE = re.compile(r"\b(?:approve|assign|complete|delete|cancel|create|update|aprobar|aprueba|asigna|completa|elimina|cancela|crea|actualiza)\b", re.I)

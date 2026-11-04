@@ -129,7 +129,7 @@ def inspect_work(work, user, now=None, separation=None):
 
 
 def daily_reply(user, scope=None):
-    serializer = DailyScopeSerializer(data=scope or {})
+    serializer = DailyScopeSerializer(data=scope if scope is not None else {})
     serializer.is_valid(raise_exception=True)
     scope = serializer.validated_data
     now = timezone.now()
@@ -143,7 +143,7 @@ def daily_reply(user, scope=None):
         from .lab_reviews import _projects
         projects = list(_projects(user).filter(code__iexact=scope["project"])[:2])
         if len(projects) != 1:
-            return response("Project unavailable. Use one exact accessible project code.")
+            return response("Project unavailable. Use one exact accessible project code.", replace_context=True)
         from .project_conversation import project_samples
         scope["project"] = projects[0].code
         work = work.filter(sample__in=project_samples(projects[0], user))
@@ -157,7 +157,8 @@ def daily_reply(user, scope=None):
             focus == "today" and row["due_today"] or focus == "qc" and (row["failed_results"] or row["qc_status"] in {"REJECTED", "RERUN_REQUIRED"} or row["review"] == "Awaiting workflow QC") or focus == "blocked" and row["blocked"]]
     rows.sort(key=lambda row: (row["priority"], row["due"] or "9999", row["id"]))
     page = rows[scope["offset"]:scope["offset"] + PAGE_SIZE]
-    answer = f"Here are {len(page)} of {len(rows)} matching priorities assessed from {min(total, SCAN_LIMIT)} work items. "
+    assessed = min(total, SCAN_LIMIT)
+    answer = f"Showing {len(page)} of {len(rows)} matching priorities from {assessed} assessed work item{'s' if assessed != 1 else ''}. "
     answer += "Scope: work assigned to you. " if scope["scope"] == "mine" else f"Scope: {scope['scope']} accessible work. "
     if not rows:
         answer += "No matching work was found in this assessment; this is not a team-wide all-clear. "
@@ -304,11 +305,24 @@ class DailyWorkActionView(APIView):
         return Response(reply, status=201)
 
 
+def explain_priorities(reply):
+    panel = reply.get("daily_work")
+    if panel is None:
+        return reply
+    rows = panel["rows"]
+    details = [f"Work #{row['id']} — {row['sample']}: {row['reason']}" for row in rows[:5]]
+    reply["answer"] += ("\n\n" + "\n".join(details) if details else "\nNo matching priority is recorded in these filters.")
+    if len(rows) > 5:
+        reply["answer"] += "\nThese are the first five displayed reasons; inspect the remaining rows for their evidence."
+    reply["answer"] += "\nThe ranking uses recorded work state, QC gates and deadlines; it does not establish a scientific cause."
+    return reply
+
+
 def route_daily_work(message, user, context=None, page_context=None):
     context = context or {}
     text = normalize_request(message)
     sample_selected = page_context or any(context.get(key) for key in ["sample_code", "sample_codes", "sample_id", "sample_ids", "workflow_guide"])
-    if text.lower() != "what should i do next" or not sample_selected or KEY in context:
+    if KEY not in context and (text.lower() != "what should i do next" or not sample_selected):
         from .workitem_operations import personal_work_summary
         personal = personal_work_summary(text, user)
         if personal:
@@ -316,20 +330,35 @@ def route_daily_work(message, user, context=None, page_context=None):
     match = re.fullmatch(r"(?:show |list )?(?:my|daily|my daily) work in project ([\w.:/-]{1,64})", text, re.I)
     if match:
         return daily_reply(user, {"project": match[1]})
+    project_work = re.fullmatch(r"(?:show|list) daily (overdue|unassigned|blocked|actionable|qc) work in project ([\w.:/-]{1,64})", text, re.I)
+    if project_work:
+        field = project_work[1].lower()
+        return daily_reply(user, {"project": project_work[2], "scope": "unassigned" if field == "unassigned" else "team",
+                                  "focus": "all" if field == "unassigned" else field})
     if text.lower() in {"show daily team work", "show daily unassigned work"}:
         return daily_reply(user, {"scope": "team" if "team" in text.lower() else "unassigned"})
     if KEY not in context:
         return None
     followup = {"only actionable": "actionable", "only overdue": "overdue", "only due today": "today", "only qc": "qc", "only blocked": "blocked", "show all work": "all"}
+    focus_match = re.fullmatch(r"only (?:the )?(actionable|overdue|blocked|qc)(?: ones| work| tasks)?", text, re.I)
+    if focus_match:
+        followup[text.lower()] = focus_match[1].lower()
+    scope_match = re.fullmatch(r"(?:only (?:the )?|(?:show|list)(?: me)? (?:the )?)(my|team|unassigned)(?: ones| work| tasks)?(?: instead| again)?", text, re.I)
+    project_match = re.fullmatch(r"(?:only (?:in )?project|(?:actually[, ]+)?(?:use|switch to)(?: project)?|same for(?: project)?) ([\w.:/-]{1,64})", text, re.I)
+    explanation = bool(re.fullmatch(r"why(?: (?:that one|this one|these|those|these priorities|are they blocked))?|explain (?:that|these priorities|this work)(?: more simply)?", text, re.I))
     serializer = DailyScopeSerializer(data=context[KEY])
-    recognized = text.lower() in {*followup, "refresh my work", "next work page", "show my work"}
+    recognized = bool(scope_match or project_match or explanation or text.lower() in {*followup, "refresh my work", "next work page", "show my work"})
     if not recognized:
+        from .workitem_operations import personal_work_summary
+        personal = personal_work_summary(text, user)
+        if personal:
+            return personal
         from .guided_actions import route_guided_action
         guided = route_guided_action(message, user, context)
         if not guided:
             return None
         if not serializer.is_valid():
-            return response("The work filters are unavailable. Ask for your daily work again.")
+            return response("The work filters are unavailable. Ask for your daily work again.", replace_context=True)
         pending = guided.get("pending_action")
         if pending:
             work = scoped_work(user).filter(pk=pending["payload"]["work_item_id"]).first()
@@ -345,12 +374,19 @@ def route_daily_work(message, user, context=None, page_context=None):
         reply.update({key: value for key, value in guided.items() if key not in {"context", "replace_context"}})
         return reply
     if not serializer.is_valid():
-        return response("The work filters are unavailable. Ask for your daily work again.")
+        return response("The work filters are unavailable. Ask for your daily work again.", replace_context=True)
     scope = serializer.validated_data
-    if text.lower() in followup:
+    if scope_match:
+        scope.update(scope="mine" if scope_match[1].lower() == "my" else scope_match[1].lower(), offset=0)
+    elif project_match:
+        scope.update(project=project_match[1], offset=0)
+    elif text.lower() in followup:
         scope.update(focus=followup[text.lower()], offset=0)
     elif text.lower() == "next work page":
         scope["offset"] = min(SCAN_LIMIT, scope["offset"] + PAGE_SIZE)
     else:
         scope["offset"] = 0
-    return daily_reply(user, scope)
+    reply = daily_reply(user, scope)
+    if explanation and "blocked" in text.lower() and reply.get("daily_work", {}).get("rows") and not any(row["blocked"] for row in reply["daily_work"]["rows"]):
+        reply["answer"] = "None of the displayed items has a blocked flag. " + reply["answer"]
+    return explain_priorities(reply) if explanation else reply

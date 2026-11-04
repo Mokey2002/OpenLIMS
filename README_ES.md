@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.70.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.71.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,17 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras del asistente | Detalles |
 | --- | --- | --- |
-| **v0.70.0** | Prioridades diarias accionables e investigaciones QC por proyecto con informes PDF/CSV auditados y permisos actualizados. | [Guía v0.70](docs/assistant-v070.md) |
+| **v0.71.0** | Seguimientos naturales, conservación de consultas vigentes, explicaciones QC basadas en evidencia y ayuda sobre conceptos. | [Guía v0.71](docs/assistant-v071.md) |
+| **v0.70.0** | Prioridades diarias accionables e investigaciones QC por proyecto con informes PDF/CSV auditados y permisos actualizados. | [Guía v0.70](docs/assistant-v070.md) · [PR #188](https://github.com/Mokey2002/OpenLIMS/pull/188) |
 | **v0.69.0** | Preparación guiada para secuenciación, requisitos/evidencia, formularios, finalización y decisiones humanas de QC con confirmación. | [Guía v0.69](docs/assistant-v069.md) · [PR #187](https://github.com/Mokey2002/OpenLIMS/pull/187) |
-| **v0.68.0** | Carga de archivos de instrumentos, revisión de mapeo, validación/recibos por fila, protección de repeticiones y recuperación desde el chat. | [Guía v0.68](docs/assistant-v068.md) · [PR #186](https://github.com/Mokey2002/OpenLIMS/pull/186) |
+
+## v0.71.0 — Conversaciones y seguimientos más naturales
+
+Después de las prioridades diarias, pregunta **“Why that one?”**; después de una investigación QC, **“Which ones failed?”** o **“Why?”**; después de seleccionar una muestra, **“What do I need to do next?”**. El asistente vuelve a consultar datos y permisos actuales. Conserva filtros al cambiar responsable/proyecto y corrige el proyecto de una investigación sin repetir la propuesta de exportación. Si no comprende un seguimiento, mantiene la consulta válida y ofrece opciones concretas; elimina contextos sin acceso o inválidos.
+
+**“Explain the difference between a sample and a work item”** explica conceptos sin buscar registros. Los ejemplos y las conversaciones guardadas sobre conceptos funcionan sin modelo de lenguaje. También mejora la ayuda informal, las correcciones y el regreso a un proyecto reciente. Reiniciar la conversación cierra el tema; cada propuesta conserva su botón Cancel para cancelar la acción. Las frases nuevas documentadas están en inglés.
+
+Versión/pie **v0.71.0**. Ambos README conservan exactamente **v0.71, v0.70 y v0.69**. Consulta la [guía v0.71](docs/assistant-v071.md) para ejemplos y validación. La conversación general abierta requiere OpenAI/Ollama habilitado; no se verificó fluidez con un proveedor real porque está deshabilitado en el entorno de desarrollo. Reconstruye API y frontend; sin migración ni dependencia nueva.
 
 ## v0.70.0 — Trabajo diario e investigaciones QC por proyecto desde el chat
 
@@ -24,7 +32,7 @@ Pregunta **`What should I work on today?`** para revisar prioridades basadas en 
 
 Pide **`Investigate ALPHA’s QC failures and export a report`**. El asistente consulta muestras principales/vinculadas accesibles, separa comprobaciones automáticas, revisiones de resultados y controles QC del trabajo, muestra evidencia y procedencia directa del instrumento, y prepara un PDF/CSV auditado. Las tasas indican su denominador; fallos/rechazos superpuestos cuentan una sola vez por resultado. La vista previa fija proyecto, filtros y ventana temporal, y vuelve a consultar al confirmar. Las descargas verifican permisos actuales del proyecto y muestras fuente, incluso para el creador; se bloquea el acceso directo a archivos de artefactos y una generación fallida limpia los archivos guardados.
 
-Ambos paneles actualizan registros y recuperan confirmaciones interrumpidas; las vistas guardadas consultan datos actuales sin repetir acciones. Los límites son explícitos. Las frases nuevas documentadas están en inglés. Consulta la [guía v0.70](docs/assistant-v070.md). Versión/pie **v0.70.0**; ambas guías contienen exactamente **v0.70, v0.69 y v0.68**. Reconstruye/reinicia API y la imagen web/frontend de producción para instalar las reglas NGINX; sin nueva migración, dependencia ni automatización programada.
+Ambos paneles actualizan registros y recuperan confirmaciones interrumpidas; las vistas guardadas consultan datos actuales sin repetir acciones. Los límites son explícitos. Las frases nuevas documentadas están en inglés. Consulta la [guía v0.70](docs/assistant-v070.md). Versión/pie **v0.70.0**; las tres actualizaciones más recientes se indican arriba. Reconstruye/reinicia API y la imagen web/frontend de producción para instalar las reglas NGINX; sin nueva migración, dependencia ni automatización programada.
 
 ## v0.69.0 — Prepara una muestra con un flujo guiado
 
@@ -34,21 +42,13 @@ Selecciona una plantilla existente si no hay una ejecución activa; asigna traba
 
 **Refresh preparation**, **What should I do next?** y **Why is preparation blocked?** consultan los registros actuales. Un paso SEQUENCING disponible indica disponibilidad en el flujo configurado, sin certificar idoneidad científica ni iniciar un instrumento. Las frases nuevas documentadas están en inglés. Consulta la [guía v0.69](docs/assistant-v069.md) para alcance, recuperación, API y pruebas. Versión/pie **v0.69.0**; ambas guías conservan exactamente las tres últimas actualizaciones. Sin nueva migración, dependencia ni automatización programada.
 
-## v0.68.0 — Importa datos de instrumentos desde el chat
-
-Elige **`Import instrument data`** o pide **`Import this sequencer file into project ALPHA`**. Adjunta un CSV/TSV UTF-8, selecciona el mapeo configurado del instrumento, el proyecto y el ID de la corrida. Revisa tipos/límites y decide si se omiten filas exactamente repetidas o se conservan como réplicas. La validación contabiliza todas las filas antes de la vista previa; cargar el archivo todavía no importa mediciones.
-
-Tras confirmar, Celery importa las filas válidas de forma atómica y muestra el recibo en ambos chats: filas recibidas, importadas, rechazadas, repeticiones omitidas y resultados creados. Descarga el informe completo por fila. Repetir el mismo instrumento, corrida y archivo recupera la importación existente; confirmar o entregar el trabajo otra vez no duplica sus mediciones. **Show my instrument imports**, **Revalidate and preview** y **Resume queued import** permiten recuperar la tarea sin navegar por pestañas. Se verifican otra vez archivo, mapeo, muestras y permisos antes de procesar.
-
-Corrige también el bloqueo del registro v0.67 por comprobar una bandera `samples` inexistente con la aplicación normal de funciones habilitada, y rechaza números no finitos tanto en la vista previa como al procesar. Consulta la [guía v0.68](docs/assistant-v068.md) para formatos, API, contabilidad y recuperación. Reconstruye API/frontend y reinicia Celery. Versión/pie **v0.68.0**; ambas guías conservan solo las tres últimas actualizaciones. Sin nueva migración, servicio, descarga de modelo ni automatización de programación.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.70.0`
+**Versión de desarrollo actual:** `v0.71.0`
 
 **Demo:** http://35.164.28.250
 

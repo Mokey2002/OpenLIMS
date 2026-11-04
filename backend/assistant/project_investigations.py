@@ -137,7 +137,7 @@ def investigate_project(spec, user, *, complete=False):
         "url": f"/samples/{work.sample_id}"} for work in gates]
     included_samples.update(work.sample_id for work in gates)
     grouped = sorted((rates(row) for row in groups.values()), key=lambda row: (-row["flagged_results"], row["label"]))
-    summary = (f"{project.code}: {totals['flagged_results']} distinct results with failed checks or rejected reviews out of {totals['results']} recorded results. "
+    summary = (f"{project.code}: {totals['flagged_results']} distinct result{'s' if totals['flagged_results'] != 1 else ''} with failed checks or rejected reviews out of {totals['results']} recorded result{'s' if totals['results'] != 1 else ''}. "
         f"Automated checks: {totals['failed_checks']} failed of {totals['assessed_checks']} assessed. "
         f"Human result reviews: {totals['rejected_reviews']} rejected; {totals['pending_reviews']} pending/reopened. These categories can overlap. "
         f"Separate work-item QC decisions: {totals['rejected_work_gates']} rejected; {totals['rerun_work_gates']} requiring rerun.")
@@ -285,6 +285,26 @@ class ProjectQCExportView(APIView):
         return Response(reply, status=201)
 
 
+def explain_failures(reply):
+    report = reply["project_investigation"]
+    lines = []
+    for row in report["failures"][:10]:
+        reason = row["qc_failure_reason"] or row["review_note"] or "No failure/rejection reason is recorded."
+        check = "failed" if row["qc_passed"] is False else "passed" if row["qc_passed"] is True else "not assessed"
+        value = row["value"] if row["value"] is not None else "no usable value"
+        notes = str(reason)[:500]
+        if row["qc_failure_reason"] and row["review_note"]:
+            notes += f" Review note: {str(row['review_note'])[:500]}"
+        lines.append(f"R-{row['id']} — {row['sample']} / {row['key']}: {value} {row['unit']}; check {check}; review {row['qc_status']}. {notes}")
+    for row in report["work_gates"][:5]:
+        lines.append(f"Work #{row['id']} — {row['sample']}: {row['qc_status']}; {str(row['reason'] or 'No review reason is recorded.')[:500]}")
+    reply["answer"] += "\n\n" + ("Recorded flagged evidence:\n" + "\n".join(lines) if lines else "No failed/rejected results or rejected/rerun work gates are recorded in this scope.")
+    if report["failure_count"] > 10 or report["work_gate_count"] > 5:
+        reply["answer"] += "\nThese are evidence excerpts; inspect the investigation panel or preview a CSV export for the remaining records."
+    reply["answer"] += "\nRecorded flags and review notes do not establish the scientific root cause."
+    return reply
+
+
 def route_project_investigation(message, user, context=None):
     text = normalize_request(message)
     prior = (context or {}).get(KEY)
@@ -299,29 +319,35 @@ def route_project_investigation(message, user, context=None):
         if text.lower() in {"cancel", "stop", "never mind"}:
             return response("Investigation request closed. No report was generated.")
         return None
-    export = re.fullmatch(r"(?:export|download)(?: this)? (?:investigation|report)(?: as (PDF|CSV))?", text, re.I)
+    export = re.fullmatch(r"(?:export|download)(?:(?: this)? (?:investigation|report))?(?: as (PDF|CSV))?", text, re.I)
     if isinstance(prior, dict):
         spec = {**prior}
         group = re.fullmatch(r"(?:group|graph failures) by (key|instrument|operator|workflow)", text, re.I)
+        correction = re.fullmatch(r"(?:actually[, ]+)?(?:use|switch to|I meant|same for)(?: project)? ([\w.:/-]{1,64})", text, re.I)
+        evidence = bool(re.fullmatch(r"why|why (?:did (?:they|these|those) fail|these failures)|which (?:ones|results) failed|show (?:me )?(?:the )?(?:failed|flagged) results|explain (?:that|these failures)(?: more simply)?", text, re.I))
         if group:
             spec["group_by"] = group[1].lower()
-        elif export:
+        elif correction or export or evidence:
             pass
         elif text.lower() not in {"refresh this investigation", "refresh investigation"}:
             spec = None
         if spec is not None:
-            if set(prior) - {"project_id", *ProjectQCSerializer().fields}:
-                return response("The investigation filters are unavailable. Start a new project investigation.")
+            project_id = prior.get("project_id")
+            if (set(prior) - {"project_id", *ProjectQCSerializer().fields}
+                    or type(project_id) is not int or not 0 < project_id < 2**63):
+                return response("The investigation filters are unavailable. Start a new project investigation.", replace_context=True)
             try:
+                if correction:
+                    spec["project_id"] = resolve_project(correction[1], user).pk
                 reply = investigation_reply(spec, user, (export[1] or "PDF").upper() if export else None)
                 if text.lower().startswith("graph"):
                     report = reply["project_investigation"]
                     reply["chart"] = {"chartType": "bar", "xKey": "label", "xAxisLabel": report["group_label"],
                         "meta": {"title": f"{report['project']}: flagged results by {report['group_label']}", "description": "Union of failed checks/rejected reviews; categories can overlap. These counts do not establish cause."},
                         "data": report["groups"][:20], "series": [{"dataKey": "flagged_results", "label": "Distinct flagged results", "axisLabel": "Results"}]}
-                return reply
+                return explain_failures(reply) if evidence else reply
             except (ValueError, KeyError, ValidationError) as exc:
-                return response(str(exc))
+                return response(str(exc), replace_context=True)
     pattern = (r"(?:investigate|review) (?:project )?([\w.:/-]{1,64})(?:'s)? QC failures?"
         r"(?: (?:from|for|in|over) (today|yesterday|this week|last week|this month|last month|last \d{1,3} days))?"
         r"(?: and export(?: (?:a|this))? (?:report|investigation)(?: as (PDF|CSV))?)?")

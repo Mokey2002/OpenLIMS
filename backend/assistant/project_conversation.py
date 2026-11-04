@@ -32,8 +32,9 @@ def project_briefing(project, user):
     member_text = ', '.join(members[:100]) or 'No members assigned'
     if len(members) > 100:
         member_text += ' (first 100 shown)'
+    sample_count = samples.count()
     answer = (f"{project.code} — {project.name}\n\n"
-        f"{samples.count()} accessible samples. Sample statuses: {statuses}.\n"
+        f"{sample_count} accessible sample{'s' if sample_count != 1 else ''}. Sample statuses: {statuses}.\n"
         f"Team members: {member_text}.\n"
         f"Work: {totals['total']} total, {totals['unfinished']} unfinished, "
         f"{totals['overdue']} overdue, {totals['unassigned']} unassigned, "
@@ -68,6 +69,19 @@ def project_sample_list(project, user):
 
 def project_request(message, user, context=None):
     text = str(message or '').strip().rstrip('?.!').strip()
+    attention = re.fullmatch(r'(?:which|what) samples are (overdue|unassigned|blocked)|show (?:me )?(overdue|unassigned|blocked) (?:samples|work)', text, re.I)
+    if attention and (context or {}).get('project_id') is not None:
+        project_id = context['project_id']
+        project = _projects(user).filter(pk=project_id).first() if type(project_id) is int and 0 < project_id < 2**63 else None
+        if project is None:
+            return response('That project is no longer accessible. Choose an accessible project.', replace_context=True)
+        from .daily_work import daily_reply
+        focus = next(value.lower() for value in attention.groups() if value)
+        reply = daily_reply(user, {'project': project.code, 'scope': 'unassigned' if focus == 'unassigned' else 'team',
+                                   'focus': 'all' if focus == 'unassigned' else focus})
+        reply['answer'] = f'Work-item priorities for samples in {project.code}. Samples can have more than one work item.\n' + reply['answer']
+        reply['context'].update(project_id=project.pk, read_intent='project_summary')
+        return reply
     match = re.fullmatch(r'(?:please\s+)?(?:summarize|summarise|summary of|give me (?:a |the )?summary of|tell me about)\s+(?:the\s+)?project\s+(.+)', text, re.I)
     if not match:
         match = re.fullmatch(r'(?:summarize|summarise|tell me about)\s+(this project|that project|the project)', text, re.I)

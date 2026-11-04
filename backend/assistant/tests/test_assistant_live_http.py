@@ -290,3 +290,38 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
         self.assertEqual(receipt["action"]["status"], "COMPLETED")
         with self.http(f"/api/v1/assistant/instrument-imports/{job_id}/report/") as response:
             self.assertEqual(len(response.read().decode("utf-8-sig").splitlines()), 5)
+
+    def test_natural_followups_and_recovery_over_real_streaming_http(self):
+        def chat(message, context=None):
+            with self.http('/api/v1/assistant/chat/stream/', {
+                    'message': message, 'context': context or {}, 'request_id': str(uuid.uuid4())}) as response:
+                events = response.read().decode()
+            self.assertIn('event: complete', events)
+            return json.loads(events.split('event: complete\ndata: ', 1)[1].split('\n\n', 1)[0])
+
+        work = self.result.work_item
+        work.assigned_to = self.user
+        work.save()
+        first = chat('What should I work on today?')
+        second = chat('Why that one?', first['context'])
+        self.assertEqual(second['context']['daily_work'], first['context']['daily_work'])
+        self.assertIn(second['daily_work']['rows'][0]['reason'], second['answer'])
+        third = chat('please unpack that bit', second['context'])
+        self.assertIn('daily_work', third['context'])
+        fourth = chat('Only overdue', third['context'])
+        self.assertEqual(fourth['context']['daily_work']['focus'], 'overdue')
+
+        first = chat("Investigate LIVE-CHAT's QC failures")
+        second = chat('Which ones failed?', first['context'])
+        self.assertIn(f'R-{self.result.pk}', second['answer'])
+        third = chat('Why?', second['context'])
+        self.assertIn('do not establish the scientific root cause', third['answer'])
+        self.project.members.remove(self.user)
+        fourth = chat('please unpack that bit', third['context'])
+        self.assertNotIn('project_investigation', fourth)
+        self.assertEqual(fourth['context'], {})
+
+        first = chat('Explain the difference between a sample and a work item')
+        second = chat('Give me a simple example', first['context'])
+        self.assertEqual(second['context']['lab_concept'], ['sample', 'work_item'])
+        self.assertIn('Illustrative example', second['answer'])
