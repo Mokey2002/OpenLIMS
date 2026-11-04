@@ -153,6 +153,10 @@ export function apiPostResponse(path, body, { signal } = {}) {
   return request(path, { method: "POST", body: JSON.stringify(body), signal });
 }
 
+export function apiGetResponse(path, { signal } = {}) {
+  return request(path, { method: "GET", signal });
+}
+
 export async function apiGetAll(path, maxPages = 100, pageSize = 200) {
   const items = [];
   let next = withPageSize(path, pageSize);

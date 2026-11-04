@@ -1,5 +1,7 @@
 from assistant.saved_queries import SavedWorkflowQueriesView, SavedWorkflowQueryDetailView
 from assistant.workflow_guide import WorkflowGuideView, WorkflowActionView
+from assistant.daily_work import DailyWorkView, DailyWorkActionView
+from assistant.project_investigations import ProjectQCView, ProjectQCExportView
 from assistant.conversations import ConversationsView, ConversationDetailView
 from assistant.streaming import AssistantChatStreamView, AssistantChatCancelView
 from django.urls import path
@@ -221,6 +223,10 @@ urlpatterns = router.urls + [
     ),
     path("assistant/saved-queries/", SavedWorkflowQueriesView.as_view(), name="assistant-saved-queries"),
     path("assistant/saved-queries/<int:pk>/", SavedWorkflowQueryDetailView.as_view(), name="assistant-saved-query-detail"),
+    path("assistant/daily-work/", DailyWorkView.as_view(), name="assistant-daily-work"),
+    path("assistant/daily-work/actions/", DailyWorkActionView.as_view(), name="assistant-daily-work-action"),
+    path("assistant/project-investigations/<int:pk>/", ProjectQCView.as_view(), name="assistant-project-investigation"),
+    path("assistant/project-investigations/<int:pk>/export/", ProjectQCExportView.as_view(), name="assistant-project-investigation-export"),
     path("assistant/workflows/<int:pk>/", WorkflowGuideView.as_view(), name="assistant-workflow-guide"),
     path("assistant/workflows/<int:pk>/actions/", WorkflowActionView.as_view(), name="assistant-workflow-action"),
     path("assistant/instrument-imports/", InstrumentImportUploadView.as_view(), name="assistant-instrument-upload"),

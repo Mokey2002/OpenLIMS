@@ -138,6 +138,8 @@ def assistant_starter_suggestions(user):
         work_item__source_import_job__isnull=False,
     ).exists()
     return without_empty(
+        "What should I work on today?" if _authenticated(user) and user.is_active else None,
+        "Investigate project QC failures" if _authenticated(user) and user.is_active else None,
         "Register samples and assign them" if _authenticated(user) and user.is_active and (is_admin(user) or is_tech(user)) else None,
         "Import instrument data" if _authenticated(user) and user.is_active and (is_admin(user) or is_tech(user)) else None,
         "Help me prepare a sample for sequencing" if _authenticated(user) and user.is_active else None,

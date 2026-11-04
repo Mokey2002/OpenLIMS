@@ -1,4 +1,6 @@
 export const ASSISTANT_STARTER_PROMPTS = [
+  "What should I work on today?",
+  "Investigate project QC failures",
   "Help me prepare a sample for sequencing",
   "Import instrument data",
   "Register samples and assign them",

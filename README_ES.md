@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.69.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.70.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,17 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras del asistente | Detalles |
 | --- | --- | --- |
-| **v0.69.0** | Preparación guiada para secuenciación, requisitos/evidencia, formularios, finalización y decisiones humanas de QC con confirmación. | [Guía v0.69](docs/assistant-v069.md) |
+| **v0.70.0** | Prioridades diarias accionables e investigaciones QC por proyecto con informes PDF/CSV auditados y permisos actualizados. | [Guía v0.70](docs/assistant-v070.md) |
+| **v0.69.0** | Preparación guiada para secuenciación, requisitos/evidencia, formularios, finalización y decisiones humanas de QC con confirmación. | [Guía v0.69](docs/assistant-v069.md) · [PR #187](https://github.com/Mokey2002/OpenLIMS/pull/187) |
 | **v0.68.0** | Carga de archivos de instrumentos, revisión de mapeo, validación/recibos por fila, protección de repeticiones y recuperación desde el chat. | [Guía v0.68](docs/assistant-v068.md) · [PR #186](https://github.com/Mokey2002/OpenLIMS/pull/186) |
-| **v0.67.0** | Registro y asignación guiados, preguntas por campos obligatorios, tarea atómica confirmada y recibos actualizados. | [Guía v0.67](docs/assistant-v067.md) · [PR #185](https://github.com/Mokey2002/OpenLIMS/pull/185) |
+
+## v0.70.0 — Trabajo diario e investigaciones QC por proyecto desde el chat
+
+Pregunta **`What should I work on today?`** para revisar prioridades basadas en fallos registrados, controles QC, disponibilidad y plazos. Filtra tu trabajo, el trabajo sin asignar o el equipo; limita a un proyecto exacto e inspecciona evidencia antes de preparar asignaciones, inicios, plazos y finalización compatibles desde ambos chats. Los revisores autorizados pueden registrar una decisión humana de QC con motivo. Al confirmar se verifican otra vez dependencias, campos, permisos y separación de funciones; el trabajo bloqueado no se presenta como disponible por estar vencido.
+
+Pide **`Investigate ALPHA’s QC failures and export a report`**. El asistente consulta muestras principales/vinculadas accesibles, separa comprobaciones automáticas, revisiones de resultados y controles QC del trabajo, muestra evidencia y procedencia directa del instrumento, y prepara un PDF/CSV auditado. Las tasas indican su denominador; fallos/rechazos superpuestos cuentan una sola vez por resultado. La vista previa fija proyecto, filtros y ventana temporal, y vuelve a consultar al confirmar. Las descargas verifican permisos actuales del proyecto y muestras fuente, incluso para el creador; se bloquea el acceso directo a archivos de artefactos y una generación fallida limpia los archivos guardados.
+
+Ambos paneles actualizan registros y recuperan confirmaciones interrumpidas; las vistas guardadas consultan datos actuales sin repetir acciones. Los límites son explícitos. Las frases nuevas documentadas están en inglés. Consulta la [guía v0.70](docs/assistant-v070.md). Versión/pie **v0.70.0**; ambas guías contienen exactamente **v0.70, v0.69 y v0.68**. Reconstruye/reinicia API y la imagen web/frontend de producción para instalar las reglas NGINX; sin nueva migración, dependencia ni automatización programada.
 
 ## v0.69.0 — Prepara una muestra con un flujo guiado
 
@@ -24,7 +32,7 @@ Pide **`Help me prepare sample S-100 for sequencing`** o elige **Help me prepare
 
 Selecciona una plantilla existente si no hay una ejecución activa; asigna trabajo, registra resultados reales y valores del formulario, prepara su finalización y permite que un revisor autorizado registre su decisión de QC con motivo. Cada cambio exige vista previa y confirmación. Se verifican otra vez requisitos, evidencia, permisos e identidades antes de ejecutar, y después se actualiza la lista. La revisión de resultados individuales sigue siendo independiente; se respeta la separación de funciones para evitar autoaprobación cuando está configurada.
 
-**Refresh preparation**, **What should I do next?** y **Why is preparation blocked?** consultan los registros actuales. Un paso SEQUENCING disponible indica disponibilidad en el flujo configurado, sin certificar idoneidad científica ni iniciar un instrumento. Las frases nuevas documentadas están en inglés. Consulta la [guía v0.69](docs/assistant-v069.md) para alcance, recuperación, API y pruebas. Versión/pie **v0.69.0**; ambas guías conservan exactamente **v0.69, v0.68 y v0.67**. Sin nueva migración, dependencia ni automatización programada.
+**Refresh preparation**, **What should I do next?** y **Why is preparation blocked?** consultan los registros actuales. Un paso SEQUENCING disponible indica disponibilidad en el flujo configurado, sin certificar idoneidad científica ni iniciar un instrumento. Las frases nuevas documentadas están en inglés. Consulta la [guía v0.69](docs/assistant-v069.md) para alcance, recuperación, API y pruebas. Versión/pie **v0.69.0**; ambas guías conservan exactamente las tres últimas actualizaciones. Sin nueva migración, dependencia ni automatización programada.
 
 ## v0.68.0 — Importa datos de instrumentos desde el chat
 
@@ -34,21 +42,13 @@ Tras confirmar, Celery importa las filas válidas de forma atómica y muestra el
 
 Corrige también el bloqueo del registro v0.67 por comprobar una bandera `samples` inexistente con la aplicación normal de funciones habilitada, y rechaza números no finitos tanto en la vista previa como al procesar. Consulta la [guía v0.68](docs/assistant-v068.md) para formatos, API, contabilidad y recuperación. Reconstruye API/frontend y reinicia Celery. Versión/pie **v0.68.0**; ambas guías conservan solo las tres últimas actualizaciones. Sin nueva migración, servicio, descarga de modelo ni automatización de programación.
 
-## v0.67.0 — Completa registros y asignaciones desde el chat
-
-Elige **`Register samples and assign them`** y responde las preguntas sobre cantidad, proyecto, tipo de muestra, responsable y campos obligatorios. También puedes empezar con **`Register 10 DNA samples in project ALPHA and assign them to maria`** y completar los metadatos que falten. `me` selecciona al usuario autenticado. Se validan los campos personalizados y los formularios de ingreso publicados, incluidos los campos condicionales, antes de mostrar una vista previa con los IDs, valores compartidos y responsable de las muestras.
-
-Al confirmar se registra y asigna todo el conjunto en una transacción. Se comprueban otra vez permisos, responsable, formularios e IDs. Los conflictos o errores revierten la tarea; repetir la confirmación de una acción completada devuelve su recibo. Ambos chats muestran el resultado y actualizan el estado del servidor tras una confirmación fallida o interrumpida. Esta tarea se completa sin navegar por pestañas. La asignación afecta al responsable de la muestra; los pasos y trabajos tienen sus propios comandos de asignación.
-
-El borrador está firmado, vinculado al usuario y caduca a los 30 minutos. Cancélalo o cambia de tema antes de la vista previa; después usa el botón Cancel de la propuesta. Los metadatos compartidos se aplican a todas las muestras nuevas. Rules y los conectores de ambos proveedores usan los mismos servicios y confirmaciones. Las frases nuevas son en inglés. Consulta la [guía v0.67](docs/assistant-v067.md). Versión/pie **v0.67.0**; ambas guías conservan solo las tres últimas actualizaciones. Sin nueva migración, dependencia ni automatización programada.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.69.0`
+**Versión de desarrollo actual:** `v0.70.0`
 
 **Demo:** http://35.164.28.250
 

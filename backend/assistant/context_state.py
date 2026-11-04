@@ -2,6 +2,8 @@ import re
 
 
 ALLOWED_CONTEXT_KEYS = {
+    "daily_work",
+    "project_investigation",
     "workflow_guide",
     "instrument_import_job_id",
     "result_query_context",
