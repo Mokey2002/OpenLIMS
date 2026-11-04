@@ -178,6 +178,12 @@ def execute_guided_action(action):
         if (fingerprint != payload["workflow_digest"] or not step or not current_run or current_run.pk != run.pk
                 or any(pos not in positions or positions[pos].status not in {"COMPLETED", "SKIPPED"} for pos in step.dependency_positions)):
             raise ValueError("The guided workflow or its dependencies changed. Refresh the checklist and request a fresh preview.")
+    if payload.get("daily_digest"):
+        from .daily_work import inspect_work, scoped_work
+        current = scoped_work(action.requested_by).get(pk=work.pk)
+        row = inspect_work(current, action.requested_by)
+        if row["digest"] != payload["daily_digest"] or not row["can_assign"]:
+            raise ValueError("Work or evidence changed. Refresh your priorities and request a fresh preview.")
     operation = payload["operation"]
     if operation == "GUIDED_ASSIGN":
         person = get_user_model().objects.get(pk=payload["target_user_id"])

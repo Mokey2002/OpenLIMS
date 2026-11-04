@@ -25,6 +25,8 @@ import AssistantPageBar from "./AssistantPageBar";
 import AssistantInstrumentUpload from "./AssistantInstrumentUpload";
 import AssistantImportReceipt from "./AssistantImportReceipt";
 import AssistantWorkflowGuide from "./AssistantWorkflowGuide";
+import AssistantDailyWork from "./AssistantDailyWork";
+import AssistantProjectInvestigation from "./AssistantProjectInvestigation";
 
 const DEMO_ASSISTANT_NOTE =
   "Public demo note: this hosted demo uses OpenLIMS Rules because server resources are limited. Self-hosted deployments can enable OpenAI or Ollama.";
@@ -64,6 +66,8 @@ export default function AssistantWidget() {
 
   const bottomRef = useRef(null);
   const workflowIndex = history.findLastIndex(item => item.workflowPlan);
+  const dailyIndex = history.findLastIndex(item => item.dailyWork);
+  const investigationIndex = history.findLastIndex(item => item.projectInvestigation);
   const workflowRevision = history.map(item => item.pendingAction ? `${item.pendingAction.id}:${item.pendingAction.status}` : "").join(";");
 
   useEffect(() => {
@@ -275,7 +279,7 @@ export default function AssistantWidget() {
 
                   {item.projectWorkflows && <ProjectWorkflowTable data={item.projectWorkflows} />}
 
-                  {item.comparison && (
+                  {item.comparison && !item.dailyWork && (
                     <ComparisonTable comparison={item.comparison} />
                   )}
 
@@ -289,6 +293,10 @@ export default function AssistantWidget() {
                     </Alert>
                   )}
 
+                  {index === dailyIndex && item.dailyWork && conversationContext.daily_work && <AssistantDailyWork initial={item.dailyWork}
+                    revision={workflowRevision} onContext={setConversationContext} onPrepared={receiveWorkflow} onBusy={setImportBusy} disabled={loading || importBusy || Boolean(actionBusy)} />}
+                  {index === investigationIndex && item.projectInvestigation && conversationContext.project_investigation && <AssistantProjectInvestigation initial={item.projectInvestigation}
+                    revision={workflowRevision} onContext={setConversationContext} onPrepared={receiveWorkflow} onBusy={setImportBusy} onRun={sendMessage} disabled={loading || importBusy || Boolean(actionBusy)} />}
                   {index === workflowIndex && item.workflowPlan && typeof conversationContext.workflow_guide === "string" && <AssistantWorkflowGuide
                     initialPlan={item.workflowPlan} revision={workflowRevision} onPrepared={receiveWorkflow} onRun={sendMessage}
                     onBusy={setImportBusy} disabled={loading || importBusy || Boolean(actionBusy)} />}

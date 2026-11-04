@@ -646,7 +646,17 @@ def execute_compliance_report(action):
         if not project or not (_is_admin(action.requested_by) or project.members.filter(id=action.requested_by_id).exists()):
             raise ComplianceReportError("Project access changed before report generation.")
     output_format = filters.get("output_format", "PDF")
-    if filters.get("report_type") == "INVESTIGATION_REPORT":
+    if filters.get("report_type") == "PROJECT_QC_INVESTIGATION":
+        from .project_investigations import investigate_project, csv_report, pdf_report
+        report = investigate_project(filters["project_qc_spec"], action.requested_by, complete=True)
+        filters["evidence_sample_ids"] = report["evidence_sample_ids"]
+        filters["generated_window"] = report["window"]
+        rows = report["failures"] + report["work_gates"]
+        if output_format == "CSV":
+            content, kind, extension, content_type = csv_report(report), GeneratedArtifact.KIND_REPORT_CSV, "csv", "text/csv"
+        else:
+            content, kind, extension, content_type = pdf_report(report), GeneratedArtifact.KIND_REPORT_PDF, "pdf", "application/pdf"
+    elif filters.get("report_type") == "INVESTIGATION_REPORT":
         investigation_result = run_investigation_spec(
             filters.get("investigation_spec") or {},
             action.requested_by,
@@ -711,14 +721,19 @@ def execute_compliance_report(action):
         project=project,
         created_by=action.requested_by,
     )
-    artifact.file.save(filename, ContentFile(content), save=True)
-    Event.objects.create(
-        entity_type="GeneratedArtifact",
-        entity_id=str(artifact.id),
-        action="REPORT_GENERATED",
-        actor=action.requested_by,
-        payload={"report_type": filters.get("report_type"), "filters": filters, "checksum_sha256": checksum, "assistant_action_id": str(action.id)},
-    )
+    try:
+        artifact.file.save(filename, ContentFile(content), save=True)
+        Event.objects.create(
+            entity_type="GeneratedArtifact",
+            entity_id=str(artifact.id),
+            action="REPORT_GENERATED",
+            actor=action.requested_by,
+            payload={"report_type": filters.get("report_type"), "filters": filters, "checksum_sha256": checksum, "assistant_action_id": str(action.id)},
+        )
+    except Exception:
+        if artifact.file.name:
+            artifact.file.storage.delete(artifact.file.name)
+        raise
     return {
         "operation": "GENERATE_COMPLIANCE_REPORT",
         "succeeded_count": 1,

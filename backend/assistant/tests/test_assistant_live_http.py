@@ -3,6 +3,8 @@ import json
 import html
 import re
 import uuid
+import hashlib
+import tempfile
 from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import ProxyHandler, Request, build_opener
@@ -26,6 +28,9 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
 
     @classmethod
     def setUpClass(cls):
+        cls._media = tempfile.TemporaryDirectory(prefix="assistant-live-http-")
+        cls._media_settings = override_settings(MEDIA_ROOT=cls._media.name)
+        cls._media_settings.enable()
         # The live server inherits this publication stub; test jobs must never
         # reach a development worker configured for a different database.
         cls._import_publication = patch("imports.tasks.process_assistant_import_job.delay", return_value=None)
@@ -39,6 +44,8 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
         except Exception:
             cls._import_publication.stop()
             settings.DATABASES["default"]["TEST"]["NAME"] = cls._test_name
+            cls._media_settings.disable()
+            cls._media.cleanup()
             raise
 
     @classmethod
@@ -48,6 +55,8 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
         finally:
             cls._import_publication.stop()
             settings.DATABASES["default"]["TEST"]["NAME"] = cls._test_name
+            cls._media_settings.disable()
+            cls._media.cleanup()
 
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="live-chat-owner")
@@ -97,6 +106,47 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
         with self.assertRaises(HTTPError) as error:
             self.http("/api/v1/assistant/chat/stream/", {"message": "Who am I?", "request_id": request_id})
         self.assertEqual(error.exception.code, 409)
+
+    def test_real_daily_work_confirmation_and_no_duplicate_completion(self):
+        work = self.result.work_item
+        work.assigned_to = self.user
+        work.save()
+        with self.http("/api/v1/assistant/chat/stream/", {"message": "What should I work on today?", "request_id": str(uuid.uuid4())}) as response:
+            text = response.read().decode()
+        reply = json.loads(text.split("event: complete\ndata: ", 1)[1].split("\n\n", 1)[0])
+        row = reply["daily_work"]["rows"][0]
+        self.assertEqual(row["id"], work.pk)
+        with self.http("/api/v1/assistant/daily-work/actions/", {"operation": "DAILY_COMPLETE", "work_item_id": work.pk, "digest": row["digest"]}) as response:
+            action = json.load(response)["pending_action"]
+        self.assertEqual(WorkItem.objects.get(pk=work.pk).status, "PENDING")
+        for _ in range(2):
+            with self.http(f"/api/v1/assistant/actions/{action['confirmation_token']}/confirm/", {"confirm": True}) as response:
+                self.assertEqual(json.load(response)["status"], "COMPLETED")
+        with self.http("/api/v1/assistant/daily-work/") as response:
+            self.assertEqual(json.load(response)["daily_work"]["rows"], [])
+        self.assertEqual(WorkItem.objects.get(pk=work.pk).status, "COMPLETED")
+
+    def test_real_project_qc_report_export_checksum_download_and_revocation(self):
+        with self.http("/api/v1/assistant/chat/stream/", {"message": "Investigate project LIVE-CHAT QC failures and export a report as CSV", "request_id": str(uuid.uuid4())}) as response:
+            text = response.read().decode()
+        reply = json.loads(text.split("event: complete\ndata: ", 1)[1].split("\n\n", 1)[0])
+        self.assertEqual(reply["project_investigation"]["summary"]["flagged_results"], 1)
+        action = reply["pending_action"]
+        with self.http(f"/api/v1/assistant/actions/{action['confirmation_token']}/confirm/", {"confirm": True}) as response:
+            result = json.load(response)["result"]
+        with self.http(result["download_url"]) as response:
+            content = response.read()
+        self.assertEqual(hashlib.sha256(content).hexdigest(), result["checksum_sha256"])
+        self.assertIn(b"concentration", content)
+        from assistant.models import GeneratedArtifact
+        artifact = GeneratedArtifact.objects.get(pk=result["artifact_id"])
+        with self.assertRaises(HTTPError) as raw_error:
+            self.http("/media/" + artifact.file.name)
+        self.assertEqual(raw_error.exception.code, 404)
+        self.project.members.remove(self.user)
+        with self.assertRaises(HTTPError) as error:
+            self.http(result["download_url"])
+        self.assertEqual(error.exception.code, 403)
 
     def test_real_streamed_workflow_preparation_through_human_qc(self):
         from pipelines.models import AnalysisDefinition, ProcedureDefinition, PipelineTemplate, PipelineTemplateStep

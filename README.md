@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.69.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.70.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,17 @@
 
 | Version | Assistant improvements | Details |
 | --- | --- | --- |
-| **v0.69.0** | Live multi-step sequencing preparation, requirements/evidence, in-chat step forms, completion and human QC decisions with confirmed actions. | [v0.69 guide](docs/assistant-v069.md) |
+| **v0.70.0** | Actionable daily priorities and project QC investigations with audited PDF/CSV evidence reports and current-access checks. | [v0.70 guide](docs/assistant-v070.md) |
+| **v0.69.0** | Live multi-step sequencing preparation, requirements/evidence, in-chat step forms, completion and human QC decisions with confirmed actions. | [v0.69 guide](docs/assistant-v069.md) · [PR #187](https://github.com/Mokey2002/OpenLIMS/pull/187) |
 | **v0.68.0** | Instrument file uploads, mapping review, row validation/receipts, repeat protection and queue recovery directly in chat. | [v0.68 guide](docs/assistant-v068.md) · [PR #186](https://github.com/Mokey2002/OpenLIMS/pull/186) |
-| **v0.67.0** | Guided sample registration and assignment, required-field questions, one atomic confirmed task and refreshed action receipts. | [v0.67 guide](docs/assistant-v067.md) · [PR #185](https://github.com/Mokey2002/OpenLIMS/pull/185) |
+
+### v0.70.0 — Daily work and project QC investigations in chat
+
+Ask **`What should I work on today?`** to review priorities grounded in recorded failures, QC gates, workflow availability and deadlines. Filter your assigned, unassigned or team work, narrow to an exact project, inspect evidence, then preview assignments, starts, deadlines or eligible completion directly in either chat view. Authorized reviewers can submit a human workflow-QC decision with a reason. Dependencies, required fields, current access and separation of duties are rechecked at confirmation; blocked work is not presented as available overdue work.
+
+Ask **`Investigate ALPHA’s QC failures and export a report`**. The assistant reviews accessible primary/linked project samples, separates automated checks, human result reviews and work-item QC gates, shows actual evidence and direct instrument provenance, and offers an audited PDF/CSV export. Rates name their assessed-check denominator; overlapping failure/rejection flags count once per result. The export preview freezes the project, filters and time window and rereads evidence at confirmation. Downloads recheck project/source-sample access, including for the creator; direct artifact media paths are blocked, and failed report generation cleans up stored files.
+
+Both panels refresh current records and recover interrupted confirmations; saved views reread data without replaying actions. Scope/row limits are explicit. See the [v0.70 guide](docs/assistant-v070.md) for commands, APIs, date semantics, permissions and report limits. Version/footer **v0.70.0**; both READMEs contain exactly **v0.70, v0.69 and v0.68** release updates. Rebuild/restart API and the production web/frontend image to install the updated NGINX rules; no new migration, dependency or scheduled automation.
 
 ### v0.69.0 — Prepare a sample through a guided workflow
 
@@ -43,7 +51,7 @@ Ask **`Help me prepare sample S-100 for sequencing`**, or choose **Help me prepa
 
 Choose an existing template when no run is active; assign work, record actual results and step-form values, preview work completion, and let an authorized human reviewer submit a QC decision with a reason. Each change has its own preview and confirmation. Current requirements, evidence, permissions and frozen identities are checked again before execution; the checklist refreshes afterward. Separate result-level QC reviews remain separate, and separation-of-duties rules prevent self-approval when configured.
 
-**Refresh preparation**, **What should I do next?** and **Why is preparation blocked?** reread current records. An available configured SEQUENCING step is reported without claiming scientific suitability or starting an instrument. See the [v0.69 guide](docs/assistant-v069.md) for scope, recovery, API and validation. Version/footer are **v0.69.0**; both READMEs retain exactly **v0.69, v0.68 and v0.67** release updates. No new migration, dependency or scheduled automation.
+**Refresh preparation**, **What should I do next?** and **Why is preparation blocked?** reread current records. An available configured SEQUENCING step is reported without claiming scientific suitability or starting an instrument. See the [v0.69 guide](docs/assistant-v069.md) for scope, recovery, API and validation. Version/footer are **v0.69.0**; both READMEs retain exactly the latest three release updates. No new migration, dependency or scheduled automation.
 
 ### v0.68.0 — Import instrument data from chat
 
@@ -53,21 +61,13 @@ After confirmation, a Celery job imports the validated rows atomically and shows
 
 Also fixes v0.67 registration being blocked by a nonexistent core `samples` feature flag when production feature enforcement is enabled, and rejects non-finite numeric import values consistently in preview and processing. See the [v0.68 guide](docs/assistant-v068.md) for supported files, API, row-accounting rules and recovery. Rebuild the API/frontend and restart the Celery worker. Version/footer are **v0.68.0**; both READMEs retain only the latest three release updates. No new migration, service, model download or scheduled coding automation.
 
-### v0.67.0 — Complete registration and assignment in chat
-
-Choose **`Register samples and assign them`**, then answer the assistant's questions about count, project, sample type, assignee and configured required fields. Or start with **`Register 10 DNA samples in project ALPHA and assign them to maria`** and supply any missing metadata. `me` selects the authenticated user. The assistant validates legacy custom fields and published intake forms, including conditional fields, before showing one preview of the generated IDs, shared values and sample assignee.
-
-Confirm in chat to create and assign the entire set in one transaction. Access, assignee eligibility, forms and IDs are checked again. A conflict or validation failure rolls back the task; confirming the same completed action again returns its receipt. Both chat views show the result message and refresh the server's action status after a failed or interrupted confirmation. No tab navigation is required for this task. Assignment sets the sample assignee; pipeline/work-item assignments have their own chat commands.
-
-The guided draft is signed, user-bound and expires after 30 minutes. Cancel it or change topics before preview; use the preview's Cancel button to cancel a proposal. Metadata values apply to every new sample in the task. Rules mode and both provider bridges use the same services and confirmation controls. See the [v0.67 guide](docs/assistant-v067.md) for a walkthrough, validation and limits. Version/footer are **v0.67.0** and both READMEs retain only the latest three release updates. No new migration, dependency or scheduled automation.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.69.0`.
+**Current development version:** `v0.70.0`.
 
 ## Deployment Access
 
@@ -948,7 +948,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.69.0**.
+`frontend/src/version.js` file. The current application version is **v0.70.0**.
 
 Footer source:
 

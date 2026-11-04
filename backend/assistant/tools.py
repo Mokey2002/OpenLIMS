@@ -586,6 +586,14 @@ def _hint_clarification(route_hint, user):
 
 
 def route_assistant_message(message, user, context=None, route_hint=None, page_context=None):
+    from .project_investigations import route_project_investigation
+    investigation = route_project_investigation(message, user, context)
+    if investigation is not None:
+        return _routed(investigation, "investigation")
+    from .daily_work import route_daily_work
+    daily = route_daily_work(message, user, context, page_context=page_context)
+    if daily is not None:
+        return _routed(daily, "work_items")
     from .workflow_guide import route_workflow_guide
     workflow = route_workflow_guide(message, user, context)
     if workflow is not None:

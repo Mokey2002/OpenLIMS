@@ -49,6 +49,7 @@ export function assistantMessage(data) {
     clarification: data.clarification || null, pendingAction: data.pending_action || null,
     instrumentImportForm: data.instrument_import_form || null, instrumentImportJob: data.instrument_import_job || null,
     workflowPlan: data.workflow_plan || null,
+    dailyWork: data.daily_work || null, projectInvestigation: data.project_investigation || null,
     actionError: data.action_error || "", llmError: data.llm_error || "", mode: data.mode || "openlims",
     modelInfo: data.model_info || { provider: "openlims", display_name: "OpenLIMS Rules" },
     interactionId: data.interaction_id || "", saveToken: data.save_turn_token || null,

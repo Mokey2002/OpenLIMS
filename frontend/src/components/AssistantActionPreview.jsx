@@ -158,6 +158,7 @@ export default function AssistantActionPreview({ action, onActionUpdate, onPrepa
           )}
           {result.download_url && (
             <div className="mt-2">
+              {result.checksum_sha256 && <div className="small mb-1" style={{ overflowWrap: "anywhere" }}>File SHA-256: {result.checksum_sha256}</div>}
               <Button
                 size="sm"
                 variant="outline-success"

@@ -2,11 +2,14 @@
 URL configuration for config project.
 """
 
+import re
+from urllib.parse import urlsplit
+
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.http import JsonResponse
-from django.urls import include, path
+from django.http import HttpResponseNotFound, JsonResponse
+from django.urls import include, path, re_path
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework.permissions import AllowAny
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -14,6 +17,11 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from core.health import build_health_status
 from core.views import MeView, OpenLIMSTokenObtainPairView
 from core.search_views import GlobalSearchView
+
+
+def private_assistant_media(request):
+    """Generated evidence must be served through the authenticated artifact view."""
+    return HttpResponseNotFound()
 
 
 def health(request):
@@ -76,6 +84,12 @@ urlpatterns = [
     path("api/search/", GlobalSearchView.as_view(), name="global-search"),
 ]
 
+
+urlpatterns += [re_path(
+    r"^" + re.escape(urlsplit(settings.MEDIA_URL).path.lstrip("/")) + r"assistant_artifacts(?:/.*)?$",
+    private_assistant_media,
+    name="private-assistant-media",
+)]
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -6,6 +6,7 @@ from django.db import transaction
 from django.core import signing
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers, status
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -66,6 +67,10 @@ def turn_descriptor(user, message, reply):
         entry.update(kind="page_read", reference=copy.deepcopy(reply["page_read_reference"]))
     elif reply.get("workflow_plan"):
         entry.update(kind="workflow_guide", sample_id=reply["workflow_plan"]["sample_id"])
+    elif reply.get("daily_work"):
+        entry.update(kind="daily_work", scope=copy.deepcopy(reply["daily_work"]["scope"]))
+    elif reply.get("project_investigation"):
+        entry.update(kind="project_investigation", spec=copy.deepcopy(reply["project_investigation"]["spec"]))
     elif reply.get("read_plan_spec"):
         from .read_plan_memory import recall
         state = recall(reply.get("context", {}), user)
@@ -113,6 +118,19 @@ def restore(conversation, user):
             from .sample_operations import _sample_queryset
             sample = _sample_queryset(user).filter(pk=turn["sample_id"]).first()
             reply = guide_reply(sample, user) if sample else {"answer": "Earlier workflow records are unavailable or no longer accessible.", "context": {}}
+            context, general = reply.get("context", {}), []
+            reply["save_turn_token"] = turn_token(user, turn["question"], reply)
+            history.append({"role": "assistant", "reply": reply})
+        elif turn["kind"] in {"daily_work", "project_investigation"}:
+            try:
+                if turn["kind"] == "daily_work":
+                    from .daily_work import daily_reply
+                    reply = daily_reply(user, {**turn["scope"], "offset": 0})
+                else:
+                    from .project_investigations import investigation_reply
+                    reply = investigation_reply(turn["spec"], user)
+            except (ValueError, ValidationError):
+                reply = {"answer": "Earlier work/investigation records are unavailable or no longer accessible.", "context": {}}
             context, general = reply.get("context", {}), []
             reply["save_turn_token"] = turn_token(user, turn["question"], reply)
             history.append({"role": "assistant", "reply": reply})

@@ -354,6 +354,8 @@ class AssistantStatusView(APIView):
                 "sample_registration_tasks": True,
                 "instrument_import_uploads": True,
                 "guided_workflows": True,
+                "daily_work_actions": True,
+                "project_qc_investigations": True,
                 "welcome_message": (
                     "Ask about samples, projects, QC, comparisons, inventory, "
                     "sequences, or system status. Suggestions below are based on "
@@ -444,6 +446,9 @@ class AssistantArtifactDownloadView(APIView):
         artifact = GeneratedArtifact.objects.select_related("project", "created_by").filter(id=artifact_id).first()
         if not artifact:
             return Response({"detail": "Artifact not found."}, status=status.HTTP_404_NOT_FOUND)
+        from .project_investigations import artifact_accessible
+        if not artifact_accessible(artifact, request.user):
+            return Response({"detail": "Report source access changed; request a new authorized report."}, status=status.HTTP_403_FORBIDDEN)
         allowed = artifact.created_by_id == request.user.id or is_admin(request.user)
         if artifact.project_id:
             allowed = allowed or artifact.project.members.filter(id=request.user.id).exists()
