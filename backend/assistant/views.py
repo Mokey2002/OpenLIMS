@@ -353,6 +353,7 @@ class AssistantStatusView(APIView):
                 "page_context": True,
                 "sample_registration_tasks": True,
                 "instrument_import_uploads": True,
+                "guided_workflows": True,
                 "welcome_message": (
                     "Ask about samples, projects, QC, comparisons, inventory, "
                     "sequences, or system status. Suggestions below are based on "

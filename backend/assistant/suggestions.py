@@ -140,6 +140,7 @@ def assistant_starter_suggestions(user):
     return without_empty(
         "Register samples and assign them" if _authenticated(user) and user.is_active and (is_admin(user) or is_tech(user)) else None,
         "Import instrument data" if _authenticated(user) and user.is_active and (is_admin(user) or is_tech(user)) else None,
+        "Help me prepare a sample for sequencing" if _authenticated(user) and user.is_active else None,
         "What needs attention?",
         project_prompt(user, "Review data quality for project"),
         f"Preview quarantine impact for lot {lot_code}" if lot_code else None,

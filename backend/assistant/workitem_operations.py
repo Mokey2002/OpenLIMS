@@ -436,6 +436,9 @@ def route_workitem_operations(message, user, context=None):
 def execute_workitem_operation(action):
     payload = action.payload or {}
     operation = payload.get("operation")
+    if operation in {"WORKFLOW_START", "WORKFLOW_FORM", "WORKFLOW_COMPLETE", "WORKFLOW_REVIEW"}:
+        from .workflow_actions import execute_workflow_action
+        return execute_workflow_action(action)
     if not _can_write(action.requested_by):
         raise WorkItemOperationError(
             "Only Tech or Director users can create or assign work items."

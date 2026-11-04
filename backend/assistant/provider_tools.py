@@ -4,6 +4,7 @@ from importlib import import_module
 
 # Public catalog doubles as the dispatch allow-list. No model-supplied module names.
 COMMAND_TOOLS = {
+    "workflow_guide": ("workflow_guide", "route_workflow_guide", "Help me prepare sample S-100 for sequencing; Refresh preparation; Why is preparation blocked?"),
     "instrument_import": ("instrument_imports", "route_instrument_import", "Import instrument data; Import this sequencer file into project ALPHA; Show my instrument imports; Show instrument import #123"),
     "sample_registration": ("registration_tasks", "route_registration_task", "Register samples and assign them; Register 10 DNA samples in project ALPHA and assign them to maria"),
     "analytics": ("analytics", "route_safe_analytics", "Group samples by project; Which instrument has the highest QC failure rate?"),
@@ -117,6 +118,9 @@ def dispatch_tool(plan, user, context=None):
             result = project_request(command, user, context)
             if result is None:
                 result = search_projects(command, user) if "project" in command.lower() else fn(command, user)
+        elif tool == "guided_actions" and "workflow_guide" in (context or {}):
+            from .workflow_guide import route_workflow_guide
+            result = route_workflow_guide(command, user, context) or fn(command, user, context=context or {})
         elif tool in NO_CONTEXT:
             result = fn(command, user)
         else:

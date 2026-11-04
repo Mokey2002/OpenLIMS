@@ -24,6 +24,7 @@ import { useAssistantPage } from "../assistantPageContext";
 import AssistantPageBar from "./AssistantPageBar";
 import AssistantInstrumentUpload from "./AssistantInstrumentUpload";
 import AssistantImportReceipt from "./AssistantImportReceipt";
+import AssistantWorkflowGuide from "./AssistantWorkflowGuide";
 
 const DEMO_ASSISTANT_NOTE =
   "Public demo note: this hosted demo uses OpenLIMS Rules because server resources are limited. Self-hosted deployments can enable OpenAI or Ollama.";
@@ -62,6 +63,8 @@ export default function AssistantWidget() {
   ]);
 
   const bottomRef = useRef(null);
+  const workflowIndex = history.findLastIndex(item => item.workflowPlan);
+  const workflowRevision = history.map(item => item.pendingAction ? `${item.pendingAction.id}:${item.pendingAction.status}` : "").join(";");
 
   useEffect(() => {
     let active = true;
@@ -149,6 +152,11 @@ export default function AssistantWidget() {
   function receiveImport(index, data) {
     setConversationContext(data.context || {});
     setHistory(current => current.map((item, position) => position === index ? assistantMessage(data) : item));
+  }
+
+  function receiveWorkflow(data) {
+    setConversationContext(data.context || {});
+    setHistory(current => [...current, assistantMessage(data)]);
   }
 
   async function handleAction(index, pendingAction, operation) {
@@ -281,6 +289,9 @@ export default function AssistantWidget() {
                     </Alert>
                   )}
 
+                  {index === workflowIndex && item.workflowPlan && typeof conversationContext.workflow_guide === "string" && <AssistantWorkflowGuide
+                    initialPlan={item.workflowPlan} revision={workflowRevision} onPrepared={receiveWorkflow} onRun={sendMessage}
+                    onBusy={setImportBusy} disabled={loading || importBusy || Boolean(actionBusy)} />}
                   {item.instrumentImportForm && <AssistantInstrumentUpload config={item.instrumentImportForm}
                     onPrepared={data => receiveImport(index, data)} onBusy={setImportBusy} disabled={loading || importBusy || Boolean(actionBusy)} />}
                   {item.instrumentImportJob && !item.pendingAction && <AssistantImportReceipt jobId={item.instrumentImportJob.id}

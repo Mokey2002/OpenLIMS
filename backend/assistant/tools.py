@@ -586,6 +586,10 @@ def _hint_clarification(route_hint, user):
 
 
 def route_assistant_message(message, user, context=None, route_hint=None, page_context=None):
+    from .workflow_guide import route_workflow_guide
+    workflow = route_workflow_guide(message, user, context)
+    if workflow is not None:
+        return _routed(workflow, "samples")
     from .instrument_imports import route_instrument_import
     instrument_import = route_instrument_import(message, user, context)
     if instrument_import is not None:
