@@ -75,6 +75,7 @@ from assistant.views import (
 )
 from assistant.instrument_imports import (
     InstrumentImportUploadView, InstrumentImportStatusView, InstrumentImportReportView, InstrumentImportControlView,
+    InstrumentImportSourceView,
 )
 from migration_toolkit.views import (
     MigrationDatabaseConnectionViewSet,
@@ -236,6 +237,7 @@ urlpatterns = router.urls + [
     path("assistant/instrument-imports/", InstrumentImportUploadView.as_view(), name="assistant-instrument-upload"),
     path("assistant/instrument-imports/<int:pk>/", InstrumentImportStatusView.as_view(), name="assistant-instrument-status"),
     path("assistant/instrument-imports/<int:pk>/report/", InstrumentImportReportView.as_view(), name="assistant-instrument-report"),
+    path("assistant/instrument-imports/<int:pk>/source/", InstrumentImportSourceView.as_view(), name="assistant-instrument-source"),
     path("assistant/instrument-imports/<int:pk>/<str:operation>/", InstrumentImportControlView.as_view(), name="assistant-instrument-control"),
     path("assistant/chat/", AssistantChatView.as_view(), name="assistant-chat"),
     path("assistant/chat/stream/", AssistantChatStreamView.as_view(), name="assistant-chat-stream"),

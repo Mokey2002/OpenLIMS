@@ -165,8 +165,11 @@ def inspect_upload(raw, instrument, project, user, skip_duplicates):
 def read_file(job):
     if not job.uploaded_file:
         raise ValueError("The staged file is unavailable. Prepare the import again.")
-    with job.uploaded_file.open("rb") as source:
-        raw = source.read(MAX_UPLOAD_SIZE_BYTES + 1)
+    try:
+        with job.uploaded_file.open("rb") as source:
+            raw = source.read(MAX_UPLOAD_SIZE_BYTES + 1)
+    except OSError as exc:
+        raise ValueError("The stored instrument file is unavailable. Restore it before retrying this import.") from exc
     return raw
 
 

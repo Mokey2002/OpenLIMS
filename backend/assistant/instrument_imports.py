@@ -65,6 +65,7 @@ def public_job(job, user):
             "sample_id_column": frozen["config"]["sample_id_column"], "delimiter": frozen["config"]["delimiter"],
             "row_report": job.summary.get("row_report", [])[:50], "report_total": frozen["counts"]["rows_received"],
             "download_url": f"/api/assistant/instrument-imports/{job.pk}/report/",
+            "source_download_url": f"/api/assistant/instrument-imports/{job.pk}/source/",
             "error": job.summary.get("error") or job.summary.get("queue_error", ""), "action": serialize_action(action) if action else None,
             "can_repair": bool(job.uploaded_by_id == user.pk and user.is_active and (is_admin(user) or is_tech(user)) and job.status in {'COMPLETED', 'FAILED'} and frozen['counts']['rows_rejected']),
             "can_revalidate": bool(repair_current and job.uploaded_by_id == user.pk and user.is_active and (is_admin(user) or is_tech(user)) and job.status in {"FAILED", "PENDING"}),
@@ -198,7 +199,8 @@ class InstrumentImportUploadView(APIView):
                         return Response(job_reply(job, request.user))
                 else:
                     job.source_filename = os.path.basename(upload.name)
-                    job.uploaded_file.save(f"assistant-{uuid.uuid4().hex}{os.path.splitext(upload.name)[1].lower()}", ContentFile(raw), save=False)
+                    job.uploaded_file.name = job.uploaded_file.storage.save(
+                        f"assistant_artifacts/instrument_uploads/{uuid.uuid4().hex}{os.path.splitext(upload.name)[1].lower()}", ContentFile(raw))
                     saved_file = (job.uploaded_file.storage, job.uploaded_file.name)
                 result = prepare(job, analysis, request.user, data["skip_duplicates"])
             return Response(result, status=201 if created else 200)
@@ -226,7 +228,27 @@ class InstrumentImportReportView(APIView):
     @extend_schema(responses=OpenApiTypes.BINARY)
     def get(self, request, pk):
         job = accessible_job(pk, request.user)
-        return FileResponse(io.BytesIO(report_csv(job)), as_attachment=True, filename=f"instrument-import-{pk}.csv", content_type="text/csv")
+        response = FileResponse(io.BytesIO(report_csv(job)), as_attachment=True, filename=f"instrument-import-{pk}.csv", content_type="text/csv")
+        response['Cache-Control'] = 'private, no-store'
+        return response
+
+
+class InstrumentImportSourceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses=OpenApiTypes.BINARY)
+    def get(self, request, pk):
+        job = accessible_job(pk, request.user)
+        try:
+            raw = read_file(job)
+            if hashlib.sha256(raw).hexdigest() != job.summary[MARKER]['file_sha256']:
+                raise ValueError('The stored source checksum changed. Restore the original file before downloading it.')
+        except ValueError as exc:
+            raise ValidationError({'detail': str(exc)}) from exc
+        filename = os.path.basename(job.summary[MARKER].get('filename') or f'instrument-import-{pk}.csv')
+        response = FileResponse(io.BytesIO(raw), as_attachment=True, filename=filename, content_type='application/octet-stream')
+        response['Cache-Control'] = 'private, no-store'
+        return response
 
 
 class InstrumentImportControlView(APIView):

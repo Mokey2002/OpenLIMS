@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.72.1.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.72.2.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,15 +14,23 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
-| **v0.72.1** | Los superusuarios reciben el rol efectivo admin en la interfaz y pueden crear proyectos y muestras sin asignar grupos manualmente. | [Crear administrador](#5-crea-tu-cuenta-de-administrador) |
+| **v0.72.2** | Archivos de instrumentos protegidos, recuperación de confirmaciones de reparación, errores controlados por archivos faltantes y mensajes correctos para roles combinados. | [Guía de robustez](docs/robustness-v0722.md) |
+| **v0.72.1** | Los superusuarios reciben el rol efectivo admin en la interfaz y pueden crear proyectos y muestras sin asignar grupos manualmente. | [Crear administrador](#5-crea-tu-cuenta-de-administrador) · [PR #192](https://github.com/Mokey2002/OpenLIMS/pull/192) |
 | **v0.72.0** | Cambios por lote, reservas de instrumentos/reactivos, reparación de filas rechazadas, borradores de cuaderno y relevos desde ambos chats. | [Guía v0.72](docs/assistant-v072.md) · [PR #190](https://github.com/Mokey2002/OpenLIMS/pull/190) |
-| **v0.71.0** | Seguimientos naturales, conservación de consultas vigentes, explicaciones QC basadas en evidencia y ayuda sobre conceptos. | [Guía v0.71](docs/assistant-v071.md) · [PR #189](https://github.com/Mokey2002/OpenLIMS/pull/189) |
+
+## v0.72.2 — Importaciones protegidas y recuperación fiable
+
+Los archivos originales subidos desde el asistente ahora usan almacenamiento protegido y se descargan mediante **Download source file**, con autenticación, permisos actuales y verificación de checksum. NGINX y Django bloquean las URL públicas anteriores generadas por el asistente; el servidor de desarrollo también comprueba rutas normalizadas. Las importaciones ordinarias conservan su comportamiento.
+
+Volver a validar una reparación expirada, cancelada o fallida prepara una nueva confirmación usando la misma importación hija y sus filas reservadas. No reinicia trabajos en cola ni mediciones ya importadas. Los archivos faltantes producen un error controlado; los roles admin/tech combinados con viewer ya no muestran un mensaje de solo lectura incorrecto.
+
+Versión/pie **v0.72.2**. Reconstruye API, worker y web con el mismo código para instalar también las protecciones NGINX. Sin migración ni dependencia nueva. Consulta la [guía de robustez](docs/robustness-v0722.md) para alcance, recuperación y pruebas. Ambos README conservan solo **v0.72.2, v0.72.1 y v0.72.0**.
 
 ## v0.72.1 — Acceso administrativo para superusuarios
 
 Una cuenta creada con `createsuperuser`, aunque no tenga grupos asignados, ahora muestra el rol efectivo **admin** en el inicio de sesión, la sesión, el perfil y las listas de usuarios. La interfaz habilita la creación de proyectos y muestras, incluidas las de tipo **PROTEIN**, conforme al acceso que ya autoriza la API. Los grupos existentes se conservan; llamarse `root` o tener `is_staff` no concede acceso administrativo.
 
-Versión/pie **v0.72.1**. Reconstruye/recrea la API y el frontend web, y actualiza la página o inicia sesión de nuevo. Este parche no necesita migración ni asignación manual de grupos. Ambos README conservan solo las últimas tres actualizaciones: **v0.72.1, v0.72.0 y v0.71.0**.
+Versión/pie **v0.72.1**. Reconstruye/recrea la API y el frontend web, y actualiza la página o inicia sesión de nuevo. Este parche no necesita migración ni asignación manual de grupos. Las tres actualizaciones más recientes se indican arriba.
 
 ## v0.72.0 — Cinco flujos de laboratorio sin salir del chat
 
@@ -32,21 +40,13 @@ Los cambios por lote y relevos conservan estados, dependencias y decisiones QC. 
 
 Se verifican permisos y evidencia al confirmar. PostgreSQL protege conflictos de reservas también mediante una restricción de exclusión; la auditoría generada por el asistente se limita a su solicitante y administradores. Consulta la [guía v0.72](docs/assistant-v072.md) para límites y API. Aplica **cuatro migraciones**, reconstruye API/frontend y reinicia Celery con la misma versión. La migración activa la extensión incluida `btree_gist` y requiere permisos adecuados en PostgreSQL. Versión/pie **v0.72.0**. Las tres actualizaciones más recientes se indican arriba. Sin dependencia Python/Node, servicio, automatización de programación, correo externo ni control físico de instrumentos nuevos. Las frases nuevas documentadas están en inglés.
 
-## v0.71.0 — Conversaciones y seguimientos más naturales
-
-Después de las prioridades diarias, pregunta **“Why that one?”**; después de una investigación QC, **“Which ones failed?”** o **“Why?”**; después de seleccionar una muestra, **“What do I need to do next?”**. El asistente vuelve a consultar datos y permisos actuales. Conserva filtros al cambiar responsable/proyecto y corrige el proyecto de una investigación sin repetir la propuesta de exportación. Si no comprende un seguimiento, mantiene la consulta válida y ofrece opciones concretas; elimina contextos sin acceso o inválidos.
-
-**“Explain the difference between a sample and a work item”** explica conceptos sin buscar registros. Los ejemplos y las conversaciones guardadas sobre conceptos funcionan sin modelo de lenguaje. También mejora la ayuda informal, las correcciones y el regreso a un proyecto reciente. Reiniciar la conversación cierra el tema; cada propuesta conserva su botón Cancel para cancelar la acción. Las frases nuevas documentadas están en inglés.
-
-Versión/pie **v0.71.0**. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía v0.71](docs/assistant-v071.md) para ejemplos y validación. La conversación general abierta requiere OpenAI/Ollama habilitado; no se verificó fluidez con un proveedor real porque está deshabilitado en el entorno de desarrollo. Reconstruye API y frontend; sin migración ni dependencia nueva.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.72.1`
+**Versión de desarrollo actual:** `v0.72.2`
 
 **Demo:** http://35.164.28.250
 
