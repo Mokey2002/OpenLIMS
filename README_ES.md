@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.72.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.72.1.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -12,11 +12,17 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 ## Tres versiones recientes
 
-| Versión | Mejoras del asistente | Detalles |
+| Versión | Mejoras | Detalles |
 | --- | --- | --- |
-| **v0.72.0** | Cambios por lote, reservas de instrumentos/reactivos, reparación de filas rechazadas, borradores de cuaderno y relevos desde ambos chats. | [Guía v0.72](docs/assistant-v072.md) |
+| **v0.72.1** | Los superusuarios reciben el rol efectivo admin en la interfaz y pueden crear proyectos y muestras sin asignar grupos manualmente. | [Crear administrador](#5-crea-tu-cuenta-de-administrador) |
+| **v0.72.0** | Cambios por lote, reservas de instrumentos/reactivos, reparación de filas rechazadas, borradores de cuaderno y relevos desde ambos chats. | [Guía v0.72](docs/assistant-v072.md) · [PR #190](https://github.com/Mokey2002/OpenLIMS/pull/190) |
 | **v0.71.0** | Seguimientos naturales, conservación de consultas vigentes, explicaciones QC basadas en evidencia y ayuda sobre conceptos. | [Guía v0.71](docs/assistant-v071.md) · [PR #189](https://github.com/Mokey2002/OpenLIMS/pull/189) |
-| **v0.70.0** | Prioridades diarias accionables e investigaciones QC por proyecto con informes PDF/CSV auditados y permisos actualizados. | [Guía v0.70](docs/assistant-v070.md) · [PR #188](https://github.com/Mokey2002/OpenLIMS/pull/188) |
+
+## v0.72.1 — Acceso administrativo para superusuarios
+
+Una cuenta creada con `createsuperuser`, aunque no tenga grupos asignados, ahora muestra el rol efectivo **admin** en el inicio de sesión, la sesión, el perfil y las listas de usuarios. La interfaz habilita la creación de proyectos y muestras, incluidas las de tipo **PROTEIN**, conforme al acceso que ya autoriza la API. Los grupos existentes se conservan; llamarse `root` o tener `is_staff` no concede acceso administrativo.
+
+Versión/pie **v0.72.1**. Reconstruye/recrea la API y el frontend web, y actualiza la página o inicia sesión de nuevo. Este parche no necesita migración ni asignación manual de grupos. Ambos README conservan solo las últimas tres actualizaciones: **v0.72.1, v0.72.0 y v0.71.0**.
 
 ## v0.72.0 — Cinco flujos de laboratorio sin salir del chat
 
@@ -24,7 +30,7 @@ Usa **Manage batch work**, **Reserve resources**, **Repair rejected import rows*
 
 Los cambios por lote y relevos conservan estados, dependencias y decisiones QC. Las reservas de instrumentos/reactivos son atómicas y rechazan conflictos, cantidades insuficientes, cuarentena, caducidad y unidades incompatibles. Cancelar libera reservas activas sin revertir consumos. La reparación crea una importación hija con filas rechazadas seleccionadas y registra su procedencia para evitar duplicados; no cambia el archivo ni las mediciones originales. Los cuadernos se crean como **Draft** con datos reales, versiones de procedimientos, revisiones y vínculos nativos; sus lectores deben tener acceso a las muestras de origen. El relevo puede incluir la notificación interna revisada.
 
-Se verifican permisos y evidencia al confirmar. PostgreSQL protege conflictos de reservas también mediante una restricción de exclusión; la auditoría generada por el asistente se limita a su solicitante y administradores. Consulta la [guía v0.72](docs/assistant-v072.md) para límites y API. Aplica **cuatro migraciones**, reconstruye API/frontend y reinicia Celery con la misma versión. La migración activa la extensión incluida `btree_gist` y requiere permisos adecuados en PostgreSQL. Versión/pie **v0.72.0**. Ambos README conservan exactamente **v0.72, v0.71 y v0.70**. Sin dependencia Python/Node, servicio, automatización de programación, correo externo ni control físico de instrumentos nuevos. Las frases nuevas documentadas están en inglés.
+Se verifican permisos y evidencia al confirmar. PostgreSQL protege conflictos de reservas también mediante una restricción de exclusión; la auditoría generada por el asistente se limita a su solicitante y administradores. Consulta la [guía v0.72](docs/assistant-v072.md) para límites y API. Aplica **cuatro migraciones**, reconstruye API/frontend y reinicia Celery con la misma versión. La migración activa la extensión incluida `btree_gist` y requiere permisos adecuados en PostgreSQL. Versión/pie **v0.72.0**. Las tres actualizaciones más recientes se indican arriba. Sin dependencia Python/Node, servicio, automatización de programación, correo externo ni control físico de instrumentos nuevos. Las frases nuevas documentadas están en inglés.
 
 ## v0.71.0 — Conversaciones y seguimientos más naturales
 
@@ -34,21 +40,13 @@ Después de las prioridades diarias, pregunta **“Why that one?”**; después 
 
 Versión/pie **v0.71.0**. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía v0.71](docs/assistant-v071.md) para ejemplos y validación. La conversación general abierta requiere OpenAI/Ollama habilitado; no se verificó fluidez con un proveedor real porque está deshabilitado en el entorno de desarrollo. Reconstruye API y frontend; sin migración ni dependencia nueva.
 
-## v0.70.0 — Trabajo diario e investigaciones QC por proyecto desde el chat
-
-Pregunta **`What should I work on today?`** para revisar prioridades basadas en fallos registrados, controles QC, disponibilidad y plazos. Filtra tu trabajo, el trabajo sin asignar o el equipo; limita a un proyecto exacto e inspecciona evidencia antes de preparar asignaciones, inicios, plazos y finalización compatibles desde ambos chats. Los revisores autorizados pueden registrar una decisión humana de QC con motivo. Al confirmar se verifican otra vez dependencias, campos, permisos y separación de funciones; el trabajo bloqueado no se presenta como disponible por estar vencido.
-
-Pide **`Investigate ALPHA’s QC failures and export a report`**. El asistente consulta muestras principales/vinculadas accesibles, separa comprobaciones automáticas, revisiones de resultados y controles QC del trabajo, muestra evidencia y procedencia directa del instrumento, y prepara un PDF/CSV auditado. Las tasas indican su denominador; fallos/rechazos superpuestos cuentan una sola vez por resultado. La vista previa fija proyecto, filtros y ventana temporal, y vuelve a consultar al confirmar. Las descargas verifican permisos actuales del proyecto y muestras fuente, incluso para el creador; se bloquea el acceso directo a archivos de artefactos y una generación fallida limpia los archivos guardados.
-
-Ambos paneles actualizan registros y recuperan confirmaciones interrumpidas; las vistas guardadas consultan datos actuales sin repetir acciones. Los límites son explícitos. Las frases nuevas documentadas están en inglés. Consulta la [guía v0.70](docs/assistant-v070.md). Versión/pie **v0.70.0**; las tres actualizaciones más recientes se indican arriba. Reconstruye/reinicia API y la imagen web/frontend de producción para instalar las reglas NGINX; sin nueva migración, dependencia ni automatización programada.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.72.0`
+**Versión de desarrollo actual:** `v0.72.1`
 
 **Demo:** http://35.164.28.250
 
@@ -135,6 +133,8 @@ docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.
 ```
 
 Introduce el usuario, correo y contraseña cuando se soliciten. La contraseña no se muestra mientras escribes. **No hay una contraseña predeterminada de administrador.**
+
+La cuenta creada por `createsuperuser` recibe acceso efectivo **admin** en OpenLIMS sin asignar grupos manualmente. El nombre de usuario puede ser `root` u otro: el acceso depende de los permisos de Django. Si una instalación anterior muestra «No assigned role» para un superusuario, actualiza/reconstruye la API y la web con este parche y vuelve a iniciar sesión. Una cuenta normal llamada `root` necesita que un administrador le conceda el rol adecuado.
 
 ### 6. Abre OpenLIMS e inicia sesión
 
