@@ -65,6 +65,10 @@ export default function AssistantImportReceipt({ jobId, initialJob = null, actio
           <tbody>{job.row_report.map(row => <tr key={row.row}><td>{row.row}</td><td>{row.sample_id}</td><td>{row.status}</td><td>{row.reason}</td></tr>)}</tbody></Table>
       </details>
       <Button size="sm" variant="outline-secondary" className="me-1" disabled={busy} onClick={async () => { try { await apiDownload(job.download_url, `instrument-import-${jobId}.csv`); } catch { setError("Could not download the report. Check your connection and access."); } }}>Download row report</Button>
+      {job.source_download_url && <Button size="sm" variant="outline-secondary" className="me-1" disabled={busy} onClick={async () => {
+        try { await apiDownload(job.source_download_url, job.filename || `instrument-import-${jobId}.csv`); }
+        catch { setError("Could not download the source file. Check your connection, current access and the stored file."); }
+      }}>Download source file</Button>}
       {job.can_repair && onPrepared && <Button size="sm" variant="outline-primary" className="me-1" disabled={busy || disabled} onClick={() => onPrepared({
         answer: "Select rejected rows and enter their actual corrections. Validation prepares a child import; measurements require confirmation.",
         lab_operation_form: { kind: "repair", title: "Repair rejected import rows", help: "Choose the rejected rows to correct. Imported rows cannot be retried here.", defaults: { parent_id: jobId } },

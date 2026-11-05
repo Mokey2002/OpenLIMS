@@ -1,4 +1,8 @@
 from rest_framework import serializers
+from django.urls import reverse
+from django.utils.functional import cached_property
+
+from core.permissions import is_admin
 
 from .models import InstrumentProfile, InstrumentColumnMapping, ImportJob
 
@@ -95,6 +99,21 @@ class ImportJobSerializer(serializers.ModelSerializer):
             "progress_percent",
             "created_at",
         ]
+
+    @cached_property
+    def _can_download_any_assistant_source(self):
+        request = self.context.get('request')
+        return bool(request and request.user.is_authenticated and is_admin(request.user))
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.summary.get('assistant_upload'):
+            request = self.context.get('request')
+            data['uploaded_file'] = None
+            if (request and request.user.is_authenticated
+                    and (instance.uploaded_by_id == request.user.pk or self._can_download_any_assistant_source)):
+                data['uploaded_file'] = request.build_absolute_uri(reverse('assistant-instrument-source', kwargs={'pk': instance.pk}))
+        return data
 
     def get_progress_percent(self, obj):
         if obj.status == "COMPLETED":

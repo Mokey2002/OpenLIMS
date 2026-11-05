@@ -258,7 +258,7 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
         self.assertEqual(Sample.objects.count(), original + 2)
 
     def test_real_multipart_instrument_upload_confirmation_and_complete_row_receipt(self):
-        from imports.models import InstrumentColumnMapping, InstrumentProfile
+        from imports.models import ImportJob, InstrumentColumnMapping, InstrumentProfile
         from imports.assistant_uploads import process_prepared_job
         profile = InstrumentProfile.objects.create(code="LIVE-UPLOAD", name="Live upload", sample_id_column="sample_id")
         InstrumentColumnMapping.objects.create(instrument=profile, source_column="concentration", target_key="concentration", value_type="NUMBER")
@@ -288,6 +288,14 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
         self.assertEqual(receipt["counts"]["duplicates_skipped"], 1)
         self.assertEqual(receipt["counts"]["rows_accounted"], 4)
         self.assertEqual(receipt["action"]["status"], "COMPLETED")
+        with self.http(receipt["source_download_url"]) as response:
+            self.assertIn('attachment;', response.headers['Content-Disposition'])
+            source = response.read()
+        job = ImportJob.objects.get(pk=job_id)
+        self.assertEqual(hashlib.sha256(source).hexdigest(), job.summary['assistant_upload']['file_sha256'])
+        with self.assertRaises(HTTPError) as raw_error:
+            self.http('/media/' + job.uploaded_file.name)
+        self.assertEqual(raw_error.exception.code, 404)
         with self.http(f"/api/v1/assistant/instrument-imports/{job_id}/report/") as response:
             self.assertEqual(len(response.read().decode("utf-8-sig").splitlines()), 5)
 
@@ -310,6 +318,10 @@ class AssistantLiveHTTPTests(ChannelsLiveServerTestCase):
         self.assertEqual(repaired["counts"]["rows_imported"], 1)
         self.assertEqual(repaired["repair"]["source_rows"], [3])
         self.assertEqual(Result.objects.count(), before + 1)
+        self.project.members.remove(self.user)
+        with self.assertRaises(HTTPError) as source_error:
+            self.http(receipt['source_download_url'])
+        self.assertEqual(source_error.exception.code, 404)
 
     @override_settings(OPENLIMS_ENFORCE_FEATURE_FLAGS=False, OPENLIMS_ASSISTANT_LLM_ENABLED=False)
     def test_real_http_batch_handover_resources_and_notebook(self):

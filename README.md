@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.72.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.72.2-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,15 +33,23 @@
 
 | Version | Improvements | Details |
 | --- | --- | --- |
-| **v0.72.1** | Superusers receive effective admin access in the UI and can create projects and samples without manual group assignment. | [Administrator setup](#5-create-your-administrator-account) |
+| **v0.72.2** | Protected instrument sources, recoverable repair confirmations, controlled missing-file errors and correct combined-role messages. | [Robustness guide](docs/robustness-v0722.md) |
+| **v0.72.1** | Superusers receive effective admin access in the UI and can create projects and samples without manual group assignment. | [Administrator setup](#5-create-your-administrator-account) · [PR #192](https://github.com/Mokey2002/OpenLIMS/pull/192) |
 | **v0.72.0** | Confirmed batch metadata changes, instrument/reagent reservations, rejected-row repairs, run-based notebook drafts and shift handovers in both chat views. | [v0.72 guide](docs/assistant-v072.md) · [PR #190](https://github.com/Mokey2002/OpenLIMS/pull/190) |
-| **v0.71.0** | Natural conversation follow-ups, retained live read scopes, grounded QC explanations and application concept help. | [v0.71 guide](docs/assistant-v071.md) · [PR #189](https://github.com/Mokey2002/OpenLIMS/pull/189) |
+
+### v0.72.2 — Protected imports and reliable recovery
+
+Original assistant instrument files now use protected storage and **Download source file** serves them through authenticated, current-access and checksum checks. NGINX and Django block generated legacy public source URLs; the development media server checks normalized paths too. Ordinary imports retain their existing behavior.
+
+Revalidating an expired, cancelled or failed repair prepares a new confirmation using the same child import and source-row claims. Queued work and imported measurements are preserved. Missing stored files return a controlled error, and combined admin/tech plus viewer roles no longer show an incorrect read-only banner.
+
+Version/footer **v0.72.2**. Rebuild API, worker and web from the same commit to install the NGINX protection too. No new migration or dependency. See the [robustness guide](docs/robustness-v0722.md) for scope, recovery and tests. Both READMEs retain only **v0.72.2, v0.72.1 and v0.72.0**.
 
 ### v0.72.1 — Superusers can create lab data
 
 Accounts created with `createsuperuser` now report the effective **admin** role in login, session, profile and user-list responses, even without assigned groups. The interface enables project/sample creation, including **PROTEIN** samples, matching existing API authorization. Assigned groups are preserved; the username `root` and the `is_staff` flag do not grant application admin access by themselves.
 
-Version/footer **v0.72.1**. Rebuild/recreate the API and web frontend, then refresh or sign in again. This patch requires no migration or manual group assignment. Both READMEs retain only the latest three release updates: **v0.72.1, v0.72.0 and v0.71.0**.
+Version/footer **v0.72.1**. Rebuild/recreate the API and web frontend, then refresh or sign in again. This patch requires no migration or manual group assignment. The latest three release updates are listed above.
 
 ### v0.72.0 — Five lab workflows without leaving chat
 
@@ -51,21 +59,13 @@ Batch updates change eligible assignment/deadline metadata together, with exclus
 
 Current permissions and evidence are rechecked at confirmation. PostgreSQL race tests and a database exclusion constraint protect booking conflicts; assistant-generated audit records are visible to their requester and administrators. See the [v0.72 guide](docs/assistant-v072.md) for limits, APIs and examples. Apply **four migrations**, rebuild API/frontend, and restart Celery workers with the same backend release. The booking migration enables PostgreSQL’s bundled `btree_gist` extension and needs suitable database privileges. Version/footer: **v0.72.0**. The latest three release updates are listed above. No new Python/Node dependency, service, scheduled coding automation, email integration or physical instrument control is added.
 
-### v0.71.0 — More natural conversations and reliable follow-ups
-
-Ask **“Why that one?”** after daily priorities, **“Which ones failed?”** or **“Why?”** after a QC investigation, and **“What do I need to do next?”** after selecting a sample. These follow-ups now use fresh, permission-checked evidence. Daily owner/project filters survive natural scope changes; project corrections keep investigation filters without repeating an export proposal. Unrecognized follow-ups retain the last valid read scope and offer specific next steps; unavailable or revoked scopes are cleared.
-
-Concept questions such as **“Explain the difference between a sample and a work item”** return application definitions instead of searching for records. Short example/explanation follow-ups and saved concept conversations work without a language model. Informal help, courtesy wording, project overviews and returning to a recent named project are supported. Conversation reset closes the topic; existing action previews retain their explicit Cancel controls.
-
-Version/footer are **v0.71.0**. The latest three release updates are listed above. See the [v0.71 guide](docs/assistant-v071.md) for examples and validation. These fixes support the rules-based assistant; open-ended general conversation still requires an enabled OpenAI/Ollama provider. Live-model fluency was not verified in the disabled-provider development environment. Rebuild the API and frontend images; no migration or new dependency.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.72.1`.
+**Current development version:** `v0.72.2`.
 
 ## Deployment Access
 
@@ -948,7 +948,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.72.1**.
+`frontend/src/version.js` file. The current application version is **v0.72.2**.
 
 Footer source:
 

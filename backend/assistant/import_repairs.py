@@ -15,7 +15,7 @@ from imports.assistant_uploads import MARKER, digest, inspect_upload, profile_sn
 from imports.csv_utils import get_csv_dict_reader
 from imports.models import ImportJob, ImportRowRepair
 
-from .instrument_imports import accessible_job, job_reply, prepare
+from .instrument_imports import accessible_job, job_reply, latest_action, prepare
 from .lab_operation_common import StrictSerializer
 from .models import AssistantAction
 
@@ -132,7 +132,17 @@ def preview_repair(user, fields):
                 if not old_numbers.issubset(numbers):
                     raise ValidationError('An earlier repair includes additional rows. Include all of those rows when replacing its unconfirmed preview.')
             if child and child.pk in old_jobs and all(claim.child_id == child.pk for claim in claims) and len(claims) == len(numbers):
-                return job_reply(old_jobs[child.pk], user)
+                current = old_jobs[child.pk]
+                if current.status in {'COMPLETED', 'RUNNING'} or current.status == 'PENDING' and not current.summary.get('awaiting_assistant_confirmation'):
+                    return job_reply(current, user)
+                action = latest_action(current, user)
+                frozen = current.summary.get(MARKER, {})
+                if (current.status == 'PENDING' and action and action.status == 'PROPOSED' and not action.is_expired
+                        and frozen.get('config') == analysis['config'] and frozen.get('plan_digest') == analysis['plan_digest']):
+                    return job_reply(current, user)
+                # Explicit validation can renew an expired/cancelled/failed
+                # preview, while retaining the child file and source-row claims.
+                return prepare(current, analysis, user, fields['skip_duplicates'])
             for old in old_jobs.values():
                 AssistantAction.objects.filter(action_type='QUEUE_IMPORT', payload__import_job_id=old.pk, status='PROPOSED').update(status='CANCELLED', error_message='Replaced by a corrected row-repair preview.')
                 old.status = 'FAILED'

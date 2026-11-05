@@ -27,7 +27,7 @@ export function canManageUsers(me) {
 }
 
 export function readOnlyMessage(me) {
-  if (isViewer(me)) {
+  if (isViewer(me) && !canWrite(me)) {
     return "Read-only access: contact an admin or tech to make changes.";
   }
 
