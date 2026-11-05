@@ -1,6 +1,20 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
 
+def application_roles(user):
+    """Report effective application roles without changing assigned groups.
+
+    Django's createsuperuser does not assign OpenLIMS groups. Its existing
+    admin access must also be visible to clients that enable controls by role.
+    """
+    if not user or not user.is_authenticated:
+        return []
+    roles = [group.name for group in user.groups.all()]
+    if user.is_superuser and "admin" not in roles:
+        roles.insert(0, "admin")
+    return roles
+
+
 def has_role(user, role_name):
     return (
         user

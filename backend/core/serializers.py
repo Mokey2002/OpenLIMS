@@ -4,6 +4,7 @@ from django.contrib.auth.models import Group
 from rest_framework import serializers
 from django.contrib.auth.models import update_last_login
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from .permissions import application_roles
 
 User = get_user_model()
 
@@ -33,7 +34,7 @@ class UserLiteSerializer(serializers.ModelSerializer):
         ]
 
     def get_roles(self, obj):
-        return list(obj.groups.values_list("name", flat=True))
+        return application_roles(obj)
 
     def get_full_name(self, obj):
         return obj.get_full_name()
@@ -61,7 +62,7 @@ class UserListSerializer(serializers.ModelSerializer):
         ]
 
     def get_roles(self, obj):
-        return list(obj.groups.values_list("name", flat=True))
+        return application_roles(obj)
 
     def get_full_name(self, obj):
         return obj.get_full_name()
@@ -155,7 +156,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
         return user
 
     def get_roles(self, obj):
-        return list(obj.groups.values_list("name", flat=True))
+        return application_roles(obj)
 
     def get_full_name(self, obj):
         return obj.get_full_name()
@@ -219,7 +220,7 @@ class UserAdminUpdateSerializer(serializers.ModelSerializer):
         return instance
 
     def get_roles(self, obj):
-        return list(obj.groups.values_list("name", flat=True))
+        return application_roles(obj)
 
     def get_full_name(self, obj):
         return obj.get_full_name()
@@ -246,7 +247,7 @@ class MeSerializer(serializers.ModelSerializer):
         ]
 
     def get_roles(self, obj):
-        return list(obj.groups.values_list("name", flat=True))
+        return application_roles(obj)
 
     def get_full_name(self, obj):
         return obj.get_full_name()
