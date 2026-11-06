@@ -18,8 +18,7 @@ import { useLanguage } from "./i18n";
 import RouteContent from "./components/RouteContent";
 import AssistantWidget from "./components/AssistantWidget";
 import AssistantPageProvider from "./components/AssistantPageProvider";
-
-const FAVORITES_KEY = "openlims_favorites";
+import FavoritesMenu from "./components/FavoritesMenu";
 
 const routeLabels = {
   "/": "My Work",
@@ -62,15 +61,6 @@ function DropdownItemLink({ to, children }) {
   return <NavDropdown.Item as={NavLink} to={to}>{children}</NavDropdown.Item>;
 }
 
-function loadFavorites() {
-  try {
-    const value = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
-}
-
 function validIdentity(user) {
   return Boolean(user?.username && Array.isArray(user?.roles));
 }
@@ -85,7 +75,6 @@ export default function Layout() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [globalSearch, setGlobalSearch] = useState("");
   const [featureFlags, setFeatureFlags] = useState({});
-  const [favorites, setFavorites] = useState(loadFavorites);
 
   useEffect(() => {
     clearLegacyTokens();
@@ -128,28 +117,12 @@ export default function Layout() {
 
   const userIsAdmin = isAdmin(me);
   const userIsTech = isTech(me);
-  const currentFavoritePath = routeLabels[location.pathname] ? location.pathname : null;
-
-  const visibleFavorites = favorites.filter((path) => {
+  function canVisitFavorite(path) {
     if (path === "/registry" && !featureFlags.registry) return false;
     if (path === "/notebook" && !featureFlags.notebook) return false;
     if (["/users", "/settings", "/sops", "/workflow-designer", "/system-status", "/data-migration"].includes(path) && !userIsAdmin) return false;
     if (path === "/imports" && !(userIsAdmin || userIsTech)) return false;
-    return routeLabels[path];
-  });
-
-  function saveFavorites(next) {
-    setFavorites(next);
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
-  }
-
-  function toggleCurrentFavorite() {
-    if (!currentFavoritePath) return;
-    saveFavorites(
-      favorites.includes(currentFavoritePath)
-        ? favorites.filter((path) => path !== currentFavoritePath)
-        : [...favorites, currentFavoritePath]
-    );
+    return Object.hasOwn(routeLabels, path);
   }
 
   async function logout() {
@@ -219,11 +192,7 @@ export default function Layout() {
                 {userIsAdmin && <DropdownItemLink to="/sops">SOP Management</DropdownItemLink>}
               </NavDropdown>
 
-              <NavDropdown title={`Favorites${visibleFavorites.length ? ` (${visibleFavorites.length})` : ""}`} id="favorites-nav">
-                {visibleFavorites.length === 0 && <NavDropdown.Item disabled>No favorites pinned</NavDropdown.Item>}
-                {visibleFavorites.map((path) => <DropdownItemLink key={path} to={path}>{routeLabels[path]}</DropdownItemLink>)}
-                {currentFavoritePath && <><NavDropdown.Divider /><NavDropdown.Item onClick={toggleCurrentFavorite}>{favorites.includes(currentFavoritePath) ? "★ Unpin current page" : "☆ Pin current page"}</NavDropdown.Item></>}
-              </NavDropdown>
+              <FavoritesMenu userId={me?.id} currentPath={location.pathname} routes={routeLabels} canVisit={canVisitFavorite} />
 
               {userIsAdmin && (
                 <NavDropdown title="Admin" id="admin-nav">
