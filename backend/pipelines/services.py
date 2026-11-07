@@ -57,6 +57,9 @@ def start_default_pipeline_for_sample(sample, actor):
 
 
 def _event(entity_type, entity_id, action, actor, payload):
+    if entity_type in {"PipelineRun", "WorkItem"} and payload.get("sample_id") is not None:
+        # One canonical audit record can also appear in its sample's history.
+        payload = {**payload, "related_sample_id": payload["sample_id"]}
     Event.objects.create(
         entity_type=entity_type,
         entity_id=str(entity_id),
@@ -121,7 +124,6 @@ def _activate_step(step, actor):
     payload = _step_payload(step)
     payload["due_at"] = due_at.isoformat()
     _event("PipelineRun", step.pipeline_run_id, "PIPELINE_STEP_ACTIVATED", actor, payload)
-    _event("Sample", step.pipeline_run.sample_id, "PIPELINE_STEP_ACTIVATED", actor, payload)
 
 
 def _result_value(result):
@@ -197,6 +199,7 @@ def _advance_run(run, actor):
             if (step.activation_condition or {}).get("source_kind") == "measurement":
                 source = by_position.get(step.activation_condition["source_position"])
                 _event("PipelineRun", run.id, "WORKFLOW_RULE_EVALUATED", actor, {
+                    "sample_id": run.sample_id, "sample_code": run.sample.sample_id,
                     "step_id": step.pk, "condition": step.activation_condition, "matched": condition_matched,
                     "source_step_id": source.pk if source else None,
                     "form_version": source.form_schema.get("version") if source else None,
@@ -216,7 +219,7 @@ def _advance_run(run, actor):
             made_progress = True
 
     steps = list(run.steps.all())
-    if steps and all(step.status in terminal for step in steps):
+    if run.status != PipelineRun.STATUS_COMPLETED and steps and all(step.status in terminal for step in steps):
         now = timezone.now()
         run.status = PipelineRun.STATUS_COMPLETED
         run.completed_at = now
@@ -229,7 +232,6 @@ def _advance_run(run, actor):
             "completed_at": now.isoformat(),
         }
         _event("PipelineRun", run.id, "PIPELINE_RUN_COMPLETED", actor, payload)
-        _event("Sample", run.sample_id, "PIPELINE_RUN_COMPLETED", actor, payload)
 
 
 @transaction.atomic
@@ -318,7 +320,6 @@ def start_pipeline(*, sample, template, actor):
         "step_count": len(step_runs),
     }
     _event("PipelineRun", run.id, "PIPELINE_RUN_STARTED", actor, payload)
-    _event("Sample", sample.id, "PIPELINE_RUN_STARTED", actor, payload)
     _advance_run(run, actor)
     return run
 
@@ -428,11 +429,12 @@ def assign_analysis(*, sample, analysis, actor, scope_type, scope_id):
         "scope_id": scope_id,
     }
     _event("WorkItem", work_item.id, "ANALYSIS_ASSIGNED", actor, payload)
-    _event("Sample", sample.id, "ANALYSIS_ASSIGNED", actor, payload)
     return work_item
 
 
 def _complete_step(step, actor):
+    if step.status == PipelineStepRun.STATUS_COMPLETED:
+        return
     now = timezone.now()
     step.status = PipelineStepRun.STATUS_COMPLETED
     step.completed_at = now
@@ -460,6 +462,8 @@ def sync_pipeline_step_from_work_item(work_item, actor=None):
     )
     step.pipeline_run = run
     if run.status not in [PipelineRun.STATUS_ACTIVE, PipelineRun.STATUS_BLOCKED]:
+        return step
+    if step.status == PipelineStepRun.STATUS_SKIPPED:
         return step
 
     if work_item.status == WorkItem.STATUS_IN_PROGRESS:
@@ -496,7 +500,10 @@ def sync_pipeline_step_from_work_item(work_item, actor=None):
             return step
         already_synchronized = (
             step.status == target_step_status and run.status == target_run_status
+            and step.failure_reason == (work_item.notes if work_item.status == WorkItem.STATUS_FAILED else "")
         )
+        if already_synchronized:
+            return step
         step.status = target_step_status
         step.failure_reason = work_item.notes if work_item.status == WorkItem.STATUS_FAILED else ""
         step.completed_at = timezone.now()
@@ -504,13 +511,10 @@ def sync_pipeline_step_from_work_item(work_item, actor=None):
         run.status = target_run_status
         run.completed_at = timezone.now() if run.status == PipelineRun.STATUS_CANCELLED else None
         run.save(update_fields=["status", "completed_at", "updated_at"])
-        if already_synchronized:
-            return step
         action = "PIPELINE_STEP_BLOCKED" if run.status == PipelineRun.STATUS_BLOCKED else "PIPELINE_RUN_CANCELLED"
         payload = _step_payload(step)
         payload["failure_reason"] = step.failure_reason
         _event("PipelineRun", run.id, action, actor, payload)
-        _event("Sample", run.sample_id, action, actor, payload)
         return step
 
     if work_item.status != WorkItem.STATUS_COMPLETED:
@@ -518,15 +522,19 @@ def sync_pipeline_step_from_work_item(work_item, actor=None):
 
     missing = missing_required_fields(work_item, step)
     if missing:
+        failure_reason = f"Missing required result fields: {', '.join(missing)}."
+        if (step.status == PipelineStepRun.STATUS_FAILED
+                and run.status == PipelineRun.STATUS_BLOCKED
+                and step.failure_reason == failure_reason):
+            return step
         step.status = PipelineStepRun.STATUS_FAILED
-        step.failure_reason = f"Missing required result fields: {', '.join(missing)}."
+        step.failure_reason = failure_reason
         step.save(update_fields=["status", "failure_reason", "updated_at"])
         run.status = PipelineRun.STATUS_BLOCKED
         run.save(update_fields=["status", "updated_at"])
         payload = _step_payload(step)
         payload["failure_reason"] = step.failure_reason
         _event("PipelineRun", run.id, "PIPELINE_STEP_BLOCKED", actor, payload)
-        _event("Sample", run.sample_id, "PIPELINE_STEP_BLOCKED", actor, payload)
         return step
 
     if step.requires_qc:
@@ -535,15 +543,19 @@ def sync_pipeline_step_from_work_item(work_item, actor=None):
             step.save(update_fields=["status", "updated_at"])
             return step
         if work_item.qc_status in [WorkItem.QC_REJECTED, WorkItem.QC_RERUN_REQUIRED]:
+            failure_reason = work_item.review_note or "QC review did not approve this step."
+            if (step.status == PipelineStepRun.STATUS_FAILED
+                    and run.status == PipelineRun.STATUS_BLOCKED
+                    and step.failure_reason == failure_reason):
+                return step
             step.status = PipelineStepRun.STATUS_FAILED
-            step.failure_reason = work_item.review_note or "QC review did not approve this step."
+            step.failure_reason = failure_reason
             step.save(update_fields=["status", "failure_reason", "updated_at"])
             run.status = PipelineRun.STATUS_BLOCKED
             run.save(update_fields=["status", "updated_at"])
             payload = _step_payload(step)
             payload["failure_reason"] = step.failure_reason
             _event("PipelineRun", run.id, "PIPELINE_STEP_BLOCKED", actor, payload)
-            _event("Sample", run.sample_id, "PIPELINE_STEP_BLOCKED", actor, payload)
             return step
 
     _complete_step(step, actor)
@@ -578,7 +590,6 @@ def retry_pipeline_step(*, run, step, actor, reason):
     payload = _step_payload(step)
     payload.update({"retry_count": step.retry_count, "reason": reason, "previous_form_values": previous_form_values, "form_version": step.form_schema.get("version")})
     _event("PipelineRun", run.id, "PIPELINE_STEP_RETRIED", actor, payload)
-    _event("Sample", run.sample_id, "PIPELINE_STEP_RETRIED", actor, payload)
     return step
 
 
@@ -633,5 +644,4 @@ def cancel_pipeline(*, run, actor, reason):
         "reason": reason,
     }
     _event("PipelineRun", run.id, "PIPELINE_RUN_CANCELLED", actor, payload)
-    _event("Sample", run.sample_id, "PIPELINE_RUN_CANCELLED", actor, payload)
     return run

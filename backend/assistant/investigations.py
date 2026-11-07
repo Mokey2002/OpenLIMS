@@ -8,6 +8,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from events.models import Event
+from events.queries import sample_event_filter
 from imports.models import ImportJob
 from inventory.models import InventoryLot, InventoryReservation
 from results.models import Result, WorkItem
@@ -402,7 +403,7 @@ def _context_findings(reagent_rows, instrument_rows):
 
 
 def _timeline(sample, subject_results, subject_work):
-    entity_filters = Q(entity_type__iexact="Sample", entity_id=str(sample.id))
+    entity_filters = sample_event_filter(sample)
     work_ids = [str(row["id"]) for row in subject_work]
     result_ids = [str(result.id) for result in subject_results]
     if work_ids:

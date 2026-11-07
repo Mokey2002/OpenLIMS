@@ -3,12 +3,12 @@ import re
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import CharField, Count, Prefetch, Q
-from django.db.models.functions import Cast
+from django.db.models import Count, Prefetch, Q
 from django.utils import timezone
 
 from core.permissions import is_admin
 from events.models import Event
+from events.queries import sample_event_filter
 from inventory.models import InventoryLot, InventoryReservation
 from inventory.units import UnitConversionError, convert_quantity, units_compatible
 from notebook.models import Experiment
@@ -36,11 +36,7 @@ def sample_history(code, user):
     if not sample:
         return response("Sample not found or not accessible. Use its exact sample ID.")
     work = WorkItem.objects.filter(sample=sample)
-    events = Event.objects.filter(
-        Q(entity_type__iexact="sample", entity_id__in=[str(sample.pk), str(sample.public_id)])
-        | Q(entity_type__iexact="workitem", entity_id__in=work.annotate(key=Cast("id", CharField())).values("key"))
-        | Q(entity_type__iexact="workitem", entity_id__in=work.annotate(key=Cast("public_id", CharField())).values("key"))
-    ).select_related("actor").order_by("-timestamp", "-pk")
+    events = Event.objects.filter(sample_event_filter(sample, include_work_items=True)).select_related("actor").order_by("-timestamp", "-pk")
     # Never include arbitrary audit payloads: they may contain former project details.
     rows = [{"at": event.timestamp.isoformat(), "action": event.action,
              "actor": event.actor.username if event.actor else "Unknown",

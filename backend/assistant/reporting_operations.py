@@ -17,6 +17,7 @@ from reportlab.lib import colors
 from reportlab.graphics.shapes import Circle, Drawing, Line, PolyLine, Rect, String
 
 from events.models import Event
+from pipelines.models import PipelineRun
 from projects.models import Project
 from results.models import Result, WorkItem
 from samples.access import get_sample_access_queryset
@@ -182,10 +183,30 @@ def _event_rows(filters, user):
         str(sample.id): sample
         for sample in get_sample_access_queryset(Sample.objects.select_related("project"), user)
     }
+    related_owners = {}
+    related_models = {"pipelinerun": PipelineRun, "workitem": WorkItem}
     rows = []
     for event in queryset[:10000]:
         payload = event.payload or {}
         event_project = payload.get("project_id")
+        related_sample = None
+        kind = event.entity_type.casefold()
+        if payload.get("related_sample_id") is not None and kind in related_models:
+            if kind not in related_owners:
+                related_owners[kind] = {
+                    str(identifier): sample_id
+                    for pk, public_id, sample_id in related_models[kind].objects.filter(
+                        sample_id__in=allowed_samples,
+                    ).values_list("pk", "public_id", "sample_id")
+                    for identifier in (pk, public_id)
+                }
+            owner_id = related_owners[kind].get(event.entity_id)
+            if str(owner_id) == str(payload["related_sample_id"]):
+                related_sample = allowed_samples.get(str(owner_id))
+            if not admin_user and related_sample is None:
+                continue
+            if related_sample and not event_project:
+                event_project = related_sample.project_id
         if project_id and event_project not in [project_id, str(project_id)]:
             continue
         if event_project:
@@ -199,7 +220,7 @@ def _event_rows(filters, user):
                     continue
         if event.entity_type == "Sample" and event.entity_id not in allowed_samples:
             continue
-        if not admin_user and not event_project and event.entity_type != "Sample":
+        if not admin_user and not event_project and event.entity_type != "Sample" and related_sample is None:
             if event.actor_id != user.id:
                 continue
         if sample_code:

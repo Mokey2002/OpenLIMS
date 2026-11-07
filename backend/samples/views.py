@@ -42,6 +42,7 @@ from .access import (
 from custom_fields.models import FieldValue
 from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite
 from events.models import Event
+from events.queries import sample_event_filter
 from projects.models import Project
 
 
@@ -184,10 +185,7 @@ class SampleViewSet(ModelViewSet):
         from events.serializers import EventSerializer
 
         sample = self.get_object()
-        events = Event.objects.filter(
-            entity_type__iexact="sample",
-            entity_id__in=[str(sample.pk), str(sample.public_id)],
-        ).select_related("actor").order_by("-timestamp", "-pk")
+        events = Event.objects.filter(sample_event_filter(sample)).select_related("actor").order_by("-timestamp", "-pk")
         page = self.paginate_queryset(events)
         serializer = EventSerializer(page if page is not None else events, many=True)
         return self.get_paginated_response(serializer.data) if page is not None else Response(serializer.data)
@@ -332,6 +330,7 @@ class SampleViewSet(ModelViewSet):
             )
 
         before = sample_audit_state(sample)
+        previous_container = sample.container if "container" in serializer.validated_data else None
         requested_status = serializer.validated_data.get("status", sample.status)
         status_changed = requested_status != sample.status
         reason = None
@@ -367,9 +366,20 @@ class SampleViewSet(ModelViewSet):
                     "reason_type": "sample_form_change" if values_changed else "sample_status_change",
                 })
 
+            if "container_id" in changed_fields:
+                extra_payload.update({
+                    "old_container_id": before["container_id"],
+                    "old_container_code": previous_container.container_id if previous_container else None,
+                    "new_container_id": updated.container_id,
+                    "new_container_code": updated.container.container_id if updated.container else None,
+                    "location_name": updated.container.location.name if updated.container and updated.container.location else None,
+                })
+
             action = (
                 "SAMPLE_STATUS_CHANGED"
                 if changed_fields == ["status"]
+                else "CONTAINER_ASSIGNED"
+                if changed_fields == ["container_id"]
                 else "UPDATED"
             )
 
@@ -562,8 +572,10 @@ class SampleViewSet(ModelViewSet):
         })
 
     @action(detail=True, methods=["post"], url_path="transition")
+    @transaction.atomic
     def transition(self, request, pk=None):
         sample = self.get_object()
+        sample = Sample.objects.select_for_update().get(pk=sample.pk)
         require_sample_modify_access(request.user, sample)
 
         new_status = request.data.get("new_status") or request.data.get("status")
@@ -604,45 +616,6 @@ class SampleViewSet(ModelViewSet):
 
         serializer = self.get_serializer(sample)
         return Response(serializer.data)
-
-    def partial_update(self, request, *args, **kwargs):
-        sample = self.get_object()
-        require_sample_modify_access(request.user, sample)
-        old_container_id = sample.container_id
-        old_container_code = (
-            sample.container.container_id if sample.container else None
-        )
-
-        response = super().partial_update(request, *args, **kwargs)
-
-        sample.refresh_from_db()
-
-        if old_container_id != sample.container_id:
-            Event.objects.create(
-                entity_type="Sample",
-                entity_id=str(sample.id),
-                action="CONTAINER_ASSIGNED",
-                actor=request.user,
-                payload={
-                    "sample_id": sample.id,
-                    "sample_code": sample.sample_id,
-                    "old_container_id": old_container_id,
-                    "old_container_code": old_container_code,
-                    "new_container_id": sample.container_id,
-                    "new_container_code": (
-                        sample.container.container_id
-                        if sample.container
-                        else None
-                    ),
-                    "location_name": (
-                        sample.container.location.name
-                        if sample.container and sample.container.location
-                        else None
-                    ),
-                },
-            )
-
-        return response
 
     @action(detail=False, methods=["post"], url_path="bulk-update")
     def bulk_update_samples(self, request):

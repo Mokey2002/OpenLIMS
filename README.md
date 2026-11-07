@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.72.4-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.72.5-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,17 @@
 
 | Version | Improvements | Details |
 | --- | --- | --- |
-| **v0.72.4** | Shared session refresh, resilient login/language settings, correct download filenames and recoverable migration exports. | [Frontend regression tests](frontend/e2e/tests/frontend-reliability.spec.js) |
+| **v0.72.5** | Single audit records for workflows, analyses and storage changes, repeat-safe workflow synchronization and atomic sample transitions. | [Audit integrity guide](docs/audit-integrity-v0725.md) |
+| **v0.72.4** | Shared session refresh, resilient login/language settings, correct download filenames and recoverable migration exports. | [Frontend regression tests](frontend/e2e/tests/frontend-reliability.spec.js) · [PR #195](https://github.com/Mokey2002/OpenLIMS/pull/195) |
 | **v0.72.3** | Account-scoped browser favorites preserve separate pins when users share a browser. | [Personal favorites](#personal-favorites) · [PR #194](https://github.com/Mokey2002/OpenLIMS/pull/194) |
-| **v0.72.2** | Protected instrument sources, recoverable repair confirmations, controlled missing-file errors and correct combined-role messages. | [Robustness guide](docs/robustness-v0722.md) · [PR #193](https://github.com/Mokey2002/OpenLIMS/pull/193) |
+
+### v0.72.5 — One audit record per recorded change
+
+Workflow and analysis actions now write one canonical audit event instead of separate workflow/work-item and sample copies. Sample history, assistant timelines and scoped reports follow that event through its sample relationship and current access checks. A container change now writes one complete event with before/after storage details; a combined update retains all changed fields in one entry.
+
+Repeated saves of completed/skipped workflow steps or unchanged failures no longer record the same outcome again or reset its completion time. Real retries, new QC decisions and changed failure reasons remain auditable. Sample status transitions now lock the sample and commit the state change with its audit record, so competing identical requests produce one transition and an audit failure rolls back the change.
+
+Version/footer **v0.72.5**. Rebuild/recreate API, worker and frontend/web from the same commit. No database migration or new dependency. Existing audit records remain intact. Both READMEs retain only **v0.72.5, v0.72.4 and v0.72.3**. See the [audit integrity guide](docs/audit-integrity-v0725.md) for causes, event scopes and regression checks.
 
 ### v0.72.4 — Reliable sessions and downloads
 
@@ -43,7 +51,7 @@ Concurrent expired requests now share a single session refresh in each tab. Dela
 
 Blocked browser storage no longer prevents application startup, cookie login/logout or applying the server's language setting. Downloads preserve literal percent signs and quoted punctuation, prefer UTF-8 filenames and fall back safely when an encoded name is invalid. Migration row and reconciliation CSV exports now use the versioned, cookie-authenticated API client, recover from expired access cookies and preserve their search/status parameters.
 
-Version/footer **v0.72.4**. Rebuild/recreate the frontend/web and refresh the browser. No API change, migration or new dependency. Both READMEs retain only **v0.72.4, v0.72.3 and v0.72.2**.
+Version/footer **v0.72.4**. Rebuild/recreate the frontend/web and refresh the browser. No API change, migration or new dependency. The latest three release updates are listed above.
 
 ### v0.72.3 — Favorites belong to each account
 
@@ -53,21 +61,13 @@ The previous shared list did not record an owner and is no longer used. Each use
 
 Version/footer **v0.72.3**. Rebuild the frontend/web and refresh the browser. No API change, migration or new dependency. The latest three release updates are listed above.
 
-### v0.72.2 — Protected imports and reliable recovery
-
-Original assistant instrument files now use protected storage and **Download source file** serves them through authenticated, current-access and checksum checks. NGINX and Django block generated legacy public source URLs; the development media server checks normalized paths too. Ordinary imports retain their existing behavior.
-
-Revalidating an expired, cancelled or failed repair prepares a new confirmation using the same child import and source-row claims. Queued work and imported measurements are preserved. Missing stored files return a controlled error, and combined admin/tech plus viewer roles no longer show an incorrect read-only banner.
-
-Version/footer **v0.72.2**. Rebuild API, worker and web from the same commit to install the NGINX protection too. No new migration or dependency. See the [robustness guide](docs/robustness-v0722.md) for scope, recovery and tests. The latest three release updates are listed above.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.72.4`.
+**Current development version:** `v0.72.5`.
 
 ## Personal favorites
 
@@ -954,7 +954,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.72.4**.
+`frontend/src/version.js` file. The current application version is **v0.72.5**.
 
 Footer source:
 

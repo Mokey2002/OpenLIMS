@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.72.4.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.72.5.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,17 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
-| **v0.72.4** | Renovación de sesión compartida, inicio de sesión e idioma resistentes a fallos del almacenamiento y descargas/migraciones fiables. | [Pruebas de regresión del frontend](frontend/e2e/tests/frontend-reliability.spec.js) |
+| **v0.72.5** | Un solo evento por cambio de flujo, análisis o almacenamiento; sincronización sin repeticiones y transiciones de muestras atómicas. | [Guía de integridad de auditoría](docs/audit-integrity-v0725.md) |
+| **v0.72.4** | Renovación de sesión compartida, inicio de sesión e idioma resistentes a fallos del almacenamiento y descargas/migraciones fiables. | [Pruebas de regresión del frontend](frontend/e2e/tests/frontend-reliability.spec.js) · [PR #195](https://github.com/Mokey2002/OpenLIMS/pull/195) |
 | **v0.72.3** | Favoritos separados por cuenta en el mismo navegador, sin compartir pines entre usuarios. | [Favoritos personales](#favoritos-personales) · [PR #194](https://github.com/Mokey2002/OpenLIMS/pull/194) |
-| **v0.72.2** | Archivos de instrumentos protegidos, recuperación de confirmaciones de reparación, errores controlados por archivos faltantes y mensajes correctos para roles combinados. | [Guía de robustez](docs/robustness-v0722.md) · [PR #193](https://github.com/Mokey2002/OpenLIMS/pull/193) |
+
+## v0.72.5 — Un evento de auditoría por cambio registrado
+
+Las acciones de flujos y análisis guardan ahora un solo evento canónico, en lugar de copias separadas para el flujo/trabajo y la muestra. El historial de muestras, las cronologías del asistente y los informes consultan el mismo evento mediante su relación con la muestra y los permisos actuales. Un cambio de contenedor guarda un solo evento con los valores anteriores y nuevos; una actualización combinada conserva todos los campos modificados en una entrada.
+
+Guardar de nuevo un paso completado/omitido o un fallo sin cambios ya no repite el resultado ni cambia su fecha de finalización. Los reintentos reales, nuevas decisiones de QC y motivos de fallo modificados siguen registrados. Las transiciones de estado bloquean la muestra y guardan el cambio junto con su auditoría: solicitudes idénticas simultáneas producen una transición y un fallo de auditoría revierte el cambio.
+
+Versión/pie **v0.72.5**. Reconstruye/recrea API, worker y frontend/web con el mismo código. Sin migración de base de datos ni dependencia nueva. Los registros históricos se conservan. Ambos README mantienen solo **v0.72.5, v0.72.4 y v0.72.3**. Consulta la [guía de integridad de auditoría](docs/audit-integrity-v0725.md) para causas, alcance y pruebas.
 
 ## v0.72.4 — Sesiones y descargas fiables
 
@@ -24,7 +32,7 @@ Las solicitudes simultáneas con sesión expirada comparten una sola renovación
 
 El bloqueo del almacenamiento del navegador ya no impide iniciar la aplicación, entrar/salir con cookies ni aplicar el idioma configurado en el servidor. Las descargas conservan signos de porcentaje y puntuación entre comillas, prefieren nombres UTF-8 y usan un nombre alternativo si la codificación no es válida. Las exportaciones CSV de filas y conciliación de migraciones usan ahora el cliente API versionado con cookies, recuperan la sesión expirada y conservan los parámetros de búsqueda y estado.
 
-Versión/pie **v0.72.4**. Reconstruye/recrea el frontend/web y actualiza el navegador. Sin cambio de API, migración ni dependencia nueva. Ambos README conservan solo **v0.72.4, v0.72.3 y v0.72.2**.
+Versión/pie **v0.72.4**. Reconstruye/recrea el frontend/web y actualiza el navegador. Sin cambio de API, migración ni dependencia nueva. Las tres actualizaciones más recientes se indican arriba.
 
 ## v0.72.3 — Favoritos personales por cuenta
 
@@ -34,21 +42,13 @@ La lista compartida anterior no registraba su propietario y deja de utilizarse. 
 
 Versión/pie **v0.72.3**. Reconstruye el frontend/web y actualiza el navegador. Sin cambio de API, migración ni dependencia nueva. Las tres actualizaciones más recientes se indican arriba.
 
-## v0.72.2 — Importaciones protegidas y recuperación fiable
-
-Los archivos originales subidos desde el asistente ahora usan almacenamiento protegido y se descargan mediante **Download source file**, con autenticación, permisos actuales y verificación de checksum. NGINX y Django bloquean las URL públicas anteriores generadas por el asistente; el servidor de desarrollo también comprueba rutas normalizadas. Las importaciones ordinarias conservan su comportamiento.
-
-Volver a validar una reparación expirada, cancelada o fallida prepara una nueva confirmación usando la misma importación hija y sus filas reservadas. No reinicia trabajos en cola ni mediciones ya importadas. Los archivos faltantes producen un error controlado; los roles admin/tech combinados con viewer ya no muestran un mensaje de solo lectura incorrecto.
-
-Versión/pie **v0.72.2**. Reconstruye API, worker y web con el mismo código para instalar también las protecciones NGINX. Sin migración ni dependencia nueva. Consulta la [guía de robustez](docs/robustness-v0722.md) para alcance, recuperación y pruebas. Las tres actualizaciones más recientes se indican arriba.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.72.4`
+**Versión de desarrollo actual:** `v0.72.5`
 
 **Demo:** http://35.164.28.250
 
