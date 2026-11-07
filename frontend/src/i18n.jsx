@@ -988,13 +988,21 @@ const LanguageContext = createContext({
 
 export function LanguageProvider({ children }) {
   const [assistantHelperEnabled, setAssistantHelperEnabled] = useState(null);
-  const [language, setLanguageState] = useState(() =>
-    normalizeLanguage(window.localStorage.getItem(LANGUAGE_STORAGE_KEY))
-  );
+  const [language, setLanguageState] = useState(() => {
+    try {
+      return normalizeLanguage(window.localStorage.getItem(LANGUAGE_STORAGE_KEY));
+    } catch {
+      return normalizeLanguage(null);
+    }
+  });
 
   const setLanguage = useCallback((nextLanguage) => {
     const normalized = normalizeLanguage(nextLanguage);
-    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, normalized);
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, normalized);
+    } catch {
+      // Language selection remains usable without a persistent browser preference.
+    }
     setLanguageState(normalized);
   }, []);
 

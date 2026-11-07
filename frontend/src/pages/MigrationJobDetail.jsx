@@ -10,7 +10,7 @@ import {
   Table,
 } from "react-bootstrap";
 import { Link, useParams } from "react-router-dom";
-import { apiGet, apiPost } from "../api";
+import { apiDownload, apiGet, apiPost } from "../api";
 import { isAdmin } from "../authz";
 import { useLanguage } from "../i18n";
 
@@ -114,28 +114,10 @@ export default function MigrationJobDetail() {
       if (exportStatus) params.set("status", exportStatus);
       if (search.trim()) params.set("search", search.trim());
 
-      const token = localStorage.getItem("access");
-      const response = await fetch(
+      await apiDownload(
         `/api/migration-jobs/${id}/export-rows/?${params.toString()}`,
-        {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }
+        `migration_job_${id}_rows.csv`
       );
-
-      if (!response.ok) {
-        throw new Error(`Export failed with status ${response.status}`);
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = url;
-      link.download = `migration_job_${id}_rows.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -147,20 +129,7 @@ export default function MigrationJobDetail() {
     setDownloading(true);
     setErr("");
     try {
-      const token = localStorage.getItem("access");
-      const response = await fetch(`/api/migration-jobs/${id}/export-reconciliation/`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!response.ok) throw new Error(`Export failed with status ${response.status}`);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `migration_job_${id}_reconciliation.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      await apiDownload(`/api/migration-jobs/${id}/export-reconciliation/`, `migration_job_${id}_reconciliation.csv`);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {

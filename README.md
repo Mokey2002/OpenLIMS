@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.72.3-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.72.4-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,17 @@
 
 | Version | Improvements | Details |
 | --- | --- | --- |
-| **v0.72.3** | Account-scoped browser favorites preserve separate pins when users share a browser. | [Personal favorites](#personal-favorites) |
+| **v0.72.4** | Shared session refresh, resilient login/language settings, correct download filenames and recoverable migration exports. | [Frontend regression tests](frontend/e2e/tests/frontend-reliability.spec.js) |
+| **v0.72.3** | Account-scoped browser favorites preserve separate pins when users share a browser. | [Personal favorites](#personal-favorites) · [PR #194](https://github.com/Mokey2002/OpenLIMS/pull/194) |
 | **v0.72.2** | Protected instrument sources, recoverable repair confirmations, controlled missing-file errors and correct combined-role messages. | [Robustness guide](docs/robustness-v0722.md) · [PR #193](https://github.com/Mokey2002/OpenLIMS/pull/193) |
-| **v0.72.1** | Superusers receive effective admin access in the UI and can create projects and samples without manual group assignment. | [Administrator setup](#5-create-your-administrator-account) · [PR #192](https://github.com/Mokey2002/OpenLIMS/pull/192) |
+
+### v0.72.4 — Reliable sessions and downloads
+
+Concurrent expired requests now share a single session refresh in each tab. Delayed responses from the old session reuse the completed refresh, and each request retries at most once. Cancelled requests keep their cancellation status without replaying or redirecting to login.
+
+Blocked browser storage no longer prevents application startup, cookie login/logout or applying the server's language setting. Downloads preserve literal percent signs and quoted punctuation, prefer UTF-8 filenames and fall back safely when an encoded name is invalid. Migration row and reconciliation CSV exports now use the versioned, cookie-authenticated API client, recover from expired access cookies and preserve their search/status parameters.
+
+Version/footer **v0.72.4**. Rebuild/recreate the frontend/web and refresh the browser. No API change, migration or new dependency. Both READMEs retain only **v0.72.4, v0.72.3 and v0.72.2**.
 
 ### v0.72.3 — Favorites belong to each account
 
@@ -43,7 +51,7 @@ Browser favorites are now stored by the authenticated account ID. Directors, tec
 
 The previous shared list did not record an owner and is no longer used. Each user needs to re-pin those pages once. Its stored value is retained without automatically assigning it to anyone. Invalid stored data cannot break the menu, and failed saves show a clear message.
 
-Version/footer **v0.72.3**. Rebuild the frontend/web and refresh the browser. No API change, migration or new dependency. Both READMEs retain only **v0.72.3, v0.72.2 and v0.72.1**.
+Version/footer **v0.72.3**. Rebuild the frontend/web and refresh the browser. No API change, migration or new dependency. The latest three release updates are listed above.
 
 ### v0.72.2 — Protected imports and reliable recovery
 
@@ -53,19 +61,13 @@ Revalidating an expired, cancelled or failed repair prepares a new confirmation 
 
 Version/footer **v0.72.2**. Rebuild API, worker and web from the same commit to install the NGINX protection too. No new migration or dependency. See the [robustness guide](docs/robustness-v0722.md) for scope, recovery and tests. The latest three release updates are listed above.
 
-### v0.72.1 — Superusers can create lab data
-
-Accounts created with `createsuperuser` now report the effective **admin** role in login, session, profile and user-list responses, even without assigned groups. The interface enables project/sample creation, including **PROTEIN** samples, matching existing API authorization. Assigned groups are preserved; the username `root` and the `is_staff` flag do not grant application admin access by themselves.
-
-Version/footer **v0.72.1**. Rebuild/recreate the API and web frontend, then refresh or sign in again. This patch requires no migration or manual group assignment. The latest three release updates are listed above.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.72.3`.
+**Current development version:** `v0.72.4`.
 
 ## Personal favorites
 
@@ -952,7 +954,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.72.3**.
+`frontend/src/version.js` file. The current application version is **v0.72.4**.
 
 Footer source:
 
