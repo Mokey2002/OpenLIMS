@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.72.3.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.72.4.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,17 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
-| **v0.72.3** | Favoritos separados por cuenta en el mismo navegador, sin compartir pines entre usuarios. | [Favoritos personales](#favoritos-personales) |
+| **v0.72.4** | Renovación de sesión compartida, inicio de sesión e idioma resistentes a fallos del almacenamiento y descargas/migraciones fiables. | [Pruebas de regresión del frontend](frontend/e2e/tests/frontend-reliability.spec.js) |
+| **v0.72.3** | Favoritos separados por cuenta en el mismo navegador, sin compartir pines entre usuarios. | [Favoritos personales](#favoritos-personales) · [PR #194](https://github.com/Mokey2002/OpenLIMS/pull/194) |
 | **v0.72.2** | Archivos de instrumentos protegidos, recuperación de confirmaciones de reparación, errores controlados por archivos faltantes y mensajes correctos para roles combinados. | [Guía de robustez](docs/robustness-v0722.md) · [PR #193](https://github.com/Mokey2002/OpenLIMS/pull/193) |
-| **v0.72.1** | Los superusuarios reciben el rol efectivo admin en la interfaz y pueden crear proyectos y muestras sin asignar grupos manualmente. | [Crear administrador](#5-crea-tu-cuenta-de-administrador) · [PR #192](https://github.com/Mokey2002/OpenLIMS/pull/192) |
+
+## v0.72.4 — Sesiones y descargas fiables
+
+Las solicitudes simultáneas con sesión expirada comparten una sola renovación en cada pestaña. Las respuestas tardías de la sesión anterior reutilizan la renovación ya completada y cada solicitud se reintenta como máximo una vez. Las solicitudes canceladas conservan su estado sin reenviarse ni redirigir al inicio de sesión.
+
+El bloqueo del almacenamiento del navegador ya no impide iniciar la aplicación, entrar/salir con cookies ni aplicar el idioma configurado en el servidor. Las descargas conservan signos de porcentaje y puntuación entre comillas, prefieren nombres UTF-8 y usan un nombre alternativo si la codificación no es válida. Las exportaciones CSV de filas y conciliación de migraciones usan ahora el cliente API versionado con cookies, recuperan la sesión expirada y conservan los parámetros de búsqueda y estado.
+
+Versión/pie **v0.72.4**. Reconstruye/recrea el frontend/web y actualiza el navegador. Sin cambio de API, migración ni dependencia nueva. Ambos README conservan solo **v0.72.4, v0.72.3 y v0.72.2**.
 
 ## v0.72.3 — Favoritos personales por cuenta
 
@@ -24,7 +32,7 @@ Los favoritos del navegador ahora se guardan por el ID de la cuenta autenticada.
 
 La lista compartida anterior no registraba su propietario y deja de utilizarse. Cada usuario debe volver a fijar esas páginas una vez. El formato anterior se conserva en el navegador sin asignarlo automáticamente a nadie. El almacenamiento inválido no rompe el menú, y un error al guardar muestra un aviso.
 
-Versión/pie **v0.72.3**. Reconstruye el frontend/web y actualiza el navegador. Sin cambio de API, migración ni dependencia nueva. Ambos README conservan solo **v0.72.3, v0.72.2 y v0.72.1**.
+Versión/pie **v0.72.3**. Reconstruye el frontend/web y actualiza el navegador. Sin cambio de API, migración ni dependencia nueva. Las tres actualizaciones más recientes se indican arriba.
 
 ## v0.72.2 — Importaciones protegidas y recuperación fiable
 
@@ -34,19 +42,13 @@ Volver a validar una reparación expirada, cancelada o fallida prepara una nueva
 
 Versión/pie **v0.72.2**. Reconstruye API, worker y web con el mismo código para instalar también las protecciones NGINX. Sin migración ni dependencia nueva. Consulta la [guía de robustez](docs/robustness-v0722.md) para alcance, recuperación y pruebas. Las tres actualizaciones más recientes se indican arriba.
 
-## v0.72.1 — Acceso administrativo para superusuarios
-
-Una cuenta creada con `createsuperuser`, aunque no tenga grupos asignados, ahora muestra el rol efectivo **admin** en el inicio de sesión, la sesión, el perfil y las listas de usuarios. La interfaz habilita la creación de proyectos y muestras, incluidas las de tipo **PROTEIN**, conforme al acceso que ya autoriza la API. Los grupos existentes se conservan; llamarse `root` o tener `is_staff` no concede acceso administrativo.
-
-Versión/pie **v0.72.1**. Reconstruye/recrea la API y el frontend web, y actualiza la página o inicia sesión de nuevo. Este parche no necesita migración ni asignación manual de grupos. Las tres actualizaciones más recientes se indican arriba.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.72.3`
+**Versión de desarrollo actual:** `v0.72.4`
 
 **Demo:** http://35.164.28.250
 

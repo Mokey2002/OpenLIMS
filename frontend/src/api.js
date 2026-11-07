@@ -50,18 +50,28 @@ async function ensureCSRFToken() {
   return token;
 }
 
-async function refreshSession() {
-  try {
-    const csrf = await ensureCSRFToken();
-    const response = await fetch(`${API_BASE}/api/v1/auth/refresh/`, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "X-CSRFToken": csrf },
-    });
-    return response.ok;
-  } catch {
-    return false;
+let sessionGeneration = 0;
+let refreshPromise = null;
+
+function refreshSession() {
+  // Rotating refresh tokens must only be exchanged once per tab at a time.
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const csrf = await ensureCSRFToken();
+        const response = await fetch(`${API_BASE}/api/v1/auth/refresh/`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "X-CSRFToken": csrf },
+        });
+        if (response.ok) sessionGeneration += 1;
+        return response.ok;
+      } catch {
+        return false;
+      }
+    })().finally(() => { refreshPromise = null; });
   }
+  return refreshPromise;
 }
 
 let activeMutations = 0;
@@ -101,6 +111,7 @@ async function performRequest(path, options = {}, retry = true) {
     headers["X-CSRFToken"] = await ensureCSRFToken();
   }
 
+  const requestGeneration = sessionGeneration;
   const response = await fetch(`${API_BASE}${requestPath}`, {
     ...options,
     method,
@@ -109,15 +120,14 @@ async function performRequest(path, options = {}, retry = true) {
   });
 
   const isAuthRequest = requestPath.startsWith("/api/v1/auth/");
-  if (response.status === 401 && retry && !isAuthRequest) {
-    if (await refreshSession()) {
-      return performRequest(requestPath, options, false);
-    }
-    redirectToLogin();
-    throw new Error("Session expired. Please log in again.");
-  }
-
   if (response.status === 401 && !isAuthRequest) {
+    options.signal?.throwIfAborted();
+    if (retry) {
+      // A slow response may belong to the session we have already refreshed.
+      const renewed = requestGeneration !== sessionGeneration || await refreshSession();
+      options.signal?.throwIfAborted();
+      if (renewed) return performRequest(requestPath, options, false);
+    }
     redirectToLogin();
     throw new Error("Session expired. Please log in again.");
   }
@@ -125,11 +135,32 @@ async function performRequest(path, options = {}, retry = true) {
   return response;
 }
 
+function downloadFilename(disposition, fallback) {
+  let plain;
+  let encoded;
+  const parameters = /(?:^|;)\s*(filename\*?)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;]*))/gi;
+  for (const match of disposition.matchAll(parameters)) {
+    const value = match[2] === undefined ? match[3].trim() : match[2].replace(/\\(.)/g, "$1");
+    if (match[1].toLowerCase() === "filename*") encoded ??= value;
+    else plain ??= value;
+  }
+
+  const utf8 = encoded?.match(/^UTF-8'[^']*'(.*)$/i);
+  if (utf8) {
+    try {
+      const decoded = decodeURIComponent(utf8[1]);
+      if (decoded) return decoded;
+    } catch {
+      // A malformed extended name must not prevent downloading the file.
+    }
+  }
+  return plain || fallback;
+}
+
 function downloadResponseBlob(response, fallbackFilename) {
   return response.blob().then((blob) => {
     const disposition = response.headers.get("Content-Disposition") || "";
-    const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
-    const filename = match ? decodeURIComponent(match[1].replace(/"$/, "")) : fallbackFilename;
+    const filename = downloadFilename(disposition, fallbackFilename);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;

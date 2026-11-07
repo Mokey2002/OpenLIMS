@@ -10,8 +10,13 @@ const LEGACY_TOKEN_KEYS = [
 
 export function clearLegacyTokens() {
   for (const key of LEGACY_TOKEN_KEYS) {
-    localStorage.removeItem(key);
-    sessionStorage.removeItem(key);
+    for (const name of ["localStorage", "sessionStorage"]) {
+      try {
+        globalThis[name].removeItem(key);
+      } catch {
+        // Cookie authentication still works when browser storage is unavailable.
+      }
+    }
   }
 }
 
