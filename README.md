@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.72.2-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.72.3-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,17 @@
 
 | Version | Improvements | Details |
 | --- | --- | --- |
-| **v0.72.2** | Protected instrument sources, recoverable repair confirmations, controlled missing-file errors and correct combined-role messages. | [Robustness guide](docs/robustness-v0722.md) |
+| **v0.72.3** | Account-scoped browser favorites preserve separate pins when users share a browser. | [Personal favorites](#personal-favorites) |
+| **v0.72.2** | Protected instrument sources, recoverable repair confirmations, controlled missing-file errors and correct combined-role messages. | [Robustness guide](docs/robustness-v0722.md) · [PR #193](https://github.com/Mokey2002/OpenLIMS/pull/193) |
 | **v0.72.1** | Superusers receive effective admin access in the UI and can create projects and samples without manual group assignment. | [Administrator setup](#5-create-your-administrator-account) · [PR #192](https://github.com/Mokey2002/OpenLIMS/pull/192) |
-| **v0.72.0** | Confirmed batch metadata changes, instrument/reagent reservations, rejected-row repairs, run-based notebook drafts and shift handovers in both chat views. | [v0.72 guide](docs/assistant-v072.md) · [PR #190](https://github.com/Mokey2002/OpenLIMS/pull/190) |
+
+### v0.72.3 — Favorites belong to each account
+
+Browser favorites are now stored by the authenticated account ID. Directors, technicians and other users retain separate pins across logout, account changes and reloads. Favorites stay unavailable until identity is loaded. Existing role/module visibility rules still apply, and storage changes from another tab refresh only the same account's pins.
+
+The previous shared list did not record an owner and is no longer used. Each user needs to re-pin those pages once. Its stored value is retained without automatically assigning it to anyone. Invalid stored data cannot break the menu, and failed saves show a clear message.
+
+Version/footer **v0.72.3**. Rebuild the frontend/web and refresh the browser. No API change, migration or new dependency. Both READMEs retain only **v0.72.3, v0.72.2 and v0.72.1**.
 
 ### v0.72.2 — Protected imports and reliable recovery
 
@@ -43,7 +51,7 @@ Original assistant instrument files now use protected storage and **Download sou
 
 Revalidating an expired, cancelled or failed repair prepares a new confirmation using the same child import and source-row claims. Queued work and imported measurements are preserved. Missing stored files return a controlled error, and combined admin/tech plus viewer roles no longer show an incorrect read-only banner.
 
-Version/footer **v0.72.2**. Rebuild API, worker and web from the same commit to install the NGINX protection too. No new migration or dependency. See the [robustness guide](docs/robustness-v0722.md) for scope, recovery and tests. Both READMEs retain only **v0.72.2, v0.72.1 and v0.72.0**.
+Version/footer **v0.72.2**. Rebuild API, worker and web from the same commit to install the NGINX protection too. No new migration or dependency. See the [robustness guide](docs/robustness-v0722.md) for scope, recovery and tests. The latest three release updates are listed above.
 
 ### v0.72.1 — Superusers can create lab data
 
@@ -51,21 +59,17 @@ Accounts created with `createsuperuser` now report the effective **admin** role 
 
 Version/footer **v0.72.1**. Rebuild/recreate the API and web frontend, then refresh or sign in again. This patch requires no migration or manual group assignment. The latest three release updates are listed above.
 
-### v0.72.0 — Five lab workflows without leaving chat
-
-Use **Manage batch work**, **Reserve resources**, **Repair rejected import rows**, **Draft a notebook from a run**, or **Prepare a shift handover**. Both chat views provide current project/run/stock choices and inline fields, followed by the existing confirmation controls and per-record receipts. Natural commands include **“Assign ALPHA’s unassigned work to Maria and set Friday deadlines”** and **“Hand my unfinished ALPHA work to Maria”**; the assistant asks for exact missing times rather than inventing a deadline.
-
-Batch updates change eligible assignment/deadline metadata together, with exclusions disclosed and workflow/QC gates preserved. Instrument slots and reagent quantities are reserved atomically; conflicting slots, expired/quarantined lots, stale stock and incompatible units are refused. Cancellation releases active linked reservations without reversing consumed stock. Row repairs create a validated child import from selected rejected rows, preserve the original file/results, and track each source row to prevent duplicate or superseded retries. Notebook drafts use actual results, configured procedure versions, native revisions and source links, and remain **Draft**; their audience must have source access. Handovers reassign eligible unfinished work and optionally deliver the previewed internal notification.
-
-Current permissions and evidence are rechecked at confirmation. PostgreSQL race tests and a database exclusion constraint protect booking conflicts; assistant-generated audit records are visible to their requester and administrators. See the [v0.72 guide](docs/assistant-v072.md) for limits, APIs and examples. Apply **four migrations**, rebuild API/frontend, and restart Celery workers with the same backend release. The booking migration enables PostgreSQL’s bundled `btree_gist` extension and needs suitable database privileges. Version/footer: **v0.72.0**. The latest three release updates are listed above. No new Python/Node dependency, service, scheduled coding automation, email integration or physical instrument control is added.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.72.2`.
+**Current development version:** `v0.72.3`.
+
+## Personal favorites
+
+Open **Favorites** and choose **Pin current page** or **Unpin current page**. Pins belong to your account in that browser; they do not sync between browsers or computers. The old shared list is no longer used: re-pin your pages once after upgrading.
 
 ## Deployment Access
 
@@ -948,7 +952,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.72.2**.
+`frontend/src/version.js` file. The current application version is **v0.72.3**.
 
 Footer source:
 

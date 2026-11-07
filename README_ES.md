@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.72.2.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.72.3.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,17 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
-| **v0.72.2** | Archivos de instrumentos protegidos, recuperación de confirmaciones de reparación, errores controlados por archivos faltantes y mensajes correctos para roles combinados. | [Guía de robustez](docs/robustness-v0722.md) |
+| **v0.72.3** | Favoritos separados por cuenta en el mismo navegador, sin compartir pines entre usuarios. | [Favoritos personales](#favoritos-personales) |
+| **v0.72.2** | Archivos de instrumentos protegidos, recuperación de confirmaciones de reparación, errores controlados por archivos faltantes y mensajes correctos para roles combinados. | [Guía de robustez](docs/robustness-v0722.md) · [PR #193](https://github.com/Mokey2002/OpenLIMS/pull/193) |
 | **v0.72.1** | Los superusuarios reciben el rol efectivo admin en la interfaz y pueden crear proyectos y muestras sin asignar grupos manualmente. | [Crear administrador](#5-crea-tu-cuenta-de-administrador) · [PR #192](https://github.com/Mokey2002/OpenLIMS/pull/192) |
-| **v0.72.0** | Cambios por lote, reservas de instrumentos/reactivos, reparación de filas rechazadas, borradores de cuaderno y relevos desde ambos chats. | [Guía v0.72](docs/assistant-v072.md) · [PR #190](https://github.com/Mokey2002/OpenLIMS/pull/190) |
+
+## v0.72.3 — Favoritos personales por cuenta
+
+Los favoritos del navegador ahora se guardan por el ID de la cuenta autenticada. Director, técnicos y otros usuarios conservan sus propios pines al cerrar sesión, cambiar de cuenta o recargar la página. No se muestran ni guardan favoritos antes de identificar la cuenta. Los pines siguen respetando la visibilidad de roles y módulos; los cambios de otras pestañas solo actualizan los de la misma cuenta.
+
+La lista compartida anterior no registraba su propietario y deja de utilizarse. Cada usuario debe volver a fijar esas páginas una vez. El formato anterior se conserva en el navegador sin asignarlo automáticamente a nadie. El almacenamiento inválido no rompe el menú, y un error al guardar muestra un aviso.
+
+Versión/pie **v0.72.3**. Reconstruye el frontend/web y actualiza el navegador. Sin cambio de API, migración ni dependencia nueva. Ambos README conservan solo **v0.72.3, v0.72.2 y v0.72.1**.
 
 ## v0.72.2 — Importaciones protegidas y recuperación fiable
 
@@ -24,7 +32,7 @@ Los archivos originales subidos desde el asistente ahora usan almacenamiento pro
 
 Volver a validar una reparación expirada, cancelada o fallida prepara una nueva confirmación usando la misma importación hija y sus filas reservadas. No reinicia trabajos en cola ni mediciones ya importadas. Los archivos faltantes producen un error controlado; los roles admin/tech combinados con viewer ya no muestran un mensaje de solo lectura incorrecto.
 
-Versión/pie **v0.72.2**. Reconstruye API, worker y web con el mismo código para instalar también las protecciones NGINX. Sin migración ni dependencia nueva. Consulta la [guía de robustez](docs/robustness-v0722.md) para alcance, recuperación y pruebas. Ambos README conservan solo **v0.72.2, v0.72.1 y v0.72.0**.
+Versión/pie **v0.72.2**. Reconstruye API, worker y web con el mismo código para instalar también las protecciones NGINX. Sin migración ni dependencia nueva. Consulta la [guía de robustez](docs/robustness-v0722.md) para alcance, recuperación y pruebas. Las tres actualizaciones más recientes se indican arriba.
 
 ## v0.72.1 — Acceso administrativo para superusuarios
 
@@ -32,25 +40,21 @@ Una cuenta creada con `createsuperuser`, aunque no tenga grupos asignados, ahora
 
 Versión/pie **v0.72.1**. Reconstruye/recrea la API y el frontend web, y actualiza la página o inicia sesión de nuevo. Este parche no necesita migración ni asignación manual de grupos. Las tres actualizaciones más recientes se indican arriba.
 
-## v0.72.0 — Cinco flujos de laboratorio sin salir del chat
-
-Usa **Manage batch work**, **Reserve resources**, **Repair rejected import rows**, **Draft a notebook from a run** o **Prepare a shift handover**. Ambos chats incluyen selectores actuales, formularios integrados, vistas previas, confirmación y recibos por registro. También aceptan **“Assign ALPHA’s unassigned work to Maria and set Friday deadlines”** y **“Hand my unfinished ALPHA work to Maria”**; solicitan fechas y horas exactas cuando faltan.
-
-Los cambios por lote y relevos conservan estados, dependencias y decisiones QC. Las reservas de instrumentos/reactivos son atómicas y rechazan conflictos, cantidades insuficientes, cuarentena, caducidad y unidades incompatibles. Cancelar libera reservas activas sin revertir consumos. La reparación crea una importación hija con filas rechazadas seleccionadas y registra su procedencia para evitar duplicados; no cambia el archivo ni las mediciones originales. Los cuadernos se crean como **Draft** con datos reales, versiones de procedimientos, revisiones y vínculos nativos; sus lectores deben tener acceso a las muestras de origen. El relevo puede incluir la notificación interna revisada.
-
-Se verifican permisos y evidencia al confirmar. PostgreSQL protege conflictos de reservas también mediante una restricción de exclusión; la auditoría generada por el asistente se limita a su solicitante y administradores. Consulta la [guía v0.72](docs/assistant-v072.md) para límites y API. Aplica **cuatro migraciones**, reconstruye API/frontend y reinicia Celery con la misma versión. La migración activa la extensión incluida `btree_gist` y requiere permisos adecuados en PostgreSQL. Versión/pie **v0.72.0**. Las tres actualizaciones más recientes se indican arriba. Sin dependencia Python/Node, servicio, automatización de programación, correo externo ni control físico de instrumentos nuevos. Las frases nuevas documentadas están en inglés.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.72.2`
+**Versión de desarrollo actual:** `v0.72.3`
 
 **Demo:** http://35.164.28.250
 
 ---
+
+## Favoritos personales
+
+Abre **Favorites** y selecciona **Pin current page** o **Unpin current page**. Los pines pertenecen a tu cuenta en ese navegador; no se sincronizan entre computadoras o navegadores. La lista compartida de versiones anteriores ya no se utiliza: vuelve a fijar tus páginas una vez después de actualizar.
 
 ## Instalación paso a paso
 
