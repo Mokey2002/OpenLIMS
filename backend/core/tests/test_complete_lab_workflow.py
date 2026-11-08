@@ -150,7 +150,12 @@ class CompleteLabWorkflowTests(APITestCase):
         self.assertEqual(str(record["current_revision_detail"]["links"][0]["entity_public_id"]), str(self.sample["public_id"]))
         self.send("post", exp_url + "autosave/", {"blocks": [], "links": []}, 403)
         self.assertEqual(SampleCustodyEvent.objects.get(sample_id=self.sample["id"]).performed_by, self.users["tech"])
-        self.assertTrue(Event.objects.filter(action="PIPELINE_RUN_COMPLETED", entity_id=str(self.sample["id"])).exists())
+        completion = Event.objects.get(
+            entity_type="PipelineRun", entity_id=str(self.run_model.pk), action="PIPELINE_RUN_COMPLETED",
+        )
+        self.assertEqual(completion.payload["related_sample_id"], self.sample["id"])
+        history = self.send("get", f"/api/samples/{self.sample['id']}/history/?page_size=200", {})["results"]
+        self.assertEqual([row["id"] for row in history].count(completion.pk), 1)
         self.assertEqual(WorkItem.objects.get(pk=second.work_item_id).reviewed_by, self.users["qc_reviewer"])
         self.as_role("outsider")
         for url in (exp_url, exp_url + "export-pdf/", f"/api/sequences/{sequence['id']}/",

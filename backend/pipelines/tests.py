@@ -352,8 +352,8 @@ class PipelineWorkflowTests(APITestCase):
         )
         self.assertTrue(
             Event.objects.filter(
-                entity_type="Sample",
-                entity_id=str(sample.id),
+                entity_type="PipelineRun",
+                payload__related_sample_id=sample.id,
                 action="PIPELINE_RUN_CANCELLED",
                 payload__reason__icontains="damaged sample",
             ).exists()
