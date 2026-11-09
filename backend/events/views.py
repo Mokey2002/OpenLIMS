@@ -9,12 +9,12 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.permissions import (
-    is_admin,
     IsAdminOnly,
     IsAuthenticatedReadOnlyAdminWrite,
 )
 
 from .models import Event
+from .access import events_for_user
 from .serializers import EventSerializer
 
 
@@ -44,13 +44,9 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
             Event.objects
             .select_related("actor")
             .all()
-            .order_by("-timestamp")
+            .order_by("-timestamp", "-pk")
         )
-        # Assistant previews/receipts can contain project data. Their native
-        # ownership boundary also applies when reading the shared audit feed.
-        if not is_admin(self.request.user):
-            private = Q(entity_type__iexact='AssistantAction') | Q(payload__has_key='assistant_action_id')
-            queryset = queryset.exclude(private & ~Q(actor=self.request.user))
+        queryset = events_for_user(queryset, self.request.user)
 
         entity_type = self.request.query_params.get("entity_type")
         action_value = self.request.query_params.get("action")
@@ -159,9 +155,9 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({
             "total_events": queryset.count(),
             "entity_types": sorted(
-                queryset.values_list("entity_type", flat=True).distinct()
+                queryset.order_by().values_list("entity_type", flat=True).distinct()
             ),
             "actions": sorted(
-                queryset.values_list("action", flat=True).distinct()
+                queryset.order_by().values_list("action", flat=True).distinct()
             ),
         })

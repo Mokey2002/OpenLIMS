@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.72.5.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.72.6.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,17 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
-| **v0.72.5** | Un solo evento por cambio de flujo, análisis o almacenamiento; sincronización sin repeticiones y transiciones de muestras atómicas. | [Guía de integridad de auditoría](docs/audit-integrity-v0725.md) |
+| **v0.72.6** | La auditoría respeta permisos actuales de proyectos y registros, cuadernos privados, objetos relacionados e instantáneas históricas. | [Guía de acceso a auditoría](docs/audit-access-v0726.md) |
+| **v0.72.5** | Un solo evento por cambio de flujo, análisis o almacenamiento; sincronización sin repeticiones y transiciones de muestras atómicas. | [Guía de integridad de auditoría](docs/audit-integrity-v0725.md) · [PR #196](https://github.com/Mokey2002/OpenLIMS/pull/196) |
 | **v0.72.4** | Renovación de sesión compartida, inicio de sesión e idioma resistentes a fallos del almacenamiento y descargas/migraciones fiables. | [Pruebas de regresión del frontend](frontend/e2e/tests/frontend-reliability.spec.js) · [PR #195](https://github.com/Mokey2002/OpenLIMS/pull/195) |
-| **v0.72.3** | Favoritos separados por cuenta en el mismo navegador, sin compartir pines entre usuarios. | [Favoritos personales](#favoritos-personales) · [PR #194](https://github.com/Mokey2002/OpenLIMS/pull/194) |
+
+## v0.72.6 — Permisos de proyectos en la auditoría
+
+Técnicos y lectores ven ahora únicamente eventos de registros a los que tienen acceso actualmente. La revocación de membresía se aplica en la siguiente solicitud. Se mantienen las reglas de cuadernos y registros privados, SOP aprobados y propiedad de acciones del asistente. Las instantáneas y referencias relacionadas no exponen proyectos u objetos privados mediante un registro visible.
+
+El mismo filtro se aplica antes de paginar, consultar un evento, buscar y calcular conteos/opciones del resumen. Los administradores conservan la auditoría completa y las exportaciones siguen reservadas a ellos. Los eventos con destinos eliminados, administrativos o desconocidos quedan disponibles solo para administradores cuando no puede comprobarse el acceso actual. Todos los registros almacenados se conservan.
+
+Versión/pie **v0.72.6**. Reconstruye/recrea API y frontend/web, y actualiza el navegador. Sin migración de base de datos ni dependencia nueva. Ambos README conservan solo **v0.72.6, v0.72.5 y v0.72.4**. Consulta la [guía de acceso a auditoría](docs/audit-access-v0726.md) para alcance, instantáneas históricas y pruebas.
 
 ## v0.72.5 — Un evento de auditoría por cambio registrado
 
@@ -24,7 +32,7 @@ Las acciones de flujos y análisis guardan ahora un solo evento canónico, en lu
 
 Guardar de nuevo un paso completado/omitido o un fallo sin cambios ya no repite el resultado ni cambia su fecha de finalización. Los reintentos reales, nuevas decisiones de QC y motivos de fallo modificados siguen registrados. Las transiciones de estado bloquean la muestra y guardan el cambio junto con su auditoría: solicitudes idénticas simultáneas producen una transición y un fallo de auditoría revierte el cambio.
 
-Versión/pie **v0.72.5**. Reconstruye/recrea API, worker y frontend/web con el mismo código. Sin migración de base de datos ni dependencia nueva. Los registros históricos se conservan. Ambos README mantienen solo **v0.72.5, v0.72.4 y v0.72.3**. Consulta la [guía de integridad de auditoría](docs/audit-integrity-v0725.md) para causas, alcance y pruebas.
+Versión/pie **v0.72.5**. Reconstruye/recrea API, worker y frontend/web con el mismo código. Sin migración de base de datos ni dependencia nueva. Los registros históricos se conservan. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de integridad de auditoría](docs/audit-integrity-v0725.md) para causas, alcance y pruebas.
 
 ## v0.72.4 — Sesiones y descargas fiables
 
@@ -34,21 +42,13 @@ El bloqueo del almacenamiento del navegador ya no impide iniciar la aplicación,
 
 Versión/pie **v0.72.4**. Reconstruye/recrea el frontend/web y actualiza el navegador. Sin cambio de API, migración ni dependencia nueva. Las tres actualizaciones más recientes se indican arriba.
 
-## v0.72.3 — Favoritos personales por cuenta
-
-Los favoritos del navegador ahora se guardan por el ID de la cuenta autenticada. Director, técnicos y otros usuarios conservan sus propios pines al cerrar sesión, cambiar de cuenta o recargar la página. No se muestran ni guardan favoritos antes de identificar la cuenta. Los pines siguen respetando la visibilidad de roles y módulos; los cambios de otras pestañas solo actualizan los de la misma cuenta.
-
-La lista compartida anterior no registraba su propietario y deja de utilizarse. Cada usuario debe volver a fijar esas páginas una vez. El formato anterior se conserva en el navegador sin asignarlo automáticamente a nadie. El almacenamiento inválido no rompe el menú, y un error al guardar muestra un aviso.
-
-Versión/pie **v0.72.3**. Reconstruye el frontend/web y actualiza el navegador. Sin cambio de API, migración ni dependencia nueva. Las tres actualizaciones más recientes se indican arriba.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.72.5`
+**Versión de desarrollo actual:** `v0.72.6`
 
 **Demo:** http://35.164.28.250
 
