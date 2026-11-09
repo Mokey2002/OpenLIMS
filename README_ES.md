@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.72.6.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.73.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,19 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
-| **v0.72.6** | La auditoría respeta permisos actuales de proyectos y registros, cuadernos privados, objetos relacionados e instantáneas históricas. | [Guía de acceso a auditoría](docs/audit-access-v0726.md) |
+| **v0.73.0** | Solicitudes de membresía o roles, vista previa y aprobación administrativa, notificaciones internas y permisos auditados sin duplicados. | [Guía de solicitudes de acceso](docs/access-requests-v0730.md) |
+| **v0.72.6** | La auditoría respeta permisos actuales de proyectos y registros, cuadernos privados, objetos relacionados e instantáneas históricas. | [Guía de acceso a auditoría](docs/audit-access-v0726.md) · [PR #197](https://github.com/Mokey2002/OpenLIMS/pull/197) |
 | **v0.72.5** | Un solo evento por cambio de flujo, análisis o almacenamiento; sincronización sin repeticiones y transiciones de muestras atómicas. | [Guía de integridad de auditoría](docs/audit-integrity-v0725.md) · [PR #196](https://github.com/Mokey2002/OpenLIMS/pull/196) |
-| **v0.72.4** | Renovación de sesión compartida, inicio de sesión e idioma resistentes a fallos del almacenamiento y descargas/migraciones fiables. | [Pruebas de regresión del frontend](frontend/e2e/tests/frontend-reliability.spec.js) · [PR #195](https://github.com/Mokey2002/OpenLIMS/pull/195) |
+
+## v0.73.0 — Solicitudes de acceso y aprobaciones
+
+Abre **Review → Access requests** (Revisión → Solicitudes de acceso), o el enlace de **Mi perfil**, para solicitar membresía de un proyecto o un rol de lector, técnico o revisor de QC. Indica el código del proyecto o el rol y un motivo. Enviar una solicitud no concede acceso ni muestra nombres o directorios de proyectos privados. Puedes retirar solicitudes pendientes y consultar tu historial.
+
+Los administradores también pueden entrar desde **Usuarios → Revisar solicitudes de acceso**. La vista previa muestra el solicitante, sus roles y el proyecto real antes de aprobar o rechazar con un motivo. No se puede solicitar el rol de administrador, revisar solicitudes propias ni conceder permisos a cuentas inactivas o eliminadas. Los roles aprobados se añaden a los existentes. Editar datos de una cuenta conserva los roles adicionales si no se cambia el selector de rol.
+
+Cada transición real genera un evento de auditoría y la notificación interna correspondiente. Repetir una solicitud reutiliza la pendiente; repetir una decisión devuelve el resultado guardado sin restaurar permisos revocados. Las aprobaciones simultáneas se serializan y una vista previa desactualizada exige revisión nueva. Los permisos, la decisión, la auditoría y las notificaciones se guardan en una sola transacción.
+
+Versión/pie **v0.73.0**. Incluye la migración **core.0003_access_requests**. Reconstruye/recrea API y frontend/web, aplica las migraciones antes de servir solicitudes y actualiza el navegador. No requiere dependencias nuevas ni configurar correo. Ambos README conservan solo **v0.73.0, v0.72.6 y v0.72.5**. Consulta la [guía de solicitudes de acceso](docs/access-requests-v0730.md) para uso, API, despliegue y pruebas.
 
 ## v0.72.6 — Permisos de proyectos en la auditoría
 
@@ -24,7 +34,7 @@ Técnicos y lectores ven ahora únicamente eventos de registros a los que tienen
 
 El mismo filtro se aplica antes de paginar, consultar un evento, buscar y calcular conteos/opciones del resumen. Los administradores conservan la auditoría completa y las exportaciones siguen reservadas a ellos. Los eventos con destinos eliminados, administrativos o desconocidos quedan disponibles solo para administradores cuando no puede comprobarse el acceso actual. Todos los registros almacenados se conservan.
 
-Versión/pie **v0.72.6**. Reconstruye/recrea API y frontend/web, y actualiza el navegador. Sin migración de base de datos ni dependencia nueva. Ambos README conservan solo **v0.72.6, v0.72.5 y v0.72.4**. Consulta la [guía de acceso a auditoría](docs/audit-access-v0726.md) para alcance, instantáneas históricas y pruebas.
+Versión/pie **v0.72.6**. Reconstruye/recrea API y frontend/web, y actualiza el navegador. Sin migración de base de datos ni dependencia nueva. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de acceso a auditoría](docs/audit-access-v0726.md) para alcance, instantáneas históricas y pruebas.
 
 ## v0.72.5 — Un evento de auditoría por cambio registrado
 
@@ -34,21 +44,13 @@ Guardar de nuevo un paso completado/omitido o un fallo sin cambios ya no repite 
 
 Versión/pie **v0.72.5**. Reconstruye/recrea API, worker y frontend/web con el mismo código. Sin migración de base de datos ni dependencia nueva. Los registros históricos se conservan. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de integridad de auditoría](docs/audit-integrity-v0725.md) para causas, alcance y pruebas.
 
-## v0.72.4 — Sesiones y descargas fiables
-
-Las solicitudes simultáneas con sesión expirada comparten una sola renovación en cada pestaña. Las respuestas tardías de la sesión anterior reutilizan la renovación ya completada y cada solicitud se reintenta como máximo una vez. Las solicitudes canceladas conservan su estado sin reenviarse ni redirigir al inicio de sesión.
-
-El bloqueo del almacenamiento del navegador ya no impide iniciar la aplicación, entrar/salir con cookies ni aplicar el idioma configurado en el servidor. Las descargas conservan signos de porcentaje y puntuación entre comillas, prefieren nombres UTF-8 y usan un nombre alternativo si la codificación no es válida. Las exportaciones CSV de filas y conciliación de migraciones usan ahora el cliente API versionado con cookies, recuperan la sesión expirada y conservan los parámetros de búsqueda y estado.
-
-Versión/pie **v0.72.4**. Reconstruye/recrea el frontend/web y actualiza el navegador. Sin cambio de API, migración ni dependencia nueva. Las tres actualizaciones más recientes se indican arriba.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.72.6`
+**Versión de desarrollo actual:** `v0.73.0`
 
 **Demo:** http://35.164.28.250
 

@@ -33,6 +33,7 @@ from custom_fields.forms import SampleFormViewSet
 from results.views import WorkItemViewSet, ResultViewSet, SampleAttachmentViewSet
 from projects.views import ProjectViewSet, ProjectPostViewSet
 from core.views import UserLiteViewSet, UserAdminViewSet
+from core.access_requests import AccessRequestViewSet
 from notebook.onboarding import OnboardingView
 from settings_app.status_policy import SampleStatusPolicyView
 from imports.views import InstrumentProfileViewSet,InstrumentColumnMappingViewSet,ImportJobViewSet
@@ -111,6 +112,7 @@ from workflow_requests.views import (
 )
 
 router = DefaultRouter()
+router.register(r"access-requests", AccessRequestViewSet, basename="access-request")
 router.register(r"sample-forms", SampleFormViewSet, basename="sample-form")
 router.register(r"samples", SampleViewSet, basename="sample")
 router.register(r"sample-batches", SampleBatchViewSet, basename="sample-batch")

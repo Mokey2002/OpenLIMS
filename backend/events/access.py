@@ -131,6 +131,8 @@ def _readable_entities(user, kinds, project_keys):
             readable[kind] = _project_context(
                 apps.get_model("assistant.AssistantAction").objects.filter(requested_by=user), project_keys,
             )
+        elif kind == "accessrequest":
+            readable[kind] = apps.get_model("core.AccessRequest").objects.filter(requester=user)
         elif kind == "notificationsubscription":
             readable[kind] = apps.get_model("assistant.NotificationSubscription").objects.filter(
                 Q(created_by=user) | Q(recipient=user),

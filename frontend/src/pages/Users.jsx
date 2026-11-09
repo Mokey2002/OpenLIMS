@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Alert,
   Badge,
@@ -31,6 +32,8 @@ function roleVariant(role) {
       return "primary";
     case "viewer":
       return "secondary";
+    case "qc_reviewer":
+      return "info";
     default:
       return "light";
   }
@@ -51,7 +54,7 @@ function statusLabel(user) {
 }
 
 function primaryRole(user) {
-  return user.roles?.[0] || "viewer";
+  return user?.roles?.[0] || "viewer";
 }
 
 export default function Users() {
@@ -217,7 +220,9 @@ export default function Users() {
     setSaving(true);
 
     try {
-      await apiPatch(`/api/admin-users/${userId}/`, editForm);
+      const changes = { ...editForm };
+      if (editForm.role === primaryRole(users.find(user => user.id === userId))) delete changes.role;
+      await apiPatch(`/api/admin-users/${userId}/`, changes);
 
       setEditingUserId(null);
       setSuccess("User updated successfully.");
@@ -317,6 +322,9 @@ export default function Users() {
 
         <div className="inline-actions">
           <Badge bg="dark">Admin only</Badge>
+          <Link to="/access-requests" className="btn btn-outline-primary btn-sm">
+            Review access requests
+          </Link>
           <Button variant="outline-dark" size="sm" onClick={load}>
             Refresh
           </Button>
@@ -441,6 +449,7 @@ export default function Users() {
                     <option value="admin">Director/Admin</option>
                     <option value="tech">Lab Tech</option>
                     <option value="viewer">Viewer</option>
+                    <option value="qc_reviewer">QC reviewer</option>
                   </Form.Select>
                 </Form.Group>
               </Col>
@@ -555,6 +564,7 @@ export default function Users() {
                             <option value="admin">Director/Admin</option>
                             <option value="tech">Lab Tech</option>
                             <option value="viewer">Viewer</option>
+                            <option value="qc_reviewer">QC reviewer</option>
                           </Form.Select>
                         ) : roles.length > 0 ? (
                           <div className="d-flex gap-1 flex-wrap">

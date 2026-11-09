@@ -68,6 +68,7 @@ export default function MyProfile() {
             <Badge bg="secondary" key={role}>{roleLabels[role] || <span translate="no">{role}</span>}</Badge>
           ) : <p className="text-muted">{t("No assigned role")}</p>}</div>
           <p className="small text-muted">{t("Roles work together with project membership and notebook sharing. Access can differ between records.")}</p>
+          <Button as={Link} to="/access-requests" variant="outline-primary" className="mb-3">{t("Access requests")}</Button>
           {account?.is_superuser && <p className="small">{t("This account also has Django superuser access. Application roles are listed above.")}</p>}
           <h2 className="h5 mt-4">{t("Password")}</h2>
           <p className="small text-muted">{t("Use email recovery to choose a new password. Email delivery must be configured by your administrator.")}</p>
