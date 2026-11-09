@@ -1,5 +1,6 @@
 // Exact UI copy only; identifiers and stored laboratory records are unchanged.
 export const labSpanish = {
+  "You can view and filter events for records you currently have access to. Audit exports are restricted to administrators.": "Puedes consultar y filtrar eventos de registros a los que tienes acceso actualmente. Las exportaciones de auditoría están reservadas a administradores.",
   "Full name": "Nombre completo",
   "Not available": "No disponible",
   "Try again": "Volver a intentar",

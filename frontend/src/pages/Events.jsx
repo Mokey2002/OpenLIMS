@@ -157,7 +157,8 @@ export default function Events() {
   }
 
   useEffect(() => {
-    load();
+    const timer = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -252,8 +253,7 @@ export default function Events() {
 
       {!userIsAdmin && (
         <Alert variant="info">
-          Audit export is restricted to admins. You can still view and filter
-          events.
+          You can view and filter events for records you currently have access to. Audit exports are restricted to administrators.
         </Alert>
       )}
 
