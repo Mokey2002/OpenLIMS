@@ -20,6 +20,50 @@ class PublicIDModel(models.Model):
         abstract = True
 
 
+class AccessRequest(models.Model):
+    PROJECT = "PROJECT"
+    ROLE = "ROLE"
+    REQUESTABLE_ROLES = ("viewer", "tech", "qc_reviewer")
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    requester = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="access_requests")
+    requester_username = models.CharField(max_length=150)
+    kind = models.CharField(max_length=16, choices=[(PROJECT, "Project membership"), (ROLE, "Application role")])
+    project_code = models.CharField(max_length=64, blank=True)
+    # Binding occurs only at approval; accepting a code does not reveal whether
+    # that project exists, its name, its members or any other private metadata.
+    project = models.ForeignKey("projects.Project", null=True, blank=True, on_delete=models.SET_NULL, related_name="access_requests")
+    role = models.CharField(max_length=32, blank=True)
+    target_key = models.CharField(max_length=256, editable=False)
+    reason = models.TextField()
+    status = models.CharField(max_length=16, default=PENDING, choices=[(value, value.title()) for value in (PENDING, APPROVED, REJECTED, CANCELLED)])
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="reviewed_access_requests")
+    reviewer_username = models.CharField(max_length=150, blank=True)
+    decision_reason = models.TextField(blank=True)
+    access_changed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        indexes = [models.Index(fields=["status", "-created_at"], name="core_access_queue_idx")]
+        constraints = [
+            models.UniqueConstraint(fields=["requester", "target_key"], condition=models.Q(status="PENDING"), name="core_access_pending_unique"),
+            models.CheckConstraint(condition=(
+                models.Q(kind="PROJECT", role="") & ~models.Q(project_code="")
+                | models.Q(kind="ROLE", project_code="", project__isnull=True, role__in=["viewer", "tech", "qc_reviewer"])
+            ), name="core_access_valid_target"),
+            models.CheckConstraint(condition=(
+                models.Q(status="PENDING", reviewed_at__isnull=True)
+                | models.Q(status__in=["APPROVED", "REJECTED", "CANCELLED"], reviewed_at__isnull=False)
+            ), name="core_access_valid_state"),
+        ]
+
+
 def shared_attachment_upload_to(instance, filename):
     safe_name = os.path.basename(filename or "attachment")
     return f"shared_attachments/{instance.public_id}/{safe_name}"

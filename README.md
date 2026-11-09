@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.72.6-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.73.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,19 @@
 
 | Version | Improvements | Details |
 | --- | --- | --- |
-| **v0.72.6** | Audit Events follow current project/object permissions, including private notebooks, related objects and historical project snapshots. | [Audit access guide](docs/audit-access-v0726.md) |
+| **v0.73.0** | Request project membership or application roles, with an admin preview/approval queue, in-app notifications and repeat-safe audited grants. | [Access requests guide](docs/access-requests-v0730.md) |
+| **v0.72.6** | Audit Events follow current project/object permissions, including private notebooks, related objects and historical project snapshots. | [Audit access guide](docs/audit-access-v0726.md) · [PR #197](https://github.com/Mokey2002/OpenLIMS/pull/197) |
 | **v0.72.5** | Single audit records for workflows, analyses and storage changes, repeat-safe workflow synchronization and atomic sample transitions. | [Audit integrity guide](docs/audit-integrity-v0725.md) · [PR #196](https://github.com/Mokey2002/OpenLIMS/pull/196) |
-| **v0.72.4** | Shared session refresh, resilient login/language settings, correct download filenames and recoverable migration exports. | [Frontend regression tests](frontend/e2e/tests/frontend-reliability.spec.js) · [PR #195](https://github.com/Mokey2002/OpenLIMS/pull/195) |
+
+### v0.73.0 — Access requests and administrator approvals
+
+Open **Review → Access requests**, or use the link on **My profile**, to request project membership or a viewer, technician or QC reviewer role. Supply a project code or role and a reason; submitting a request grants no access. Private project names and directories are not exposed. Pending requests can be withdrawn and decided requests remain in your history.
+
+Administrators can also open the queue from **Users → Review access requests**. Preview the requester, current roles and actual project before approving or rejecting with a reason. Administrator access cannot be requested, reviewers cannot approve their own requests, and inactive/deleted accounts cannot receive grants. Role approvals add to existing roles. Editing account details now preserves additional roles when the role selector is unchanged.
+
+Each real transition records one audit event and sends the relevant in-app notification. Duplicate submissions reuse the pending request; repeated decisions return the stored receipt without regranting revoked access. Concurrent approvals are serialized, and stale project previews require a fresh review. Grants, decisions, notifications and audit entries commit together.
+
+Version/footer **v0.73.0**. Includes database migration **core.0003_access_requests**. Rebuild/recreate API and frontend/web, apply migrations before serving requests, then refresh the browser. No new dependency or email setup is required. Both READMEs retain only **v0.73.0, v0.72.6 and v0.72.5**. See the [access requests guide](docs/access-requests-v0730.md) for usage, API examples, deployment and verification.
 
 ### v0.72.6 — Project access applies to Audit Events
 
@@ -43,7 +53,7 @@ Technicians and viewers now see audit entries only for records they can currentl
 
 The same access filter runs before list pagination, direct event lookup, searching and summary counts/options. Administrators retain the complete audit log and exports remain admin-only. Entries with deleted, administrative or unrecognized targets stay admin-only when current access cannot be verified. All stored audit records are preserved.
 
-Version/footer **v0.72.6**. Rebuild/recreate API and frontend/web, then refresh the browser. No database migration or new dependency. Both READMEs retain only **v0.72.6, v0.72.5 and v0.72.4**. See the [audit access guide](docs/audit-access-v0726.md) for supported scopes, historical snapshots and tests.
+Version/footer **v0.72.6**. Rebuild/recreate API and frontend/web, then refresh the browser. No database migration or new dependency. The latest three release updates are listed above. See the [audit access guide](docs/audit-access-v0726.md) for supported scopes, historical snapshots and tests.
 
 ### v0.72.5 — One audit record per recorded change
 
@@ -53,21 +63,13 @@ Repeated saves of completed/skipped workflow steps or unchanged failures no long
 
 Version/footer **v0.72.5**. Rebuild/recreate API, worker and frontend/web from the same commit. No database migration or new dependency. Existing audit records remain intact. The latest three release updates are listed above. See the [audit integrity guide](docs/audit-integrity-v0725.md) for causes, event scopes and regression checks.
 
-### v0.72.4 — Reliable sessions and downloads
-
-Concurrent expired requests now share a single session refresh in each tab. Delayed responses from the old session reuse the completed refresh, and each request retries at most once. Cancelled requests keep their cancellation status without replaying or redirecting to login.
-
-Blocked browser storage no longer prevents application startup, cookie login/logout or applying the server's language setting. Downloads preserve literal percent signs and quoted punctuation, prefer UTF-8 filenames and fall back safely when an encoded name is invalid. Migration row and reconciliation CSV exports now use the versioned, cookie-authenticated API client, recover from expired access cookies and preserve their search/status parameters.
-
-Version/footer **v0.72.4**. Rebuild/recreate the frontend/web and refresh the browser. No API change, migration or new dependency. The latest three release updates are listed above.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.72.6`.
+**Current development version:** `v0.73.0`.
 
 ## Personal favorites
 
@@ -108,6 +110,7 @@ directly from the repository owner.
 | **Assistant** | OpenLIMS Rules, optional OpenAI or Ollama, clarification choices, visible removable context, investigation and comparison follow-ups, confirmed actions with expiring user-bound tokens and audit events |
 | **Jobs** | Celery/Redis background jobs and real-time WebSocket updates |
 | **Security** | HttpOnly browser JWT cookies, CSRF protection, refresh rotation/blacklisting, logout invalidation, role-based permissions, and Bearer JWT support for API clients |
+| **Access requests** | Self-service project/role requests, administrator preview and approval queue, withdrawal/history, in-app notifications and atomic audited grants |
 | **Localization** | Director-controlled, instance-wide English or Spanish UI, including the sign-in screen and workflow pages |
 | **Shared foundation** | Stable public IDs, reusable links and attachments, versioned APIs, OpenAPI documentation, common project permissions and audit payloads, and server-enforced guarded module feature flags |
 
@@ -954,7 +957,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.72.6**.
+`frontend/src/version.js` file. The current application version is **v0.73.0**.
 
 Footer source:
 

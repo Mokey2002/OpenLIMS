@@ -10,6 +10,7 @@ installRandomUUIDCompatibility();
 const ForgotPassword = lazyPage(() => import("./pages/ForgotPassword"));
 const SetPassword = lazyPage(() => import("./pages/SetPassword"));
 const MyProfile = lazyPage(() => import("./pages/MyProfile"));
+const AccessRequests = lazyPage(() => import("./pages/AccessRequests"));
 const MyWork = lazyPage(() => import("./pages/MyWork"));
 const GettingStarted = lazyPage(() => import("./pages/GettingStarted"));
 const SamplesList = lazyPage(() => import("./pages/SamplesList"));
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<MyWork />} />
             <Route path="me" element={<MyProfile />} />
+            <Route path="access-requests" element={<AccessRequests />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="getting-started" element={<GettingStarted />} />
             <Route path="assistant" element={<Assistant />} />

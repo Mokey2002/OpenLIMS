@@ -9,7 +9,7 @@ from .permissions import application_roles
 User = get_user_model()
 
 
-VALID_ROLES = ["admin", "tech", "viewer"]
+VALID_ROLES = ["admin", "tech", "viewer", "qc_reviewer"]
 
 
 class UserLiteSerializer(serializers.ModelSerializer):

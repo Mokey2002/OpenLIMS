@@ -1,5 +1,11 @@
 // Exact UI copy only; identifiers and stored laboratory records are unchanged.
 export const labSpanish = {
+  "Access requests": "Solicitudes de acceso",
+  "Review access requests": "Revisar solicitudes de acceso",
+  "This request has already been decided.": "Esta solicitud ya fue resuelta.",
+  "The requester no longer has an active account.": "El solicitante ya no tiene una cuenta activa.",
+  "Another administrator must review your request.": "Otro administrador debe revisar tu solicitud.",
+  "The project code is missing or ambiguous. Reject the request and ask for clarification.": "El código del proyecto no existe o es ambiguo. Rechaza la solicitud y pide una aclaración.",
   "You can view and filter events for records you currently have access to. Audit exports are restricted to administrators.": "Puedes consultar y filtrar eventos de registros a los que tienes acceso actualmente. Las exportaciones de auditoría están reservadas a administradores.",
   "Full name": "Nombre completo",
   "Not available": "No disponible",

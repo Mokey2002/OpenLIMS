@@ -23,6 +23,7 @@ import FavoritesMenu from "./components/FavoritesMenu";
 const routeLabels = {
   "/": "My Work",
   "/me": "My profile",
+  "/access-requests": "Access requests",
   "/getting-started": "Getting started",
   "/dashboard": "Dashboard",
   "/assistant": "Assistant",
@@ -177,6 +178,7 @@ export default function Layout() {
               </NavDropdown>
 
               <NavDropdown title="Review" id="review-nav">
+                <DropdownItemLink to="/access-requests">Access requests</DropdownItemLink>
                 <DropdownItemLink to="/qc-review">Result QC</DropdownItemLink>
                 <DropdownItemLink to="/traceability">Sample Traceability</DropdownItemLink>
                 <DropdownItemLink to="/investigations">Investigation Workbench</DropdownItemLink>
