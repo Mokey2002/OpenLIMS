@@ -182,6 +182,11 @@ class ExperimentRevisionSerializer(serializers.ModelSerializer):
 
 
 class ExperimentCommentSerializer(serializers.ModelSerializer):
+    def validate_assigned_to(self, value):
+        if value is not None and not value.is_active:
+            raise serializers.ValidationError("Choose an active assignee.")
+        return value
+
     author_username = serializers.CharField(source="author.username", read_only=True)
     assigned_to_username = serializers.CharField(source="assigned_to.username", read_only=True)
     mention_usernames = serializers.SerializerMethodField()
@@ -220,6 +225,11 @@ class ExperimentWorkflowStepSerializer(serializers.ModelSerializer):
 
 
 class ExperimentSerializer(serializers.ModelSerializer):
+    def validate_assignees(self, values):
+        if any(not value.is_active for value in values):
+            raise serializers.ValidationError("Choose active assignees.")
+        return values
+
     workflow_steps = ExperimentWorkflowStepSerializer(many=True, read_only=True)
     notebook_name = serializers.CharField(source="notebook.name", read_only=True)
     project = serializers.IntegerField(source="notebook.project_id", read_only=True)

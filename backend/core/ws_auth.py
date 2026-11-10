@@ -5,8 +5,9 @@ from channels.db import database_sync_to_async
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.exceptions import TokenError, AuthenticationFailed
 from rest_framework_simplejwt.tokens import AccessToken
+from .authentication import CookieJWTAuthentication
 
 
 User = get_user_model()
@@ -21,9 +22,9 @@ def get_user_from_token(token):
         if not user_id:
             return AnonymousUser()
 
-        return User.objects.get(id=user_id, is_active=True)
+        return CookieJWTAuthentication().get_user(access_token)
 
-    except (TokenError, User.DoesNotExist):
+    except (TokenError, AuthenticationFailed, User.DoesNotExist):
         return AnonymousUser()
 
 
@@ -54,6 +55,7 @@ class JWTAuthMiddleware:
         # Browser clients authenticate with the same-origin HttpOnly cookie.
         # Query-string JWTs remain a compatibility fallback for non-browser clients.
         token = _token_from_cookie(scope) or _token_from_query_string(scope)
+        scope["auth_token"] = token
         scope["user"] = await get_user_from_token(token) if token else AnonymousUser()
         return await self.app(scope, receive, send)
 

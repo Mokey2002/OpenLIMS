@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from rest_framework import serializers
 from django.contrib.auth.models import update_last_login
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 from .permissions import application_roles
 
 User = get_user_model()
@@ -257,9 +257,30 @@ class MeSerializer(serializers.ModelSerializer):
         return obj.get_full_name()
     
 class OpenLIMSTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        from .session_revocation import GENERATION_CLAIM, session_generation
+        token = super().get_token(user)
+        token[GENERATION_CLAIM] = session_generation(user)
+        return token
+
+    @transaction.atomic
     def validate(self, attrs):
+        # Serialize token issuance with offboarding. Otherwise a login that
+        # began before deactivation could mint the new generation afterwards.
+        User.objects.select_for_update().filter(**{self.username_field: attrs.get(self.username_field)}).first()
         data = super().validate(attrs)
 
         update_last_login(None, self.user)
 
         return data
+
+
+class OpenLIMSTokenRefreshSerializer(TokenRefreshSerializer):
+    @transaction.atomic
+    def validate(self, attrs):
+        from .authentication import CookieJWTAuthentication
+        refresh = self.token_class(attrs["refresh"])
+        User.objects.select_for_update().filter(pk=refresh.get("user_id")).first()
+        CookieJWTAuthentication().get_user(refresh)
+        return super().validate(attrs)

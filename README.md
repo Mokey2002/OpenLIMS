@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.73.2-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.74.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,19 @@
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.74.0** | Reviewed responsibility handovers, membership removal and permanent session revocation in one audited offboarding workflow. | [Offboarding guide](docs/coordinated-offboarding-v0740.md) |
 | **v0.73.2** | One initial assistant draft revision, repeat-safe notebook saves and readable audit actions, names and revision changes. | [Audit clarity guide](docs/audit-clarity-v0732.md) |
 | **v0.73.1** | Protect the last active administrator across user management, Django admin and migration rollback, including concurrent changes. | [Administrator safety guide](docs/administrator-safety-v0731.md) |
-| **v0.73.0** | Request project membership or application roles, with an admin preview/approval queue, in-app notifications and repeat-safe audited grants. | [Access requests guide](docs/access-requests-v0730.md) · [PR #198](https://github.com/Mokey2002/OpenLIMS/pull/198) |
+
+### v0.74.0 — Coordinated account offboarding
+
+Open **Users → Offboard** to review a person's outstanding responsibilities, choose an active replacement and enter the handover reason. Expand each category to inspect the actual samples, work items, pending QC, notebook tasks and owned notebooks/registry records. Verify any physical sample handoff before previewing. The replacement must have the required roles and project/notebook access; no application roles are copied.
+
+The expiring preview lists responsibility transfers, project and notebook access removal, account deactivation, session revocation, cancellation of pending access requests and unconfirmed assistant actions, and deactivation of personal notification subscriptions. Confirmation checks current permissions and assignments again, then commits the handover, notifications, audit entries and receipt together. Stale previews require a new review, and retrying a lost confirmation returns the existing receipt.
+
+Old browser, bearer API, refresh, Django admin and WebSocket sessions remain invalid after later account reactivation. Historical authors, completed work, approvals and scientific revisions retain their original attribution. Queued jobs, submitted workflow requests and instrument bookings are listed for review and continue under their existing controls. Self-offboarding and removal of the last active administrator are blocked.
+
+Version/footer **v0.74.0**. Includes migration **core.0005_coordinated_offboarding**. Rebuild/recreate API, worker and frontend/web together and apply migrations before serving traffic; production Compose runs migrations during API startup. No new dependency. Both READMEs retain only **v0.74.0, v0.73.2 and v0.73.1**. See the [offboarding guide](docs/coordinated-offboarding-v0740.md) for supported responsibilities, API examples, session behavior and verification.
 
 ### v0.73.2 — Readable activity and fewer redundant assistant records
 
@@ -45,7 +55,7 @@ Notebook saves compare actual content with links in a stable order, including re
 
 Dashboard activity, Audit Events and Reports show record names, readable action descriptions and revision changes such as **Revision 3 → 4; 1 block modified**. Raw IDs, action codes and payloads remain available under **Technical details** in Audit Events. Audit exports append readable fields. Snapshot labels require no extra record lookups, and current access restrictions still apply. Clearing filters now reloads the audit list and older responses cannot replace newer results.
 
-Version/footer **v0.73.2**. This release also carries the pending administrator safeguards from v0.73.1. Rebuild/recreate API, worker and frontend/web from the same checkout; installations upgrading from v0.73.0 must apply **core.0004_user_administration_lock**, which production API startup applies automatically. No new dependency or audit-history backfill. Both READMEs retain only **v0.73.2, v0.73.1 and v0.73.0**. See the [audit clarity guide](docs/audit-clarity-v0732.md) for causes, examples and verification.
+Version/footer **v0.73.2**. This release includes the administrator safeguards from v0.73.1. Rebuild/recreate API, worker and frontend/web from the same checkout; installations upgrading from v0.73.0 must apply **core.0004_user_administration_lock**, which production API startup applies automatically. No new dependency or audit-history backfill. The latest three release updates are listed above. See the [audit clarity guide](docs/audit-clarity-v0732.md) for causes, examples and verification.
 
 ### v0.73.1 — Keep an active administrator
 
@@ -55,23 +65,13 @@ The Users page marks the protected account and disables its unsafe controls. Sta
 
 Version/footer **v0.73.1**. Includes migration **core.0004_user_administration_lock**. Rebuild/recreate API and frontend/web and apply migrations before serving requests; production Compose applies them during API startup. No new dependency. The latest three release updates are listed above. See the [administrator safety guide](docs/administrator-safety-v0731.md) for handovers, supported paths and checks.
 
-### v0.73.0 — Access requests and administrator approvals
-
-Open **Review → Access requests**, or use the link on **My profile**, to request project membership or a viewer, technician or QC reviewer role. Supply a project code or role and a reason; submitting a request grants no access. Private project names and directories are not exposed. Pending requests can be withdrawn and decided requests remain in your history.
-
-Administrators can also open the queue from **Users → Review access requests**. Preview the requester, current roles and actual project before approving or rejecting with a reason. Administrator access cannot be requested, reviewers cannot approve their own requests, and inactive/deleted accounts cannot receive grants. Role approvals add to existing roles. Editing account details now preserves additional roles when the role selector is unchanged.
-
-Each real transition records one audit event and sends the relevant in-app notification. Duplicate submissions reuse the pending request; repeated decisions return the stored receipt without regranting revoked access. Concurrent approvals are serialized, and stale project previews require a fresh review. Grants, decisions, notifications and audit entries commit together.
-
-Version/footer **v0.73.0**. Includes database migration **core.0003_access_requests**. Rebuild/recreate API and frontend/web, apply migrations before serving requests, then refresh the browser. No new dependency or email setup is required. The latest three release updates are listed above. See the [access requests guide](docs/access-requests-v0730.md) for usage, API examples, deployment and verification.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.73.2`.
+**Current development version:** `v0.74.0`.
 
 ## Personal favorites
 
@@ -959,7 +959,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.73.2**.
+`frontend/src/version.js` file. The current application version is **v0.74.0**.
 
 Footer source:
 

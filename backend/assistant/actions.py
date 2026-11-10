@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
@@ -401,6 +402,9 @@ EXECUTORS = {
 def confirm_action(token, user):
     try:
         with transaction.atomic():
+            user = get_user_model().objects.select_for_update().get(pk=user.pk)
+            if not user.is_active:
+                raise AssistantActionError("This account is disabled and cannot confirm actions.")
             action = (
                 AssistantAction.objects.select_for_update()
                 .get(confirmation_token=token, requested_by=user)

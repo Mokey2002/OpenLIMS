@@ -29,6 +29,30 @@ class UserAdministrationLock(models.Model):
         constraints = [models.CheckConstraint(condition=models.Q(id=1), name="core_single_user_admin_lock")]
 
 
+class UserSessionState(models.Model):
+    """A persistent generation invalidates credentials even after reactivation."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="session_state")
+    generation = models.PositiveIntegerField(default=0)
+
+
+class UserOffboarding(models.Model):
+    """An administrator's expiring preview and repeat-safe completion receipt."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    target = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="offboarding_plans")
+    administrator = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="prepared_offboardings")
+    successor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="received_offboardings")
+    reason = models.TextField()
+    snapshot = models.JSONField(default=dict)
+    fingerprint = models.CharField(max_length=64)
+    custody_confirmed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    completed_at = models.DateTimeField(null=True, blank=True)
+    receipt = models.JSONField(default=dict)
+
+
 class AccessRequest(models.Model):
     PROJECT = "PROJECT"
     ROLE = "ROLE"
