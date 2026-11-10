@@ -13,6 +13,7 @@ import {
 } from "react-bootstrap";
 import { apiDeleteResponse, apiGet, apiPatchResponse, apiPost } from "../api";
 import { isAdmin } from "../authz";
+import UserOffboarding from "../components/UserOffboarding";
 
 function formatTimestamp(value) {
   if (!value) return "-";
@@ -58,6 +59,7 @@ function primaryRole(user) {
 }
 
 export default function Users() {
+  const [offboardingUser, setOffboardingUser] = useState(null);
   const [me, setMe] = useState(null);
   const [users, setUsers] = useState([]);
 
@@ -687,6 +689,12 @@ export default function Users() {
                               Edit
                             </Button>
 
+                            <Button size="sm" variant="outline-danger"
+                              disabled={saving || user.is_last_active_admin || user.id === me?.id}
+                              onClick={() => { setOffboardingUser(user); setErr(""); setSuccess(""); }}>
+                              Offboard
+                            </Button>
+
                             <Button
                               size="sm"
                               variant={
@@ -721,6 +729,11 @@ export default function Users() {
           )}
         </Card.Body>
       </Card>
+      {offboardingUser && <UserOffboarding key={offboardingUser.id} user={offboardingUser} onClose={completed => {
+        setOffboardingUser(null);
+        if (completed) setSuccess("Offboarding completed. Responsibilities transferred and access revoked.");
+        void load();
+      }} />}
     </div>
   );
 }

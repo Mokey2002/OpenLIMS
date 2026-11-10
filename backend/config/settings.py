@@ -115,6 +115,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.session_revocation.SessionRevocationMiddleware",
     "core.feature_flags.FeatureFlagAPIMiddleware",
     "core.security.SecurityHeadersMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",

@@ -125,5 +125,7 @@ test('protection is explained in Spanish', async ({ page }) => {
   await page.goto('/users');
   await expect(page.getByText('Último administrador activo', { exact: true })).toBeVisible();
   await expect(page.getByText('Conserva al menos un administrador activo. Crea o activa otro administrador antes de quitar este acceso.', { exact: true })).toBeVisible();
-  await expect(userRow(page).locator('button.btn-outline-danger')).toBeDisabled();
+  for (const name of ['Eliminar', 'Dar de baja']) {
+    await expect(userRow(page).getByRole('button', { name, exact: true })).toBeDisabled();
+  }
 });

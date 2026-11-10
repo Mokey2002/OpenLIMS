@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.73.2.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.74.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,19 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.74.0** | Transferencia revisada de responsabilidades, eliminación de permisos y revocación permanente de sesiones en una baja coordinada y auditada. | [Guía de baja coordinada](docs/coordinated-offboarding-v0740.md) |
 | **v0.73.2** | Una revisión inicial por borrador del asistente, guardado sin duplicados y auditoría con nombres, acciones y cambios legibles. | [Guía de claridad de auditoría](docs/audit-clarity-v0732.md) |
 | **v0.73.1** | Protege al último administrador activo en usuarios, Django admin y reversión de migraciones, incluso con cambios simultáneos. | [Guía de protección administrativa](docs/administrator-safety-v0731.md) |
-| **v0.73.0** | Solicitudes de membresía o roles, vista previa y aprobación administrativa, notificaciones internas y permisos auditados sin duplicados. | [Guía de solicitudes de acceso](docs/access-requests-v0730.md) · [PR #198](https://github.com/Mokey2002/OpenLIMS/pull/198) |
+
+## v0.74.0 — Baja coordinada de usuarios
+
+Abre **Usuarios → Dar de baja** para revisar las responsabilidades pendientes, elegir una persona activa de reemplazo e indicar el motivo. Expande cada categoría para consultar muestras, tareas, revisiones de calidad, pasos de cuaderno y propiedad de cuadernos/registros. Verifica cualquier entrega física de muestras antes de preparar la vista previa. La persona de reemplazo debe tener los roles y permisos de proyectos/cuadernos necesarios; no se copian roles de aplicación.
+
+La vista previa temporal muestra transferencias, eliminación de membresías y permisos de cuadernos, desactivación de la cuenta y revocación de sesiones. También cancela solicitudes de acceso y acciones del asistente sin confirmar, y desactiva suscripciones personales. La confirmación vuelve a comprobar permisos y asignaciones y guarda los cambios, notificaciones, auditoría y comprobante en una transacción. Una vista previa desactualizada exige revisar de nuevo; reintentar una confirmación perdida devuelve el mismo comprobante.
+
+Las sesiones antiguas del navegador, API, renovación, Django admin y WebSocket no vuelven a funcionar al reactivar la cuenta. La autoría, el trabajo completado, las aprobaciones y las revisiones científicas conservan su atribución. Los trabajos en cola, solicitudes de workflow y reservas de instrumentos se muestran para revisión y conservan sus controles existentes. No se permite dar de baja la propia cuenta ni al último administrador activo.
+
+Versión/pie **v0.74.0**. Incluye **core.0005_coordinated_offboarding**. Reconstruye/recrea API, worker y frontend/web juntos y aplica las migraciones antes de servir tráfico; Compose de producción las ejecuta al iniciar la API. Sin dependencia nueva. Ambos README conservan solo **v0.74.0, v0.73.2 y v0.73.1**. Consulta la [guía de baja coordinada](docs/coordinated-offboarding-v0740.md) para alcance, API, sesiones y pruebas.
 
 ## v0.73.2 — Actividad legible y menos registros redundantes
 
@@ -26,7 +36,7 @@ El guardado compara el contenido real con enlaces en orden estable, incluso para
 
 El panel, Auditoría e Informes muestran nombres, acciones legibles y cambios como **Revisión 3 → 4; 1 bloque modificado**. Los IDs, códigos y datos originales están disponibles en **Detalles técnicos** de Auditoría. Las exportaciones añaden campos legibles. Las etiquetas usan instantáneas ya autorizadas, sin consultas extra de registros ni ampliar permisos. Limpiar filtros actualiza la lista y una respuesta antigua ya no reemplaza los resultados nuevos.
 
-Versión/pie **v0.73.2**. También incluye la protección administrativa pendiente de v0.73.1. Reconstruye/recrea API, worker y frontend/web con el mismo código. Si actualizas desde v0.73.0, aplica **core.0004_user_administration_lock**; el inicio de la API de producción lo hace automáticamente. Sin dependencia nueva ni modificación del historial. Ambos README conservan solo **v0.73.2, v0.73.1 y v0.73.0**. Consulta la [guía de claridad de auditoría](docs/audit-clarity-v0732.md) para causas, ejemplos y pruebas.
+Versión/pie **v0.73.2**. También incluye la protección administrativa de v0.73.1. Reconstruye/recrea API, worker y frontend/web con el mismo código. Si actualizas desde v0.73.0, aplica **core.0004_user_administration_lock**; el inicio de la API de producción lo hace automáticamente. Sin dependencia nueva ni modificación del historial. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de claridad de auditoría](docs/audit-clarity-v0732.md) para causas, ejemplos y pruebas.
 
 ## v0.73.1 — Conservar un administrador activo
 
@@ -36,23 +46,13 @@ La página de usuarios identifica la cuenta protegida y desactiva los controles 
 
 Versión/pie **v0.73.1**. Incluye la migración **core.0004_user_administration_lock**. Reconstruye/recrea API y frontend/web y aplica migraciones antes de servir solicitudes; Compose de producción las aplica al iniciar la API. Sin dependencia nueva. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de protección administrativa](docs/administrator-safety-v0731.md) para transferencias, alcance y pruebas.
 
-## v0.73.0 — Solicitudes de acceso y aprobaciones
-
-Abre **Review → Access requests** (Revisión → Solicitudes de acceso), o el enlace de **Mi perfil**, para solicitar membresía de un proyecto o un rol de lector, técnico o revisor de QC. Indica el código del proyecto o el rol y un motivo. Enviar una solicitud no concede acceso ni muestra nombres o directorios de proyectos privados. Puedes retirar solicitudes pendientes y consultar tu historial.
-
-Los administradores también pueden entrar desde **Usuarios → Revisar solicitudes de acceso**. La vista previa muestra el solicitante, sus roles y el proyecto real antes de aprobar o rechazar con un motivo. No se puede solicitar el rol de administrador, revisar solicitudes propias ni conceder permisos a cuentas inactivas o eliminadas. Los roles aprobados se añaden a los existentes. Editar datos de una cuenta conserva los roles adicionales si no se cambia el selector de rol.
-
-Cada transición real genera un evento de auditoría y la notificación interna correspondiente. Repetir una solicitud reutiliza la pendiente; repetir una decisión devuelve el resultado guardado sin restaurar permisos revocados. Las aprobaciones simultáneas se serializan y una vista previa desactualizada exige revisión nueva. Los permisos, la decisión, la auditoría y las notificaciones se guardan en una sola transacción.
-
-Versión/pie **v0.73.0**. Incluye la migración **core.0003_access_requests**. Reconstruye/recrea API y frontend/web, aplica las migraciones antes de servir solicitudes y actualiza el navegador. No requiere dependencias nuevas ni configurar correo. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de solicitudes de acceso](docs/access-requests-v0730.md) para uso, API, despliegue y pruebas.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.73.2`
+**Versión de desarrollo actual:** `v0.74.0`
 
 **Demo:** http://35.164.28.250
 

@@ -169,6 +169,11 @@ class ResultSerializer(serializers.ModelSerializer):
 
 
 class WorkItemSerializer(serializers.ModelSerializer):
+    def validate_assigned_to(self, value):
+        if value is not None and not value.is_active:
+            raise serializers.ValidationError("Choose an active assignee.")
+        return value
+
     sample_code = serializers.CharField(source="sample.sample_id", read_only=True)
     project_id = serializers.IntegerField(
         source="sample.project_id",

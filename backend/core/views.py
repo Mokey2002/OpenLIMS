@@ -6,16 +6,14 @@ from django.db import transaction
 from django.db.models import CharField, OuterRef, Subquery
 from django.db.models.functions import Cast
 from django.middleware.csrf import get_token
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiTypes, extend_schema
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from rest_framework_simplejwt.exceptions import TokenError, AuthenticationFailed
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from events.models import Event
 from .authentication import enforce_csrf
@@ -24,7 +22,8 @@ from .user_safety import (
     LastAdministratorConflict, LastAdministratorError, last_administrator_id,
     lock_api_administrator, protect_api_update, protect_user_deletion, user_administration,
 )
-from .serializers import OpenLIMSTokenObtainPairSerializer
+from .serializers import OpenLIMSTokenObtainPairSerializer, OpenLIMSTokenRefreshSerializer
+from .offboarding import OffboardingConfirmSerializer, OffboardingPreviewSerializer
 from .serializers import (
     MeSerializer,
     UserAdminUpdateSerializer,
@@ -75,6 +74,10 @@ class OpenLIMSTokenObtainPairView(TokenObtainPairView):
     serializer_class = OpenLIMSTokenObtainPairSerializer
 
 
+class OpenLIMSTokenRefreshView(TokenRefreshView):
+    serializer_class = OpenLIMSTokenRefreshSerializer
+
+
 class CSRFTokenView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -111,8 +114,7 @@ class CookieRefreshView(APIView):
             return Response({"detail": "Refresh cookie is missing."}, status=401)
 
         try:
-            JWTAuthentication().get_user(RefreshToken(refresh))
-            serializer = TokenRefreshSerializer(data={"refresh": refresh})
+            serializer = OpenLIMSTokenRefreshSerializer(data={"refresh": refresh})
             serializer.is_valid(raise_exception=True)
         except (TokenError, AuthenticationFailed):
             response = Response({"detail": "Session expired. Please sign in again."}, status=401)
@@ -162,6 +164,31 @@ class UserLiteViewSet(ReadOnlyModelViewSet):
 
 class UserAdminViewSet(ModelViewSet):
     permission_classes = [IsAdminOnly]
+
+    @extend_schema(responses=OpenApiTypes.OBJECT)
+    @action(detail=True, methods=["get"], url_path="offboarding")
+    def offboarding(self, request, pk=None):
+        from .offboarding import review_offboarding
+        return Response(review_offboarding(self.get_object(), request.user))
+
+    @extend_schema(request=OffboardingPreviewSerializer, responses={201: OpenApiTypes.OBJECT})
+    @action(detail=True, methods=["post"], url_path="offboarding/preview")
+    def offboarding_preview(self, request, pk=None):
+        from .offboarding import prepare_offboarding
+        serializer = OffboardingPreviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(prepare_offboarding(self.get_object(), request.user, serializer.validated_data), status=201)
+
+    @extend_schema(request=OffboardingConfirmSerializer, responses=OpenApiTypes.OBJECT)
+    @action(detail=True, methods=["post"], url_path="offboarding/confirm")
+    def offboarding_confirm(self, request, pk=None):
+        from .offboarding import confirm_offboarding
+        serializer = OffboardingConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            return Response(confirm_offboarding(self.get_object(), request.user, serializer.validated_data["preview_id"]))
+        except LastAdministratorError:
+            raise LastAdministratorConflict() from None
 
     def get_serializer_context(self):
         context = super().get_serializer_context()

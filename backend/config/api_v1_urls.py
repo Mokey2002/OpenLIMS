@@ -1,7 +1,7 @@
 from core.password_recovery import PasswordRecoveryView
 from core.invitations import AcceptInvitationView
 from django.urls import include, path
-from rest_framework_simplejwt.views import TokenRefreshView
+from core.views import OpenLIMSTokenRefreshView as TokenRefreshView
 
 from core.performance_views import MyWorkSummaryView, SessionBootstrapView
 from core.search_views import GlobalSearchView

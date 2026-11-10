@@ -11,6 +11,7 @@ def build_audit_payload(
     before=None,
     after=None,
     details=None,
+    changed_fields=None,
 ):
     """Create the common audit payload used by new OpenLIMS modules."""
     project = get_entity_project(entity)
@@ -30,6 +31,7 @@ def build_audit_payload(
         "before": before if before is not None else {},
         "after": after if after is not None else {},
         "details": details if details is not None else {},
+        **({"changed_fields": list(changed_fields)} if changed_fields is not None else {}),
     }
     return payload
 
@@ -43,6 +45,7 @@ def record_audit_event(
     before=None,
     after=None,
     details=None,
+    changed_fields=None,
 ):
     from events.models import Event
 
@@ -58,5 +61,6 @@ def record_audit_event(
             before=before,
             after=after,
             details=details,
+            changed_fields=changed_fields,
         ),
     )

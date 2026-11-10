@@ -25,6 +25,12 @@ class CookieJWTAuthentication(JWTAuthentication):
     enforcement on unsafe requests.
     """
 
+    def get_user(self, validated_token):
+        from .session_revocation import validate_session_generation
+        user = super().get_user(validated_token)
+        validate_session_generation(user, validated_token)
+        return user
+
     def authenticate(self, request):
         header = self.get_header(request)
         if header is not None:

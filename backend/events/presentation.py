@@ -47,6 +47,8 @@ def event_presentation(event):
         "assistantaction": ("summary", "action_type"),
     }.get(kind, ("name", "title", "code", "sample_code", "run_id"))
     entity_label = _text(reference.get("label"))
+    if event.action == "RESPONSIBILITY_TRANSFERRED":
+        entity_label = _text(_mapping(payload.get("details")).get("label")) or entity_label
     if not entity_label:
         entity_label = next((label for snapshot in [payload, after, before] for key in fields
                              if (label := _text(snapshot.get(key)))), "")

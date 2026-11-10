@@ -19,6 +19,7 @@ from notifications.models import Notification
 from projects.models import Project
 from .models import AccessRequest
 from .permissions import application_roles, is_admin
+from .user_safety import user_administration
 
 
 class RequestConflict(APIException):
@@ -103,6 +104,7 @@ def _audit(row, actor, action):
     Event.objects.create(entity_type="AccessRequest", entity_id=str(row.pk), actor=actor, action=action, payload=payload)
 
 
+@user_administration()
 @transaction.atomic
 def submit(user, data):
     user = get_user_model().objects.select_for_update().filter(pk=user.pk).first()
@@ -174,6 +176,7 @@ def _locked_people(row, actor):
     return reviewer, users.get(row.requester_id)
 
 
+@user_administration()
 @transaction.atomic
 def review(request_id, actor, data):
     row = AccessRequest.objects.select_for_update().get(pk=request_id)
@@ -212,6 +215,7 @@ def review(request_id, actor, data):
     return row
 
 
+@user_administration()
 @transaction.atomic
 def withdraw(request_id, user):
     row = AccessRequest.objects.select_for_update().get(pk=request_id)

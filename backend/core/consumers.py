@@ -1,6 +1,7 @@
 import json
 
 from channels.generic.websocket import AsyncWebsocketConsumer
+from .ws_auth import get_user_from_token
 
 
 class JobStatusConsumer(AsyncWebsocketConsumer):
@@ -17,6 +18,8 @@ class JobStatusConsumer(AsyncWebsocketConsumer):
             self.group_name,
             self.channel_name,
         )
+        self.session_group = f"user_sessions_{user.pk}"
+        await self.channel_layer.group_add(self.session_group, self.channel_name)
 
         await self.accept()
 
@@ -32,8 +35,22 @@ class JobStatusConsumer(AsyncWebsocketConsumer):
             self.group_name,
             self.channel_name,
         )
+        if hasattr(self, "session_group"):
+            await self.channel_layer.group_discard(self.session_group, self.channel_name)
+
+    async def session_revoked(self, event):
+        await self.close(code=4001)
+
+    async def session_is_current(self):
+        user = await get_user_from_token(self.scope.get("auth_token"))
+        if user.is_anonymous:
+            await self.close(code=4001)
+            return False
+        return True
 
     async def receive(self, text_data=None, bytes_data=None):
+        if not await self.session_is_current():
+            return
         if not text_data:
             return
 
@@ -57,7 +74,8 @@ class JobStatusConsumer(AsyncWebsocketConsumer):
             )
 
     async def job_update(self, event):
-        await self.send_json(event.get("payload", {}))
+        if await self.session_is_current():
+            await self.send_json(event.get("payload", {}))
 
     async def send_json(self, data):
         await self.send(text_data=json.dumps(data))

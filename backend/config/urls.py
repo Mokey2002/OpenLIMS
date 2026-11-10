@@ -12,7 +12,7 @@ from django.contrib import admin
 from django.http import HttpResponseNotFound, JsonResponse
 from django.urls import include, path, re_path
 from django.views.static import serve
-from rest_framework_simplejwt.views import TokenRefreshView
+from core.views import OpenLIMSTokenRefreshView as TokenRefreshView
 from rest_framework.permissions import AllowAny
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
