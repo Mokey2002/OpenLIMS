@@ -85,6 +85,7 @@ class SuperuserRoleTests(APITestCase):
 
     def test_role_demotion_removes_effective_admin_on_the_next_request(self):
         root = User.objects.create_superuser('owner', 'owner@example.org', PASSWORD)
+        User.objects.create_superuser('backup-owner', password=None)
         self.assertEqual(self.login(root)['roles'], ['admin'])
         response = self.client.patch(f'/api/v1/admin-users/{root.pk}/', {'role': 'viewer'}, format='json',
             HTTP_X_CSRFTOKEN=self.client.cookies['csrftoken'].value)
