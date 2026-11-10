@@ -65,6 +65,7 @@ def finish_queued_action(
         event_payload = {
             "assistant_action_id": str(action.id),
             "action_type": action.action_type,
+            "summary": action.summary,
             "idempotency_key": str(action.idempotency_key),
             result_key: result_id,
             "result": result,

@@ -72,9 +72,13 @@ class AdminUserListSerializer(UserListSerializer):
     invitation_event = serializers.CharField(read_only=True, allow_null=True)
     invitation_updated_at = serializers.DateTimeField(read_only=True, allow_null=True)
     password_ready = serializers.SerializerMethodField()
+    is_last_active_admin = serializers.SerializerMethodField()
 
     class Meta(UserListSerializer.Meta):
-        fields = UserListSerializer.Meta.fields + ["invitation_event", "invitation_updated_at", "password_ready"]
+        fields = UserListSerializer.Meta.fields + ["invitation_event", "invitation_updated_at", "password_ready", "is_last_active_admin"]
+
+    def get_is_last_active_admin(self, obj) -> bool:
+        return obj.pk == self.context.get("last_administrator_id")
 
     def get_password_ready(self, obj):
         return obj.has_usable_password()

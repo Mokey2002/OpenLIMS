@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.73.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.73.2.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,27 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
-| **v0.73.0** | Solicitudes de membresía o roles, vista previa y aprobación administrativa, notificaciones internas y permisos auditados sin duplicados. | [Guía de solicitudes de acceso](docs/access-requests-v0730.md) |
-| **v0.72.6** | La auditoría respeta permisos actuales de proyectos y registros, cuadernos privados, objetos relacionados e instantáneas históricas. | [Guía de acceso a auditoría](docs/audit-access-v0726.md) · [PR #197](https://github.com/Mokey2002/OpenLIMS/pull/197) |
-| **v0.72.5** | Un solo evento por cambio de flujo, análisis o almacenamiento; sincronización sin repeticiones y transiciones de muestras atómicas. | [Guía de integridad de auditoría](docs/audit-integrity-v0725.md) · [PR #196](https://github.com/Mokey2002/OpenLIMS/pull/196) |
+| **v0.73.2** | Una revisión inicial por borrador del asistente, guardado sin duplicados y auditoría con nombres, acciones y cambios legibles. | [Guía de claridad de auditoría](docs/audit-clarity-v0732.md) |
+| **v0.73.1** | Protege al último administrador activo en usuarios, Django admin y reversión de migraciones, incluso con cambios simultáneos. | [Guía de protección administrativa](docs/administrator-safety-v0731.md) |
+| **v0.73.0** | Solicitudes de membresía o roles, vista previa y aprobación administrativa, notificaciones internas y permisos auditados sin duplicados. | [Guía de solicitudes de acceso](docs/access-requests-v0730.md) · [PR #198](https://github.com/Mokey2002/OpenLIMS/pull/198) |
+
+## v0.73.2 — Actividad legible y menos registros redundantes
+
+Los borradores del asistente guardan la plantilla, el flujo y las evidencias del instrumento en una sola revisión inicial y un evento de creación. Las acciones síncronas generan un resultado de finalización con la fecha de confirmación. Los trabajos en cola conservan sus eventos separados de confirmación y finalización posterior.
+
+El guardado compara el contenido real con enlaces en orden estable, incluso para revisiones antiguas. Un guardado sin cambios o un reintento idéntico reutiliza la revisión actual; un cambio diferente con una revisión desactualizada sigue exigiendo actualizar. Recuperar una respuesta perdida actualiza el historial una vez y muestra el estado real del servidor. Se conservan los eventos históricos, revisiones inmutables y sumas de comprobación; las ediciones reales siguen teniendo eventos separados.
+
+El panel, Auditoría e Informes muestran nombres, acciones legibles y cambios como **Revisión 3 → 4; 1 bloque modificado**. Los IDs, códigos y datos originales están disponibles en **Detalles técnicos** de Auditoría. Las exportaciones añaden campos legibles. Las etiquetas usan instantáneas ya autorizadas, sin consultas extra de registros ni ampliar permisos. Limpiar filtros actualiza la lista y una respuesta antigua ya no reemplaza los resultados nuevos.
+
+Versión/pie **v0.73.2**. También incluye la protección administrativa pendiente de v0.73.1. Reconstruye/recrea API, worker y frontend/web con el mismo código. Si actualizas desde v0.73.0, aplica **core.0004_user_administration_lock**; el inicio de la API de producción lo hace automáticamente. Sin dependencia nueva ni modificación del historial. Ambos README conservan solo **v0.73.2, v0.73.1 y v0.73.0**. Consulta la [guía de claridad de auditoría](docs/audit-clarity-v0732.md) para causas, ejemplos y pruebas.
+
+## v0.73.1 — Conservar un administrador activo
+
+OpenLIMS impide eliminar, desactivar o quitar los permisos del último administrador activo. Cuentan los superusuarios activos de Django y los miembros activos del grupo `admin`; las cuentas inactivas o con solo `is_staff` no cuentan. Se permite editar el perfil y transferir responsabilidades cuando queda otro administrador activo.
+
+La página de usuarios identifica la cuenta protegida y desactiva los controles inseguros. Una página desactualizada muestra un conflicto claro y actualiza la lista. La protección también se aplica a usuarios/grupos en Django admin, eliminaciones masivas, cambios del nombre o eliminación del grupo `admin`, y reversiones de migraciones que eliminarían al administrador o restaurarían permisos antiguos. Un bloqueo transaccional compartido evita que solicitudes simultáneas eliminen a todos los administradores. Los cambios y eliminaciones por API se guardan junto con la auditoría y se vuelven a comprobar los permisos actuales del actor tras la espera.
+
+Versión/pie **v0.73.1**. Incluye la migración **core.0004_user_administration_lock**. Reconstruye/recrea API y frontend/web y aplica migraciones antes de servir solicitudes; Compose de producción las aplica al iniciar la API. Sin dependencia nueva. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de protección administrativa](docs/administrator-safety-v0731.md) para transferencias, alcance y pruebas.
 
 ## v0.73.0 — Solicitudes de acceso y aprobaciones
 
@@ -26,23 +44,7 @@ Los administradores también pueden entrar desde **Usuarios → Revisar solicitu
 
 Cada transición real genera un evento de auditoría y la notificación interna correspondiente. Repetir una solicitud reutiliza la pendiente; repetir una decisión devuelve el resultado guardado sin restaurar permisos revocados. Las aprobaciones simultáneas se serializan y una vista previa desactualizada exige revisión nueva. Los permisos, la decisión, la auditoría y las notificaciones se guardan en una sola transacción.
 
-Versión/pie **v0.73.0**. Incluye la migración **core.0003_access_requests**. Reconstruye/recrea API y frontend/web, aplica las migraciones antes de servir solicitudes y actualiza el navegador. No requiere dependencias nuevas ni configurar correo. Ambos README conservan solo **v0.73.0, v0.72.6 y v0.72.5**. Consulta la [guía de solicitudes de acceso](docs/access-requests-v0730.md) para uso, API, despliegue y pruebas.
-
-## v0.72.6 — Permisos de proyectos en la auditoría
-
-Técnicos y lectores ven ahora únicamente eventos de registros a los que tienen acceso actualmente. La revocación de membresía se aplica en la siguiente solicitud. Se mantienen las reglas de cuadernos y registros privados, SOP aprobados y propiedad de acciones del asistente. Las instantáneas y referencias relacionadas no exponen proyectos u objetos privados mediante un registro visible.
-
-El mismo filtro se aplica antes de paginar, consultar un evento, buscar y calcular conteos/opciones del resumen. Los administradores conservan la auditoría completa y las exportaciones siguen reservadas a ellos. Los eventos con destinos eliminados, administrativos o desconocidos quedan disponibles solo para administradores cuando no puede comprobarse el acceso actual. Todos los registros almacenados se conservan.
-
-Versión/pie **v0.72.6**. Reconstruye/recrea API y frontend/web, y actualiza el navegador. Sin migración de base de datos ni dependencia nueva. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de acceso a auditoría](docs/audit-access-v0726.md) para alcance, instantáneas históricas y pruebas.
-
-## v0.72.5 — Un evento de auditoría por cambio registrado
-
-Las acciones de flujos y análisis guardan ahora un solo evento canónico, en lugar de copias separadas para el flujo/trabajo y la muestra. El historial de muestras, las cronologías del asistente y los informes consultan el mismo evento mediante su relación con la muestra y los permisos actuales. Un cambio de contenedor guarda un solo evento con los valores anteriores y nuevos; una actualización combinada conserva todos los campos modificados en una entrada.
-
-Guardar de nuevo un paso completado/omitido o un fallo sin cambios ya no repite el resultado ni cambia su fecha de finalización. Los reintentos reales, nuevas decisiones de QC y motivos de fallo modificados siguen registrados. Las transiciones de estado bloquean la muestra y guardan el cambio junto con su auditoría: solicitudes idénticas simultáneas producen una transición y un fallo de auditoría revierte el cambio.
-
-Versión/pie **v0.72.5**. Reconstruye/recrea API, worker y frontend/web con el mismo código. Sin migración de base de datos ni dependencia nueva. Los registros históricos se conservan. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de integridad de auditoría](docs/audit-integrity-v0725.md) para causas, alcance y pruebas.
+Versión/pie **v0.73.0**. Incluye la migración **core.0003_access_requests**. Reconstruye/recrea API y frontend/web, aplica las migraciones antes de servir solicitudes y actualiza el navegador. No requiere dependencias nuevas ni configurar correo. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de solicitudes de acceso](docs/access-requests-v0730.md) para uso, API, despliegue y pruebas.
 
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
@@ -50,7 +52,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.73.0`
+**Versión de desarrollo actual:** `v0.73.2`
 
 **Demo:** http://35.164.28.250
 

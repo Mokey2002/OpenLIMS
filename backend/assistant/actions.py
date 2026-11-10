@@ -69,6 +69,7 @@ def _audit(action, event_action, payload=None):
         payload={
             "assistant_action_id": str(action.id),
             "action_type": action.action_type,
+            "summary": action.summary,
             "idempotency_key": str(action.idempotency_key),
             **(payload or {}),
         },
@@ -496,10 +497,11 @@ def confirm_action(token, user):
                 "executed_at",
                 "updated_at",
             ])
-            _audit(action, "ASSISTANT_ACTION_CONFIRMED", {"result": result})
-
-            if next_status == AssistantAction.STATUS_COMPLETED:
-                _audit(action, "ASSISTANT_ACTION_COMPLETED", {"result": result})
+            # Synchronous actions confirm and complete in this transaction.
+            # Record one receipt; queued work still records its confirmation
+            # here and its separate completion when the worker finishes.
+            event_action = "ASSISTANT_ACTION_COMPLETED" if next_status == AssistantAction.STATUS_COMPLETED else "ASSISTANT_ACTION_CONFIRMED"
+            _audit(action, event_action, {"result": result, "confirmed_at": action.confirmed_at.isoformat()})
 
             return action
     except AssistantAction.DoesNotExist as exc:

@@ -3,7 +3,6 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 
@@ -12,6 +11,8 @@ from events.models import Event
 from projects.models import Project
 from results.models import Result, WorkItem
 from samples.models import Sample
+from core.permissions import is_admin
+from core.user_safety import lock_users, protect_user_deletion, protect_user_state, user_administration
 
 from .models import (
     MigrationJob,
@@ -181,6 +182,12 @@ def _restore_change(change):
     instance = model.objects.filter(pk=change.object_id).first()
     if not instance:
         return False
+    if change.object_type == "USER":
+        restored_groups = change.metadata.get("groups", list(instance.groups.values_list("name", flat=True)))
+        protect_user_state(
+            instance, active=change.previous_values.get("is_active", instance.is_active),
+            administrator=change.previous_values.get("is_superuser", instance.is_superuser) or "admin" in restored_groups,
+        )
     for field, value in change.previous_values.items():
         setattr(instance, field, value)
     if change.previous_values:
@@ -212,8 +219,14 @@ def _blocking_relations(instance):
     return sorted(set(blockers))
 
 
-@transaction.atomic
+@user_administration()
 def rollback_migration(job, actor):
+    # Acquire the same account lock before the job lock or any User writes.
+    ids = list(job.object_changes.filter(object_type="USER").values_list("object_id", flat=True))
+    targets = list(User.objects.filter(pk__in=ids))
+    actor = lock_users(actor, targets).get(actor.pk)
+    if not actor or not actor.is_active or not is_admin(actor):
+        raise ValidationError("Your administrator access changed. Refresh the page and sign in again if needed.")
     job = MigrationJob.objects.select_for_update().select_related("profile").get(pk=job.pk)
     if job.status not in [MigrationJob.STATUS_COMPLETED, MigrationJob.STATUS_PARTIAL_FAILED]:
         raise ValidationError("Only a completed migration can be rolled back.")
@@ -240,6 +253,8 @@ def rollback_migration(job, actor):
             instance = model.objects.filter(pk=change.object_id).first()
             if not instance:
                 continue
+            if object_type == "USER":
+                protect_user_deletion([instance.pk])
             blockers = _blocking_relations(instance)
             if blockers:
                 raise ValidationError(

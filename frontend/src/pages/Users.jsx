@@ -11,7 +11,7 @@ import {
   Spinner,
   Table,
 } from "react-bootstrap";
-import { apiDelete, apiGet, apiPatch, apiPost } from "../api";
+import { apiDeleteResponse, apiGet, apiPatchResponse, apiPost } from "../api";
 import { isAdmin } from "../authz";
 
 function formatTimestamp(value) {
@@ -89,15 +89,19 @@ export default function Users() {
     setLoading(true);
 
     try {
-      const [meData, usersData] = await Promise.all([
+      const [accountResult, usersResult] = await Promise.allSettled([
         apiGet("/api/me/"),
         apiGet("/api/admin-users/"),
       ]);
-
+      if (accountResult.status === "rejected") throw accountResult.reason;
+      const meData = accountResult.value;
       setMe(meData);
+      if (!isAdmin(meData)) { setUsers([]); return; }
+      if (usersResult.status === "rejected") throw usersResult.reason;
+      const usersData = usersResult.value;
       setUsers(usersData.results || usersData || []);
-    } catch (e) {
-      setErr(e.message || String(e));
+    } catch {
+      setErr("Could not load user management. Refresh the page or check your administrator access.");
     } finally {
       setLoading(false);
     }
@@ -214,6 +218,30 @@ export default function Users() {
     }));
   }
 
+  async function mutateUser(userId, changes) {
+    let response;
+    try {
+      response = changes === undefined
+        ? await apiDeleteResponse(`/api/admin-users/${userId}/`)
+        : await apiPatchResponse(`/api/admin-users/${userId}/`, changes);
+    } catch {
+      throw new Error("Could not confirm the account change. Refresh the users list before trying again.");
+    }
+    if (response.ok) return;
+    const data = await response.json().catch(() => null);
+    if (response.status === 409 && data?.code === "last_active_administrator") {
+      cancelEdit();
+      await load();
+      throw new Error("Keep at least one active administrator. Create or activate another administrator before removing this access.");
+    }
+    if (response.status === 403) {
+      cancelEdit();
+      setMe(await apiGet("/api/me/").catch(() => null));
+      throw new Error("Your administrator access changed. Refresh the page and sign in again if needed.");
+    }
+    throw new Error("The account change was not accepted. Check the account details and try again.");
+  }
+
   async function saveUser(userId) {
     setErr("");
     setSuccess("");
@@ -222,7 +250,7 @@ export default function Users() {
     try {
       const changes = { ...editForm };
       if (editForm.role === primaryRole(users.find(user => user.id === userId))) delete changes.role;
-      await apiPatch(`/api/admin-users/${userId}/`, changes);
+      await mutateUser(userId, changes);
 
       setEditingUserId(null);
       setSuccess("User updated successfully.");
@@ -246,8 +274,9 @@ export default function Users() {
 
     if (!confirmed) return;
 
+    setSaving(true);
     try {
-      await apiPatch(`/api/admin-users/${user.id}/`, {
+      await mutateUser(user.id, {
         is_active: nextStatus,
       });
 
@@ -260,6 +289,8 @@ export default function Users() {
       await load();
     } catch (e) {
       setErr(e.message || String(e));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -272,14 +303,17 @@ export default function Users() {
 
     setErr("");
     setSuccess("");
+    setSaving(true);
 
     try {
-      await apiDelete(`/api/admin-users/${userId}/`);
+      await mutateUser(userId);
 
       setSuccess("User deleted successfully.");
       await load();
     } catch (e) {
       setErr(e.message || String(e));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -292,7 +326,7 @@ export default function Users() {
     );
   }
 
-  if (me && !userIsAdmin) {
+  if (!userIsAdmin) {
     return (
       <div className="w-100">
         <div className="page-header">
@@ -302,6 +336,8 @@ export default function Users() {
           </div>
         </div>
 
+        {err && <Alert variant="danger">{err}</Alert>}
+        {success && <Alert variant="success">{success}</Alert>}
         <Alert variant="warning">
           Admin/director access required. You do not have permission to manage
           users.
@@ -333,6 +369,9 @@ export default function Users() {
 
       {err && <Alert variant="danger">{err}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
+      {users.some(user => user.is_last_active_admin) && <Alert variant="info">
+        Keep at least one active administrator. Create or activate another administrator before removing this access.
+      </Alert>}
 
       <div className="stat-grid mb-4">
         <Card className="app-card metric-card h-100">
@@ -508,6 +547,7 @@ export default function Users() {
                     <tr key={user.id}>
                       <td>
                         <div className="fw-semibold">{user.username}</div>
+                        {user.is_last_active_admin && <Badge bg="info" text="dark" className="mt-1">Last active administrator</Badge>}
                         <div className="feed-meta">
                           {isEditing ? (
                             <Row className="g-2 mt-1">
@@ -557,6 +597,7 @@ export default function Users() {
                           <Form.Select
                             size="sm"
                             value={editForm.role}
+                            disabled={saving || user.is_last_active_admin}
                             onChange={(e) =>
                               updateEditField("role", e.target.value)
                             }
@@ -586,8 +627,10 @@ export default function Users() {
                         {isEditing ? (
                           <Form.Check
                             type="switch"
+                            id={`user-active-${user.id}`}
                             label={editForm.is_active ? "Active" : "Disabled"}
                             checked={Boolean(editForm.is_active)}
+                            disabled={saving || user.is_last_active_admin}
                             onChange={(e) =>
                               updateEditField("is_active", e.target.checked)
                             }
@@ -639,6 +682,7 @@ export default function Users() {
                               size="sm"
                               variant="outline-dark"
                               onClick={() => startEdit(user)}
+                              disabled={saving}
                             >
                               Edit
                             </Button>
@@ -651,6 +695,7 @@ export default function Users() {
                                   : "outline-success"
                               }
                               onClick={() => toggleActive(user)}
+                              disabled={saving || user.is_last_active_admin}
                             >
                               {user.is_active ? "Disable" : "Activate"}
                             </Button>
@@ -658,6 +703,7 @@ export default function Users() {
                             <Button
                               size="sm"
                               variant="outline-danger"
+                              disabled={saving || user.is_last_active_admin}
                               onClick={() =>
                                 deleteUser(user.id, user.username)
                               }

@@ -16,6 +16,7 @@ from core.permissions import (
 from .models import Event
 from .access import events_for_user
 from .serializers import EventSerializer
+from .presentation import event_presentation, spreadsheet_text
 
 
 class EventViewSet(viewsets.ReadOnlyModelViewSet):
@@ -106,9 +107,11 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
             "entity_id",
             "action",
             "payload",
+            "entity_label", "action_label", "description", "source",
         ])
 
         for event in queryset:
+            display = event_presentation(event)
             writer.writerow([
                 event.id,
                 event.timestamp.isoformat() if event.timestamp else "",
@@ -117,6 +120,7 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
                 event.entity_id,
                 event.action,
                 json.dumps(event.payload or {}, default=str),
+                *[spreadsheet_text(display[field]) for field in ["entity_label", "action_label", "description", "source"]],
             ])
 
         return response
@@ -136,6 +140,7 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
                 "entity_id": event.entity_id,
                 "action": event.action,
                 "payload": event.payload or {},
+                **event_presentation(event),
             })
 
         response = HttpResponse(

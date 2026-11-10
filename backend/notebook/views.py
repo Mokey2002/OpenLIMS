@@ -336,7 +336,8 @@ class ExperimentViewSet(NotebookPermissionContextMixin, viewsets.ModelViewSet):
             reason=request.data.get("reason", "Autosave"),
             expected_revision_public_id=request.data.get("expected_revision_public_id"),
         )
-        return Response({"created": created, "revision": ExperimentRevisionSerializer(revision).data})
+        return Response({"created": created, "experiment_status": revision.experiment.status,
+                         "revision": ExperimentRevisionSerializer(revision).data})
 
     @extend_schema(
         parameters=[

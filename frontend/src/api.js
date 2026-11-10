@@ -184,6 +184,14 @@ export function apiPostResponse(path, body, { signal } = {}) {
   return request(path, { method: "POST", body: JSON.stringify(body), signal });
 }
 
+export function apiPatchResponse(path, body, { signal } = {}) {
+  return request(path, { method: "PATCH", body: JSON.stringify(body), signal });
+}
+
+export function apiDeleteResponse(path, { signal } = {}) {
+  return request(path, { method: "DELETE", signal });
+}
+
 export function apiGetResponse(path, { signal } = {}) {
   return request(path, { method: "GET", signal });
 }
