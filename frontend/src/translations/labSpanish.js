@@ -1,5 +1,11 @@
 // Exact UI copy only; identifiers and stored laboratory records are unchanged.
 export const labSpanish = {
+  "Last active administrator": "Último administrador activo",
+  "Could not load user management. Refresh the page or check your administrator access.": "No se pudo cargar la gestión de usuarios. Actualiza la página o comprueba tu acceso administrativo.",
+  "Keep at least one active administrator. Create or activate another administrator before removing this access.": "Conserva al menos un administrador activo. Crea o activa otro administrador antes de quitar este acceso.",
+  "Your administrator access changed. Refresh the page and sign in again if needed.": "Tu acceso administrativo cambió. Actualiza la página e inicia sesión de nuevo si es necesario.",
+  "Could not confirm the account change. Refresh the users list before trying again.": "No se pudo confirmar el cambio de la cuenta. Actualiza la lista de usuarios antes de intentarlo de nuevo.",
+  "The account change was not accepted. Check the account details and try again.": "No se aceptó el cambio de la cuenta. Revisa los datos e inténtalo de nuevo.",
   "Access requests": "Solicitudes de acceso",
   "Review access requests": "Revisar solicitudes de acceso",
   "This request has already been decided.": "Esta solicitud ya fue resuelta.",

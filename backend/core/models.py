@@ -20,6 +20,15 @@ class PublicIDModel(models.Model):
         abstract = True
 
 
+class UserAdministrationLock(models.Model):
+    """One transaction lock shared by account and administrator-group edits."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+
+    class Meta:
+        constraints = [models.CheckConstraint(condition=models.Q(id=1), name="core_single_user_admin_lock")]
+
+
 class AccessRequest(models.Model):
     PROJECT = "PROJECT"
     ROLE = "ROLE"

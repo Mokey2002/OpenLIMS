@@ -20,6 +20,10 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from events.models import Event
 from .authentication import enforce_csrf
 from .permissions import IsAdminOnly
+from .user_safety import (
+    LastAdministratorConflict, LastAdministratorError, last_administrator_id,
+    lock_api_administrator, protect_api_update, protect_user_deletion, user_administration,
+)
 from .serializers import OpenLIMSTokenObtainPairSerializer
 from .serializers import (
     MeSerializer,
@@ -159,6 +163,27 @@ class UserLiteViewSet(ReadOnlyModelViewSet):
 class UserAdminViewSet(ModelViewSet):
     permission_classes = [IsAdminOnly]
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.action in {"list", "retrieve"}:
+            context["last_administrator_id"] = last_administrator_id()
+        return context
+
+    def _guarded_write(self, method, request, *args, **kwargs):
+        try:
+            with user_administration():
+                target = self.get_object()
+                request.user = lock_api_administrator(request.user, target)
+                return method(request, *args, **kwargs)
+        except LastAdministratorError:
+            raise LastAdministratorConflict() from None
+
+    def update(self, request, *args, **kwargs):
+        return self._guarded_write(super().update, request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        return self._guarded_write(super().destroy, request, *args, **kwargs)
+
     def get_queryset(self):
         invitation_events = Event.objects.filter(
             entity_type="User", entity_id=Cast(OuterRef("pk"), CharField()),
@@ -225,7 +250,8 @@ class UserAdminViewSet(ModelViewSet):
             self.invitation_status = send_invitation(user, self.request.user)
 
     def perform_update(self, serializer):
-        user = self.get_object()
+        user = serializer.instance
+        protect_api_update(user, serializer.validated_data)
 
         before = {
             "email": user.email,
@@ -275,6 +301,7 @@ class UserAdminViewSet(ModelViewSet):
             )
 
     def perform_destroy(self, instance):
+        protect_user_deletion([instance.pk])
         Event.objects.create(
             entity_type="User",
             entity_id=str(instance.id),
