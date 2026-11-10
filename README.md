@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.73.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.73.2-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,19 @@
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.73.2** | One initial assistant draft revision, repeat-safe notebook saves and readable audit actions, names and revision changes. | [Audit clarity guide](docs/audit-clarity-v0732.md) |
 | **v0.73.1** | Protect the last active administrator across user management, Django admin and migration rollback, including concurrent changes. | [Administrator safety guide](docs/administrator-safety-v0731.md) |
 | **v0.73.0** | Request project membership or application roles, with an admin preview/approval queue, in-app notifications and repeat-safe audited grants. | [Access requests guide](docs/access-requests-v0730.md) · [PR #198](https://github.com/Mokey2002/OpenLIMS/pull/198) |
-| **v0.72.6** | Audit Events follow current project/object permissions, including private notebooks, related objects and historical project snapshots. | [Audit access guide](docs/audit-access-v0726.md) · [PR #197](https://github.com/Mokey2002/OpenLIMS/pull/197) |
+
+### v0.73.2 — Readable activity and fewer redundant assistant records
+
+Assistant notebook drafts now save their template, workflow and recorded run evidence together in one initial revision and one draft-creation audit event. Synchronous assistant actions write one completion receipt with the confirmation timestamp. Queued jobs retain their separate confirmation and later completion records.
+
+Notebook saves compare actual content with links in a stable order, including revisions written by older versions. Unchanged saves and identical retries reuse the current revision, while different edits from an outdated revision still require a refresh. A recovered save updates notebook history once and uses the server's actual status. Historical audit entries, immutable revisions and stored checksums are preserved; genuine edits remain separate events.
+
+Dashboard activity, Audit Events and Reports show record names, readable action descriptions and revision changes such as **Revision 3 → 4; 1 block modified**. Raw IDs, action codes and payloads remain available under **Technical details** in Audit Events. Audit exports append readable fields. Snapshot labels require no extra record lookups, and current access restrictions still apply. Clearing filters now reloads the audit list and older responses cannot replace newer results.
+
+Version/footer **v0.73.2**. This release also carries the pending administrator safeguards from v0.73.1. Rebuild/recreate API, worker and frontend/web from the same checkout; installations upgrading from v0.73.0 must apply **core.0004_user_administration_lock**, which production API startup applies automatically. No new dependency or audit-history backfill. Both READMEs retain only **v0.73.2, v0.73.1 and v0.73.0**. See the [audit clarity guide](docs/audit-clarity-v0732.md) for causes, examples and verification.
 
 ### v0.73.1 — Keep an active administrator
 
@@ -43,7 +53,7 @@ OpenLIMS now blocks deleting, disabling or demoting the last active administrato
 
 The Users page marks the protected account and disables its unsafe controls. Stale pages receive a clear conflict message and refresh their account list. The same safeguard covers Django user/group administration, bulk deletion, renaming/removing the `admin` group, and migration rollback that would delete an administrator or restore old access. Account mutations share a transaction lock so concurrent requests cannot remove the remaining administrators together. API updates/deletions commit with their audit event, and waiting requests recheck the actor's current access.
 
-Version/footer **v0.73.1**. Includes migration **core.0004_user_administration_lock**. Rebuild/recreate API and frontend/web and apply migrations before serving requests; production Compose applies them during API startup. No new dependency. Both READMEs retain only **v0.73.1, v0.73.0 and v0.72.6**. See the [administrator safety guide](docs/administrator-safety-v0731.md) for handovers, supported paths and checks.
+Version/footer **v0.73.1**. Includes migration **core.0004_user_administration_lock**. Rebuild/recreate API and frontend/web and apply migrations before serving requests; production Compose applies them during API startup. No new dependency. The latest three release updates are listed above. See the [administrator safety guide](docs/administrator-safety-v0731.md) for handovers, supported paths and checks.
 
 ### v0.73.0 — Access requests and administrator approvals
 
@@ -55,21 +65,13 @@ Each real transition records one audit event and sends the relevant in-app notif
 
 Version/footer **v0.73.0**. Includes database migration **core.0003_access_requests**. Rebuild/recreate API and frontend/web, apply migrations before serving requests, then refresh the browser. No new dependency or email setup is required. The latest three release updates are listed above. See the [access requests guide](docs/access-requests-v0730.md) for usage, API examples, deployment and verification.
 
-### v0.72.6 — Project access applies to Audit Events
-
-Technicians and viewers now see audit entries only for records they can currently access. Membership revocation takes effect on the next request. Private notebook/registry rules, approved SOP visibility and assistant ownership remain in force. Audit snapshots and linked-object references cannot expose an inaccessible project or private target through a readable record.
-
-The same access filter runs before list pagination, direct event lookup, searching and summary counts/options. Administrators retain the complete audit log and exports remain admin-only. Entries with deleted, administrative or unrecognized targets stay admin-only when current access cannot be verified. All stored audit records are preserved.
-
-Version/footer **v0.72.6**. Rebuild/recreate API and frontend/web, then refresh the browser. No database migration or new dependency. The latest three release updates are listed above. See the [audit access guide](docs/audit-access-v0726.md) for supported scopes, historical snapshots and tests.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.73.1`.
+**Current development version:** `v0.73.2`.
 
 ## Personal favorites
 
@@ -957,7 +959,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.73.1**.
+`frontend/src/version.js` file. The current application version is **v0.73.2**.
 
 Footer source:
 

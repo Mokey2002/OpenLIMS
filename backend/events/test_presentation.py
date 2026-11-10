@@ -25,7 +25,7 @@ class AuditPresentationTests(APITestCase):
         location = self.event()
         container = Event.objects.create(entity_type="Container", entity_id="13", action="CONTAINER_CREATED",
             payload={"container_id": "Protein box A"})
-        experiment = Event.objects.create(entity_type="experiment", entity_id="3c834c15-53d3-4e65-8ffe-67314e7d28e0",
+        experiment = Event.objects.create(entity_type="experiment", entity_id="83f882c1-1f5f-4d23-8a38-29461020d7f8",
             action="EXPERIMENT_REVISION_CREATED", payload={"entity": {"label": "Protein stability study"},
                 "before": {"revision": 3}, "after": {"revision": 4}, "reason": "Notebook autosave"})
         rows = {row["id"]: row for row in self.client.get("/api/events/").data["results"]}

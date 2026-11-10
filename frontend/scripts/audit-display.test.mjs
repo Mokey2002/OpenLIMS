@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { auditAction, auditDescription, auditReason, auditRecord } from "../src/utils/auditDisplay.js";
 
 test("old experiment snapshots show the title and distinguish real revisions", () => {
-  const event = { entity_type: "experiment", entity_id: "3c834c15-53d3-4e65-8ffe-67314e7d28e0",
+  const event = { entity_type: "experiment", entity_id: "83f882c1-1f5f-4d23-8a38-29461020d7f8",
     action: "EXPERIMENT_REVISION_CREATED", payload: { entity: { label: "Protein stability study" },
       before: { revision: 3 }, after: { revision: 4 }, details: { changes: { blocks_modified: 1, links_added: 2 } } } };
   assert.equal(auditRecord(event), "Protein stability study");
@@ -27,7 +27,7 @@ test("unresolvable or malformed historical records remain readable without inven
 });
 
 test("the legacy technical action UUID is kept out of the displayed reason", () => {
-  assert.equal(auditReason({ payload: { reason: "Assistant source draft / action 3c834c15-53d3-4e65-8ffe-67314e7d28e0" } }), "Assistant source draft");
+  assert.equal(auditReason({ payload: { reason: "Assistant source draft / action 83f882c1-1f5f-4d23-8a38-29461020d7f8" } }), "Assistant source draft");
   assert.equal(auditReason({ payload: { reason: "Repeat QC after checking control S-100" } }), "Repeat QC after checking control S-100");
 });
 

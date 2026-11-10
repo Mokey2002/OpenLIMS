@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 
-const uuid = '3c834c15-53d3-4e65-8ffe-67314e7d28e0';
+const uuid = '83f882c1-1f5f-4d23-8a38-29461020d7f8';
 const experiment = { id: 30, entity_type: 'experiment', entity_id: uuid, action: 'EXPERIMENT_REVISION_CREATED', actor: 1, actor_username: 'director',
   timestamp: '2026-11-06T04:34:11Z', payload: { entity: { type: 'experiment', public_id: uuid, label: 'Protein stability study' },
     before: { revision: 3 }, after: { revision: 4 }, details: { changes: { blocks_modified: 1 } }, reason: 'Notebook autosave' } };
