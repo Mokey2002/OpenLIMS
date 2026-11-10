@@ -147,25 +147,26 @@ def notebook_plan(user, fields, *, lock=False):
 def execute_notebook_draft(action):
     plan = notebook_plan(action.requested_by, action.payload['fields'], lock=True)
     assert_unchanged(action, plan)
+    reason = 'Created notebook draft from recorded run'
     if plan['template']:
-        experiment = instantiate_template(plan['template'], action.requested_by, title=plan['fields']['title'], links=plan['links'])
-        blocks = [*plan['template'].blocks, *plan['blocks']]
+        experiment = instantiate_template(
+            plan['template'], action.requested_by, title=plan['fields']['title'], links=plan['links'],
+            extra_blocks=plan['blocks'], revision_reason=reason, audit_action='DRAFT_CREATED_FROM_RUN',
+        )
+        revision = experiment.current_revision
     else:
         experiment = Experiment.objects.create(notebook=plan['notebook'], title=plan['fields']['title'], created_by=action.requested_by)
-        blocks = plan['blocks']
-    revision, _ = create_revision(experiment=experiment, actor=action.requested_by, blocks=blocks, links=plan['links'],
-        reason=f'Assistant source draft / action {action.pk}')
+        revision, _ = create_revision(experiment=experiment, actor=action.requested_by, blocks=plan['blocks'], links=plan['links'],
+            reason=reason, audit_action='DRAFT_CREATED_FROM_RUN')
     experiment.refresh_from_db()
     experiment.status = Experiment.STATUS_DRAFT
     experiment.save(update_fields=['status', 'updated_at'])
     # Enrich the new, uncommitted native audit entries with their originating
     # action. No prior experiment or revision is edited.
-    for event in Event.objects.filter(entity_type__iexact='experiment', entity_id=str(experiment.public_id)):
-        event.payload = {**event.payload, 'assistant_action_id': str(action.pk)}
+    for event in Event.objects.filter(entity_type__iexact='experiment', entity_id=str(experiment.public_id), action='DRAFT_CREATED_FROM_RUN'):
+        event.payload = {**event.payload, 'assistant_action_id': str(action.pk), 'project_id': experiment.project.pk,
+                         'source_kind': plan['fields']['source_kind'], 'source_id': plan['fields']['source_id'], 'status': 'DRAFT'}
         event.save(update_fields=['payload'])
-    Event.objects.create(entity_type='experiment', entity_id=str(experiment.public_id), actor=action.requested_by,
-        action='DRAFT_CREATED_FROM_RUN', payload={'assistant_action_id': str(action.pk), 'project_id': experiment.project.pk,
-            'source_kind': plan['fields']['source_kind'], 'source_id': plan['fields']['source_id'], 'status': 'DRAFT'})
     return {'operation': 'NOTEBOOK_DRAFT', 'succeeded_count': 1, 'failed_count': 0, 'experiment_id': experiment.pk,
         'experiment_public_id': str(experiment.public_id), 'revision': revision.number, 'checksum_sha256': revision.checksum,
         'url': f'/notebook?experiment={experiment.public_id}',

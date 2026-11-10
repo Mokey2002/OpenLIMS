@@ -112,7 +112,7 @@ def validate_values(definition, values, *, complete):
     return values
 
 
-def create_steps(experiment, definitions, actor, *, cloning=False):
+def create_steps(experiment, definitions, actor, *, cloning=False, audit=True):
     definitions = validate_definition(deepcopy(definitions))
     for position, definition in enumerate(definitions, 1):
         user_id = definition.pop("assignee", None)
@@ -125,9 +125,11 @@ def create_steps(experiment, definitions, actor, *, cloning=False):
         ExperimentWorkflowStep.objects.create(experiment=experiment, position=position, definition=definition, assignee=assignee)
         if assignee:
             experiment.assignees.add(assignee)
-    if definitions:
+    snapshot = workflow_snapshot(experiment) if definitions else []
+    if definitions and audit:
         record_audit_event(entity=experiment, action="EXPERIMENT_WORKFLOW_STARTED", actor=actor,
-                           after={"steps": workflow_snapshot(experiment)})
+                           after={"steps": snapshot})
+    return snapshot
 
 
 def workflow_snapshot(experiment):

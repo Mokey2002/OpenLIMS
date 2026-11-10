@@ -78,6 +78,10 @@ function revisionLinks(revision) {
   }));
 }
 
+function savedRevisions(revisions, revision) {
+  return [revision, ...(revisions || []).filter(row => row.public_id !== revision.public_id)];
+}
+
 function statusColor(status) {
   return { DRAFT: "secondary", IN_PROGRESS: "primary", COMPLETED: "warning", REVIEWED: "success", LOCKED: "dark" }[status] || "secondary";
 }
@@ -309,14 +313,14 @@ export default function NotebookPage() {
       setSelected((current) => {
         if (!current || current.id !== experiment.id) return current;
         const prior = current.revisions || [];
-        const revisions = response.created ? [response.revision, ...prior] : prior.map((row) => row.id === response.revision.id ? response.revision : row);
-        return { ...current, status: current.status === "DRAFT" ? "IN_PROGRESS" : current.status,
+        const revisions = savedRevisions(prior, response.revision);
+        return { ...current, status: response.experiment_status || (response.created && current.status === "DRAFT" ? "IN_PROGRESS" : current.status),
           current_revision: response.revision.id, current_revision_detail: response.revision, revisions };
       });
       setExperiments((current) => current.map((row) => row.id === experiment.id ? {
-        ...row, status: row.status === "DRAFT" ? "IN_PROGRESS" : row.status,
+        ...row, status: response.experiment_status || (response.created && row.status === "DRAFT" ? "IN_PROGRESS" : row.status),
         current_revision: response.revision.id, current_revision_detail: response.revision,
-        revisions: response.created ? [response.revision, ...(row.revisions || [])] : row.revisions,
+        revisions: savedRevisions(row.revisions, response.revision),
       } : row));
       return true;
     } catch (requestError) {

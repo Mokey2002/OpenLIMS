@@ -10,6 +10,8 @@ import {
 } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api";
+import { useLanguage } from "../i18n";
+import { auditAction, auditDescription, auditRecord } from "../utils/auditDisplay";
 
 function formatTimestamp(ts) {
   try {
@@ -101,6 +103,7 @@ function MetricCard({ title, value, note, tooltip, to }) {
 }
 
 export default function Dashboard() {
+  const { t, language } = useLanguage();
   const [samples, setSamples] = useState([]);
   const [events, setEvents] = useState([]);
   const [workItems, setWorkItems] = useState([]);
@@ -132,7 +135,8 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    load();
+    const timer = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const isAdmin = me?.roles?.includes("admin");
@@ -418,12 +422,13 @@ export default function Dashboard() {
 
                     <td>
                       <Badge bg={actionVariant(event.action)}>
-                        {event.action}
+                        {auditAction(event, t)}
                       </Badge>
+                      <div className="small text-muted mt-1" translate="no">{auditDescription(event, t, language)}</div>
                     </td>
 
                     <td>
-                      {event.entity_type} #{event.entity_id}
+                      <span translate="no">{auditRecord(event, t)}</span>
                     </td>
 
                     <td>{event.actor_username || "-"}</td>

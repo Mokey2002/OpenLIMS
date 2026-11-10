@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Badge,
@@ -12,6 +12,8 @@ import {
 } from "react-bootstrap";
 import { apiDownload, apiGet } from "../api";
 import { isAdmin } from "../authz";
+import { useLanguage } from "../i18n";
+import { auditAction, auditDescription, auditReason, auditRecord, humanizeAudit } from "../utils/auditDisplay";
 
 function formatTimestamp(ts) {
   if (!ts) return "-";
@@ -21,48 +23,6 @@ function formatTimestamp(ts) {
   } catch {
     return ts;
   }
-}
-
-function getReason(payload) {
-  return payload?.reason || "";
-}
-
-function getBeforeAfterSummary(payload, action = "") {
-  if (!payload) return "";
-
-  if (action === "SAMPLE_PROJECT_LINKED") {
-    const projectLabel =
-      payload.linked_project_code ||
-      payload.linked_project_name ||
-      payload.linked_project_id;
-
-    return projectLabel ? `Linked project: ${projectLabel}` : "Project linked";
-  }
-
-  if (action === "SAMPLE_PROJECT_UNLINKED") {
-    const projectLabel =
-      payload.unlinked_project_code ||
-      payload.unlinked_project_name ||
-      payload.unlinked_project_id;
-
-    return projectLabel
-      ? `Unlinked project: ${projectLabel}`
-      : "Project unlinked";
-  }
-
-  const before = payload.before || {};
-  const after = payload.after || {};
-  const changedFields = payload.changed_fields || [];
-
-  if (!changedFields.length) return "";
-
-  return changedFields
-    .map((field) => {
-      const beforeValue = before[field] ?? "-";
-      const afterValue = after[field] ?? "-";
-      return `${field}: ${beforeValue} → ${afterValue}`;
-    })
-    .join(", ");
 }
 
 function prettyPayload(payload) {
@@ -116,6 +76,8 @@ async function downloadAuditExport(format, filters) {
 }
 
 export default function Events() {
+  const { t, language } = useLanguage();
+  const requestRef = useRef(null);
   const [me, setMe] = useState(null);
   const [events, setEvents] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -133,32 +95,38 @@ export default function Events() {
   const [exporting, setExporting] = useState("");
   const [err, setErr] = useState("");
 
-  async function load() {
+  async function load(nextFilters = filters) {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setErr("");
     setLoading(true);
 
     try {
-      const queryString = buildQueryString(filters);
+      const queryString = buildQueryString(nextFilters);
 
       const [meData, eventsData, summaryData] = await Promise.all([
-        apiGet("/api/me/"),
-        apiGet(`/api/events/${queryString}`),
-        apiGet(`/api/events/summary/${queryString}`),
+        apiGet("/api/me/", { signal: controller.signal }),
+        apiGet(`/api/events/${queryString}`, { signal: controller.signal }),
+        apiGet(`/api/events/summary/${queryString}`, { signal: controller.signal }),
       ]);
-
+      if (controller.signal.aborted) return;
       setMe(meData);
       setEvents(eventsData.results || eventsData || []);
       setSummary(summaryData);
-    } catch (e) {
-      setErr(e.message || String(e));
+    } catch {
+      if (!controller.signal.aborted) {
+        setEvents([]); setSummary(null);
+        setErr(t("Could not load audit activity. Refresh the page to try again."));
+      }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }
 
   useEffect(() => {
     const timer = window.setTimeout(load, 0);
-    return () => window.clearTimeout(timer);
+    return () => { window.clearTimeout(timer); requestRef.current?.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -186,14 +154,16 @@ export default function Events() {
   }
 
   function clearFilters() {
-    setFilters({
+    const cleared = {
       entity_type: "",
       action: "",
       actor: "",
       search: "",
       date_from: "",
       date_to: "",
-    });
+    };
+    setFilters(cleared);
+    void load(cleared);
   }
 
   async function exportFile(format) {
@@ -221,7 +191,7 @@ export default function Events() {
         </div>
 
         <div className="inline-actions">
-          <Button variant="outline-dark" size="sm" onClick={load}>
+          <Button variant="outline-dark" size="sm" onClick={() => load()}>
             Refresh
           </Button>
 
@@ -274,7 +244,7 @@ export default function Events() {
 
           <Row className="g-3">
             <Col md={3}>
-              <Form.Group>
+              <Form.Group controlId="audit-filter-entity">
                 <Form.Label>Entity Type</Form.Label>
                 <Form.Select
                   value={filters.entity_type}
@@ -284,7 +254,7 @@ export default function Events() {
 
                   {entityTypes.map((entityType) => (
                     <option key={entityType} value={entityType}>
-                      {entityType}
+                      {t(humanizeAudit(entityType))}
                     </option>
                   ))}
                 </Form.Select>
@@ -292,7 +262,7 @@ export default function Events() {
             </Col>
 
             <Col md={3}>
-              <Form.Group>
+              <Form.Group controlId="audit-filter-action">
                 <Form.Label>Action</Form.Label>
                 <Form.Select
                   value={filters.action}
@@ -302,7 +272,7 @@ export default function Events() {
 
                   {actions.map((action) => (
                     <option key={action} value={action}>
-                      {action}
+                      {auditAction({ action }, t)}
                     </option>
                   ))}
                 </Form.Select>
@@ -310,7 +280,7 @@ export default function Events() {
             </Col>
 
             <Col md={3}>
-              <Form.Group>
+              <Form.Group controlId="audit-filter-actor">
                 <Form.Label>Actor</Form.Label>
                 <Form.Control
                   placeholder="director, peter, maria..."
@@ -321,7 +291,7 @@ export default function Events() {
             </Col>
 
             <Col md={3}>
-              <Form.Group>
+              <Form.Group controlId="audit-filter-search">
                 <Form.Label>Search</Form.Label>
                 <Form.Control
                   placeholder="import, sequence, sample..."
@@ -332,7 +302,7 @@ export default function Events() {
             </Col>
 
             <Col md={3}>
-              <Form.Group>
+              <Form.Group controlId="audit-filter-from">
                 <Form.Label>Date From</Form.Label>
                 <Form.Control
                   type="datetime-local"
@@ -343,7 +313,7 @@ export default function Events() {
             </Col>
 
             <Col md={3}>
-              <Form.Group>
+              <Form.Group controlId="audit-filter-to">
                 <Form.Label>Date To</Form.Label>
                 <Form.Control
                   type="datetime-local"
@@ -354,7 +324,7 @@ export default function Events() {
             </Col>
 
             <Col md={6} className="d-flex align-items-end gap-2">
-              <Button variant="dark" onClick={load}>
+              <Button variant="dark" onClick={() => load()}>
                 Apply Filters
               </Button>
 
@@ -430,7 +400,7 @@ export default function Events() {
                   <th>Action</th>
                   <th>Reason</th>
                   <th>Change Summary</th>
-                  <th>Payload</th>
+                  <th>Details</th>
                 </tr>
               </thead>
 
@@ -444,21 +414,22 @@ export default function Events() {
                     <td>{event.actor_username || event.actor || "-"}</td>
 
                     <td>
-                      <div className="fw-semibold">{event.entity_type}</div>
-                      <div className="feed-meta">ID: {event.entity_id}</div>
+                      <div className="fw-semibold" translate="no">{auditRecord(event, t)}</div>
+                      <div className="feed-meta">{t(humanizeAudit(event.entity_type))}</div>
                     </td>
 
                     <td>
                       <Badge bg={statusVariant(event.action)}>
-                        {event.action}
+                        {auditAction(event, t)}
                       </Badge>
+                      {event.source === "Assistant" && <div className="feed-meta mt-1">{t("Assistant")}</div>}
                     </td>
 
                     <td style={{ minWidth: "260px" }}>
-                      {getReason(event.payload) ? (
+                      {auditReason(event) ? (
                         <div className="reason-box mb-0">
                           <div className="fw-semibold">
-                            {getReason(event.payload)}
+                            {auditReason(event)}
                           </div>
                         </div>
                       ) : (
@@ -467,16 +438,14 @@ export default function Events() {
                     </td>
 
                     <td style={{ minWidth: "260px" }}>
-                      {getBeforeAfterSummary(event.payload, event.action) ? (
-                        <div className="small">
-                          {getBeforeAfterSummary(event.payload, event.action)}
-                        </div>
-                      ) : (
-                        <span className="feed-meta">-</span>
-                      )}
+                      <div className="small" translate="no">{auditDescription(event, t, language)}</div>
                     </td>
 
-                    <td style={{ minWidth: "360px" }}>
+                    <td style={{ minWidth: "160px" }}>
+                      <details><summary>{t("Technical details")}</summary>
+                      <dl className="small mt-2"><dt>{t("Action code")}</dt><dd translate="no">{event.action}</dd>
+                        <dt>{t("Record ID")}</dt><dd translate="no">{event.entity_type} #{event.entity_id}</dd>
+                        <dt>{t("Event ID")}</dt><dd translate="no">{event.id}</dd></dl>
                       <pre
                         className="mb-0"
                         style={{
@@ -491,6 +460,7 @@ export default function Events() {
                       >
                         {prettyPayload(event.payload)}
                       </pre>
+                      </details>
                     </td>
                   </tr>
                 ))}

@@ -479,14 +479,19 @@ class LabOperationTests(APITestCase):
         self.assertEqual(experiment.status, 'DRAFT')
         self.assertEqual(experiment.template_id, template.pk)
         self.assertEqual(experiment.workflow_steps.get().assignee_id, self.maria.pk)
-        self.assertEqual(experiment.revisions.count(), 2)
+        self.assertEqual(experiment.revisions.count(), 1)
         revision = experiment.revisions.order_by('-number').first()
         blocks = list(revision.blocks.values_list('data', flat=True))
         self.assertIn('Template method instructions', str(blocks))
         self.assertIn('EXTRACT@2', str(blocks))
         events = Event.objects.filter(entity_type__iexact='experiment', entity_id=str(experiment.public_id))
-        self.assertTrue(events.exists())
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(events.get().action, 'DRAFT_CREATED_FROM_RUN')
         self.assertTrue(all('assistant_action_id' in event.payload for event in events))
+        again = self.confirm(reply)['result']
+        self.assertEqual(again['experiment_id'], experiment.pk)
+        self.assertEqual(experiment.revisions.count(), 1)
+        self.assertEqual(Event.objects.filter(entity_type__iexact='experiment', entity_id=str(experiment.public_id)).count(), 1)
 
     def test_repair_preserves_manual_header_and_hides_preview_audit(self):
         self.instrument.auto_detect_header = False

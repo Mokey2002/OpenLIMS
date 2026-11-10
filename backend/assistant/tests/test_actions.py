@@ -206,7 +206,7 @@ class AssistantActionConfirmationTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         action.refresh_from_db()
         self.assertEqual(action.status, AssistantAction.STATUS_COMPLETED)
-        self.assertTrue(
+        self.assertFalse(
             Event.objects.filter(
                 entity_id=str(action.id),
                 action="ASSISTANT_ACTION_CONFIRMED",

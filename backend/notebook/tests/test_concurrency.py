@@ -22,6 +22,40 @@ class NotebookConcurrencyTests(TransactionTestCase):
             raise SkipTest("Requires PostgreSQL row locking")
         super().setUpClass()
 
+    def test_identical_concurrent_saves_create_one_revision_and_one_audit_event(self):
+        from events.models import Event
+
+        owner = get_user_model().objects.create_user(username="identical-owner")
+        notebook = Notebook.objects.create(name="Identical saves", owner=owner)
+        experiment = Experiment.objects.create(notebook=notebook, title="Protein observations", created_by=owner)
+        first, _ = create_revision(experiment=experiment, actor=owner,
+            blocks=[{"block_type": "RICH_TEXT", "data": {"text": "Before"}}], links=[])
+        ready = Barrier(2, timeout=10)
+
+        def save():
+            close_old_connections()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET lock_timeout = '10s'")
+                    cursor.execute("SET statement_timeout = '15s'")
+                actor = get_user_model().objects.get(pk=owner.pk)
+                current = Experiment.objects.get(pk=experiment.pk)
+                ready.wait()
+                revision, created = create_revision(experiment=current, actor=actor,
+                    blocks=[{"block_type": "RICH_TEXT", "data": {"text": "Same new observations"}}], links=[],
+                    expected_revision_public_id=str(first.public_id))
+                return str(revision.public_id), created
+            finally:
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(save) for _ in range(2)]
+            results = [future.result(timeout=30) for future in futures]
+        self.assertEqual(results[0][0], results[1][0])
+        self.assertCountEqual([created for _, created in results], [True, False])
+        self.assertEqual(experiment.revisions.count(), 2)
+        self.assertEqual(Event.objects.filter(entity_type="experiment", entity_id=str(experiment.public_id)).count(), 2)
+
     def test_two_onboarding_requests_create_one_experiment(self):
         from rest_framework.test import APIClient
         from notebook.models import ExperimentTemplate, ExperimentOnboarding

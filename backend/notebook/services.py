@@ -26,7 +26,10 @@ BLOCK_TYPES = {choice[0] for choice in ExperimentBlock.TYPE_CHOICES}
 
 
 @transaction.atomic
-def instantiate_template(template, actor, *, title=None, assignees=None, links=None):
+def instantiate_template(
+    template, actor, *, title=None, assignees=None, links=None, extra_blocks=None,
+    revision_reason="Created from template", audit_action="EXPERIMENT_REVISION_CREATED",
+):
     """Shared creation path for notebook templates and guided onboarding."""
     from .workflows import create_steps
 
@@ -39,9 +42,12 @@ def instantiate_template(template, actor, *, title=None, assignees=None, links=N
         title=title or template.name, created_by=actor,
     )
     experiment.assignees.set(assignees or [])
-    create_steps(experiment, template.workflow_steps, actor)
-    create_revision(experiment=experiment, actor=actor, blocks=template.blocks or [],
-                    links=links or [], reason="Created from template")
+    # A custom creation event records the complete initialized draft, including
+    # its workflow, rather than logging an intermediate initialization as well.
+    workflow = create_steps(experiment, template.workflow_steps, actor, audit=audit_action == "EXPERIMENT_REVISION_CREATED")
+    create_revision(experiment=experiment, actor=actor, blocks=[*(template.blocks or []), *(extra_blocks or [])],
+                    links=links or [], reason=revision_reason, audit_action=audit_action,
+                    audit_details={"workflow_steps": workflow} if audit_action != "EXPERIMENT_REVISION_CREATED" else None)
     experiment.refresh_from_db()
     notify_experiment(experiment, actor, experiment.assignees.all(),
                       f"Experiment assigned / Experimento asignado: {experiment.title}",
@@ -51,7 +57,9 @@ def instantiate_template(template, actor, *, title=None, assignees=None, links=N
 
 def canonical_content(blocks, links):
     return json.dumps(
-        {"blocks": blocks, "links": links},
+        {"blocks": blocks, "links": sorted(links, key=lambda link: (
+            link["entity_type"], str(link["entity_public_id"]), link["relation_type"],
+        ))},
         sort_keys=True,
         separators=(",", ":"),
         default=str,
@@ -60,6 +68,23 @@ def canonical_content(blocks, links):
 
 def content_checksum(blocks, links):
     return hashlib.sha256(canonical_content(blocks, links).encode("utf-8")).hexdigest()
+
+
+def content_change_counts(old_blocks, old_links, blocks, links):
+    def counts(before, after, key):
+        old = {key(row): row for row in before}
+        new = {key(row): row for row in after}
+        return {
+            "added": len(new.keys() - old.keys()), "removed": len(old.keys() - new.keys()),
+            "modified": sum(old[key] != new[key] for key in old.keys() & new.keys()),
+        }
+
+    return {
+        **{f"blocks_{key}": count for key, count in counts(old_blocks, blocks, lambda row: row["position"]).items()},
+        **{f"links_{key}": count for key, count in counts(old_links, links, lambda row: (
+            row["entity_type"], str(row["entity_public_id"]), row["relation_type"],
+        )).items()},
+    }
 
 
 def validate_blocks(blocks):
@@ -256,30 +281,26 @@ def compare_revisions(before, after):
 def create_revision(
     *, experiment, actor, blocks, links, reason="Autosave", restored_from=None,
     preserve_link_versions=False, expected_revision_public_id=None,
+    audit_action="EXPERIMENT_REVISION_CREATED", audit_details=None,
 ):
     experiment = Experiment.objects.select_for_update().select_related("notebook").get(pk=experiment.pk)
     if not user_can_notebook(actor, experiment.notebook, "write"):
         raise PermissionDenied("You cannot edit this experiment.")
     if experiment.status in {Experiment.STATUS_REVIEWED, Experiment.STATUS_LOCKED}:
         raise ValidationError({"status": "Reviewed or locked experiments cannot be modified; clone the experiment instead."})
-    if expected_revision_public_id is not None:
-        current_public_id = str(experiment.current_revision.public_id) if experiment.current_revision else ""
-        if str(expected_revision_public_id) != current_public_id:
-            raise ValidationError(
-                {
-                    "revision": (
-                        "This experiment has a newer revision. Refresh it before saving so another "
-                        "collaborator's work is not overwritten."
-                    )
-                }
-            )
-
     cleaned_blocks = validate_blocks(blocks)
+    previous = experiment.current_revision
+    old_blocks, old_links = [], []
     existing_versions = {}
-    if experiment.current_revision_id:
+    if previous:
+        old_blocks = list(previous.blocks.values("position", "block_type", "data"))
+        old_links = [{
+            "entity_type": link.entity_type, "entity_public_id": str(link.entity_public_id),
+            "relation_type": link.relation_type, "label": link.label, "version": link.version,
+        } for link in previous.links.all()]
         existing_versions = {
-            (link.entity_type, str(link.entity_public_id), link.relation_type): link.version
-            for link in experiment.current_revision.links.all()
+            (link["entity_type"], link["entity_public_id"], link["relation_type"]): link["version"]
+            for link in old_links
         }
     cleaned_links = resolve_links(
         links,
@@ -292,10 +313,21 @@ def create_revision(
         {**link, "entity_public_id": str(link["entity_public_id"])} for link in cleaned_links
     ]
     checksum = content_checksum(cleaned_blocks, checksum_links)
-    if experiment.current_revision and experiment.current_revision.checksum == checksum:
-        return experiment.current_revision, False
+    # Older immutable checksums included the supplied link order, whereas the
+    # API returns links sorted by type/label. Compare the actual content so a
+    # reload or a retry cannot manufacture another revision. Keep stored hashes.
+    if previous and content_checksum(old_blocks, old_links) == checksum:
+        previous.experiment = experiment
+        return previous, False
 
-    previous = experiment.current_revision
+    if expected_revision_public_id is not None:
+        current_public_id = str(previous.public_id) if previous else ""
+        if str(expected_revision_public_id) != current_public_id:
+            raise ValidationError({"revision": (
+                "This experiment has a newer revision. Refresh it before saving so another "
+                "collaborator's work is not overwritten."
+            )})
+
     number = (previous.number if previous else 0) + 1
     revision = ExperimentRevision.objects.create(
         experiment=experiment,
@@ -338,12 +370,13 @@ def create_revision(
     experiment.refresh_from_db()
     record_audit_event(
         entity=experiment,
-        action="EXPERIMENT_REVISION_CREATED",
+        action=audit_action,
         actor=actor,
         reason=reason,
         before={"revision": previous.number if previous else None},
         after={"revision": revision.number, "checksum": checksum},
-        details={"block_count": len(cleaned_blocks), "link_count": len(cleaned_links)},
+        details={**(audit_details or {}), "block_count": len(cleaned_blocks), "link_count": len(cleaned_links),
+                 "changes": content_change_counts(old_blocks, old_links, cleaned_blocks, checksum_links)},
     )
     return revision, True
 

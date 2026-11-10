@@ -14,6 +14,8 @@ import { apiGet } from "../api";
 import ConfirmedOperationCard from "../components/ConfirmedOperationCard";
 import useConfirmedOperation from "../hooks/useConfirmedOperation";
 import PrintTemplates from "../components/PrintTemplates";
+import { useLanguage } from "../i18n";
+import { auditAction, auditDescription, auditRecord } from "../utils/auditDisplay";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -118,6 +120,7 @@ function getProjectCode(value) {
 }
 
 export default function Reports() {
+  const { t, language } = useLanguage();
   const [projects, setProjects] = useState([]);
   const [samples, setSamples] = useState([]);
   const [workItems, setWorkItems] = useState([]);
@@ -524,6 +527,7 @@ export default function Reports() {
   }
 
   function exportAuditActivity() {
+    const displayCell = value => /^[\s\ufeff]*[=+\-@]/.test(value) ? `'${value}` : value;
     const rows = filteredEvents.map((event) => ({
       id: event.id,
       timestamp: event.timestamp || event.created_at,
@@ -532,6 +536,10 @@ export default function Reports() {
       entity_id: event.entity_id,
       action: event.action,
       payload: JSON.stringify(event.payload || {}),
+      entity_label: displayCell(auditRecord(event, t)),
+      action_label: displayCell(auditAction(event, t)),
+      description: displayCell(auditDescription(event, t, language)),
+      source: event.source || "",
     }));
 
     downloadCsv(
@@ -544,6 +552,7 @@ export default function Reports() {
         "entity_id",
         "action",
         "payload",
+        "entity_label", "action_label", "description", "source",
       ],
       rows
     );
@@ -977,9 +986,10 @@ export default function Reports() {
                       <tr key={event.id}>
                         <td>{formatTimestamp(event.timestamp || event.created_at)}</td>
                         <td>{event.actor_username || event.actor || "-"}</td>
-                        <td>{event.entity_type}</td>
+                        <td translate="no">{auditRecord(event, t)}</td>
                         <td>
-                          <Badge bg="secondary">{event.action}</Badge>
+                          <Badge bg="secondary">{auditAction(event, t)}</Badge>
+                          <div className="small text-muted mt-1" translate="no">{auditDescription(event, t, language)}</div>
                         </td>
                       </tr>
                     ))}
