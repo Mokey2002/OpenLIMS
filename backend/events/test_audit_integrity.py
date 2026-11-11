@@ -26,6 +26,7 @@ class AuditIntegrityTests(APITestCase):
         self.admin = get_user_model().objects.create_superuser("audit-admin", password=None)
         self.client.force_authenticate(self.admin)
         self.project = Project.objects.create(code="AUDIT", name="Audit regression")
+        self.project.members.add(self.admin)
         self.sample = Sample.objects.create(sample_id="AUDIT-001", project=self.project, created_by=self.admin)
         self.analysis = AnalysisDefinition.objects.create(code="AUDIT", name="Audit analysis", created_by=self.admin)
         self.procedure = ProcedureDefinition.objects.create(

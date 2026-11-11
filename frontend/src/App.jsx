@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { createBrowserRouter, createRoutesFromElements, Navigate, Route, RouterProvider } from "react-router-dom";
 import { lazyPage } from "./utils/lazyPage";
 import Layout from "./Layout";
 import Login from "./pages/Login";
@@ -56,11 +56,8 @@ function RouteFallback() {
   return <div className="py-5 text-center text-muted">Loading…</div>;
 }
 
-export default function App() {
-  return (
-    <BrowserRouter>
-      <Suspense fallback={<RouteFallback />}>
-        <Routes>
+const router = createBrowserRouter(createRoutesFromElements(
+        <>
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/set-password" element={<SetPassword />} />
@@ -109,8 +106,9 @@ export default function App() {
             <Route path="mass-spec/:id" element={<MassSpecDetail />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
-  );
+        </>
+));
+
+export default function App() {
+  return <Suspense fallback={<RouteFallback />}><RouterProvider router={router} /></Suspense>;
 }

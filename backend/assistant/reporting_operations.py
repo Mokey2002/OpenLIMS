@@ -595,7 +595,7 @@ def _investigation_pdf_bytes(result, filters):
     return stream.getvalue()
 
 
-def _pdf_bytes(rows, filters, project):
+def _pdf_bytes(rows, filters, project, *, user=None):
     if filters.get("print_template"):
         from settings_app.print_rendering import render_report
         return render_report(rows, filters, filters["print_template"])
@@ -610,9 +610,9 @@ def _pdf_bytes(rows, filters, project):
         Spacer(1, 12),
     ]
     if project:
-        samples = Sample.objects.filter(project=project)
-        work = WorkItem.objects.filter(sample__project=project)
-        results = Result.objects.filter(work_item__sample__project=project)
+        samples = get_sample_access_queryset(Sample.objects.filter(project=project), user)
+        work = WorkItem.objects.filter(sample__in=samples)
+        results = Result.objects.filter(work_item__sample__in=samples)
         summary = [
             ["Metric", "Value"],
             ["Samples", samples.count()],
@@ -727,7 +727,7 @@ def execute_compliance_report(action):
             extension = "csv"
             content_type = "text/csv"
         else:
-            content = _pdf_bytes(rows, filters, project)
+            content = _pdf_bytes(rows, filters, project, user=action.requested_by)
             kind = GeneratedArtifact.KIND_REPORT_PDF
             extension = "pdf"
             content_type = "application/pdf"

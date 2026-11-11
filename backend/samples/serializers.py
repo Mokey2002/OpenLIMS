@@ -280,6 +280,13 @@ class SampleBatchSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 class SingleSampleAttachmentSerializer(serializers.ModelSerializer):
+    def validate_sample(self, sample):
+        from .access import user_can_access_sample
+        request = self.context.get("request")
+        if request and not user_can_access_sample(request.user, sample, for_write=True):
+            raise serializers.ValidationError("Choose an accessible sample for which you have attachment permissions.")
+        return sample
+
     filename = serializers.SerializerMethodField()
     uploaded_by_username = serializers.SerializerMethodField()
 

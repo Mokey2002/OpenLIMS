@@ -668,7 +668,7 @@ class BackendPermissionTests(APITestCase):
         self.assertIn(assigned.id, ids)
         self.assertIn(unassigned.id, ids)
 
-    def test_viewer_sees_only_samples_in_assigned_projects(self):
+    def test_viewer_sees_assigned_project_samples_and_samples_without_projects(self):
         other_project = Project.objects.create(
             code="PRJ-OTHER",
             name="Other Project",
@@ -696,10 +696,10 @@ class BackendPermissionTests(APITestCase):
         ids = {item["id"] for item in response.data["results"]}
 
         self.assertIn(assigned.id, ids)
-        self.assertNotIn(unassigned.id, ids)
+        self.assertIn(unassigned.id, ids)
         self.assertNotIn(other_sample.id, ids)
 
-    def test_tech_sees_assigned_project_samples_and_own_unassigned_samples(self):
+    def test_tech_sees_assigned_project_samples_and_all_samples_without_projects(self):
         other_project = Project.objects.create(
             code="PRJ-OTHER-TECH",
             name="Other Tech Project",
@@ -735,7 +735,7 @@ class BackendPermissionTests(APITestCase):
 
         self.assertIn(assigned.id, ids)
         self.assertIn(own_unassigned.id, ids)
-        self.assertNotIn(other_unassigned.id, ids)
+        self.assertIn(other_unassigned.id, ids)
         self.assertNotIn(other_project_sample.id, ids)
 
     def test_tech_created_unassigned_sample_is_visible_to_that_tech(self):

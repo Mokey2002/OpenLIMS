@@ -153,7 +153,7 @@ class AuditAccessTests(APITestCase):
                 self.assertNotIn(row.pk, self.ids())
                 self.assertEqual(self.client.get(f"/api/events/{row.pk}/").status_code, 404)
 
-    def test_linked_project_sample_access_and_unassigned_creator_rules_are_retained(self):
+    def test_linked_project_and_completely_unassigned_samples_are_visible(self):
         sample = self.entities["denied"]["Sample"]
         sample.linked_projects.add(self.project)
         self.assertIn(self.denied["Sample"].pk, self.ids())
@@ -163,9 +163,10 @@ class AuditAccessTests(APITestCase):
         own_event = self.event("Sample", own, "UNASSIGNED_OWN")
         other_event = self.event("Sample", other, "UNASSIGNED_OTHER")
         self.assertIn(own_event.pk, self.ids())
-        self.assertNotIn(other_event.pk, self.ids())
+        self.assertIn(other_event.pk, self.ids())
         self.client.force_authenticate(self.viewer)
-        self.assertNotIn(own_event.pk, self.ids())
+        self.assertIn(own_event.pk, self.ids())
+        self.assertIn(other_event.pk, self.ids())
 
     def test_private_notebooks_require_notebook_access_not_just_project_membership(self):
         notebook = Notebook.objects.create(name="Private scientific notes", owner=self.other)
@@ -217,7 +218,9 @@ class AuditAccessTests(APITestCase):
                 for kind in ["UnknownModule", "Sample", "User", "SystemSettings"]]
         self.assertFalse({row.pk for row in rows} & self.ids())
         self.client.force_authenticate(self.admin)
-        self.assertTrue({row.pk for row in rows} <= self.ids())
+        visible = self.ids()
+        self.assertTrue({row.pk for row in rows if row.entity_type != "Sample"} <= visible)
+        self.assertNotIn(next(row.pk for row in rows if row.entity_type == "Sample"), visible)
 
     def test_assistant_privacy_remains_an_additional_boundary(self):
         action = AssistantAction.objects.create(
@@ -256,7 +259,9 @@ class AuditAccessTests(APITestCase):
         settings.save()
         self.assertIn(row.pk, self.ids())
 
-    def test_admins_keep_the_full_log_and_exports_remain_admin_only(self):
+    def test_admin_project_members_see_the_full_project_log_and_exports_remain_admin_only(self):
+        self.project.members.add(self.admin)
+        self.private.members.add(self.admin)
         self.client.force_authenticate(self.admin)
         self.assertEqual(len(self.ids()), len(self.allowed) + len(self.denied))
         exported = self.client.get("/api/events/export-json/")

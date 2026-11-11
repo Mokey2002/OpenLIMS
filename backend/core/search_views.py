@@ -99,8 +99,8 @@ class GlobalSearchView(APIView):
             )
         )
 
-        if not user_is_admin:
-            samples = samples.filter(project_id__in=allowed_project_ids)
+        from samples.access import get_sample_access_queryset
+        samples = get_sample_access_queryset(samples, user)
 
         # --------------------------------------------------
         # Projects

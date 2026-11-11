@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.75.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.76.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,19 @@
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.76.0** | Notebook draft recovery, personal table views and consistent project/no-project sample visibility. | [Recovery, table and visibility guide](docs/recovery-personal-tables-sample-access-v0760.md) |
 | **v0.75.0** | Highlighted before/after changes and notebook text, plus requester-only failure/stall alerts with checkpoints and recovery controls. | [Comparison and alert guide](docs/comparisons-and-job-alerts-v0750.md) |
 | **v0.74.0** | Reviewed responsibility handovers, membership removal and permanent session revocation in one audited offboarding workflow. | [Offboarding guide](docs/coordinated-offboarding-v0740.md) |
-| **v0.73.2** | One initial assistant draft revision, repeat-safe notebook saves and readable audit actions, names and revision changes. | [Audit clarity guide](docs/audit-clarity-v0732.md) |
+
+### v0.76.0 — Recoverable notebook edits and personal table views
+
+Notebook entry edits now keep an account/experiment recovery copy in the current browser tab before autosave. Failed saves preserve open edits; reopening offers a before/after review and explicit restore. Newer server revisions require acknowledgement, and saving still checks the current revision. Navigation warns about unsaved work. Saves run in order so edits made during a slow request are retained. Recovery copies never grant notebook access or create scientific revisions by themselves.
+
+Samples, Work Queue and Inventory tables remember search, filters, sorting, visible columns, page size and page position per account in this browser. Returning from a sample restores the list view. Reset controls remain available when filters produce no rows. Bulk selections are not persisted, and display settings never change permissions.
+
+Sample visibility follows one rule for all active accounts, including administrators: membership in the primary or a linked project, or no primary/linked projects at all. Creating or being assigned a private sample does not bypass membership. Lists, direct reads, search, exports, related work, shared entities, assistant queries and sample-related audit/report reads use the scope. Write permissions remain separate. Administrators can join projects using existing membership controls.
+
+Version/footer **v0.76.0**. No new migration or dependency; rebuild/recreate API, worker and web together and retain the assistant monitor. Both READMEs contain only **v0.76.0, v0.75.0 and v0.74.0** release updates. See the [recovery, table and visibility guide](docs/recovery-personal-tables-sample-access-v0760.md) for browser-storage limits, behavior, access rules and validation.
 
 ### v0.75.0 — Visual comparisons and assistant job alerts
 
@@ -43,7 +53,7 @@ Audit Events now offers **Compare changes** with named before/after values and *
 
 Assistant failures now send one requester-only in-app alert containing the last recorded checkpoint and recovery guidance. A separate **assistant-monitor** process also detects jobs waiting too long or no longer reporting progress, even when Celery workers are unavailable. Queue warnings preserve the job's actual state. Alerts support read-only status refresh and direct job/receipt review; they do not restart jobs. Worker callbacks and monitor reconciliation share repeat-safe completion handling, and normal progress/completion resolves old stall alerts. Existing native assistant failure notices are consolidated to avoid duplicates.
 
-Version/footer **v0.75.0**. Includes **assistant.0011_job_progress_and_alerts** and the queue index in **assistant.0012_job_health_queue_index**. Rebuild/recreate **api, worker, web and assistant-monitor** together; production Compose starts the monitor after the migrated API is healthy. Default warnings are **10 minutes queued** and **30 minutes without a progress checkpoint**, configurable through environment settings. No new dependency, SMTP setup or historical-data rewrite. Both READMEs retain only **v0.75.0, v0.74.0 and v0.73.2**. See the [comparison and job-alert guide](docs/comparisons-and-job-alerts-v0750.md) for behavior, limits, API examples and deployment.
+Version/footer **v0.75.0**. Includes **assistant.0011_job_progress_and_alerts** and the queue index in **assistant.0012_job_health_queue_index**. Rebuild/recreate **api, worker, web and assistant-monitor** together; production Compose starts the monitor after the migrated API is healthy. Default warnings are **10 minutes queued** and **30 minutes without a progress checkpoint**, configurable through environment settings. No new dependency, SMTP setup or historical-data rewrite. Both READMEs retain only the three releases listed above. See the [comparison and job-alert guide](docs/comparisons-and-job-alerts-v0750.md) for behavior, limits, API examples and deployment.
 
 ### v0.74.0 — Coordinated account offboarding
 
@@ -55,23 +65,13 @@ Old browser, bearer API, refresh, Django admin and WebSocket sessions remain inv
 
 Version/footer **v0.74.0**. Includes migration **core.0005_coordinated_offboarding**. Rebuild/recreate API, worker and frontend/web together and apply migrations before serving traffic; production Compose runs migrations during API startup. No new dependency. The latest three release updates are listed above. See the [offboarding guide](docs/coordinated-offboarding-v0740.md) for supported responsibilities, API examples, session behavior and verification.
 
-### v0.73.2 — Readable activity and fewer redundant assistant records
-
-Assistant notebook drafts now save their template, workflow and recorded run evidence together in one initial revision and one draft-creation audit event. Synchronous assistant actions write one completion receipt with the confirmation timestamp. Queued jobs retain their separate confirmation and later completion records.
-
-Notebook saves compare actual content with links in a stable order, including revisions written by older versions. Unchanged saves and identical retries reuse the current revision, while different edits from an outdated revision still require a refresh. A recovered save updates notebook history once and uses the server's actual status. Historical audit entries, immutable revisions and stored checksums are preserved; genuine edits remain separate events.
-
-Dashboard activity, Audit Events and Reports show record names, readable action descriptions and revision changes such as **Revision 3 → 4; 1 block modified**. Raw IDs, action codes and payloads remain available under **Technical details** in Audit Events. Audit exports append readable fields. Snapshot labels require no extra record lookups, and current access restrictions still apply. Clearing filters now reloads the audit list and older responses cannot replace newer results.
-
-Version/footer **v0.73.2**. This release includes the administrator safeguards from v0.73.1. Rebuild/recreate API, worker and frontend/web from the same checkout; installations upgrading from v0.73.0 must apply **core.0004_user_administration_lock**, which production API startup applies automatically. No new dependency or audit-history backfill. The latest three release updates are listed above. See the [audit clarity guide](docs/audit-clarity-v0732.md) for causes, examples and verification.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.75.0`.
+**Current development version:** `v0.76.0`.
 
 ## Personal favorites
 
@@ -600,7 +600,7 @@ OpenLIMS uses role-based permissions and project-scoped access control. Browser 
 
 | Role | Purpose |
 |---|---|
-| **Admin / Director** | Full system access |
+| **Admin / Director** | System administration; project-scoped sample access |
 | **Tech** | Lab workflow access for assigned projects |
 | **Viewer** | Read-only access |
 
@@ -608,11 +608,12 @@ OpenLIMS uses role-based permissions and project-scoped access control. Browser 
 
 | Role | Sample Visibility | Modify Samples |
 |---|---|---|
-| **Admin / Director** | All samples, including unassigned samples | Yes |
-| **Tech** | Samples in assigned projects, linked project samples, and unassigned samples they created | Only samples they have modification rights for |
-| **Viewer** | Samples in assigned or linked projects | No |
+| **Admin / Director** | Member primary/linked projects, plus samples with no projects | Yes, for visible samples |
+| **Tech** | Member primary/linked projects, plus samples with no projects | Primary-project membership or ownership of an unassigned sample, subject to visibility |
+| **Viewer / QC reviewer** | Member primary/linked projects, plus samples with no projects | No general sample editing; QC permissions remain separate |
 
 Linked-project access allows a user to see a sample, but it does not automatically grant edit or import permissions.
+No-project visibility requires both an empty primary project and no linked projects. Creatorship and assignment do not override project restrictions. Administrators can manage memberships, but must join a project to view its samples. Personal table preferences never expand this scope.
 
 ---
 

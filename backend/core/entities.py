@@ -199,7 +199,7 @@ def get_accessible_entity_queryset(entity_type, user, *, write=False):
 
     if not user or not user.is_authenticated:
         return queryset.none()
-    if is_admin(user):
+    if is_admin(user) and normalized not in {"sample", "pipeline_run", "work_item", "result"}:
         return queryset
     # Notebook collaborators and workflow requesters can have explicit write
     # capabilities without holding a laboratory-wide technician role. Resolve
@@ -219,7 +219,7 @@ def get_accessible_entity_queryset(entity_type, user, *, write=False):
         if write:
             allowed = allowed.filter(requester=user)
         return queryset.filter(pk__in=allowed)
-    if write and not is_tech(user):
+    if write and not (is_tech(user) or is_admin(user)):
         return queryset.none()
     if definition.global_scope:
         return queryset
@@ -228,12 +228,12 @@ def get_accessible_entity_queryset(entity_type, user, *, write=False):
     if normalized == "sample":
         from samples.access import get_sample_access_queryset
 
-        return get_sample_access_queryset(queryset, user)
+        return get_sample_access_queryset(queryset, user, for_write=write)
     if normalized in {"pipeline_run", "work_item", "result"}:
         from samples.access import get_sample_access_queryset
         from samples.models import Sample
 
-        allowed_samples = get_sample_access_queryset(Sample.objects.all(), user)
+        allowed_samples = get_sample_access_queryset(Sample.objects.all(), user, for_write=write)
         if normalized == "pipeline_run":
             return queryset.filter(sample__in=allowed_samples)
         if normalized == "work_item":
@@ -266,10 +266,9 @@ def get_accessible_entity_queryset(entity_type, user, *, write=False):
 def user_can_access_entity(user, obj, *, write=False):
     if not user or not user.is_authenticated:
         return False
-    if is_admin(user):
-        return True
-
     entity_type = get_entity_type_for_object(obj)
+    if is_admin(user) and entity_type not in {"sample", "pipeline_run", "work_item", "result"}:
+        return True
     definition = _definitions()[entity_type]
     if entity_type in {"notebook", "experiment"}:
         from notebook.permissions import user_can_notebook
@@ -282,7 +281,7 @@ def user_can_access_entity(user, obj, *, write=False):
         if write:
             return obj.requester_id == user.pk or user_can_operate_request(user, obj)
         return workflow_requests_for_user(user).filter(pk=obj.pk).exists()
-    if write and not is_tech(user):
+    if write and not (is_tech(user) or is_admin(user)):
         return False
     if definition.global_scope:
         return True
@@ -291,6 +290,10 @@ def user_can_access_entity(user, obj, *, write=False):
 
         checker = user_can_modify_sample if write else user_can_access_sample
         return checker(user, obj)
+    if entity_type in {"pipeline_run", "work_item", "result"}:
+        sample = obj.work_item.sample if entity_type == "result" else obj.sample
+        from samples.access import user_can_access_sample, user_can_modify_sample
+        return (user_can_modify_sample if write else user_can_access_sample)(user, sample)
     if entity_type == "registry_record":
         from registry.services import registry_records_for_user, user_can_write_record
 

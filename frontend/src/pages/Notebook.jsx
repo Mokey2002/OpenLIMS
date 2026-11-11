@@ -1,9 +1,10 @@
 import RevisionComparison from "../components/ChangeComparison";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useBlocker } from "react-router-dom";
 import {
   Alert, Badge, Button, Card, Col, Form, Modal, Nav, Row, Spinner, Tab, Table,
 } from "react-bootstrap";
-import { apiDownload, apiGet, apiGetAll, apiPatch, apiPost, apiPostForm } from "../api";
+import { apiDownload, apiGet, apiGetAll, apiPatch, apiPost, apiPostForm, apiPostResponse } from "../api";
 import ExperimentWorkflow from "../components/notebook/ExperimentWorkflow";
 import TemplateDesigner from "../components/notebook/TemplateDesigner";
 import BlockEditor from "../components/notebook/BlockEditor";
@@ -11,6 +12,8 @@ import { BLOCK_CATALOG, newBlock } from "../components/notebook/blockTypes";
 import { useLanguage } from "../i18n";
 import "./Notebook.css";
 import { selectNotebookRecord } from "./notebookSelection";
+import DraftRecovery from "../components/notebook/DraftRecovery";
+import { draftContent, notebookDraftKey, readNotebookDraft, recoveryStorage, removeNotebookDraft, sameDraftContent, storeNotebookDraft } from "../utils/notebookRecovery";
 
 const EDITABLE_STATES = new Set(["DRAFT", "IN_PROGRESS"]);
 const STATUS_OPTIONS = ["DRAFT", "IN_PROGRESS", "COMPLETED", "REVIEWED", "LOCKED"];
@@ -143,6 +146,10 @@ export default function NotebookPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [saveState, setSaveState] = useState("");
+  const [recoveryDraft, setRecoveryDraft] = useState(null);
+  const [storageWarning, setStorageWarning] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [topTab, setTopTab] = useState("workspace");
   const [detailTab, setDetailTab] = useState("entry");
   const [notebookSearch, setNotebookSearch] = useState("");
@@ -170,22 +177,48 @@ export default function NotebookPage() {
   const dirtyRef = useRef(false);
   const editVersionRef = useRef(0);
   const linkTargetRequests = useRef(new Set());
+  const draftKeyRef = useRef(null);
+  const contentRef = useRef({ blocks: [], links: [] });
+  const saveChain = useRef(Promise.resolve(true));
+  const savedEditVersionRef = useRef(0);
+  const allowNavigationRef = useRef(false);
+  const blocker = useBlocker(() => dirtyRef.current && !allowNavigationRef.current);
+
+  useEffect(() => {
+    const beforeUnload = event => { if (dirtyRef.current) { event.preventDefault(); event.returnValue = ""; } };
+    const beforeLogout = event => {
+      if (dirtyRef.current && !window.confirm(language === "es" ? "Hay cambios sin guardar. ¿Salir de la cuenta de todos modos?" : "You have unsaved changes. Sign out anyway?")) event.preventDefault();
+      else allowNavigationRef.current = true;
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    window.addEventListener("openlims:before-logout", beforeLogout);
+    return () => { window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("openlims:before-logout", beforeLogout); };
+  }, [language]);
 
   function formatDate(value) {
     return value ? new Date(value).toLocaleString(locale) : "—";
   }
 
-  function adoptExperiment(experiment) {
+  function adoptExperiment(experiment, actor = me) {
     comparisonRequest.current?.abort();
     setComparisonLoading(false);
     setWorkflowEpoch(current => current + 1);
     selectionToken.current += 1;
     clearTimeout(autosaveTimer.current);
     dirtyRef.current = false;
+    setHasUnsavedChanges(false);
+    setSaveFailed(false);
     editVersionRef.current += 1;
+    savedEditVersionRef.current = editVersionRef.current;
     setSelected(experiment);
     setBlocks(withKeys(experiment?.current_revision_detail?.blocks || []));
     setLinks(revisionLinks(experiment?.current_revision_detail));
+    contentRef.current = draftContent(experiment?.current_revision_detail?.blocks || [], revisionLinks(experiment?.current_revision_detail));
+    draftKeyRef.current = experiment ? notebookDraftKey(actor?.id, experiment.public_id) : null;
+    const stored = readNotebookDraft(recoveryStorage(), draftKeyRef.current);
+    const alreadySaved = stored && sameDraftContent(stored, contentRef.current);
+    if (alreadySaved) removeNotebookDraft(recoveryStorage(), draftKeyRef.current);
+    setRecoveryDraft(alreadySaved ? null : stored);
     setExperimentMeta({ title: experiment?.title || "", assignees: experiment?.assignees || [] });
     revisionRef.current = experiment?.current_revision_detail?.public_id || "";
     setSaveState("");
@@ -265,7 +298,7 @@ export default function NotebookPage() {
       setSelectedNotebookId(targetNotebook?.id || null);
       setNotebookEditForm(targetNotebook ? notebookValues(targetNotebook) : null);
       setTemplateForm((current) => ({ ...current, notebook: targetNotebook?.permissions?.write ? String(targetNotebook.id) : "" }));
-      adoptExperiment(target);
+      adoptExperiment(target, meData);
       void loadAttachments(target);
     } catch (requestError) {
       if (auxiliaryToken === workspaceLoadToken.current) setError(requestError.message || String(requestError));
@@ -296,18 +329,32 @@ export default function NotebookPage() {
     if (!experiment?.permissions?.write || !EDITABLE_STATES.has(experiment.status)) return true;
     const token = selectionToken.current;
     const savedEditVersion = editVersionRef.current;
-    const expectedRevision = revisionRef.current;
     clearTimeout(autosaveTimer.current);
+    const run = async () => {
+    if (token !== selectionToken.current) return true;
+    if (savedEditVersion <= savedEditVersionRef.current) {
+      if (!dirtyRef.current) setSaveState("All changes saved");
+      return true;
+    }
+    const expectedRevision = revisionRef.current;
     setSaveState("Saving...");
     try {
-      const response = await apiPost(`/api/experiments/${experiment.id}/autosave/`, {
+      const result = await apiPostResponse(`/api/experiments/${experiment.id}/autosave/`, {
         blocks: serializableBlocks(nextBlocks), links: nextLinks, reason,
         expected_revision_public_id: expectedRevision,
       });
+      const response = await result.json().catch(() => ({}));
+      if (!result.ok) throw new Error(result.status === 409 || response.revision ? say("The saved experiment changed. Review the latest saved version before restoring your edits.", "El experimento guardado cambió. Revisa la última versión antes de restaurar tus cambios.") : say("Could not save your edits. Check your connection and access, then retry.", "No se pudieron guardar los cambios. Revisa la conexión y los permisos e inténtalo de nuevo."));
       if (token !== selectionToken.current || selected?.id !== experiment.id) return true;
       revisionRef.current = response.revision.public_id;
+      savedEditVersionRef.current = savedEditVersion;
       const hasNewerLocalChanges = editVersionRef.current !== savedEditVersion;
       dirtyRef.current = hasNewerLocalChanges;
+      setHasUnsavedChanges(hasNewerLocalChanges);
+      setSaveFailed(false);
+      if (hasNewerLocalChanges) {
+        setStorageWarning(!storeNotebookDraft(recoveryStorage(), draftKeyRef.current, contentRef.current, revisionRef.current));
+      } else removeNotebookDraft(recoveryStorage(), draftKeyRef.current);
       setSaveState(hasNewerLocalChanges ? "Unsaved changes" : response.created ? `Saved as r${response.revision.number}` : "All changes saved");
       setLinks((current) => current.map((link) => {
         const saved = response.revision.links.find((row) => row.entity_type === link.entity_type && String(row.entity_public_id) === String(link.public_id) && row.relation_type === link.relation_type);
@@ -328,16 +375,26 @@ export default function NotebookPage() {
       } : row));
       return true;
     } catch (requestError) {
-      setSaveState("Save failed — refresh required");
+      if (token !== selectionToken.current) return false;
+      setSaveState("Save failed — your edits are still open");
+      setSaveFailed(true);
       setError(requestError.message || String(requestError));
       return false;
     }
+    };
+    const pending = saveChain.current.catch(() => false).then(run);
+    saveChain.current = pending;
+    return pending;
   }
 
   function scheduleAutosave(nextBlocks, nextLinks) {
     if (!selected?.permissions?.write || !EDITABLE_STATES.has(selected.status)) return;
     dirtyRef.current = true;
+    setHasUnsavedChanges(true);
+    setSaveFailed(false);
     editVersionRef.current += 1;
+    contentRef.current = draftContent(nextBlocks, nextLinks);
+    setStorageWarning(!storeNotebookDraft(recoveryStorage(), draftKeyRef.current, contentRef.current, revisionRef.current));
     clearTimeout(autosaveTimer.current);
     setSaveState("Unsaved changes");
     const experiment = selected;
@@ -579,6 +636,31 @@ export default function NotebookPage() {
     await load(selected?.id, selectedNotebookId);
   }
 
+  function restoreRecovery() {
+    if (!recoveryDraft || !selected?.permissions?.write || !EDITABLE_STATES.has(selected.status)) return;
+    const recovered = draftContent(recoveryDraft.blocks, recoveryDraft.links);
+    setBlocks(withKeys(recovered.blocks)); setLinks(recovered.links);
+    contentRef.current = recovered;
+    dirtyRef.current = true; setHasUnsavedChanges(true);
+    editVersionRef.current += 1;
+    setStorageWarning(!storeNotebookDraft(recoveryStorage(), draftKeyRef.current, recovered, revisionRef.current));
+    setRecoveryDraft(null); setSaveFailed(false);
+    setSaveState(say("Recovered draft — review and save your changes", "Borrador recuperado: revisa y guarda tus cambios"));
+    setError("");
+  }
+
+  async function reviewLatestVersion() {
+    clearTimeout(autosaveTimer.current);
+    const token = selectionToken.current, version = editVersionRef.current;
+    try {
+      await saveChain.current;
+      const latest = await apiGet(`/api/experiments/${selected.id}/?compact=1`);
+      if (token !== selectionToken.current || version !== editVersionRef.current) return;
+      adoptExperiment(latest);
+      setError("");
+    } catch { setError(say("Could not load the latest experiment. Your open edits have been kept.", "No se pudo cargar la última versión. Se conservaron los cambios abiertos.")); }
+  }
+
   const selectedNotebook = useMemo(() => notebooks.find((row) => String(row.id) === String(selectedNotebookId)) || null, [notebooks, selectedNotebookId]);
   const notebookTemplates = useMemo(() => templates.filter((row) => String(row.notebook) === String(selectedNotebookId)), [templates, selectedNotebookId]);
   const notebookExperiments = useMemo(() => experiments.filter((row) => String(row.notebook) === String(selectedNotebookId)), [experiments, selectedNotebookId]);
@@ -590,7 +672,8 @@ export default function NotebookPage() {
     return matchesText && matchesStatus && mine;
   }), [notebookExperiments, experimentSearch, statusFilter, myWorkOnly, me]);
   const targetOptions = linkTargets[linkForm.entity_type] || [];
-  const editable = Boolean(selected?.permissions?.write && EDITABLE_STATES.has(selected.status));
+  const canEdit = Boolean(selected?.permissions?.write && EDITABLE_STATES.has(selected.status));
+  const editable = canEdit && !recoveryDraft;
   const openComments = experiments.reduce((count, experiment) => (
     count + (experiment.open_comment_count ?? (experiment.comments || []).filter((comment) => !comment.resolved).length)
   ), 0);
@@ -607,6 +690,10 @@ export default function NotebookPage() {
     </div>
     {error && <Alert variant="danger" dismissible onClose={() => setError("")}>{error}</Alert>}
     {message && <Alert variant="success" dismissible onClose={() => setMessage("")}>{message}</Alert>}
+    {storageWarning && <Alert variant="warning">{say("Browser recovery storage is unavailable or full. Keep this page open until your edits are saved to the server.", "El almacenamiento de recuperación no está disponible o está lleno. Mantén la página abierta hasta guardar los cambios en el servidor.")}</Alert>}
+    {recoveryDraft && selected && <DraftRecovery key={`${selected.id}-${recoveryDraft.savedAt}`} draft={recoveryDraft} current={selected} canRestore={canEdit} onRestore={restoreRecovery} onDiscard={() => { removeNotebookDraft(recoveryStorage(), draftKeyRef.current); setRecoveryDraft(null); }} />}
+    {saveFailed && hasUnsavedChanges && <div className="d-flex flex-wrap gap-2 mb-3"><Button variant="primary" onClick={() => saveContent(blocks, links, "Retry notebook save")}>{say("Retry saving edits", "Reintentar guardar cambios")}</Button><Button variant="outline-secondary" onClick={reviewLatestVersion}>{say("Review latest saved version", "Revisar la última versión guardada")}</Button></div>}
+    <Modal show={blocker.state === "blocked"} onHide={() => blocker.reset?.()} centered><Modal.Header closeButton><Modal.Title>{say("Leave with unsaved changes?", "¿Salir con cambios sin guardar?")}</Modal.Title></Modal.Header><Modal.Body>{say("Your latest edits have not been saved to the server. Stay to save them, or leave and review the recovery copy when you return to this experiment in this tab.", "Los últimos cambios no se guardaron en el servidor. Quédate para guardarlos o vuelve a revisar la copia de recuperación en esta pestaña.")}{storageWarning && <p className="text-danger mt-2">{say("A browser recovery copy could not be stored. Leaving may lose your edits.", "No se pudo guardar una copia de recuperación. Si sales, puedes perder los cambios.")}</p>}</Modal.Body><Modal.Footer><Button variant="secondary" onClick={() => blocker.reset?.()}>{say("Stay on this page", "Permanecer en esta página")}</Button><Button variant="outline-danger" onClick={() => { allowNavigationRef.current = true; clearTimeout(autosaveTimer.current); blocker.proceed?.(); }}>{say("Leave page", "Salir de la página")}</Button></Modal.Footer></Modal>
 
     <details className="notebook-guide mb-4" open={notebooks.length === 0 ? true : undefined}>
       <summary>{say("How does the notebook work?", "¿Cómo funciona la bitácora?")}</summary>

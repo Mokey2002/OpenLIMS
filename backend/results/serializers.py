@@ -1,9 +1,24 @@
 from rest_framework import serializers
 
 from .models import WorkItem, Result, SampleAttachment
+from samples.access import user_can_access_sample
+
+
+class SampleOperationValidation:
+    def validate_sample(self, sample):
+        request = self.context.get("request")
+        if request and not user_can_access_sample(request.user, sample, for_write=True):
+            raise serializers.ValidationError("Choose an accessible sample for which you have work permissions.")
+        return sample
 
 
 class ResultSerializer(serializers.ModelSerializer):
+    def validate_work_item(self, work_item):
+        request = self.context.get("request")
+        if request and not user_can_access_sample(request.user, work_item.sample, for_write=True):
+            raise serializers.ValidationError("Choose an accessible work item for which you have result permissions.")
+        return work_item
+
     work_item_name = serializers.CharField(source="work_item.name", read_only=True)
     sample_id = serializers.IntegerField(source="work_item.sample_id", read_only=True)
     sample_code = serializers.CharField(
@@ -168,7 +183,20 @@ class ResultSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class WorkItemSerializer(serializers.ModelSerializer):
+class WorkItemSerializer(SampleOperationValidation, serializers.ModelSerializer):
+    can_update = serializers.SerializerMethodField()
+
+    def get_can_update(self, obj) -> bool:
+        request = self.context.get("request")
+        if request is None:
+            return False
+        if hasattr(obj, "_can_update") and getattr(obj, "_can_update_user", None) == request.user.pk:
+            return bool(obj._can_update)
+        from core.permissions import is_admin, is_tech
+        if not (is_admin(request.user) or is_tech(request.user)):
+            return False
+        return user_can_access_sample(request.user, obj.sample, for_write=True)
+
     def validate_assigned_to(self, value):
         if value is not None and not value.is_active:
             raise serializers.ValidationError("Choose an active assignee.")
@@ -268,6 +296,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "pipeline_step_position",
             "name",
             "work_type",
+            "can_update",
             "analysis_code",
             "required_fields",
             "status",
@@ -321,7 +350,7 @@ class WorkItemQCReviewSerializer(serializers.Serializer):
     )
 
 
-class SampleAttachmentSerializer(serializers.ModelSerializer):
+class SampleAttachmentSerializer(SampleOperationValidation, serializers.ModelSerializer):
     filename = serializers.SerializerMethodField()
 
     class Meta:

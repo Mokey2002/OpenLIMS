@@ -6,6 +6,7 @@ from rest_framework.exceptions import ValidationError
 from events.models import Event
 from notifications.models import Notification
 from samples.models import Sample
+from projects.models import Project
 from results.models import WorkItem
 from .automation import validate_automation
 from .models import PipelineTemplateStep, PipelineRun
@@ -16,7 +17,7 @@ from .test_step_forms import WorkflowFormTests
 class WorkflowActionTests(TestCase):
     setUp = WorkflowFormTests.setUp
 
-    def new_run(self, config, conditional=False):
+    def new_run(self, config, conditional=False, project=None):
         target = self.template_step
         if conditional:
             target = PipelineTemplateStep.objects.create(
@@ -25,7 +26,7 @@ class WorkflowActionTests(TestCase):
                     "source_position": 1, "result_key": "concentration", "operator": "LT", "value": 10})
         target.automation = config
         target.save()
-        run = start_pipeline(sample=Sample.objects.create(sample_id="S2"), template=self.template, actor=self.admin)
+        run = start_pipeline(sample=Sample.objects.create(sample_id="S2", project=project), template=self.template, actor=self.admin)
         return run, run.steps.get(position=target.position)
 
     def config(self):
@@ -69,7 +70,9 @@ class WorkflowActionTests(TestCase):
     def test_inaccessible_assignee_and_recipient_are_skipped_and_audited(self):
         user = get_user_model().objects.create_user(username="outsider")
         user.groups.add(Group.objects.get_or_create(name="tech")[0])
-        run, step = self.new_run({"assigned_to": user.pk, "notify_assignee": True, "notify_users": [user.pk]})
+        project = Project.objects.create(code="PRIVATE-ACTIONS", name="Private workflow")
+        project.members.add(self.admin)
+        run, step = self.new_run({"assigned_to": user.pk, "notify_assignee": True, "notify_users": [user.pk]}, project=project)
         self.assertIsNone(step.work_item.assigned_to_id)
         self.assertFalse(Notification.objects.exists())
         event = Event.objects.get(action="WORKFLOW_ACTIONS_APPLIED", entity_id=str(run.pk))

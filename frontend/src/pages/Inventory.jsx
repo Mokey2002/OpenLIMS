@@ -7,12 +7,56 @@ import {
   Col,
   Form,
   Row,
-  Table,
 } from "react-bootstrap";
 import { apiGet, apiGetAll, apiPost } from "../api";
 import { canWrite, isAdmin } from "../authz";
 import ConfirmedOperationCard from "../components/ConfirmedOperationCard";
 import useConfirmedOperation from "../hooks/useConfirmedOperation";
+import PersonalTable from "../components/PersonalTable";
+import useRememberedTableScroll from "../hooks/useRememberedTableScroll";
+
+const ITEM_COLUMNS = [
+  { key: "code", label: "Code", value: row => row.code, optional: false },
+  { key: "name", label: "Name", value: row => row.name },
+  { key: "available", label: "Available", value: row => Number(row.available_quantity), render: row => `${row.available_quantity} ${row.default_unit}` },
+  { key: "reorder", label: "Reorder", value: row => Number(row.reorder_level), render: row => `${row.reorder_level} ${row.default_unit}` },
+];
+const LOT_COLUMNS = [
+  { key: "lot", label: "Lot", value: row => row.lot_code, optional: false },
+  { key: "item", label: "Item", value: row => row.item_code },
+  { key: "available", label: "Available", value: row => Number(row.available_quantity), render: row => `${row.available_quantity} ${row.unit}` },
+  { key: "expires", label: "Expires", value: row => row.expiration_date },
+  { key: "status", label: "Status", value: row => row.status, render: row => <Badge bg={row.status === "ACTIVE" ? "success" : row.status === "EXPIRED" ? "danger" : "secondary"}>{row.status}</Badge> },
+  { key: "container", label: "Container", value: row => row.container_code || row.location_name },
+];
+const RESERVATION_COLUMNS = [
+  { key: "reservation", label: "Reservation", value: row => row.id, render: row => `#${row.id}`, optional: false },
+  { key: "material", label: "Item / lot", value: row => `${row.item_code} / ${row.lot_code}` },
+  { key: "project", label: "Project", value: row => row.project_code },
+  { key: "quantity", label: "Quantity", value: row => Number(row.quantity), render: row => `${row.quantity} ${row.unit}` },
+  { key: "status", label: "Status", value: row => row.status },
+  { key: "creator", label: "Created by", value: row => row.created_by_username },
+];
+const LOCATION_COLUMNS = [
+  { key: "code", label: "Code", value: row => row.code || row.id },
+  { key: "path", label: "Path", value: row => row.path || row.name, optional: false },
+  { key: "kind", label: "Kind", value: row => row.kind },
+];
+const CONTAINER_COLUMNS = [
+  { key: "id", label: "ID", value: row => row.id },
+  { key: "code", label: "Container ID", value: row => row.container_id, optional: false },
+  { key: "kind", label: "Kind", value: row => row.kind },
+  { key: "path", label: "Storage path", value: row => row.path || row.location_name || row.location },
+];
+const LEDGER_COLUMNS = [
+  { key: "time", label: "Time", value: row => row.occurred_at, render: row => new Date(row.occurred_at).toLocaleString(), optional: false },
+  { key: "lot", label: "Lot", value: row => row.lot_code },
+  { key: "operation", label: "Operation", value: row => row.operation },
+  { key: "change", label: "Change", value: row => Number(row.amount), render: row => `${row.amount} ${row.unit}` },
+  { key: "quantities", label: "Before → after", value: row => `${row.before_quantity} → ${row.after_quantity}` },
+  { key: "actor", label: "Actor", value: row => row.actor_username },
+  { key: "reason", label: "Reason", value: row => row.reason },
+];
 
 export default function Inventory() {
   const [locations, setLocations] = useState([]);
@@ -25,6 +69,7 @@ export default function Inventory() {
   const [cycleCounts, setCycleCounts] = useState([]);
   const [projects, setProjects] = useState([]);
   const [me, setMe] = useState(null);
+  useRememberedTableScroll(me?.id, "inventory", Boolean(me));
   const [err, setErr] = useState("");
   const [locationName, setLocationName] = useState("");
   const [locationCode, setLocationCode] = useState("");
@@ -331,17 +376,13 @@ export default function Inventory() {
         <Col lg={5}>
           <Card className="app-card h-100"><Card.Body>
             <h5 className="section-title">Reagents and supplies</h5>
-            {inventoryItems.length === 0 ? <div className="empty-state">No inventory items yet.</div> : (
-              <Table responsive hover className="app-table"><thead><tr><th>Code</th><th>Name</th><th>Available</th><th>Reorder</th></tr></thead><tbody>{inventoryItems.map((item) => <tr key={item.id}><td>{item.code}</td><td>{item.name}</td><td>{item.available_quantity} {item.default_unit}</td><td>{item.reorder_level} {item.default_unit}</td></tr>)}</tbody></Table>
-            )}
+            <PersonalTable userId={me?.id} name="inventory-items" title="Reagents and supplies" rows={inventoryItems} columns={ITEM_COLUMNS} emptyMessage="No inventory items yet." />
           </Card.Body></Card>
         </Col>
         <Col lg={7}>
           <Card className="app-card h-100"><Card.Body>
             <h5 className="section-title">Lots</h5>
-            {inventoryLots.length === 0 ? <div className="empty-state">No inventory lots yet.</div> : (
-              <Table responsive hover className="app-table"><thead><tr><th>Lot</th><th>Item</th><th>Available</th><th>Expires</th><th>Status</th><th>Container</th></tr></thead><tbody>{inventoryLots.map((lot) => <tr key={lot.id}><td>{lot.lot_code}</td><td>{lot.item_code}</td><td>{lot.available_quantity} {lot.unit}</td><td>{lot.expiration_date || "—"}</td><td><Badge bg={lot.status === "ACTIVE" ? "success" : lot.status === "EXPIRED" ? "danger" : "secondary"}>{lot.status}</Badge></td><td>{lot.container_code || lot.location_name || "—"}</td></tr>)}</tbody></Table>
-            )}
+            <PersonalTable userId={me?.id} name="inventory-lots" title="Lots" rows={inventoryLots} columns={LOT_COLUMNS} emptyMessage="No inventory lots yet." />
           </Card.Body></Card>
         </Col>
       </Row>
@@ -349,18 +390,16 @@ export default function Inventory() {
       <Card className="app-card mt-4">
         <Card.Body>
           <h5 className="section-title">Reservations</h5>
-          {reservations.length === 0 ? <div className="empty-state">No accessible reservations.</div> : (
-            <Table responsive hover className="app-table"><thead><tr><th>Reservation</th><th>Item / lot</th><th>Project</th><th>Quantity</th><th>Status</th><th>Created by</th></tr></thead><tbody>{reservations.map((reservation) => <tr key={reservation.id}><td>#{reservation.id}</td><td>{reservation.item_code} / {reservation.lot_code}</td><td>{reservation.project_code}</td><td>{reservation.quantity} {reservation.unit}</td><td>{reservation.status}</td><td>{reservation.created_by_username || "—"}</td></tr>)}</tbody></Table>
-          )}
+          <PersonalTable userId={me?.id} name="inventory-reservations" title="Reservations" rows={reservations} columns={RESERVATION_COLUMNS} emptyMessage="No reservations yet." />
         </Card.Body>
       </Card>
 
       <Row className="g-4 mt-1">
-        <Col lg={5}><Card className="app-card h-100"><Card.Body><h5 className="section-title">Hierarchical lab spaces</h5>{locations.length === 0 ? <div className="empty-state">No locations yet.</div> : <Table responsive hover className="app-table"><thead><tr><th>Code</th><th>Path</th><th>Kind</th></tr></thead><tbody>{locations.map((location) => <tr key={location.id}><td>{location.code || location.id}</td><td>{location.path || location.name}</td><td>{location.kind}</td></tr>)}</tbody></Table>}</Card.Body></Card></Col>
-        <Col lg={7}><Card className="app-card h-100"><Card.Body><h5 className="section-title">Containers</h5>{containers.length === 0 ? <div className="empty-state">No containers yet.</div> : <Table responsive hover className="app-table"><thead><tr><th>ID</th><th>Container ID</th><th>Kind</th><th>Storage path</th></tr></thead><tbody>{containers.map((container) => <tr key={container.id}><td>{container.id}</td><td>{container.container_id}</td><td>{container.kind}</td><td>{container.path || container.location_name || container.location || "—"}</td></tr>)}</tbody></Table>}</Card.Body></Card></Col>
+        <Col lg={5}><Card className="app-card h-100"><Card.Body><h5 className="section-title">Hierarchical lab spaces</h5><PersonalTable userId={me?.id} name="inventory-locations" title="Hierarchical lab spaces" rows={locations} columns={LOCATION_COLUMNS} emptyMessage="No locations yet." /></Card.Body></Card></Col>
+        <Col lg={7}><Card className="app-card h-100"><Card.Body><h5 className="section-title">Containers</h5><PersonalTable userId={me?.id} name="inventory-containers" title="Containers" rows={containers} columns={CONTAINER_COLUMNS} emptyMessage="No containers yet." /></Card.Body></Card></Col>
       </Row>
 
-      <Row className="g-4 mt-1"><Col lg={8}><Card className="app-card h-100"><Card.Body><h5 className="section-title">Immutable inventory ledger</h5>{transactions.length === 0 ? <div className="empty-state">No inventory transactions yet.</div> : <Table responsive hover className="app-table"><thead><tr><th>Time</th><th>Lot</th><th>Operation</th><th>Change</th><th>Before → after</th><th>Actor</th><th>Reason</th></tr></thead><tbody>{transactions.map((row) => <tr key={row.public_id}><td>{new Date(row.occurred_at).toLocaleString()}</td><td>{row.lot_code}</td><td>{row.operation}</td><td>{row.amount} {row.unit}</td><td>{row.before_quantity} → {row.after_quantity}</td><td>{row.actor_username}</td><td>{row.reason}</td></tr>)}</tbody></Table>}</Card.Body></Card></Col><Col lg={4}><Card className="app-card h-100"><Card.Body><div className="toolbar-row"><h5 className="section-title">Stock and expiration alerts</h5>{writable && <Button size="sm" variant="outline-dark" onClick={refreshAlerts}>Refresh</Button>}</div>{alerts.filter((row) => row.status === "OPEN").map((row) => <Alert variant={row.alert_type === "EXPIRATION" ? "warning" : "info"} key={row.public_id}>{row.message}</Alert>)}{alerts.filter((row) => row.status === "OPEN").length === 0 && <div className="empty-state">No open alerts.</div>}<h6 className="mt-4">Cycle counts</h6>{cycleCounts.map((count) => <div className="feed-item mb-2" key={count.public_id}><strong>{count.name}</strong><div className="feed-meta">{count.location_name} · {count.status} · {count.lines.length} lots</div></div>)}</Card.Body></Card></Col></Row>
+      <Row className="g-4 mt-1"><Col lg={8}><Card className="app-card h-100"><Card.Body><h5 className="section-title">Immutable inventory ledger</h5><PersonalTable userId={me?.id} name="inventory-ledger" title="Immutable inventory ledger" rows={transactions} columns={LEDGER_COLUMNS} emptyMessage="No inventory transactions yet." /></Card.Body></Card></Col><Col lg={4}><Card className="app-card h-100"><Card.Body><div className="toolbar-row"><h5 className="section-title">Stock and expiration alerts</h5>{writable && <Button size="sm" variant="outline-dark" onClick={refreshAlerts}>Refresh</Button>}</div>{alerts.filter((row) => row.status === "OPEN").map((row) => <Alert variant={row.alert_type === "EXPIRATION" ? "warning" : "info"} key={row.public_id}>{row.message}</Alert>)}{alerts.filter((row) => row.status === "OPEN").length === 0 && <div className="empty-state">No open alerts.</div>}<h6 className="mt-4">Cycle counts</h6>{cycleCounts.map((count) => <div className="feed-item mb-2" key={count.public_id}><strong>{count.name}</strong><div className="feed-meta">{count.location_name} · {count.status} · {count.lines.length} lots</div></div>)}</Card.Body></Card></Col></Row>
     </div>
   );
 }

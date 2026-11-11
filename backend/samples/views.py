@@ -186,6 +186,10 @@ class SampleViewSet(ModelViewSet):
             else:
                 queryset = queryset.filter(assigned_to_id=assigned_to)
 
+        ordering = self.request.query_params.get("ordering", "-created_at")
+        if ordering not in {"created_at", "-created_at", "sample_id", "-sample_id", "status", "-status"}:
+            raise ValidationError({"ordering": "Choose a supported sample sort order."})
+        queryset = queryset.order_by(ordering, "pk")
         return with_sample_modify_permission(get_sample_access_queryset(queryset, self.request.user), self.request.user)
 
     @action(detail=True, methods=["get"], url_path="history")
@@ -931,6 +935,7 @@ class SingleSampleAttachmentViewSet(ModelViewSet):
         allowed_samples = get_sample_access_queryset(
             Sample.objects.all(),
             self.request.user,
+            for_write=self.request.method not in {"GET", "HEAD", "OPTIONS"},
         )
 
         return queryset.filter(sample__in=allowed_samples)
@@ -938,7 +943,7 @@ class SingleSampleAttachmentViewSet(ModelViewSet):
     def perform_create(self, serializer):
         sample = serializer.validated_data.get("sample")
 
-        if not user_can_access_sample(self.request.user, sample):
+        if not user_can_access_sample(self.request.user, sample, for_write=True):
             raise ValidationError({
                 "sample": "You do not have access to attach files to this sample."
             })

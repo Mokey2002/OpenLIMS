@@ -106,8 +106,8 @@ def _record(item, proposed):
     }
 
 
-def _accessible_work(user):
-    samples = get_sample_access_queryset(Sample.objects.all(), user)
+def _accessible_work(user, *, for_write=False):
+    samples = get_sample_access_queryset(Sample.objects.all(), user, for_write=for_write)
     return WorkItem.objects.filter(sample__in=samples)
 
 
@@ -245,6 +245,7 @@ def _propose_create(message, user):
         get_sample_access_queryset(
             Sample.objects.filter(batch=batch).select_related("project"),
             user,
+            for_write=True,
         ).order_by("id")[: MAX_WORK_ITEMS + 1]
     )
     if len(samples) > MAX_WORK_ITEMS:
@@ -319,7 +320,7 @@ def _propose_assignment(message, user):
 
     work_type = _work_type(message) or "GENERAL"
     queryset = (
-        _accessible_work(user)
+        _accessible_work(user, for_write=True)
         .select_related("sample", "sample__project", "assigned_to")
         .filter(work_type=work_type, status__in=ACTIVE_STATUSES)
     )
@@ -447,7 +448,7 @@ def execute_workitem_operation(action):
             if not sample:
                 failed.append({"id": sample_id, "reason": "sample changed or left the frozen batch"})
                 continue
-            if not get_sample_access_queryset(Sample.objects.filter(id=sample.id), action.requested_by).exists():
+            if not get_sample_access_queryset(Sample.objects.filter(id=sample.id), action.requested_by, for_write=True).exists():
                 failed.append({"id": sample_id, "label": sample.sample_id, "reason": "project access denied"})
                 continue
             try:
@@ -503,7 +504,7 @@ def execute_workitem_operation(action):
             if any(key not in expected or expected[key] != current[key] for key in ("due_at", "sample_id", "project_id", "work_type")):
                 failed.append({"id": item_id, "label": f"Work #{item.id}", "reason": "work details changed or preview is outdated; generate a new preview"})
                 continue
-            if not _can_access_project(action.requested_by, item.sample.project):
+            if not _can_access_project(action.requested_by, item.sample.project) or not get_sample_access_queryset(Sample.objects.filter(pk=item.sample_id), action.requested_by, for_write=True).exists():
                 failed.append({"id": item_id, "reason": "project access denied"})
                 continue
             if item.sample.project and not (_is_admin(target) or item.sample.project.members.filter(id=target.id).exists()):

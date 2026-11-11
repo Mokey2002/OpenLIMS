@@ -27,6 +27,7 @@ class PerformanceV029Tests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.user)
         self.project = Project.objects.create(name="Performance Project", code="PERF")
+        self.project.members.add(self.user)
 
     def test_my_work_response_is_bounded_while_counts_cover_all_records(self):
         past_due = timezone.now() - timedelta(hours=1)

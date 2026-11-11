@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.75.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.76.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,19 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.76.0** | Recuperación de borradores, vistas personales de tablas y acceso coherente a muestras por proyecto o sin proyectos. | [Guía de recuperación, tablas y acceso](docs/recovery-personal-tables-sample-access-v0760.md) |
 | **v0.75.0** | Cambios anteriores/nuevos y texto de cuadernos resaltados; alertas de fallos o falta de progreso con recuperación para el solicitante. | [Guía de comparaciones y alertas](docs/comparisons-and-job-alerts-v0750.md) |
 | **v0.74.0** | Transferencia revisada de responsabilidades, eliminación de permisos y revocación permanente de sesiones en una baja coordinada y auditada. | [Guía de baja coordinada](docs/coordinated-offboarding-v0740.md) |
-| **v0.73.2** | Una revisión inicial por borrador del asistente, guardado sin duplicados y auditoría con nombres, acciones y cambios legibles. | [Guía de claridad de auditoría](docs/audit-clarity-v0732.md) |
+
+## v0.76.0 — Recuperación de borradores y vistas personales
+
+Los cambios de contenido y enlaces del cuaderno guardan una copia por cuenta/experimento en la pestaña actual antes del autoguardado. Un fallo conserva los cambios abiertos; al volver puedes comparar y restaurar. Si otra persona guardó una revisión nueva, debes revisarla y confirmar antes de restaurar. El servidor sigue comprobando la revisión actual. La navegación avisa de cambios pendientes y los guardados lentos se ejecutan en orden. Recuperar un borrador no concede permisos ni crea revisiones por sí solo.
+
+Muestras, Cola de trabajo e Inventario recuerdan búsquedas, filtros, orden, columnas, tamaño y posición de página por cuenta en este navegador. Al volver de una muestra se recupera la vista anterior. Puedes restablecer la vista incluso sin resultados. Las selecciones de acciones masivas no se conservan y estas preferencias no cambian permisos.
+
+Todas las cuentas activas, incluidos administradores, ven una muestra si pertenecen al proyecto principal o a uno vinculado, o si la muestra no tiene ningún proyecto. Ser creador o responsable no evita la restricción. Se aplica a listas, lectura directa, búsqueda, exportación, trabajo relacionado, entidades compartidas, consultas del asistente y auditoría/informes de muestras. Los permisos de edición siguen separados. Un administrador puede incorporarse a un proyecto mediante los controles de membresía existentes.
+
+Versión/pie **v0.76.0**. Sin migración ni dependencia nueva. Reconstruye/recrea API, worker y web juntos; conserva el monitor del asistente. Ambos README contienen solo **v0.76.0, v0.75.0 y v0.74.0**. Consulta la [guía de recuperación, tablas y acceso](docs/recovery-personal-tables-sample-access-v0760.md) para alcance, límites del navegador, permisos y pruebas.
 
 ## v0.75.0 — Comparaciones visuales y alertas del asistente
 
@@ -24,7 +34,7 @@ Auditoría ofrece **Comparar cambios** con valores anteriores y nuevos legibles 
 
 Los fallos del asistente generan una alerta interna para el solicitante con el último paso registrado y opciones de recuperación. Un proceso **assistant-monitor** separado detecta trabajos que llevan demasiado tiempo esperando o sin informar progreso, incluso si los workers de Celery no están disponibles. Las advertencias conservan el estado real del trabajo. Puedes actualizar el estado y abrir el trabajo o comprobante sin reiniciarlo. Las devoluciones repetidas y el monitor reutilizan el mismo resultado; el progreso y la finalización resuelven alertas antiguas. Se consolidan los avisos de fallo existentes para evitar duplicados.
 
-Versión/pie **v0.75.0**. Incluye **assistant.0011_job_progress_and_alerts** y el índice de cola **assistant.0012_job_health_queue_index**. Reconstruye/recrea **api, worker, web y assistant-monitor** juntos; Compose de producción inicia el monitor cuando la API migrada está disponible. Valores predeterminados: **10 minutos en cola** y **30 minutos sin un nuevo punto de progreso**, configurables por entorno. Sin dependencia nueva, SMTP ni modificación del historial. Ambos README conservan solo **v0.75.0, v0.74.0 y v0.73.2**. Consulta la [guía de comparaciones y alertas](docs/comparisons-and-job-alerts-v0750.md) para alcance, API, límites y despliegue.
+Versión/pie **v0.75.0**. Incluye **assistant.0011_job_progress_and_alerts** y el índice de cola **assistant.0012_job_health_queue_index**. Reconstruye/recrea **api, worker, web y assistant-monitor** juntos; Compose de producción inicia el monitor cuando la API migrada está disponible. Valores predeterminados: **10 minutos en cola** y **30 minutos sin un nuevo punto de progreso**, configurables por entorno. Sin dependencia nueva, SMTP ni modificación del historial. Ambos README conservan solo las tres versiones indicadas arriba. Consulta la [guía de comparaciones y alertas](docs/comparisons-and-job-alerts-v0750.md) para alcance, API, límites y despliegue.
 
 ## v0.74.0 — Baja coordinada de usuarios
 
@@ -35,16 +45,6 @@ La vista previa temporal muestra transferencias, eliminación de membresías y p
 Las sesiones antiguas del navegador, API, renovación, Django admin y WebSocket no vuelven a funcionar al reactivar la cuenta. La autoría, el trabajo completado, las aprobaciones y las revisiones científicas conservan su atribución. Los trabajos en cola, solicitudes de workflow y reservas de instrumentos se muestran para revisión y conservan sus controles existentes. No se permite dar de baja la propia cuenta ni al último administrador activo.
 
 Versión/pie **v0.74.0**. Incluye **core.0005_coordinated_offboarding**. Reconstruye/recrea API, worker y frontend/web juntos y aplica las migraciones antes de servir tráfico; Compose de producción las ejecuta al iniciar la API. Sin dependencia nueva. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de baja coordinada](docs/coordinated-offboarding-v0740.md) para alcance, API, sesiones y pruebas.
-
-## v0.73.2 — Actividad legible y menos registros redundantes
-
-Los borradores del asistente guardan la plantilla, el flujo y las evidencias del instrumento en una sola revisión inicial y un evento de creación. Las acciones síncronas generan un resultado de finalización con la fecha de confirmación. Los trabajos en cola conservan sus eventos separados de confirmación y finalización posterior.
-
-El guardado compara el contenido real con enlaces en orden estable, incluso para revisiones antiguas. Un guardado sin cambios o un reintento idéntico reutiliza la revisión actual; un cambio diferente con una revisión desactualizada sigue exigiendo actualizar. Recuperar una respuesta perdida actualiza el historial una vez y muestra el estado real del servidor. Se conservan los eventos históricos, revisiones inmutables y sumas de comprobación; las ediciones reales siguen teniendo eventos separados.
-
-El panel, Auditoría e Informes muestran nombres, acciones legibles y cambios como **Revisión 3 → 4; 1 bloque modificado**. Los IDs, códigos y datos originales están disponibles en **Detalles técnicos** de Auditoría. Las exportaciones añaden campos legibles. Las etiquetas usan instantáneas ya autorizadas, sin consultas extra de registros ni ampliar permisos. Limpiar filtros actualiza la lista y una respuesta antigua ya no reemplaza los resultados nuevos.
-
-Versión/pie **v0.73.2**. También incluye la protección administrativa de v0.73.1. Reconstruye/recrea API, worker y frontend/web con el mismo código. Si actualizas desde v0.73.0, aplica **core.0004_user_administration_lock**; el inicio de la API de producción lo hace automáticamente. Sin dependencia nueva ni modificación del historial. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de claridad de auditoría](docs/audit-clarity-v0732.md) para causas, ejemplos y pruebas.
 
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
@@ -689,7 +689,7 @@ Los permisos se aplican por rol y proyecto.
 
 | Rol | Alcance general |
 |---|---|
-| **Director / administrador** | Acceso completo al sistema y configuración |
+| **Director / administrador** | Administración y configuración; muestras según membresía de proyecto |
 | **Técnico** | Operación de laboratorio en los proyectos asignados |
 | **Observador** | Acceso de solo lectura a los registros permitidos |
 

@@ -23,7 +23,7 @@ class AuditComparisonTests(TestCase):
         cls.reader = User.objects.create_user("comparison-reader", password=None)
         cls.reader.groups.add(Group.objects.get_or_create(name="tech")[0])
         cls.project = Project.objects.create(code="DIFF", name="Protein comparisons")
-        cls.project.members.add(cls.reader)
+        cls.project.members.add(cls.reader, cls.admin)
         cls.first = Location.objects.create(name="Freezer A", kind="FREEZER")
         cls.second = Location.objects.create(name="Freezer B", kind="FREEZER")
         cls.box_a = Container.objects.create(container_id="BOX-A", kind="BOX", location=cls.first)
