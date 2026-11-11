@@ -1,0 +1,5 @@
+.change-comparison { table-layout: fixed; }
+.change-comparison th, .change-comparison td { width: 50%; vertical-align: top; }
+.change-value { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 26rem; overflow: auto; }
+.change-value del { background: #fce6e8; color: #861b27; text-decoration: line-through; }
+.change-value ins { background: #e0f3e6; color: #14532d; text-decoration: underline; text-underline-offset: 3px; }

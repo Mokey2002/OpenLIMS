@@ -161,7 +161,8 @@ def run_blast_job_task(job_id):
             result_updates={"job_status": job.status},
         )
 
-        if actor:
+        from assistant.job_health import assistant_managed_job
+        if actor and not assistant_managed_job("RUN_BLAST", "blast_job_id", job.pk):
             Notification.objects.get_or_create(
                 user=actor,
                 title=f"BLAST failed: {job.name}",

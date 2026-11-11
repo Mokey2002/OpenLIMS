@@ -249,7 +249,7 @@ export default function Alignments() {
 
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedSequenceIds, setSelectedSequenceIds] = useState([]);
-  const [selectedJobId, setSelectedJobId] = useState("");
+  const [selectedJobId, setSelectedJobId] = useState(() => new URLSearchParams(window.location.search).get("job") || "");
 
   const [alignmentName, setAlignmentName] = useState(
     "OpenLIMS Clustal Omega Alignment"
@@ -290,6 +290,9 @@ export default function Alignments() {
       const projectList = projectsData.results || projectsData || [];
       const sequenceList = sequencesData.results || sequencesData || [];
       const jobList = jobsData.results || jobsData || [];
+      if (selectedJobId && !jobList.some(job => String(job.id) === String(selectedJobId))) {
+        jobList.unshift(await apiGet(`/api/alignment-jobs/${encodeURIComponent(selectedJobId)}/`));
+      }
 
       setMe(meData);
       setProjects(projectList);

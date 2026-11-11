@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.74.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.75.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,17 @@
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.75.0** | Highlighted before/after changes and notebook text, plus requester-only failure/stall alerts with checkpoints and recovery controls. | [Comparison and alert guide](docs/comparisons-and-job-alerts-v0750.md) |
 | **v0.74.0** | Reviewed responsibility handovers, membership removal and permanent session revocation in one audited offboarding workflow. | [Offboarding guide](docs/coordinated-offboarding-v0740.md) |
 | **v0.73.2** | One initial assistant draft revision, repeat-safe notebook saves and readable audit actions, names and revision changes. | [Audit clarity guide](docs/audit-clarity-v0732.md) |
-| **v0.73.1** | Protect the last active administrator across user management, Django admin and migration rollback, including concurrent changes. | [Administrator safety guide](docs/administrator-safety-v0731.md) |
+
+### v0.75.0 — Visual comparisons and assistant job alerts
+
+Audit Events now offers **Compare changes** with named before/after values and **Compare revision text** for exact notebook revisions. Notebook **History → Compare** uses the same word highlighting: removed text is struck through, added text is underlined, and linked-record changes remain visible. Historical names come from recorded snapshots; missing legacy names are identified explicitly. Full values and identifiers remain under Technical details, and comparisons respect current access permissions without changing scientific history.
+
+Assistant failures now send one requester-only in-app alert containing the last recorded checkpoint and recovery guidance. A separate **assistant-monitor** process also detects jobs waiting too long or no longer reporting progress, even when Celery workers are unavailable. Queue warnings preserve the job's actual state. Alerts support read-only status refresh and direct job/receipt review; they do not restart jobs. Worker callbacks and monitor reconciliation share repeat-safe completion handling, and normal progress/completion resolves old stall alerts. Existing native assistant failure notices are consolidated to avoid duplicates.
+
+Version/footer **v0.75.0**. Includes **assistant.0011_job_progress_and_alerts** and the queue index in **assistant.0012_job_health_queue_index**. Rebuild/recreate **api, worker, web and assistant-monitor** together; production Compose starts the monitor after the migrated API is healthy. Default warnings are **10 minutes queued** and **30 minutes without a progress checkpoint**, configurable through environment settings. No new dependency, SMTP setup or historical-data rewrite. Both READMEs retain only **v0.75.0, v0.74.0 and v0.73.2**. See the [comparison and job-alert guide](docs/comparisons-and-job-alerts-v0750.md) for behavior, limits, API examples and deployment.
 
 ### v0.74.0 — Coordinated account offboarding
 
@@ -45,7 +53,7 @@ The expiring preview lists responsibility transfers, project and notebook access
 
 Old browser, bearer API, refresh, Django admin and WebSocket sessions remain invalid after later account reactivation. Historical authors, completed work, approvals and scientific revisions retain their original attribution. Queued jobs, submitted workflow requests and instrument bookings are listed for review and continue under their existing controls. Self-offboarding and removal of the last active administrator are blocked.
 
-Version/footer **v0.74.0**. Includes migration **core.0005_coordinated_offboarding**. Rebuild/recreate API, worker and frontend/web together and apply migrations before serving traffic; production Compose runs migrations during API startup. No new dependency. Both READMEs retain only **v0.74.0, v0.73.2 and v0.73.1**. See the [offboarding guide](docs/coordinated-offboarding-v0740.md) for supported responsibilities, API examples, session behavior and verification.
+Version/footer **v0.74.0**. Includes migration **core.0005_coordinated_offboarding**. Rebuild/recreate API, worker and frontend/web together and apply migrations before serving traffic; production Compose runs migrations during API startup. No new dependency. The latest three release updates are listed above. See the [offboarding guide](docs/coordinated-offboarding-v0740.md) for supported responsibilities, API examples, session behavior and verification.
 
 ### v0.73.2 — Readable activity and fewer redundant assistant records
 
@@ -57,21 +65,13 @@ Dashboard activity, Audit Events and Reports show record names, readable action 
 
 Version/footer **v0.73.2**. This release includes the administrator safeguards from v0.73.1. Rebuild/recreate API, worker and frontend/web from the same checkout; installations upgrading from v0.73.0 must apply **core.0004_user_administration_lock**, which production API startup applies automatically. No new dependency or audit-history backfill. The latest three release updates are listed above. See the [audit clarity guide](docs/audit-clarity-v0732.md) for causes, examples and verification.
 
-### v0.73.1 — Keep an active administrator
-
-OpenLIMS now blocks deleting, disabling or demoting the last active administrator. Active Django superusers and active members of the `admin` group count; inactive accounts and staff-only accounts do not. Profile edits remain available, and normal administrator handovers are allowed when another active administrator remains.
-
-The Users page marks the protected account and disables its unsafe controls. Stale pages receive a clear conflict message and refresh their account list. The same safeguard covers Django user/group administration, bulk deletion, renaming/removing the `admin` group, and migration rollback that would delete an administrator or restore old access. Account mutations share a transaction lock so concurrent requests cannot remove the remaining administrators together. API updates/deletions commit with their audit event, and waiting requests recheck the actor's current access.
-
-Version/footer **v0.73.1**. Includes migration **core.0004_user_administration_lock**. Rebuild/recreate API and frontend/web and apply migrations before serving requests; production Compose applies them during API startup. No new dependency. The latest three release updates are listed above. See the [administrator safety guide](docs/administrator-safety-v0731.md) for handovers, supported paths and checks.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.74.0`.
+**Current development version:** `v0.75.0`.
 
 ## Personal favorites
 
@@ -824,7 +824,7 @@ For editing source code with live reload, use this alternative **instead of** th
 
 ```bash
 cp deploy/.env.example deploy/.env
-docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.yml up -d --build db redis api worker
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.yml up -d --build db redis api worker assistant-monitor
 ```
 
 The development API runs migrations automatically. Once it is running, create an administrator:
@@ -959,7 +959,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.74.0**.
+`frontend/src/version.js` file. The current application version is **v0.75.0**.
 
 Footer source:
 

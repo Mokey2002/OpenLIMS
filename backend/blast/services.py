@@ -269,6 +269,9 @@ def run_blast_job(job, actor=None):
             "updated_at",
         ]
     )
+    from assistant.job_health import record_action_progress
+    record_action_progress(action_type="RUN_BLAST", result_key="blast_job_id", result_id=job.pk,
+                           current_step="Running BLAST search", last_completed_step="Query FASTA prepared")
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:

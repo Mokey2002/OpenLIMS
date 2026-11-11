@@ -212,6 +212,12 @@ def validate_prepared(job, user):
 def process_prepared_job(job_id, expected_action_id=None):
     from .tasks import process_rows
     from assistant.lifecycle import finish_queued_action
+    from assistant.job_health import record_action_progress
+    queued = ImportJob.objects.filter(pk=job_id).values_list("summary", flat=True).first() or {}
+    queued_action = queued.get("queued_by_action_id")
+    if queued_action and (expected_action_id is None or str(expected_action_id) == queued_action):
+        record_action_progress(action_type="QUEUE_IMPORT", action_id=queued_action,
+                              current_step="Validating and importing in one transaction", last_completed_step="Worker received confirmed import")
     attempt = None
     try:
         with transaction.atomic():

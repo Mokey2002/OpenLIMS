@@ -59,6 +59,13 @@ def sample_audit_state(sample):
         "container_id": sample.container_id,
         "batch_id": sample.batch_id,
         "assigned_to_id": sample.assigned_to_id,
+        "labels": {
+            "project_id": sample.project.code if sample.project else None,
+            "container_id": sample.container.container_id if sample.container else None,
+            "batch_id": sample.batch.code if sample.batch else None,
+            "assigned_to_id": sample.assigned_to.username if sample.assigned_to else None,
+            "location": sample.container.location.name if sample.container else None,
+        },
     }
 
 
@@ -108,9 +115,11 @@ def create_sample_event(sample, action, actor, before, after, changed_fields, ex
         "sample_code": sample.sample_id,
         "actor_id": actor.id if actor and actor.is_authenticated else None,
         "actor_username": actor.username if actor and actor.is_authenticated else None,
-        "before": before,
-        "after": after,
-        "changed_fields": changed_fields,
+        "before": {key: value for key, value in before.items() if key != "labels"},
+        "after": {key: value for key, value in after.items() if key != "labels"},
+        "display_before": before.get("labels", {}),
+        "display_after": after.get("labels", {}),
+        "changed_fields": [field for field in changed_fields if field != "labels"],
     }
 
     if extra_payload:
@@ -353,7 +362,7 @@ class SampleViewSet(ModelViewSet):
 
         changed_fields = [
             key for key in before.keys()
-            if before[key] != after[key]
+            if key != "labels" and before[key] != after[key]
         ]
 
         if changed_fields:
@@ -1124,6 +1133,16 @@ class SampleCustodyEventViewSet(ReadOnlyModelViewSet):
                     "to_container_code": to_container.container_id if to_container else None,
                     "from_custodian": from_custodian.username if from_custodian else None,
                     "to_custodian": to_custodian.username if to_custodian else None,
+                    "before": {
+                        "location": from_container.location.name if from_container else None,
+                        "container": from_container.container_id if from_container else None,
+                        "custodian": from_custodian.username if from_custodian else None,
+                    },
+                    "after": {
+                        "location": to_container.location.name if to_container else None,
+                        "container": to_container.container_id if to_container else None,
+                        "custodian": to_custodian.username if to_custodian else None,
+                    },
                     "reason": custody_event.reason,
                 },
             )

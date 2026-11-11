@@ -7,6 +7,8 @@ from django.utils.dateparse import parse_datetime
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import NotFound
+from uuid import UUID
 
 from core.permissions import (
     IsAdminOnly,
@@ -33,6 +35,31 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     serializer_class = EventSerializer
+
+    @action(detail=True, methods=["get"])
+    def comparison(self, request, pk=None):
+        from notebook.models import Experiment
+        from notebook.permissions import user_can_notebook
+        from notebook.services import compare_revisions
+        from .comparison import can_compare_revision, field_changes, mapping
+        event = self.get_object()
+        comparison = None
+        if can_compare_revision(event):
+            try:
+                identifier = UUID(str(event.entity_id))
+                experiment = Experiment.objects.filter(public_id=identifier).first()
+            except ValueError:
+                experiment = Experiment.objects.filter(pk=int(event.entity_id)).first() if str(event.entity_id).isdigit() else None
+            if not experiment or not user_can_notebook(request.user, experiment.notebook, "read"):
+                raise NotFound("The recorded revision comparison is no longer available.")
+            payload = mapping(event.payload)
+            old_number = mapping(payload.get("before")).get("revision")
+            after = experiment.revisions.filter(number=payload["after"]["revision"]).first()
+            before = experiment.revisions.filter(number=old_number).first() if type(old_number) is int else None
+            if not after or (old_number is not None and not before):
+                raise NotFound("The recorded revision comparison is no longer available.")
+            comparison = compare_revisions(before, after)
+        return Response({"field_changes": field_changes(event), "revision_comparison": comparison})
 
     def get_permissions(self):
         if self.action in ["export_csv", "export_json"]:

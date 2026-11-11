@@ -63,6 +63,7 @@ from assistant.views import (
     AssistantActionCancelView,
     AssistantActionConfirmView,
     AssistantActionDetailView,
+    AssistantJobHealthView,
     AssistantChatView,
     AssistantFeedbackView,
     AssistantMetricsView,
@@ -216,6 +217,7 @@ router.register(
 )
 
 urlpatterns = router.urls + [
+    path("assistant/jobs/<uuid:action_id>/", AssistantJobHealthView.as_view(), name="assistant-job-health"),
     path("sample-status-policy/", SampleStatusPolicyView.as_view(), name="sample-status-policy"),
     path("onboarding/", OnboardingView.as_view(), name="onboarding"),
     path("ui-settings/", PublicUISettingsView.as_view(), name="public-ui-settings"),

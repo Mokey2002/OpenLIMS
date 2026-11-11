@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Alert, Badge, Button, Table } from "react-bootstrap";
 import { apiDownload } from "../api";
 import AssistantImportReceipt from "./AssistantImportReceipt";
+import AssistantJobStatus from "./AssistantJobStatus";
 
 function displayValue(value) {
   if (value === null || value === undefined || value === "") return "—";
@@ -27,10 +28,11 @@ export default function AssistantActionPreview({ action, onActionUpdate, onPrepa
   const validationErrors = preview.validation_errors || [];
   const failures = result.failed || [];
 
-  if (!preview.operation && !result.operation) return null;
+  if (!preview.operation && !result.operation && !["QUEUED", "FAILED"].includes(action?.status)) return null;
 
   return (
     <div className="mt-3">
+      <AssistantJobStatus action={action} onActionUpdate={onActionUpdate} />
       {preview.operation && (
         <>
           <div className="fw-semibold mb-2">{preview.title || "Exact preview"}</div>

@@ -14,6 +14,7 @@ import { apiDownload, apiGet } from "../api";
 import { isAdmin } from "../authz";
 import { useLanguage } from "../i18n";
 import { auditAction, auditDescription, auditReason, auditRecord, humanizeAudit } from "../utils/auditDisplay";
+import AuditChangeComparison from "../components/AuditChangeComparison";
 
 function formatTimestamp(ts) {
   if (!ts) return "-";
@@ -439,6 +440,7 @@ export default function Events() {
 
                     <td style={{ minWidth: "260px" }}>
                       <div className="small" translate="no">{auditDescription(event, t, language)}</div>
+                      <AuditChangeComparison event={event} />
                     </td>
 
                     <td style={{ minWidth: "160px" }}>

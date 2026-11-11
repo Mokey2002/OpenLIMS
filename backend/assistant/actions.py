@@ -44,7 +44,9 @@ class AssistantActionError(Exception):
 
 
 def serialize_action(action):
-    return {
+    from .job_health import action_health
+    health = action_health(action) if action.status in {"QUEUED", "FAILED", "COMPLETED"} else None
+    data = {
         "id": str(action.id),
         "type": action.action_type,
         "summary": action.summary,
@@ -58,7 +60,11 @@ def serialize_action(action):
         "preview": (action.payload or {}).get("preview") or {},
         "result": action.result,
         "error_message": action.error_message,
+        "health": health,
     }
+    if health is not None and not health["accessible"]:
+        data.update(preview={}, result={}, error_message="")
+    return data
 
 
 def _audit(action, event_action, payload=None):
@@ -75,6 +81,9 @@ def _audit(action, event_action, payload=None):
             **(payload or {}),
         },
     )
+    if action.status == "FAILED":
+        from .job_health import ensure_action_alert
+        ensure_action_alert(action, "FAILED")
 
 
 def propose_action(user, action_type, summary, payload):
@@ -470,6 +479,8 @@ def confirm_action(token, user):
                 )
 
             action.confirmed_at = timezone.now()
+            action.progress = {"current_step": "Applying confirmed operation", "last_completed_step": "Confirmation and permissions verified"}
+            action.last_progress_at = timezone.now()
             executor = EXECUTORS[action.action_type]
 
             try:
@@ -485,6 +496,7 @@ def confirm_action(token, user):
                     "confirmed_at",
                     "executed_at",
                     "updated_at",
+                    "progress", "last_progress_at",
                 ])
                 _audit(action, "ASSISTANT_ACTION_FAILED", {"error": str(exc)})
                 return action
@@ -492,6 +504,12 @@ def confirm_action(token, user):
             action.status = next_status
             action.result = result
             action.error_message = ""
+            if next_status == AssistantAction.STATUS_QUEUED:
+                action.progress = {"current_step": "Waiting for worker", "last_completed_step": "Confirmation saved"}
+                action.last_progress_at = timezone.now()
+            elif next_status == AssistantAction.STATUS_COMPLETED:
+                action.progress = {"current_step": "Completed", "last_completed_step": "Confirmed operation completed"}
+                action.last_progress_at = timezone.now()
             action.executed_at = timezone.now()
             action.save(update_fields=[
                 "status",
@@ -500,6 +518,7 @@ def confirm_action(token, user):
                 "confirmed_at",
                 "executed_at",
                 "updated_at",
+                "progress", "last_progress_at",
             ])
             # Synchronous actions confirm and complete in this transaction.
             # Record one receipt; queued work still records its confirmation

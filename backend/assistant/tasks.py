@@ -19,6 +19,11 @@ def generate_assistant_report(action_id):
         action = AssistantAction.objects.get(id=action_id)
     except AssistantAction.DoesNotExist:
         return
+    if action.status != AssistantAction.STATUS_QUEUED:
+        return
+    from .job_health import record_action_progress
+    from .lifecycle import finish_queued_action
+    record_action_progress(action_type="QUEUE_REPORT", action_id=action.pk, current_step="Compiling report", last_completed_step="Worker received report request")
 
     filters = action.payload.get("filters") or {}
     project_id = filters.get("project_id")
@@ -37,6 +42,9 @@ def generate_assistant_report(action_id):
         events = events.filter(payload__project_id=project_id)
 
     try:
+        from core.permissions import is_admin
+        if not action.requested_by.is_active or not is_admin(action.requested_by):
+            raise PermissionError("Current administrator access is required to generate this report.")
         report = {
             "report_type": action.payload.get("report_type", "OPERATIONS_SUMMARY"),
             "filters": filters,
@@ -54,36 +62,9 @@ def generate_assistant_report(action_id):
             "audit_event_count": events.count(),
         }
 
-        action.status = AssistantAction.STATUS_COMPLETED
-        action.result = {"report": report}
-        action.error_message = ""
-        action.save(update_fields=["status", "result", "error_message", "updated_at"])
-
-        Event.objects.create(
-            entity_type="AssistantAction",
-            entity_id=str(action.id),
-            action="ASSISTANT_ACTION_COMPLETED",
-            actor=action.requested_by,
-            payload={
-                "action_type": action.action_type,
-                "report_type": report["report_type"],
-            },
-        )
+        finish_queued_action(action_type="QUEUE_REPORT", action_id=action.pk, succeeded=True, result_updates={"report": report})
     except Exception as exc:
-        action.status = AssistantAction.STATUS_FAILED
-        action.error_message = str(exc)
-        action.save(update_fields=["status", "error_message", "updated_at"])
-
-        Event.objects.create(
-            entity_type="AssistantAction",
-            entity_id=str(action.id),
-            action="ASSISTANT_ACTION_FAILED",
-            actor=action.requested_by,
-            payload={
-                "action_type": action.action_type,
-                "error": str(exc),
-            },
-        )
+        finish_queued_action(action_type="QUEUE_REPORT", action_id=action.pk, succeeded=False, error_message=str(exc))
         raise
 
 

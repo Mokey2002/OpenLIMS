@@ -13,6 +13,7 @@ import { Link } from "react-router-dom";
 import { apiGetAll, apiPost } from "../api";
 import ConfirmedOperationCard from "../components/ConfirmedOperationCard";
 import useConfirmedOperation from "../hooks/useConfirmedOperation";
+import AssistantJobStatus from "../components/AssistantJobStatus";
 
 function formatTimestamp(value) {
   if (!value) return "—";
@@ -40,8 +41,8 @@ export default function Notifications() {
   async function load() {
     setErr("");
     try {
-      const [notificationRows, subscriptionRows, itemRows, sampleRows, blastRows, resultRows] =
-        await Promise.all([
+      const [notificationRows, ...optional] =
+        await Promise.allSettled([
           apiGetAll("/api/notifications/"),
           apiGetAll("/api/notification-subscriptions/"),
           apiGetAll("/api/inventory-items/"),
@@ -49,12 +50,10 @@ export default function Notifications() {
           apiGetAll("/api/blast-jobs/"),
           apiGetAll("/api/results/"),
         ]);
-      setNotifications(notificationRows);
-      setSubscriptions(subscriptionRows);
-      setItems(itemRows);
-      setSamples(sampleRows);
-      setBlastJobs(blastRows);
-      setResults(resultRows);
+      if (notificationRows.status === "rejected") throw notificationRows.reason;
+      setNotifications(notificationRows.value);
+      const values = optional.map(result => result.status === "fulfilled" ? result.value : []);
+      setSubscriptions(values[0]); setItems(values[1]); setSamples(values[2]); setBlastJobs(values[3]); setResults(values[4]);
     } catch (requestError) {
       setErr(requestError.message || String(requestError));
     }
@@ -258,6 +257,10 @@ export default function Notifications() {
                     </div>
                     <div className="feed-meta mb-2">{formatTimestamp(notification.created_at)}</div>
                     <div>{notification.message}</div>
+                    {notification.assistant_alert && (notification.assistant_alert.resolved_at
+                      ? <Badge bg="success" className="mt-2">Alert resolved</Badge>
+                      : <AssistantJobStatus actionId={notification.assistant_alert.action_id} autoRefresh={false}
+                        initial={{ id: notification.assistant_alert.action_id, status: notification.assistant_alert.status, health: notification.assistant_alert.snapshot }} />)}
                     {notification.link && <div className="mt-2"><Link to={notification.link}>Open</Link></div>}
                   </div>
                   {!notification.is_read && <Button variant="outline-dark" size="sm" onClick={() => markRead(notification.id)}>Mark read</Button>}
