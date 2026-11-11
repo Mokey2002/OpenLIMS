@@ -17,6 +17,15 @@ from .csv_utils import get_csv_dict_reader
 
 
 def broadcast_import_job_update(job, message):
+    from django.db import connection
+    from assistant.job_health import record_action_progress
+    # Atomic prepared imports must not hold an Action lock during their full
+    # data transaction: the independent stall monitor needs to inspect it.
+    if not (job.summary.get("assistant_upload") and connection.in_atomic_block):
+        record_action_progress(action_type="QUEUE_IMPORT", result_key="import_job_id", result_id=job.pk,
+            current_step="Importing rows" if job.status == "RUNNING" else job.status.capitalize(),
+            last_completed_step=f"{job.progress_current} of {job.progress_total} rows processed" if job.progress_current else "Worker received import",
+            current=job.progress_current, total=job.progress_total)
     progress_percent = 0
 
     if job.progress_total:
@@ -422,7 +431,8 @@ def process_import_job(job_id):
             result_updates={"job_status": job.status},
         )
 
-        if job.uploaded_by:
+        from assistant.job_health import assistant_managed_job
+        if job.uploaded_by and not assistant_managed_job("QUEUE_IMPORT", "import_job_id", job.pk):
             Notification.objects.create(
                 user=job.uploaded_by,
                 title="Import failed",

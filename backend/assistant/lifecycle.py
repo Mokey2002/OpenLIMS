@@ -1,15 +1,16 @@
-from django.db import transaction
+from django.utils import timezone
 
 from events.models import Event
 
 from .models import AssistantAction
+from .action_locking import locked_action
 
 
 def finish_queued_action(
     *,
     action_type,
-    result_key,
-    result_id,
+    result_key=None,
+    result_id=None,
     succeeded,
     error_message="",
     result_updates=None,
@@ -23,18 +24,15 @@ def finish_queued_action(
     lookup = {
         "action_type": action_type,
         "status": AssistantAction.STATUS_QUEUED,
-        f"result__{result_key}": result_id,
     }
     if action_id is not None:
         lookup["pk"] = action_id
+    elif result_key:
+        lookup[f"result__{result_key}"] = result_id
+    else:
+        raise ValueError("Completion requires an action or job identity.")
 
-    with transaction.atomic():
-        action = (
-            AssistantAction.objects.select_for_update()
-            .filter(**lookup)
-            .first()
-        )
-
+    with locked_action(lookup) as action:
         if action is None:
             return None
 
@@ -48,12 +46,17 @@ def finish_queued_action(
         )
         action.result = result
         action.error_message = "" if succeeded else str(error_message or "")
+        action.progress = {**(action.progress or {}), "current_step": "Completed" if succeeded else "Failed"}
+        if succeeded:
+            action.progress["last_completed_step"] = "Results saved"
+        action.last_progress_at = timezone.now()
         action.save(
             update_fields=[
                 "status",
                 "result",
                 "error_message",
                 "updated_at",
+                "progress", "last_progress_at",
             ]
         )
 
@@ -67,9 +70,10 @@ def finish_queued_action(
             "action_type": action.action_type,
             "summary": action.summary,
             "idempotency_key": str(action.idempotency_key),
-            result_key: result_id,
             "result": result,
         }
+        if result_key:
+            event_payload[result_key] = result_id
 
         if not succeeded:
             event_payload["error"] = action.error_message
@@ -81,5 +85,9 @@ def finish_queued_action(
             actor=action.requested_by,
             payload=event_payload,
         )
+        action.health_alerts.filter(kind="STALLED", resolved_at__isnull=True).update(resolved_at=action.last_progress_at)
+        if not succeeded:
+            from .job_health import ensure_action_alert
+            ensure_action_alert(action, "FAILED")
 
         return action

@@ -208,10 +208,10 @@ def revision_payload(revision):
 
 def compare_revisions(before, after):
     """Return a deterministic, UI-friendly comparison of two immutable revisions."""
-    if before.experiment_id != after.experiment_id:
+    if before is not None and before.experiment_id != after.experiment_id:
         raise ValidationError({"revision": "Both revisions must belong to the same experiment."})
 
-    before_payload = revision_payload(before)
+    before_payload = revision_payload(before) if before is not None else {"public_id": None, "number": 0, "checksum": None, "blocks": [], "links": []}
     after_payload = revision_payload(after)
     before_blocks = {block["position"]: block for block in before_payload["blocks"]}
     after_blocks = {block["position"]: block for block in after_payload["blocks"]}

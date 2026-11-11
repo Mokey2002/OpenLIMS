@@ -63,6 +63,9 @@ def run_clustal_omega_alignment(job, actor=None):
             "updated_at",
         ]
     )
+    from assistant.job_health import record_action_progress
+    record_action_progress(action_type="RUN_ALIGNMENT", result_key="alignment_job_id", result_id=job.pk,
+                           current_step="Running sequence alignment", last_completed_step="Alignment input FASTA prepared")
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:

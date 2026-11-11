@@ -182,14 +182,15 @@ class LabOperationTests(APITestCase):
         PipelineTemplateStep.objects.create(template=template, position=1, procedure=procedure)
         return start_pipeline(sample=self.sample, template=template, actor=self.actor)
 
-    def test_batch_stale_scope_is_atomic_and_has_no_notification(self):
+    def test_batch_stale_scope_is_atomic_and_notifies_only_the_requester_about_failure(self):
         reply = self.preview('batch', {'project': 'ALPHA', 'scope': 'unassigned', 'assign_to': 'maria'})
         sample = Sample.objects.create(sample_id='NEW-WORK', project=self.project, created_by=self.actor)
         WorkItem.objects.create(sample=sample, name='New work', created_by=self.actor)
         self.failed_confirmation(reply)
         self.unassigned.refresh_from_db()
         self.assertIsNone(self.unassigned.assigned_to_id)
-        self.assertFalse(Notification.objects.exists())
+        self.assertFalse(Notification.objects.filter(user=self.maria).exists())
+        self.assertEqual(Notification.objects.filter(user=self.actor, assistant_alert__kind='FAILED').count(), 1)
 
     def test_batch_exclusions_and_blocked_work_do_not_bypass_gates(self):
         run = self.pipeline()
@@ -247,7 +248,8 @@ class LabOperationTests(APITestCase):
         self.work.status = 'FAILED'
         self.work.save()
         self.failed_confirmation(reply)
-        self.assertFalse(Notification.objects.exists())
+        self.assertFalse(Notification.objects.filter(user=self.maria).exists())
+        self.assertEqual(Notification.objects.filter(user=self.actor, assistant_alert__kind='FAILED').count(), 1)
         self.work.refresh_from_db()
         self.assertEqual(self.work.assigned_to, self.actor)
 

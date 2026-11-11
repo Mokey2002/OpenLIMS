@@ -111,6 +111,7 @@ class WorkItemViewSet(ModelViewSet):
         if instance.status in [WorkItem.STATUS_COMPLETED, WorkItem.STATUS_CANCELLED] and "assigned_to" in self.request.data:
             raise PermissionDenied("Completed or cancelled work cannot be reassigned.")
         before_assignee = instance.assigned_to_id
+        before_assignee_name = instance.assigned_to.username if instance.assigned_to else None
         instance._pipeline_actor = self.request.user
         updated = serializer.save()
         if "assigned_to" in self.request.data and before_assignee != updated.assigned_to_id:
@@ -119,7 +120,10 @@ class WorkItemViewSet(ModelViewSet):
                 entity_id=str(updated.id),
                 action="WORK_ITEM_REASSIGNED" if before_assignee else "WORK_ITEM_ASSIGNED",
                 actor=self.request.user,
-                payload={"before": {"assigned_to_id": before_assignee}, "after": {"assigned_to_id": updated.assigned_to_id}, "project_id": updated.sample.project_id},
+                payload={"before": {"assigned_to_id": before_assignee}, "after": {"assigned_to_id": updated.assigned_to_id},
+                         "display_before": {"assigned_to_id": before_assignee_name},
+                         "display_after": {"assigned_to_id": updated.assigned_to.username if updated.assigned_to else None},
+                         "project_id": updated.sample.project_id},
             )
 
     def perform_create(self, serializer):

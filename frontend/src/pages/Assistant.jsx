@@ -1,4 +1,5 @@
 import AssistantConversations from "../components/AssistantConversations";
+import AssistantJobStatus from "../components/AssistantJobStatus";
 import AssistantLabOperation from "../components/AssistantLabOperation";
 import AssistantRequestStatus from "../components/AssistantRequestStatus";
 import useAssistantRequest from "../hooks/useAssistantRequest";
@@ -241,6 +242,7 @@ function AssistantSession({ initialPage }) {
 
       {err && <Alert variant="danger">{err}</Alert>}
 
+      {new URLSearchParams(location.search).get("job_action") && <AssistantJobStatus key={location.search} actionId={new URLSearchParams(location.search).get("job_action")} />}
       <Alert variant="info">
         The assistant can investigate QC failures; compare samples, projects, and batches; graph result
         trends; find outliers and workflow bottlenecks; and preview sample, QC,

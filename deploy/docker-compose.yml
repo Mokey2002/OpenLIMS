@@ -46,12 +46,13 @@ services:
       - redis
 
   worker:
+    restart: unless-stopped
     build:
       context: ../backend
       args:
         PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim}
     container_name: openlims-worker
-    command: celery -A config worker -l info
+    command: sh -c "python manage.py migrate --check && exec celery -A config worker -l info"
     volumes:
       - ../backend:/app
       - ../migration_sources:/app/migration_sources:ro
@@ -62,6 +63,21 @@ services:
       - db
       - redis
 
+
+  assistant-monitor:
+    build:
+      context: ../backend
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim}
+    restart: unless-stopped
+    command: python manage.py monitor_assistant_actions --interval 60
+    volumes:
+      - ../backend:/app
+    env_file:
+      - .env
+    depends_on:
+      - api
+      - db
 
   ollama:
     image: ollama/ollama:latest

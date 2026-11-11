@@ -387,6 +387,16 @@ class AssistantActionDetailView(APIView):
         return Response(serialize_action(action), status=status.HTTP_200_OK)
 
 
+class AssistantJobHealthView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses=OpenApiTypes.OBJECT)
+    def get(self, request, action_id):
+        from django.shortcuts import get_object_or_404
+        action = get_object_or_404(AssistantAction.objects.select_related("requested_by"), pk=action_id, requested_by=request.user)
+        return Response(serialize_action(action))
+
+
 class AssistantActionConfirmView(APIView):
     permission_classes = [IsAuthenticated]
 

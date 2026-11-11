@@ -1,3 +1,4 @@
+import RevisionComparison from "../components/ChangeComparison";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert, Badge, Button, Card, Col, Form, Modal, Nav, Row, Spinner, Tab, Table,
@@ -162,6 +163,7 @@ export default function NotebookPage() {
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const autosaveTimer = useRef(null);
   const selectionToken = useRef(0);
+  const comparisonRequest = useRef(null);
   const navigationToken = useRef(0);
   const workspaceLoadToken = useRef(0);
   const revisionRef = useRef("");
@@ -174,6 +176,8 @@ export default function NotebookPage() {
   }
 
   function adoptExperiment(experiment) {
+    comparisonRequest.current?.abort();
+    setComparisonLoading(false);
     setWorkflowEpoch(current => current + 1);
     selectionToken.current += 1;
     clearTimeout(autosaveTimer.current);
@@ -552,13 +556,23 @@ export default function NotebookPage() {
   }
 
   async function compareRevisions(event) {
-    event.preventDefault(); if (!compareForm.from || !compareForm.to) return; setComparisonLoading(true);
+    event.preventDefault(); if (!compareForm.from || !compareForm.to) return;
+    comparisonRequest.current?.abort();
+    const controller = new AbortController(), token = selectionToken.current;
+    comparisonRequest.current = controller;
+    setComparisonLoading(true); setComparison(null);
     try {
       const params = new URLSearchParams({ from: compareForm.from, to: compareForm.to });
-      setComparison(await apiGet(`/api/experiments/${selected.id}/compare/?${params}`));
-    } catch (requestError) { setError(requestError.message || String(requestError)); }
-    finally { setComparisonLoading(false); }
+      const data = await apiGet(`/api/experiments/${selected.id}/compare/?${params}`, { signal: controller.signal });
+      if (!controller.signal.aborted && token === selectionToken.current) setComparison(data);
+    } catch {
+      if (!controller.signal.aborted && token === selectionToken.current) setError("Could not load the revision comparison. Refresh and try again.");
+    } finally {
+      if (!controller.signal.aborted && token === selectionToken.current) setComparisonLoading(false);
+    }
   }
+
+  useEffect(() => () => comparisonRequest.current?.abort(), []);
 
   async function refreshWorkspace() {
     if (dirtyRef.current && !(await saveContent(blocks, links, "Saved before refresh", selected))) return;
@@ -766,7 +780,7 @@ function DiscussionPanel({ selected, users, form, setForm, onSubmit, onResolve, 
 
 function HistoryPanel({ selected, editable, form, setForm, comparison, loading, onCompare, onWorkflow, formatDate }) {
   return <><Card className="app-card mb-4"><Card.Body><h5 className="section-title">Compare immutable revisions</h5><Form onSubmit={onCompare}><Row className="g-2"><Col md={5}><Form.Label>Before</Form.Label><Form.Select required value={form.from} onChange={(event) => setForm({ ...form, from: event.target.value })}><option value="">Choose revision</option>{(selected.revisions || []).map((revision) => <option key={revision.public_id} value={revision.public_id}>r{revision.number} · {revision.change_summary}</option>)}</Form.Select></Col><Col md={5}><Form.Label>After</Form.Label><Form.Select required value={form.to} onChange={(event) => setForm({ ...form, to: event.target.value })}><option value="">Choose revision</option>{(selected.revisions || []).map((revision) => <option key={revision.public_id} value={revision.public_id}>r{revision.number} · {revision.change_summary}</option>)}</Form.Select></Col><Col md={2} className="d-flex align-items-end"><Button type="submit" className="w-100" disabled={loading}>{loading ? "Comparing..." : "Compare"}</Button></Col></Row></Form>
-    {comparison && <div className="notebook-comparison mt-3"><div className="inline-actions mb-3"><Badge bg="primary">r{comparison.before.number} → r{comparison.after.number}</Badge><Badge bg="success">{comparison.summary.blocks_added} blocks added</Badge><Badge bg="warning" text="dark">{comparison.summary.blocks_modified} modified</Badge><Badge bg="danger">{comparison.summary.blocks_removed} removed</Badge><Badge bg="info">{comparison.summary.links_added + comparison.summary.links_modified + comparison.summary.links_removed} link changes</Badge></div>{comparison.block_changes.map((change) => <div className="notebook-change" key={`${change.position}-${change.change}`}><div><Badge bg={change.change === "added" ? "success" : change.change === "removed" ? "danger" : "warning"} text={change.change === "modified" ? "dark" : undefined}>{change.change}</Badge> Block {change.position + 1}</div><Row className="g-2 mt-1"><Col md={6}><small>Before</small><pre>{change.before ? JSON.stringify(change.before.data, null, 2) : "—"}</pre></Col><Col md={6}><small>After</small><pre>{change.after ? JSON.stringify(change.after.data, null, 2) : "—"}</pre></Col></Row></div>)}</div>}
+    {comparison && <RevisionComparison comparison={comparison} />}
   </Card.Body></Card><Card className="app-card"><Card.Body><h5 className="section-title">Revision and sign-off history</h5><Table responsive className="app-table align-middle"><thead><tr><th>Revision</th><th>Author</th><th>Timestamp</th><th>Change</th><th>Checksum</th><th /></tr></thead><tbody>{(selected.revisions || []).map((revision) => <tr key={revision.public_id}><td><strong>r{revision.number}</strong>{revision.number === selected.current_revision_detail?.number && <Badge bg="primary" className="ms-2">Current</Badge>}</td><td>{revision.created_by_username || "System"}</td><td>{formatDate(revision.created_at)}</td><td>{revision.change_summary}</td><td><code>{revision.checksum.slice(0, 12)}…</code></td><td>{editable && revision.number !== selected.current_revision_detail?.number && <Button size="sm" variant="outline-dark" onClick={() => onWorkflow("restore", { revision })}>Restore</Button>}</td></tr>)}</tbody></Table>
     {(selected.reviews || []).length > 0 && <><h6 className="mt-4">Review sign-off</h6><Table responsive className="app-table"><thead><tr><th>Reviewer</th><th>Decision</th><th>Signed name</th><th>Revision</th><th>Timestamp</th><th>Comment</th></tr></thead><tbody>{selected.reviews.map((review) => <tr key={review.public_id}><td>{review.reviewer_username}</td><td><Badge bg={review.decision === "APPROVED" ? "success" : "warning"}>{statusLabel(review.decision)}</Badge></td><td>{review.signed_name}</td><td>r{review.revision_number}</td><td>{formatDate(review.reviewed_at)}</td><td>{review.comment || "—"}</td></tr>)}</tbody></Table></>}
   </Card.Body></Card></>;

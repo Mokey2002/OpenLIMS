@@ -70,6 +70,8 @@ class AssistantAction(models.Model):
     payload = models.JSONField(default=dict)
     result = models.JSONField(default=dict, blank=True)
     error_message = models.TextField(blank=True)
+    progress = models.JSONField(default=dict, blank=True)
+    last_progress_at = models.DateTimeField(null=True, blank=True)
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -84,6 +86,7 @@ class AssistantAction(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
+            models.Index(fields=["status", "id"], name="assistant_health_queue_idx"),
             models.Index(
                 fields=["requested_by", "status", "created_at"],
                 name="asst_req_status_created_idx",
@@ -96,6 +99,20 @@ class AssistantAction(models.Model):
 
     def __str__(self):
         return f"{self.action_type} ({self.status})"
+
+
+class AssistantActionAlert(models.Model):
+    FAILED = "FAILED"
+    STALLED = "STALLED"
+    action = models.ForeignKey(AssistantAction, on_delete=models.CASCADE, related_name="health_alerts")
+    kind = models.CharField(max_length=12, choices=[(FAILED, "Failed"), (STALLED, "Stalled")])
+    notification = models.OneToOneField("notifications.Notification", on_delete=models.SET_NULL, null=True, blank=True, related_name="assistant_alert")
+    snapshot = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["action", "kind"], name="assistant_alert_once_per_kind")]
 
 
 class GeneratedArtifact(models.Model):

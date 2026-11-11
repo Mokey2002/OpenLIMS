@@ -75,7 +75,8 @@ def run_alignment_job(job_id):
                 },
             )
 
-        if actor and job.status == "FAILED":
+        from assistant.job_health import assistant_managed_job
+        if actor and job.status == "FAILED" and not assistant_managed_job("RUN_ALIGNMENT", "alignment_job_id", job.pk):
             Notification.objects.get_or_create(
                 user=actor,
                 title=f"Alignment failed: {job.name}",
@@ -118,7 +119,8 @@ def run_alignment_job(job_id):
             result_updates={"job_status": job.status},
         )
 
-        if actor:
+        from assistant.job_health import assistant_managed_job
+        if actor and not assistant_managed_job("RUN_ALIGNMENT", "alignment_job_id", job.pk):
             Notification.objects.get_or_create(
                 user=actor,
                 title=f"Alignment failed: {job.name}",

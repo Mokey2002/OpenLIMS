@@ -82,7 +82,7 @@ export default function Blast() {
   const [evalue, setEvalue] = useState("10");
   const [projectId, setProjectId] = useState("");
 
-  const [selectedJobId, setSelectedJobId] = useState(null);
+  const [selectedJobId, setSelectedJobId] = useState(() => new URLSearchParams(window.location.search).get("job"));
   const [lastLiveUpdate, setLastLiveUpdate] = useState("");
 
   const { connected } = useJobSocket({
@@ -115,7 +115,11 @@ export default function Blast() {
         ]);
 
       setDatabases(databaseData.results || databaseData || []);
-      setJobs(jobData.results || jobData || []);
+      const jobList = jobData.results || jobData || [];
+      if (selectedJobId && !jobList.some(job => String(job.id) === String(selectedJobId))) {
+        jobList.unshift(await apiGet(`/api/blast-jobs/${encodeURIComponent(selectedJobId)}/`));
+      }
+      setJobs(jobList);
       setSequences(sequenceData.results || sequenceData || []);
       setProjects(projectData.results || projectData || []);
     } catch (e) {
@@ -128,18 +132,14 @@ export default function Blast() {
   }
 
   useEffect(() => {
-    load();
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const readyDatabases = useMemo(() => {
     return databases.filter((database) => database.status === "READY");
   }, [databases]);
-
-  const selectedSequence = useMemo(() => {
-    return sequences.find(
-      (sequence) => String(sequence.id) === String(querySequenceId)
-    );
-  }, [sequences, querySequenceId]);
 
   const selectedJob = useMemo(() => {
     if (!selectedJobId && jobs.length > 0) return jobs[0];
@@ -147,21 +147,14 @@ export default function Blast() {
     return jobs.find((job) => String(job.id) === String(selectedJobId));
   }, [jobs, selectedJobId]);
 
-  useEffect(() => {
-    if (selectedSequence) {
-      const suggestedProgram = programForSequence(selectedSequence.sequence_type);
-      setProgram(suggestedProgram);
-
-      if (!jobName) {
-        setJobName(`BLAST ${selectedSequence.name}`);
-      }
-
-      if (!projectId && selectedSequence.project) {
-        setProjectId(String(selectedSequence.project));
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSequence]);
+  function selectQuerySequence(value) {
+    setQuerySequenceId(value);
+    const sequence = sequences.find(row => String(row.id) === String(value));
+    if (!sequence) return;
+    setProgram(programForSequence(sequence.sequence_type));
+    setJobName(current => current || `BLAST ${sequence.name}`);
+    if (sequence.project) setProjectId(current => current || String(sequence.project));
+  }
 
   async function createDatabase(e) {
     e.preventDefault();
@@ -432,7 +425,7 @@ export default function Blast() {
                   <Form.Label>Query Sequence</Form.Label>
                   <Form.Select
                     value={querySequenceId}
-                    onChange={(e) => setQuerySequenceId(e.target.value)}
+                    onChange={(e) => selectQuerySequence(e.target.value)}
                   >
                     <option value="">Select sequence...</option>
 

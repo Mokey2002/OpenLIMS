@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.74.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.75.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,17 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.75.0** | Cambios anteriores/nuevos y texto de cuadernos resaltados; alertas de fallos o falta de progreso con recuperación para el solicitante. | [Guía de comparaciones y alertas](docs/comparisons-and-job-alerts-v0750.md) |
 | **v0.74.0** | Transferencia revisada de responsabilidades, eliminación de permisos y revocación permanente de sesiones en una baja coordinada y auditada. | [Guía de baja coordinada](docs/coordinated-offboarding-v0740.md) |
 | **v0.73.2** | Una revisión inicial por borrador del asistente, guardado sin duplicados y auditoría con nombres, acciones y cambios legibles. | [Guía de claridad de auditoría](docs/audit-clarity-v0732.md) |
-| **v0.73.1** | Protege al último administrador activo en usuarios, Django admin y reversión de migraciones, incluso con cambios simultáneos. | [Guía de protección administrativa](docs/administrator-safety-v0731.md) |
+
+## v0.75.0 — Comparaciones visuales y alertas del asistente
+
+Auditoría ofrece **Comparar cambios** con valores anteriores y nuevos legibles y **Comparar texto de revisiones** para revisiones exactas del cuaderno. **Historial → Comparar** utiliza el mismo resaltado: texto eliminado tachado, texto añadido subrayado y cambios de registros vinculados. Los nombres históricos provienen de las instantáneas; se indica cuando un registro antiguo no guardó el nombre. Los valores e identificadores completos siguen en Detalles técnicos. Las comparaciones respetan el acceso actual y conservan el historial científico.
+
+Los fallos del asistente generan una alerta interna para el solicitante con el último paso registrado y opciones de recuperación. Un proceso **assistant-monitor** separado detecta trabajos que llevan demasiado tiempo esperando o sin informar progreso, incluso si los workers de Celery no están disponibles. Las advertencias conservan el estado real del trabajo. Puedes actualizar el estado y abrir el trabajo o comprobante sin reiniciarlo. Las devoluciones repetidas y el monitor reutilizan el mismo resultado; el progreso y la finalización resuelven alertas antiguas. Se consolidan los avisos de fallo existentes para evitar duplicados.
+
+Versión/pie **v0.75.0**. Incluye **assistant.0011_job_progress_and_alerts** y el índice de cola **assistant.0012_job_health_queue_index**. Reconstruye/recrea **api, worker, web y assistant-monitor** juntos; Compose de producción inicia el monitor cuando la API migrada está disponible. Valores predeterminados: **10 minutos en cola** y **30 minutos sin un nuevo punto de progreso**, configurables por entorno. Sin dependencia nueva, SMTP ni modificación del historial. Ambos README conservan solo **v0.75.0, v0.74.0 y v0.73.2**. Consulta la [guía de comparaciones y alertas](docs/comparisons-and-job-alerts-v0750.md) para alcance, API, límites y despliegue.
 
 ## v0.74.0 — Baja coordinada de usuarios
 
@@ -26,7 +34,7 @@ La vista previa temporal muestra transferencias, eliminación de membresías y p
 
 Las sesiones antiguas del navegador, API, renovación, Django admin y WebSocket no vuelven a funcionar al reactivar la cuenta. La autoría, el trabajo completado, las aprobaciones y las revisiones científicas conservan su atribución. Los trabajos en cola, solicitudes de workflow y reservas de instrumentos se muestran para revisión y conservan sus controles existentes. No se permite dar de baja la propia cuenta ni al último administrador activo.
 
-Versión/pie **v0.74.0**. Incluye **core.0005_coordinated_offboarding**. Reconstruye/recrea API, worker y frontend/web juntos y aplica las migraciones antes de servir tráfico; Compose de producción las ejecuta al iniciar la API. Sin dependencia nueva. Ambos README conservan solo **v0.74.0, v0.73.2 y v0.73.1**. Consulta la [guía de baja coordinada](docs/coordinated-offboarding-v0740.md) para alcance, API, sesiones y pruebas.
+Versión/pie **v0.74.0**. Incluye **core.0005_coordinated_offboarding**. Reconstruye/recrea API, worker y frontend/web juntos y aplica las migraciones antes de servir tráfico; Compose de producción las ejecuta al iniciar la API. Sin dependencia nueva. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de baja coordinada](docs/coordinated-offboarding-v0740.md) para alcance, API, sesiones y pruebas.
 
 ## v0.73.2 — Actividad legible y menos registros redundantes
 
@@ -38,21 +46,13 @@ El panel, Auditoría e Informes muestran nombres, acciones legibles y cambios co
 
 Versión/pie **v0.73.2**. También incluye la protección administrativa de v0.73.1. Reconstruye/recrea API, worker y frontend/web con el mismo código. Si actualizas desde v0.73.0, aplica **core.0004_user_administration_lock**; el inicio de la API de producción lo hace automáticamente. Sin dependencia nueva ni modificación del historial. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de claridad de auditoría](docs/audit-clarity-v0732.md) para causas, ejemplos y pruebas.
 
-## v0.73.1 — Conservar un administrador activo
-
-OpenLIMS impide eliminar, desactivar o quitar los permisos del último administrador activo. Cuentan los superusuarios activos de Django y los miembros activos del grupo `admin`; las cuentas inactivas o con solo `is_staff` no cuentan. Se permite editar el perfil y transferir responsabilidades cuando queda otro administrador activo.
-
-La página de usuarios identifica la cuenta protegida y desactiva los controles inseguros. Una página desactualizada muestra un conflicto claro y actualiza la lista. La protección también se aplica a usuarios/grupos en Django admin, eliminaciones masivas, cambios del nombre o eliminación del grupo `admin`, y reversiones de migraciones que eliminarían al administrador o restaurarían permisos antiguos. Un bloqueo transaccional compartido evita que solicitudes simultáneas eliminen a todos los administradores. Los cambios y eliminaciones por API se guardan junto con la auditoría y se vuelven a comprobar los permisos actuales del actor tras la espera.
-
-Versión/pie **v0.73.1**. Incluye la migración **core.0004_user_administration_lock**. Reconstruye/recrea API y frontend/web y aplica migraciones antes de servir solicitudes; Compose de producción las aplica al iniciar la API. Sin dependencia nueva. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de protección administrativa](docs/administrator-safety-v0731.md) para transferencias, alcance y pruebas.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.74.0`
+**Versión de desarrollo actual:** `v0.75.0`
 
 **Demo:** http://35.164.28.250
 

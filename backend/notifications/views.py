@@ -10,7 +10,7 @@ class NotificationViewSet(ModelViewSet):
     serializer_class = NotificationSerializer
 
     def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user).order_by("-created_at")
+        return Notification.objects.filter(user=self.request.user).select_related("assistant_alert__action").order_by("-created_at")
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
