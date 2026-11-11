@@ -36,7 +36,7 @@ test("sample search debounces, cancels stale results and reuses reference data",
   await expect(page.getByRole("link", { name: "NEW", exact: true })).toBeVisible();
   releaseOld();
   await expect(page.getByRole("link", { name: "OLD", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Next sample page", exact: true }).click();
   await expect.poll(() => samples().at(-1).query).toContain("page=2");
   const beforeFilter = samples().length;
   await page.locator("select").filter({ has: page.locator('option', { hasText: "All statuses" }) }).selectOption("QC");
