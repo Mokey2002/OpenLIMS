@@ -185,6 +185,15 @@ class ResultSerializer(serializers.ModelSerializer):
 
 class WorkItemSerializer(SampleOperationValidation, serializers.ModelSerializer):
     can_update = serializers.SerializerMethodField()
+    update_access = serializers.SerializerMethodField()
+
+    def get_update_access(self, obj) -> dict:
+        from core.action_guidance import guidance, serializer_actor_roles, work_update_guidance
+        allowed = self.get_can_update(obj)
+        if allowed:
+            return guidance(True)
+        user, roles = serializer_actor_roles(self)
+        return work_update_guidance(obj, user, roles, allowed)
 
     def get_can_update(self, obj) -> bool:
         request = self.context.get("request")
@@ -297,6 +306,7 @@ class WorkItemSerializer(SampleOperationValidation, serializers.ModelSerializer)
             "name",
             "work_type",
             "can_update",
+            "update_access",
             "analysis_code",
             "required_fields",
             "status",

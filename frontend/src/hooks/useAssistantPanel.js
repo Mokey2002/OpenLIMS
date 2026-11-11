@@ -17,7 +17,7 @@ export function useAssistantPanel(url, field, initial, revision, onContext) {
       setPanel(data[field]); setError(""); setLoaded(key); context.current?.(data.context || {});
     }).catch(error => {
       if (!controller.signal.aborted && error.name !== "AbortError") {
-        setPanel(null); setLoaded(key); setError(error instanceof TypeError || error instanceof SyntaxError ? "Records are unavailable. Check your connection and current access, then refresh." : error.message);
+        setPanel(null); setLoaded(key); setError(error.status === 0 || error instanceof TypeError || error instanceof SyntaxError ? "Records are unavailable. Check your connection and current access, then refresh." : error.message);
       }
     });
     return () => controller.abort();
@@ -38,7 +38,7 @@ export function useAssistantProposal(onPrepared, onBusy) {
       if (!response.ok) throw new Error(data.detail || `Check the entered fields: ${JSON.stringify(data)}`);
       onPrepared(data); return true;
     } catch (error) {
-      if (error.name !== "AbortError") setError(error instanceof TypeError ? "The preview response was interrupted. Refresh the records and request a new preview." : error.message);
+      if (error.name !== "AbortError") setError(error.status === 0 || error instanceof TypeError ? "The preview response was interrupted. Refresh the records and request a new preview." : error.message);
       return false;
     } finally { setBusy(false); onBusy?.(false); }
   }

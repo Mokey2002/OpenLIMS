@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.76.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.77.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,17 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.77.0** | Errores junto a cada campo, valores conservados, foco en el primer error y explicaciones accesibles de acciones no disponibles. | [Guía de formularios y acceso](docs/form-feedback-action-guidance-v0770.md) |
 | **v0.76.0** | Recuperación de borradores, vistas personales de tablas y acceso coherente a muestras por proyecto o sin proyectos. | [Guía de recuperación, tablas y acceso](docs/recovery-personal-tables-sample-access-v0760.md) |
 | **v0.75.0** | Cambios anteriores/nuevos y texto de cuadernos resaltados; alertas de fallos o falta de progreso con recuperación para el solicitante. | [Guía de comparaciones y alertas](docs/comparisons-and-job-alerts-v0750.md) |
-| **v0.74.0** | Transferencia revisada de responsabilidades, eliminación de permisos y revocación permanente de sesiones en una baja coordinada y auditada. | [Guía de baja coordinada](docs/coordinated-offboarding-v0740.md) |
+
+## v0.77.0 — Errores claros y orientación sobre acciones no disponibles
+
+Los formularios principales de muestras, mediciones, usuarios, proyectos, inventario y cuadernos muestran errores junto a cada campo, enfocan el primer valor no válido y conservan lo introducido si se rechaza el guardado. Las ayudas describen formatos y rangos válidos. El resumen enlaza cada error, incluidas las mediciones anidadas. Cada formulario evita envíos repetidos mientras espera una respuesta. Ante un fallo de conexión conserva los valores y recomienda comprobar si se guardó el registro antes de reintentar.
+
+Las acciones no disponibles de guardar, completar, revisar, bloquear, clonar y usar plantillas explican el bloqueo con controles accesibles por teclado y pantalla táctil. Las respuestas de muestras y tareas incluyen motivos de acceso derivados de los permisos actuales del servidor. Las solicitudes de roles, los controles de membresía del proyecto o el propietario del cuaderno permiten dar el siguiente paso apropiado. Consultar una explicación no concede permisos, reintenta cambios ni modifica el historial científico. Las nuevas ayudas están disponibles en inglés y español.
+
+Versión/pie **v0.77.0**. Sin migración ni dependencia nueva. Reconstruye/recrea API, worker y web juntos y conserva el monitor del asistente. Ambos README incluyen solo **v0.77.0, v0.76.0 y v0.75.0**. Consulta la [guía de formularios y acceso](docs/form-feedback-action-guidance-v0770.md) para alcance, campos de API, límites y pruebas.
 
 ## v0.76.0 — Recuperación de borradores y vistas personales
 
@@ -26,7 +34,7 @@ Muestras, Cola de trabajo e Inventario recuerdan búsquedas, filtros, orden, col
 
 Todas las cuentas activas, incluidos administradores, ven una muestra si pertenecen al proyecto principal o a uno vinculado, o si la muestra no tiene ningún proyecto. Ser creador o responsable no evita la restricción. Se aplica a listas, lectura directa, búsqueda, exportación, trabajo relacionado, entidades compartidas, consultas del asistente y auditoría/informes de muestras. Los permisos de edición siguen separados. Un administrador puede incorporarse a un proyecto mediante los controles de membresía existentes.
 
-Versión/pie **v0.76.0**. Sin migración ni dependencia nueva. Reconstruye/recrea API, worker y web juntos; conserva el monitor del asistente. Ambos README contienen solo **v0.76.0, v0.75.0 y v0.74.0**. Consulta la [guía de recuperación, tablas y acceso](docs/recovery-personal-tables-sample-access-v0760.md) para alcance, límites del navegador, permisos y pruebas.
+Versión/pie **v0.76.0**. Sin migración ni dependencia nueva. Reconstruye/recrea API, worker y web juntos; conserva el monitor del asistente. Ambos README conservan solo las tres actualizaciones indicadas arriba. Consulta la [guía de recuperación, tablas y acceso](docs/recovery-personal-tables-sample-access-v0760.md) para alcance, límites del navegador, permisos y pruebas.
 
 ## v0.75.0 — Comparaciones visuales y alertas del asistente
 
@@ -36,23 +44,13 @@ Los fallos del asistente generan una alerta interna para el solicitante con el �
 
 Versión/pie **v0.75.0**. Incluye **assistant.0011_job_progress_and_alerts** y el índice de cola **assistant.0012_job_health_queue_index**. Reconstruye/recrea **api, worker, web y assistant-monitor** juntos; Compose de producción inicia el monitor cuando la API migrada está disponible. Valores predeterminados: **10 minutos en cola** y **30 minutos sin un nuevo punto de progreso**, configurables por entorno. Sin dependencia nueva, SMTP ni modificación del historial. Ambos README conservan solo las tres versiones indicadas arriba. Consulta la [guía de comparaciones y alertas](docs/comparisons-and-job-alerts-v0750.md) para alcance, API, límites y despliegue.
 
-## v0.74.0 — Baja coordinada de usuarios
-
-Abre **Usuarios → Dar de baja** para revisar las responsabilidades pendientes, elegir una persona activa de reemplazo e indicar el motivo. Expande cada categoría para consultar muestras, tareas, revisiones de calidad, pasos de cuaderno y propiedad de cuadernos/registros. Verifica cualquier entrega física de muestras antes de preparar la vista previa. La persona de reemplazo debe tener los roles y permisos de proyectos/cuadernos necesarios; no se copian roles de aplicación.
-
-La vista previa temporal muestra transferencias, eliminación de membresías y permisos de cuadernos, desactivación de la cuenta y revocación de sesiones. También cancela solicitudes de acceso y acciones del asistente sin confirmar, y desactiva suscripciones personales. La confirmación vuelve a comprobar permisos y asignaciones y guarda los cambios, notificaciones, auditoría y comprobante en una transacción. Una vista previa desactualizada exige revisar de nuevo; reintentar una confirmación perdida devuelve el mismo comprobante.
-
-Las sesiones antiguas del navegador, API, renovación, Django admin y WebSocket no vuelven a funcionar al reactivar la cuenta. La autoría, el trabajo completado, las aprobaciones y las revisiones científicas conservan su atribución. Los trabajos en cola, solicitudes de workflow y reservas de instrumentos se muestran para revisión y conservan sus controles existentes. No se permite dar de baja la propia cuenta ni al último administrador activo.
-
-Versión/pie **v0.74.0**. Incluye **core.0005_coordinated_offboarding**. Reconstruye/recrea API, worker y frontend/web juntos y aplica las migraciones antes de servir tráfico; Compose de producción las ejecuta al iniciar la API. Sin dependencia nueva. Las tres actualizaciones más recientes se indican arriba. Consulta la [guía de baja coordinada](docs/coordinated-offboarding-v0740.md) para alcance, API, sesiones y pruebas.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.75.0`
+**Versión de desarrollo actual:** `v0.77.0`
 
 **Demo:** http://35.164.28.250
 

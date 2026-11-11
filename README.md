@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.76.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.77.0-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,17 @@
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.77.0** | Field-level form errors, retained input, first-error focus and accessible explanations for unavailable actions. | [Form feedback and action guidance](docs/form-feedback-action-guidance-v0770.md) |
 | **v0.76.0** | Notebook draft recovery, personal table views and consistent project/no-project sample visibility. | [Recovery, table and visibility guide](docs/recovery-personal-tables-sample-access-v0760.md) |
 | **v0.75.0** | Highlighted before/after changes and notebook text, plus requester-only failure/stall alerts with checkpoints and recovery controls. | [Comparison and alert guide](docs/comparisons-and-job-alerts-v0750.md) |
-| **v0.74.0** | Reviewed responsibility handovers, membership removal and permanent session revocation in one audited offboarding workflow. | [Offboarding guide](docs/coordinated-offboarding-v0740.md) |
+
+### v0.77.0 — Clear form errors and actionable access guidance
+
+Core sample, measurement, user, project, inventory and notebook forms now show readable errors beside the affected fields, focus the first invalid input and retain entered values after a rejected save. Hints describe valid formats and ranges. A form summary links to each error, including nested measurements. Each form prevents repeated submissions while its request is pending; network failures preserve input and advise checking whether the record was saved before retrying.
+
+Unavailable notebook save, completion, review, locking, cloning and template actions now explain their blockers through keyboard- and touch-accessible information controls. Sample and work responses include read-only access explanations derived from existing server permission decisions. Role requests, project membership controls or the notebook owner provide the relevant next step. Viewing an explanation never grants access, retries a mutation or changes scientific history. New guidance is available in English and Spanish.
+
+Version/footer **v0.77.0**. No new migration or dependency. Rebuild/recreate API, worker and web together and retain the assistant monitor. Both READMEs retain only **v0.77.0, v0.76.0 and v0.75.0** release updates. See the [form feedback and action guidance guide](docs/form-feedback-action-guidance-v0770.md) for coverage, API fields, limits and validation.
 
 ### v0.76.0 — Recoverable notebook edits and personal table views
 
@@ -45,7 +53,7 @@ Samples, Work Queue and Inventory tables remember search, filters, sorting, visi
 
 Sample visibility follows one rule for all active accounts, including administrators: membership in the primary or a linked project, or no primary/linked projects at all. Creating or being assigned a private sample does not bypass membership. Lists, direct reads, search, exports, related work, shared entities, assistant queries and sample-related audit/report reads use the scope. Write permissions remain separate. Administrators can join projects using existing membership controls.
 
-Version/footer **v0.76.0**. No new migration or dependency; rebuild/recreate API, worker and web together and retain the assistant monitor. Both READMEs contain only **v0.76.0, v0.75.0 and v0.74.0** release updates. See the [recovery, table and visibility guide](docs/recovery-personal-tables-sample-access-v0760.md) for browser-storage limits, behavior, access rules and validation.
+Version/footer **v0.76.0**. No new migration or dependency; rebuild/recreate API, worker and web together and retain the assistant monitor. Both READMEs retain only the latest three release updates listed above. See the [recovery, table and visibility guide](docs/recovery-personal-tables-sample-access-v0760.md) for browser-storage limits, behavior, access rules and validation.
 
 ### v0.75.0 — Visual comparisons and assistant job alerts
 
@@ -55,23 +63,13 @@ Assistant failures now send one requester-only in-app alert containing the last 
 
 Version/footer **v0.75.0**. Includes **assistant.0011_job_progress_and_alerts** and the queue index in **assistant.0012_job_health_queue_index**. Rebuild/recreate **api, worker, web and assistant-monitor** together; production Compose starts the monitor after the migrated API is healthy. Default warnings are **10 minutes queued** and **30 minutes without a progress checkpoint**, configurable through environment settings. No new dependency, SMTP setup or historical-data rewrite. Both READMEs retain only the three releases listed above. See the [comparison and job-alert guide](docs/comparisons-and-job-alerts-v0750.md) for behavior, limits, API examples and deployment.
 
-### v0.74.0 — Coordinated account offboarding
-
-Open **Users → Offboard** to review a person's outstanding responsibilities, choose an active replacement and enter the handover reason. Expand each category to inspect the actual samples, work items, pending QC, notebook tasks and owned notebooks/registry records. Verify any physical sample handoff before previewing. The replacement must have the required roles and project/notebook access; no application roles are copied.
-
-The expiring preview lists responsibility transfers, project and notebook access removal, account deactivation, session revocation, cancellation of pending access requests and unconfirmed assistant actions, and deactivation of personal notification subscriptions. Confirmation checks current permissions and assignments again, then commits the handover, notifications, audit entries and receipt together. Stale previews require a new review, and retrying a lost confirmation returns the existing receipt.
-
-Old browser, bearer API, refresh, Django admin and WebSocket sessions remain invalid after later account reactivation. Historical authors, completed work, approvals and scientific revisions retain their original attribution. Queued jobs, submitted workflow requests and instrument bookings are listed for review and continue under their existing controls. Self-offboarding and removal of the last active administrator are blocked.
-
-Version/footer **v0.74.0**. Includes migration **core.0005_coordinated_offboarding**. Rebuild/recreate API, worker and frontend/web together and apply migrations before serving traffic; production Compose runs migrations during API startup. No new dependency. The latest three release updates are listed above. See the [offboarding guide](docs/coordinated-offboarding-v0740.md) for supported responsibilities, API examples, session behavior and verification.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.76.0`.
+**Current development version:** `v0.77.0`.
 
 ## Personal favorites
 
@@ -960,7 +958,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.75.0**.
+`frontend/src/version.js` file. The current application version is **v0.77.0**.
 
 Footer source:
 

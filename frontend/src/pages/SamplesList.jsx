@@ -19,6 +19,9 @@ import { useLanguage } from "../i18n";
 import useTablePreferences from "../hooks/useTablePreferences";
 import TableViewControls from "../components/TableViewControls";
 import useRememberedTableScroll from "../hooks/useRememberedTableScroll";
+import FeedbackForm, { FormField } from "../components/FeedbackForm";
+import useFormFeedback from "../hooks/useFormFeedback";
+import ActionButton, { AccessDetails, AccessNotice } from "../components/ActionGuidance";
 
 const SAMPLE_COLUMNS = [
   { key: "id", label: "ID" }, { key: "sample_type", label: "Sample Type" },
@@ -115,6 +118,7 @@ function sampleCell(sample, key) {
 }
 
 export default function SamplesList() {
+  const createFeedback = useFormFeedback();
   const [searchParams] = useSearchParams();
   const { language } = useLanguage();
   const [sampleForms, setSampleForms] = useState([]);
@@ -212,7 +216,7 @@ export default function SamplesList() {
       setPreviousPageUrl(data.previous || null);
       setRowsReady(true);
     } catch (e) {
-      if (!controller.signal.aborted && page > 1 && String(e.message).endsWith("404")) {
+      if (!controller.signal.aborted && page > 1 && e.status === 404) {
         updateView({ page: 1 });
         return;
       }
@@ -294,7 +298,7 @@ export default function SamplesList() {
       setSuccess("Sample created.");
       await load();
     } catch (e) {
-      setErr(e.message || String(e));
+      createFeedback.reject(e);
     }
   }
 
@@ -424,6 +428,7 @@ export default function SamplesList() {
       </div>
 
       {err && <Alert variant="danger">{err}</Alert>}
+      {me && !userCanWrite && <AccessNotice access={{ allowed: false, reason: "Registering or changing samples requires a technician or administrator role.", next_step: "Request the appropriate role or ask an administrator.", href: "/access-requests" }} />}
       {supportError && <Alert variant="warning">{language === "es" ? "No se pudieron cargar algunos filtros u opciones de registro. Actualiza esta página para reintentar." : "Some filters or registration options could not load. Refresh this page to retry."}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
 
@@ -437,28 +442,34 @@ export default function SamplesList() {
           <h5 className="section-title">Create Sample</h5>
           {canWrite(me) && <ConfiguredIntake projects={projects} onImported={load} />}
 
-          <Form onSubmit={createSample}>
+          <FeedbackForm feedback={createFeedback} onSubmit={createSample}>
             <SampleFormFields fields={sampleForms.find(f => f.code === sampleType.trim().toUpperCase())?.fields || []} values={formValues} onChange={setFormValues} />
             <Row className="g-2">
               <Col md={4}>
+                <FormField name="sample_id" label="Sample ID" hint="Use a unique sample ID, such as S-002. Maximum 64 characters.">
                 <Form.Control
+                  required maxLength={64}
                   value={sampleId}
                   onChange={(e) => setSampleId(e.target.value)}
                   placeholder="New sample id, e.g. S-002"
                 />
+                </FormField>
               </Col>
 
               <Col md={3}>
+                <FormField name="sample_type" label="Sample Type" hint="Choose a configured type or use GENERAL.">
                 <Form.Control
                   value={sampleType}
                   list="configured-sample-types"
                   onChange={(e) => { setSampleType(e.target.value); setFormValues({}); }}
                   placeholder="Sample type, e.g. DNA"
                 />
+                </FormField>
                 <datalist id="configured-sample-types">{[...new Set(sampleForms.map(f => f.code))].map(code => <option key={code} value={code}>{sampleForms.find(f => f.code === code)?.[language === "es" ? "name_es" : "name_en"]}</option>)}</datalist>
               </Col>
 
               <Col md={3}>
+                <FormField name="project" label="Primary Project">
                 <Form.Select
                   value={projectId}
                   onChange={(e) => setProjectId(e.target.value)}
@@ -471,15 +482,16 @@ export default function SamplesList() {
                     </option>
                   ))}
                 </Form.Select>
+                </FormField>
               </Col>
 
               <Col md={2}>
-                <Button type="submit" variant="dark" className="w-100">
+                <ActionButton type="submit" variant="dark" className="w-100">
                   Create
-                </Button>
+                </ActionButton>
               </Col>
             </Row>
-          </Form>
+          </FeedbackForm>
         </Card.Body>
       </Card>
       )}
@@ -606,17 +618,19 @@ export default function SamplesList() {
             </Col>
 
             <Col md={3}>
-              <Button
+              <ActionButton
                 variant="dark"
                 className="w-100"
                 onClick={applyBulkUpdate}
+                reason={selectedIds.length === 0 ? "Select at least one sample." : "Enter a reason with at least 10 characters before changing status."}
+                nextStep="Select samples below and review the bulk change fields."
                 disabled={
                   selectedIds.length === 0 ||
                   (bulkStatus && bulkReason.trim().length < 10)
                 }
               >
                 Apply to {selectedIds.length}
-              </Button>
+              </ActionButton>
             </Col>
           </Row>
 
@@ -655,14 +669,16 @@ export default function SamplesList() {
               Clear Selection
             </Button>
 
-            <Button
+            <ActionButton
               variant="outline-warning"
               size="sm"
               onClick={archiveSelected}
               disabled={selectedIds.length === 0 || bulkReason.trim().length < 10}
+              reason={selectedIds.length === 0 ? "Select at least one sample." : "Enter a reason with at least 10 characters before archiving."}
+              nextStep="Review the selected samples and enter the reason for this change."
             >
               Archive Selected
-            </Button>
+            </ActionButton>
 
             <Button
               variant="outline-primary"
@@ -761,6 +777,7 @@ export default function SamplesList() {
                       <Link to={`/samples/${sample.id}`}>
                         {sample.sample_id}
                       </Link>
+                      <AccessDetails access={sample.modification_access} />
                     </td>
 
                     {SAMPLE_COLUMNS.filter(column => preferences.columns.includes(column.key)).map(column => <td key={column.key}>{sampleCell(sample, column.key)}</td>)}

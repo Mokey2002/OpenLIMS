@@ -1,3 +1,6 @@
+import FeedbackForm, { FormField } from "../components/FeedbackForm";
+import useFormFeedback from "../hooks/useFormFeedback";
+import ActionButton, { AccessNotice } from "../components/ActionGuidance";
 import { useEffect, useState } from "react";
 import {
   Alert,
@@ -59,6 +62,7 @@ const LEDGER_COLUMNS = [
 ];
 
 export default function Inventory() {
+  const locationFeedback = useFormFeedback(), containerFeedback = useFormFeedback(), ledgerFeedback = useFormFeedback();
   const [locations, setLocations] = useState([]);
   const [containers, setContainers] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
@@ -143,7 +147,7 @@ export default function Inventory() {
       setLocationKind("FREEZER");
       await load();
     } catch (requestError) {
-      setErr(requestError.message || String(requestError));
+      locationFeedback.reject(requestError);
     }
   }
 
@@ -163,7 +167,7 @@ export default function Inventory() {
       setContainerLocation("");
       await load();
     } catch (requestError) {
-      setErr(requestError.message || String(requestError));
+      containerFeedback.reject(requestError);
     }
   }
 
@@ -210,7 +214,7 @@ export default function Inventory() {
       setLedgerForm({ barcode: "", lot: "", operation: "CONSUME", amount: "", unit: "", reason: "", to_location: "", to_container: "" });
       await load();
     } catch (requestError) {
-      setErr(requestError.message || String(requestError));
+      ledgerFeedback.reject(requestError);
     }
   }
 
@@ -258,15 +262,15 @@ export default function Inventory() {
             <Card className="app-card h-100">
               <Card.Body>
                 <h5 className="section-title">Create Location</h5>
-                <Form onSubmit={createLocation}>
+                <FeedbackForm feedback={locationFeedback} onSubmit={createLocation}>
                   <Row className="g-2">
-                    <Col md={3}><Form.Control placeholder="Location code" value={locationCode} onChange={(event) => setLocationCode(event.target.value)} /></Col>
-                    <Col md={4}><Form.Control placeholder="Location name" value={locationName} onChange={(event) => setLocationName(event.target.value)} /></Col>
-                    <Col md={3}><Form.Select value={locationKind} onChange={(event) => setLocationKind(event.target.value)}><option value="SITE">SITE</option><option value="BUILDING">BUILDING</option><option value="LABORATORY">LABORATORY</option><option value="ROOM">ROOM</option><option value="FREEZER">FREEZER</option><option value="SHELF">SHELF</option><option value="RACK">RACK</option><option value="BOX">BOX</option><option value="WELL">WELL</option></Form.Select></Col>
-                    <Col md={2}><Button type="submit" variant="dark" className="w-100">Create</Button></Col>
-                    <Col xs={12}><Form.Select value={locationParent} onChange={(event) => setLocationParent(event.target.value)}><option value="">Top-level location</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.path || location.name}</option>)}</Form.Select></Col>
+                    <Col md={3}><FormField name="code" label="Location code" hint="Leave blank to generate a code."><Form.Control placeholder="Location code" value={locationCode} onChange={(event) => setLocationCode(event.target.value)} /></FormField></Col>
+                    <Col md={4}><FormField name="name" label="Location name" hint="Use a name such as Protein freezer."><Form.Control required placeholder="Location name" value={locationName} onChange={(event) => setLocationName(event.target.value)} /></FormField></Col>
+                    <Col md={3}><FormField name="kind" label="Location kind"><Form.Select required value={locationKind} onChange={(event) => setLocationKind(event.target.value)}><option value="SITE">SITE</option><option value="BUILDING">BUILDING</option><option value="LABORATORY">LABORATORY</option><option value="ROOM">ROOM</option><option value="FREEZER">FREEZER</option><option value="SHELF">SHELF</option><option value="RACK">RACK</option><option value="BOX">BOX</option><option value="WELL">WELL</option></Form.Select></FormField></Col>
+                    <Col md={2}><ActionButton type="submit" variant="dark" className="w-100">Create</ActionButton></Col>
+                    <Col xs={12}><FormField name="parent" label="Parent location"><Form.Select value={locationParent} onChange={(event) => setLocationParent(event.target.value)}><option value="">Top-level location</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.path || location.name}</option>)}</Form.Select></FormField></Col>
                   </Row>
-                </Form>
+                </FeedbackForm>
               </Card.Body>
             </Card>
           </Col>
@@ -274,15 +278,15 @@ export default function Inventory() {
             <Card className="app-card h-100">
               <Card.Body>
                 <h5 className="section-title">Create Container</h5>
-                <Form onSubmit={createContainer}>
+                <FeedbackForm feedback={containerFeedback} onSubmit={createContainer}>
                   <Row className="g-2">
-                    <Col md={4}><Form.Control placeholder="Container ID" value={containerId} onChange={(event) => setContainerId(event.target.value)} /></Col>
-                    <Col md={3}><Form.Select value={containerKind} onChange={(event) => setContainerKind(event.target.value)}><option value="BOX">BOX</option><option value="RACK">RACK</option><option value="PLATE">PLATE</option><option value="TUBE">TUBE</option></Form.Select></Col>
-                    <Col md={3}><Form.Select value={containerLocation} onChange={(event) => setContainerLocation(event.target.value)}><option value="">Location</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</Form.Select></Col>
-                    <Col md={2}><Button type="submit" variant="dark" className="w-100">Create</Button></Col>
-                    {containerKind === "PLATE" && <><Col md={6}><Form.Control type="number" min="1" required placeholder="Plate rows" value={containerRows} onChange={(event) => setContainerRows(event.target.value)} /></Col><Col md={6}><Form.Control type="number" min="1" required placeholder="Plate columns" value={containerColumns} onChange={(event) => setContainerColumns(event.target.value)} /></Col></>}
+                    <Col md={4}><FormField name="container_id" label="Container ID" hint="Use a unique container ID, such as BOX-A1."><Form.Control required placeholder="Container ID" value={containerId} onChange={(event) => setContainerId(event.target.value)} /></FormField></Col>
+                    <Col md={3}><FormField name="kind" label="Container kind"><Form.Select required value={containerKind} onChange={(event) => setContainerKind(event.target.value)}><option value="BOX">BOX</option><option value="RACK">RACK</option><option value="PLATE">PLATE</option><option value="TUBE">TUBE</option></Form.Select></FormField></Col>
+                    <Col md={3}><FormField name="location" label="Location" hint="Choose an existing storage location."><Form.Select required value={containerLocation} onChange={(event) => setContainerLocation(event.target.value)}><option value="">Location</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</Form.Select></FormField></Col>
+                    <Col md={2}><ActionButton type="submit" variant="dark" className="w-100">Create</ActionButton></Col>
+                    {containerKind === "PLATE" && <><Col md={6}><FormField name="rows" label="Plate rows" hint="Enter a whole number of at least 1."><Form.Control type="number" min="1" required placeholder="Plate rows" value={containerRows} onChange={(event) => setContainerRows(event.target.value)} /></FormField></Col><Col md={6}><FormField name="columns" label="Plate columns" hint="Enter a whole number of at least 1."><Form.Control type="number" min="1" required placeholder="Plate columns" value={containerColumns} onChange={(event) => setContainerColumns(event.target.value)} /></FormField></Col></>}
                   </Row>
-                </Form>
+                </FeedbackForm>
               </Card.Body>
             </Card>
           </Col>
@@ -293,7 +297,7 @@ export default function Inventory() {
         <Card className="app-card mb-4">
           <Card.Body>
             <div className="toolbar-row"><div><h5 className="section-title mb-1">Scan-based immutable transaction</h5><div className="feed-meta">Receive, move, transfer, count, consume, adjust, quarantine, dispose, or return material. Every operation records before/after quantity, actor, reason, and linked execution provenance.</div></div><Badge bg="dark">Inventory v2</Badge></div>
-            <Form onSubmit={executeLedgerOperation} className="mt-3"><Row className="g-2 align-items-end"><Col md={2}><Form.Label>Scanned barcode</Form.Label><Form.Control value={ledgerForm.barcode} onChange={(event) => setLedgerForm({ ...ledgerForm, barcode: event.target.value })} placeholder="LOT:..." /></Col><Col md={2}><Form.Label>Or choose lot</Form.Label><Form.Select value={ledgerForm.lot} onChange={(event) => { const lot = inventoryLots.find((row) => String(row.id) === event.target.value); setLedgerForm({ ...ledgerForm, lot: event.target.value, unit: lot?.unit || "" }); }}><option value="">Lot</option>{inventoryLots.map((lot) => <option key={lot.id} value={lot.id}>{lot.lot_code}</option>)}</Form.Select></Col><Col md={2}><Form.Label>Operation</Form.Label><Form.Select value={ledgerForm.operation} onChange={(event) => setLedgerForm({ ...ledgerForm, operation: event.target.value })}>{["RECEIVE", "MOVE", "TRANSFER", "COUNT", "CONSUME", "ADJUST", "QUARANTINE", "DISPOSE", "RETURN"].map((name) => <option key={name}>{name}</option>)}</Form.Select></Col><Col md={1}><Form.Label>Amount</Form.Label><Form.Control type="number" step="any" value={ledgerForm.amount} onChange={(event) => setLedgerForm({ ...ledgerForm, amount: event.target.value })} /></Col><Col md={1}><Form.Label>Unit</Form.Label><Form.Control value={ledgerForm.unit} onChange={(event) => setLedgerForm({ ...ledgerForm, unit: event.target.value })} /></Col><Col md={3}><Form.Label>Required reason</Form.Label><Form.Control required value={ledgerForm.reason} onChange={(event) => setLedgerForm({ ...ledgerForm, reason: event.target.value })} /></Col><Col md={1}><Button type="submit" className="w-100">Record</Button></Col>{["MOVE", "TRANSFER"].includes(ledgerForm.operation) && <><Col md={6}><Form.Select value={ledgerForm.to_location} onChange={(event) => setLedgerForm({ ...ledgerForm, to_location: event.target.value, to_container: "" })}><option value="">Destination location</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.path || location.name}</option>)}</Form.Select></Col><Col md={6}><Form.Select value={ledgerForm.to_container} onChange={(event) => setLedgerForm({ ...ledgerForm, to_container: event.target.value })}><option value="">Destination container</option>{containers.filter((container) => !ledgerForm.to_location || String(container.location) === ledgerForm.to_location).map((container) => <option key={container.id} value={container.id}>{container.path}</option>)}</Form.Select></Col></>}</Row></Form>
+            <FeedbackForm feedback={ledgerFeedback} onSubmit={executeLedgerOperation} className="mt-3"><Row className="g-2 align-items-end"><Col md={2}><FormField name="barcode" label="Scanned barcode" hint="Scan a barcode or choose a lot below."><Form.Control value={ledgerForm.barcode} onChange={(event) => setLedgerForm({ ...ledgerForm, barcode: event.target.value })} placeholder="LOT:..." /></FormField></Col><Col md={2}><FormField name="lot" label="Lot"><Form.Select value={ledgerForm.lot} onChange={(event) => { const lot = inventoryLots.find((row) => String(row.id) === event.target.value); setLedgerForm({ ...ledgerForm, lot: event.target.value, unit: lot?.unit || "" }); }}><option value="">Lot</option>{inventoryLots.map((lot) => <option key={lot.id} value={lot.id}>{lot.lot_code}</option>)}</Form.Select></FormField></Col><Col md={2}><FormField name="operation" label="Operation"><Form.Select required value={ledgerForm.operation} onChange={(event) => setLedgerForm({ ...ledgerForm, operation: event.target.value })}>{["RECEIVE", "MOVE", "TRANSFER", "COUNT", "CONSUME", "ADJUST", "QUARANTINE", "DISPOSE", "RETURN"].map((name) => <option key={name}>{name}</option>)}</Form.Select></FormField></Col><Col md={1}><FormField name="amount" label="Amount" hint="Enter the quantity in the lot unit, such as 0.5."><Form.Control type="number" step="any" value={ledgerForm.amount} onChange={(event) => setLedgerForm({ ...ledgerForm, amount: event.target.value })} /></FormField></Col><Col md={1}><FormField name="unit" label="Unit" hint="Use the unit shown for this lot."><Form.Control value={ledgerForm.unit} onChange={(event) => setLedgerForm({ ...ledgerForm, unit: event.target.value })} /></FormField></Col><Col md={3}><FormField name="reason" label="Required reason" hint="Explain why the inventory is changing."><Form.Control required value={ledgerForm.reason} onChange={(event) => setLedgerForm({ ...ledgerForm, reason: event.target.value })} /></FormField></Col><Col md={1}><ActionButton type="submit" className="w-100">Record</ActionButton></Col>{["MOVE", "TRANSFER"].includes(ledgerForm.operation) && <><Col md={6}><FormField name="to_location" label="Destination location"><Form.Select value={ledgerForm.to_location} onChange={(event) => setLedgerForm({ ...ledgerForm, to_location: event.target.value, to_container: "" })}><option value="">Destination location</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.path || location.name}</option>)}</Form.Select></FormField></Col><Col md={6}><FormField name="to_container" label="Destination container"><Form.Select value={ledgerForm.to_container} onChange={(event) => setLedgerForm({ ...ledgerForm, to_container: event.target.value })}><option value="">Destination container</option>{containers.filter((container) => !ledgerForm.to_location || String(container.location) === ledgerForm.to_location).map((container) => <option key={container.id} value={container.id}>{container.path}</option>)}</Form.Select></FormField></Col></>}</Row></FeedbackForm>
             <Form onSubmit={assignLotBarcode} className="mt-3"><Row className="g-2"><Col md={5}><Form.Select required value={barcodeForm.lot} onChange={(event) => setBarcodeForm({ ...barcodeForm, lot: event.target.value })}><option value="">Assign barcode to lot</option>{inventoryLots.map((lot) => <option key={lot.id} value={lot.id}>{lot.lot_code}</option>)}</Form.Select></Col><Col md={5}><Form.Control required value={barcodeForm.barcode} onChange={(event) => setBarcodeForm({ ...barcodeForm, barcode: event.target.value })} placeholder="Barcode identity" /></Col><Col md={2}><Button type="submit" variant="outline-dark" className="w-100">Assign barcode</Button></Col></Row></Form>
           </Card.Body>
         </Card>
@@ -367,7 +371,7 @@ export default function Inventory() {
           </Card.Body>
         </Card>
       ) : me ? (
-        <Alert variant="info">Inventory operations require a Tech or Director role.</Alert>
+        <AccessNotice access={{ allowed: false, reason: "Inventory operations require a Tech or Director role.", next_step: "Request the appropriate role or ask an administrator.", href: "/access-requests" }} />
       ) : null}
 
       <ConfirmedOperationCard operation={operation} />

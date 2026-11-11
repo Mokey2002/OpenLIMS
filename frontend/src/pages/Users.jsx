@@ -1,3 +1,6 @@
+import FeedbackForm, { FormField } from "../components/FeedbackForm";
+import useFormFeedback from "../hooks/useFormFeedback";
+import ActionButton from "../components/ActionGuidance";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -59,6 +62,7 @@ function primaryRole(user) {
 }
 
 export default function Users() {
+  const createFeedback = useFormFeedback();
   const [offboardingUser, setOffboardingUser] = useState(null);
   const [me, setMe] = useState(null);
   const [users, setUsers] = useState([]);
@@ -163,7 +167,7 @@ export default function Users() {
         : created.invitation_status === "sent" ? "User created. Invitation submitted for email delivery." : "User created successfully.");
       await load();
     } catch (e) {
-      setErr(e.message || String(e));
+      createFeedback.reject(e);
     } finally {
       setSaving(false);
     }
@@ -415,61 +419,51 @@ export default function Users() {
         <Card.Body>
           <h5 className="section-title">Create User</h5>
 
-          <Form onSubmit={createUser}>
+          <FeedbackForm feedback={createFeedback} onSubmit={createUser}>
             <Form.Check className="mb-3" type="switch" id="send-invitation"
               label="Send invitation email so the user can set a password"
-              checked={sendInvitation} onChange={e => setSendInvitation(e.target.checked)} />
+              checked={sendInvitation} onChange={e => { setSendInvitation(e.target.checked); createFeedback.clear(); }} />
             <Row className="g-3">
               <Col md={3}>
-                <Form.Group>
-                  <Form.Label>Username</Form.Label>
-                  <Form.Control
+                <FormField name="username" label="Username" hint="Choose a unique username, such as maria.chen."><Form.Control required maxLength={150}
                     placeholder="username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                   />
-                </Form.Group>
+                </FormField>
               </Col>
 
               <Col md={3}>
-                <Form.Group>
-                  <Form.Label>Email</Form.Label>
-                  <Form.Control
+                <FormField name="email" label="Email" hint="Use an address such as name@example.org."><Form.Control
                     type="email"
                     required={sendInvitation}
                     placeholder="email@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
-                </Form.Group>
+                </FormField>
               </Col>
 
               <Col md={3}>
-                <Form.Group>
-                  <Form.Label>First Name</Form.Label>
-                  <Form.Control
+                <FormField name="first_name" label="First Name"><Form.Control
                     placeholder="First"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                   />
-                </Form.Group>
+                </FormField>
               </Col>
 
               <Col md={3}>
-                <Form.Group>
-                  <Form.Label>Last Name</Form.Label>
-                  <Form.Control
+                <FormField name="last_name" label="Last Name"><Form.Control
                     placeholder="Last"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                   />
-                </Form.Group>
+                </FormField>
               </Col>
 
               <Col md={4}>
-                <Form.Group>
-                  <Form.Label>Temporary Password</Form.Label>
-                  <Form.Control
+                <FormField name="password" label="Temporary Password" hint="Use a strong temporary password. The server checks the password policy."><Form.Control
                     type="password"
                     disabled={sendInvitation}
                     required={!sendInvitation}
@@ -477,13 +471,11 @@ export default function Users() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
-                </Form.Group>
+                </FormField>
               </Col>
 
               <Col md={4}>
-                <Form.Group>
-                  <Form.Label>Role</Form.Label>
-                  <Form.Select
+                <FormField name="role" label="Role"><Form.Select
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
                   >
@@ -492,21 +484,21 @@ export default function Users() {
                     <option value="viewer">Viewer</option>
                     <option value="qc_reviewer">QC reviewer</option>
                   </Form.Select>
-                </Form.Group>
+                </FormField>
               </Col>
 
               <Col md={4} className="d-flex align-items-end">
-                <Button
+                <ActionButton
                   type="submit"
                   variant="dark"
                   className="w-100"
                   disabled={saving}
                 >
                   {saving ? "Creating..." : "Create User"}
-                </Button>
+                </ActionButton>
               </Col>
             </Row>
-          </Form>
+          </FeedbackForm>
         </Card.Body>
       </Card>
 

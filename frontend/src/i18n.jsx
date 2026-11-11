@@ -10,6 +10,7 @@ import {
 } from "react";
 import { apiGet } from "./api";
 import { labSpanish } from "./translations/labSpanish";
+import { formFeedbackSpanish } from "./translations/formFeedbackSpanish";
 
 const LANGUAGE_STORAGE_KEY = "openlims-ui-language";
 const SUPPORTED_LANGUAGES = new Set(["en", "es"]);
@@ -860,6 +861,7 @@ const spanishText = {
   "Lab workflow access focused on endotoxin review, instrument results, sample QC, and project updates.": "Acceso a workflows enfocados en endotoxinas, resultados de instrumentos, QC de muestras y proyectos.",
   "Read-only demo access. Can view dashboards, samples, projects, events, analysis, sequences, and alignments but cannot make changes.": "Acceso de demostración de solo lectura. Puede consultar paneles, muestras, proyectos, eventos, análisis, secuencias y alineamientos sin realizar cambios.",
   ...labSpanish,
+  ...formFeedbackSpanish,
 };
 
 function normalizeLanguage(language) {

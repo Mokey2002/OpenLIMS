@@ -1,3 +1,6 @@
+import FeedbackForm, { FormField } from "../components/FeedbackForm";
+import useFormFeedback from "../hooks/useFormFeedback";
+import ActionButton from "../components/ActionGuidance";
 import { useLanguage } from "../i18n";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
@@ -27,6 +30,7 @@ async function apiGetAllPages(basePath) {
 }
 
 export default function Projects() {
+  const createFeedback = useFormFeedback();
   const { language } = useLanguage();
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
@@ -134,7 +138,7 @@ export default function Projects() {
 
       await load();
     } catch (e) {
-      setErr(e.message || String(e));
+      createFeedback.reject(e);
     }
   }
 
@@ -160,41 +164,41 @@ export default function Projects() {
           <Card.Body>
             <h5 className="section-title">Create Project</h5>
 
-            <Form onSubmit={createProject}>
+            <FeedbackForm feedback={createFeedback} onSubmit={createProject}>
               <Row className="g-3">
                 <Col md={4}>
-                  <Form.Control
+                  <FormField name="name" label="Project name" hint="Give the study a descriptive name."><Form.Control required
                     placeholder="Project name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                  />
+                  /></FormField>
                 </Col>
 
                 <Col md={3}>
-                  <Form.Control
+                  <FormField name="code" label="Project code" hint="Use a unique code, such as ALPHA."><Form.Control required
                     placeholder="Project code"
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
-                  />
+                  /></FormField>
                 </Col>
 
                 <Col md={5}>
-                  <Form.Control
+                  <FormField name="description" label="Description"><Form.Control
                     placeholder="Description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                  />
+                  /></FormField>
                 </Col>
               </Row>
 
               <div className="mt-4">
                 <div className="feed-meta mb-2">Team Members</div>
 
-                <Form.Control
+                <FormField name="members" label="Find team members"><Form.Control
                   placeholder="Search users by username or email"
                   value={memberQuery}
                   onChange={(e) => setMemberQuery(e.target.value)}
-                />
+                /></FormField>
 
                 {memberQuery && (
                   <Card className="app-card mt-3">
@@ -250,11 +254,11 @@ export default function Projects() {
               </div>
 
               <div className="mt-4">
-                <Button type="submit" variant="dark" disabled={!name || !code}>
+                <ActionButton type="submit" variant="dark">
                   Create Project
-                </Button>
+                </ActionButton>
               </div>
-            </Form>
+            </FeedbackForm>
           </Card.Body>
         </Card>
       )}

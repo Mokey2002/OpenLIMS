@@ -146,7 +146,7 @@ test("forbidden and authentication endpoints never trigger a refresh", async t =
     paths.push(path);
     return new Response(null, { status: path.includes("auth") ? 401 : 403 });
   });
-  await assert.rejects(api.apiGet("/api/samples/"), /403/);
+  await assert.rejects(api.apiGet("/api/samples/"), error => error.status === 403);
   assert.equal((await api.apiGetResponse("/api/auth/login/")).status, 401);
   assert.deepEqual(paths, ["/api/v1/samples/", "/api/v1/auth/login/"]);
   assert.equal(window.location.href, "/samples");

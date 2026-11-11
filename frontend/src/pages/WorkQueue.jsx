@@ -14,6 +14,7 @@ import ConfirmedOperationCard from "../components/ConfirmedOperationCard";
 import useConfirmedOperation from "../hooks/useConfirmedOperation";
 import PersonalTable from "../components/PersonalTable";
 import useRememberedTableScroll from "../hooks/useRememberedTableScroll";
+import { AccessDetails, AccessNotice } from "../components/ActionGuidance";
 
 const BASE_WORK_TYPES = ["GENERAL", "SEQUENCING", "EXTRACTION", "PCR", "ANALYSIS"];
 const WORK_COLUMNS = [
@@ -121,7 +122,7 @@ export default function WorkQueue() {
   const writable = canWrite(me);
   const columns = useMemo(() => writable ? [...WORK_COLUMNS, {
     key: "update", label: "Update", optional: false, sortable: false, value: () => "",
-    render: item => item.can_update === false ? <span className="feed-meta">Read-only</span> : ["COMPLETED", "FAILED", "CANCELLED"].includes(item.status) ? <span className="feed-meta">Final</span> : <Form.Select size="sm" aria-label={`Update work ${item.id}`} value={item.status} onChange={event => updateWorkStatus(item, event.target.value)}>{["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED", "CANCELLED"].map(status => <option key={status}>{status}</option>)}</Form.Select>,
+    render: item => item.can_update === false ? item.update_access ? <AccessDetails access={item.update_access} /> : <span className="feed-meta">Read-only</span> : ["COMPLETED", "FAILED", "CANCELLED"].includes(item.status) ? <details className="small"><summary>Final</summary>Work Queue treats this work as final. Ask a lab manager about corrections.</details> : <Form.Select size="sm" aria-label={`Update work ${item.id}`} value={item.status} onChange={event => updateWorkStatus(item, event.target.value)}>{["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED", "CANCELLED"].map(status => <option key={status}>{status}</option>)}</Form.Select>,
   }] : WORK_COLUMNS, [writable, updateWorkStatus]);
   const filterOptions = useMemo(() => [
     { key: "work_type", label: "Work type", options: workTypes },
@@ -141,6 +142,7 @@ export default function WorkQueue() {
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
+      {me && !writable && <AccessNotice access={{ allowed: false, reason: "Updating work requires a technician or administrator role.", next_step: "Request the appropriate role or ask an administrator.", href: "/access-requests" }} />}
       {!writable && me && (
         <Alert variant="info">Work creation and assignment require a Tech or Director role.</Alert>
       )}
