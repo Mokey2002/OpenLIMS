@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.77.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.77.1-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -33,9 +33,15 @@
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.77.1** | Fix four frontend CI regressions caused by outdated error-text and sample-pagination expectations; verify recovery after failures. | [Frontend CI regression guide](docs/frontend-ci-regressions-v0771.md) |
 | **v0.77.0** | Field-level form errors, retained input, first-error focus and accessible explanations for unavailable actions. | [Form feedback and action guidance](docs/form-feedback-action-guidance-v0770.md) |
 | **v0.76.0** | Notebook draft recovery, personal table views and consistent project/no-project sample visibility. | [Recovery, table and visibility guide](docs/recovery-personal-tables-sample-access-v0760.md) |
-| **v0.75.0** | Highlighted before/after changes and notebook text, plus requester-only failure/stall alerts with checkpoints and recovery controls. | [Comparison and alert guide](docs/comparisons-and-job-alerts-v0750.md) |
+
+### v0.77.1 — Frontend CI regression fixes
+
+Four browser checks still expected raw HTTP error strings or the old sample pagination name after the recent UX updates. They now assert the readable error messages and **Next sample page** accessible control. Notebook tests still verify that a failed switch preserves the current notebook/experiment and that denied initial access leaves navigation usable. History tests still reject misleading empty-success states and now verify recovery after the service returns. No application behavior, permissions or database schema changed.
+
+Version/footer **v0.77.1**; both READMEs retain exactly **v0.77.1, v0.77.0 and v0.76.0** release updates. See the [frontend CI regression guide](docs/frontend-ci-regressions-v0771.md) for causes and validation.
 
 ### v0.77.0 — Clear form errors and actionable access guidance
 
@@ -43,7 +49,7 @@ Core sample, measurement, user, project, inventory and notebook forms now show r
 
 Unavailable notebook save, completion, review, locking, cloning and template actions now explain their blockers through keyboard- and touch-accessible information controls. Sample and work responses include read-only access explanations derived from existing server permission decisions. Role requests, project membership controls or the notebook owner provide the relevant next step. Viewing an explanation never grants access, retries a mutation or changes scientific history. New guidance is available in English and Spanish.
 
-Version/footer **v0.77.0**. No new migration or dependency. Rebuild/recreate API, worker and web together and retain the assistant monitor. Both READMEs retain only **v0.77.0, v0.76.0 and v0.75.0** release updates. See the [form feedback and action guidance guide](docs/form-feedback-action-guidance-v0770.md) for coverage, API fields, limits and validation.
+Version/footer **v0.77.0**. No new migration or dependency. Rebuild/recreate API, worker and web together and retain the assistant monitor. Both READMEs retain only the latest three release updates listed above. See the [form feedback and action guidance guide](docs/form-feedback-action-guidance-v0770.md) for coverage, API fields, limits and validation.
 
 ### v0.76.0 — Recoverable notebook edits and personal table views
 
@@ -55,21 +61,13 @@ Sample visibility follows one rule for all active accounts, including administra
 
 Version/footer **v0.76.0**. No new migration or dependency; rebuild/recreate API, worker and web together and retain the assistant monitor. Both READMEs retain only the latest three release updates listed above. See the [recovery, table and visibility guide](docs/recovery-personal-tables-sample-access-v0760.md) for browser-storage limits, behavior, access rules and validation.
 
-### v0.75.0 — Visual comparisons and assistant job alerts
-
-Audit Events now offers **Compare changes** with named before/after values and **Compare revision text** for exact notebook revisions. Notebook **History → Compare** uses the same word highlighting: removed text is struck through, added text is underlined, and linked-record changes remain visible. Historical names come from recorded snapshots; missing legacy names are identified explicitly. Full values and identifiers remain under Technical details, and comparisons respect current access permissions without changing scientific history.
-
-Assistant failures now send one requester-only in-app alert containing the last recorded checkpoint and recovery guidance. A separate **assistant-monitor** process also detects jobs waiting too long or no longer reporting progress, even when Celery workers are unavailable. Queue warnings preserve the job's actual state. Alerts support read-only status refresh and direct job/receipt review; they do not restart jobs. Worker callbacks and monitor reconciliation share repeat-safe completion handling, and normal progress/completion resolves old stall alerts. Existing native assistant failure notices are consolidated to avoid duplicates.
-
-Version/footer **v0.75.0**. Includes **assistant.0011_job_progress_and_alerts** and the queue index in **assistant.0012_job_health_queue_index**. Rebuild/recreate **api, worker, web and assistant-monitor** together; production Compose starts the monitor after the migrated API is healthy. Default warnings are **10 minutes queued** and **30 minutes without a progress checkpoint**, configurable through environment settings. No new dependency, SMTP setup or historical-data rewrite. Both READMEs retain only the three releases listed above. See the [comparison and job-alert guide](docs/comparisons-and-job-alerts-v0750.md) for behavior, limits, API examples and deployment.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.77.0`.
+**Current development version:** `v0.77.1`.
 
 ## Personal favorites
 
@@ -958,7 +956,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.77.0**.
+`frontend/src/version.js` file. The current application version is **v0.77.1**.
 
 Footer source:
 

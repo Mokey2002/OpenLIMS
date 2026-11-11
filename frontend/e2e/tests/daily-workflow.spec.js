@@ -46,17 +46,25 @@ test('My Work retries initial failure and preserves data during a failed backgro
 });
 
 test('failed notebook switch keeps the current notebook and experiment together', async ({ page }) => {
+  let failSwitch = true;
   await mockApi(page, async (route, path) => {
-    if (!path.endsWith('/experiments/21/')) return false;
+    if (!path.endsWith('/experiments/21/') || !failSwitch) return false;
     await route.fulfill({ status: 503, json: { detail: 'Detail unavailable' } });
     return true;
   });
   await page.goto('/notebook');
   await expect(page.getByRole('heading', { name: 'Experiment 11', exact: true })).toBeVisible();
   await page.locator('.notebook-sidebar select').first().selectOption('2');
-  await expect(page.getByRole('alert').filter({ hasText: 'failed: 503' })).toBeVisible();
+  const failure = page.getByRole('alert').filter({ hasText: 'OpenLIMS could not complete the request. Please try again later.' });
+  await expect(failure).toBeVisible();
+  await expect(failure).not.toContainText(/503|Detail unavailable|GET .*failed/);
   await expect(page.locator('.notebook-sidebar select').first()).toHaveValue('1');
   await expect(page.getByRole('heading', { name: 'Experiment 11', exact: true })).toBeVisible();
+  failSwitch = false;
+  await page.locator('.notebook-sidebar select').first().selectOption('2');
+  await expect(page.getByRole('heading', { name: 'Experiment 21', exact: true })).toBeVisible();
+  await expect(page.locator('.notebook-sidebar select').first()).toHaveValue('2');
+  await expect(failure).toHaveCount(0);
 });
 
 test('a late detail response cannot replace the latest selection', async ({ page }) => {
@@ -131,7 +139,9 @@ test('an unavailable initial experiment does not hide the notebook navigator', a
     return true;
   });
   await page.goto('/notebook');
-  await expect(page.getByRole('alert').filter({ hasText: 'failed: 403' })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Experiment access changed' })).toBeVisible();
+  await expect(page.getByText('No experiment selected', { exact: true })).toBeVisible();
+  await expect(page.locator('.notebook-sidebar select').first()).toBeEnabled();
   await page.getByRole('button', { name: /Experiment 12/ }).click();
   await expect(page.getByRole('heading', { name: 'Experiment 12', exact: true })).toBeVisible();
 });

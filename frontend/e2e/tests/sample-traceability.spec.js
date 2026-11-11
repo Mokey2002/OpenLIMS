@@ -15,7 +15,7 @@ async function mockRecord(page, { failHistory = false, empty = false } = {}) {
     if (path === "/api/samples/1/") body = { id: 1, public_id: "sample-public-id", sample_id: "TRACE-001", status: "RECEIVED", can_modify: false };
     if (path.endsWith("/allowed-transitions/")) body = { allowed_transitions: [] };
     if (path === "/api/samples/1/history/") {
-      if (failHistory) return route.fulfill({ status: 503, json: { detail: "History temporarily unavailable" } });
+      if (typeof failHistory === "function" ? failHistory() : failHistory) return route.fulfill({ status: 503, json: { detail: "History temporarily unavailable" } });
       body = empty ? [] : url.searchParams.has("page")
         ? { count: 2, next: null, results: [{ id: 1, action: "CREATED", entity_type: "Sample", entity_id: "1", timestamp: "2026-09-01T10:00:00Z", payload: {} }] }
         : { count: 2, next: "/api/v1/samples/1/history/?page=2", results: [{ id: 2, action: "SHARED_ATTACHMENT_UPLOADED", entity_type: "sample", entity_id: "sample-public-id", timestamp: "2026-10-01T10:00:00Z", payload: {} }] };
@@ -59,8 +59,17 @@ test("empty record explains how to link a saved experiment", async ({ page }) =>
 });
 
 test("failed history is not presented as an empty successful record", async ({ page }) => {
-  await mockRecord(page, { failHistory: true });
+  let failHistory = true;
+  await mockRecord(page, { failHistory: () => failHistory });
   await page.goto("/samples/1");
-  await expect(page.getByRole("alert").filter({ hasText: "503" })).toBeVisible();
+  const failure = page.getByRole("alert").filter({ hasText: "OpenLIMS could not complete the request. Please try again later." });
+  await expect(failure).toBeVisible();
+  await expect(failure).not.toContainText(/503|History temporarily unavailable|GET .*failed/);
   await expect(page.getByText("No timeline events yet.")).toHaveCount(0);
+  failHistory = false;
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "TRACE-001" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "History (2)", exact: true })).toBeVisible();
+  await expect(page.getByText("Sample created", { exact: true })).toBeVisible();
+  await expect(failure).toHaveCount(0);
 });

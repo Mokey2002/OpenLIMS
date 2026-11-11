@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.77.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.77.1.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -14,9 +14,15 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.77.1** | Corrección de cuatro pruebas de CI con expectativas antiguas de errores y paginación; comprobación de recuperación tras fallos. | [Guía de regresiones de CI](docs/frontend-ci-regressions-v0771.md) |
 | **v0.77.0** | Errores junto a cada campo, valores conservados, foco en el primer error y explicaciones accesibles de acciones no disponibles. | [Guía de formularios y acceso](docs/form-feedback-action-guidance-v0770.md) |
 | **v0.76.0** | Recuperación de borradores, vistas personales de tablas y acceso coherente a muestras por proyecto o sin proyectos. | [Guía de recuperación, tablas y acceso](docs/recovery-personal-tables-sample-access-v0760.md) |
-| **v0.75.0** | Cambios anteriores/nuevos y texto de cuadernos resaltados; alertas de fallos o falta de progreso con recuperación para el solicitante. | [Guía de comparaciones y alertas](docs/comparisons-and-job-alerts-v0750.md) |
+
+## v0.77.1 — Correcciones de regresiones de CI del frontend
+
+Cuatro pruebas del navegador esperaban mensajes HTTP técnicos o el nombre antiguo del botón de paginación después de las mejoras de UX. Ahora comprueban mensajes legibles y el control accesible **Next sample page**. Se mantiene la comprobación de que un cambio de cuaderno fallido conserva el cuaderno/experimento actual y que un acceso inicial denegado permite seguir navegando. Las pruebas de historial siguen rechazando estados vacíos engañosos y ahora comprueban la recuperación cuando vuelve el servicio. No cambia el comportamiento de la aplicación, los permisos ni el esquema de datos.
+
+Versión/pie **v0.77.1**. Ambos README incluyen exactamente **v0.77.1, v0.77.0 y v0.76.0**. Consulta la [guía de regresiones de CI](docs/frontend-ci-regressions-v0771.md) para causas y validación.
 
 ## v0.77.0 — Errores claros y orientación sobre acciones no disponibles
 
@@ -24,7 +30,7 @@ Los formularios principales de muestras, mediciones, usuarios, proyectos, invent
 
 Las acciones no disponibles de guardar, completar, revisar, bloquear, clonar y usar plantillas explican el bloqueo con controles accesibles por teclado y pantalla táctil. Las respuestas de muestras y tareas incluyen motivos de acceso derivados de los permisos actuales del servidor. Las solicitudes de roles, los controles de membresía del proyecto o el propietario del cuaderno permiten dar el siguiente paso apropiado. Consultar una explicación no concede permisos, reintenta cambios ni modifica el historial científico. Las nuevas ayudas están disponibles en inglés y español.
 
-Versión/pie **v0.77.0**. Sin migración ni dependencia nueva. Reconstruye/recrea API, worker y web juntos y conserva el monitor del asistente. Ambos README incluyen solo **v0.77.0, v0.76.0 y v0.75.0**. Consulta la [guía de formularios y acceso](docs/form-feedback-action-guidance-v0770.md) para alcance, campos de API, límites y pruebas.
+Versión/pie **v0.77.0**. Sin migración ni dependencia nueva. Reconstruye/recrea API, worker y web juntos y conserva el monitor del asistente. Ambos README conservan solo las tres actualizaciones indicadas arriba. Consulta la [guía de formularios y acceso](docs/form-feedback-action-guidance-v0770.md) para alcance, campos de API, límites y pruebas.
 
 ## v0.76.0 — Recuperación de borradores y vistas personales
 
@@ -36,21 +42,13 @@ Todas las cuentas activas, incluidos administradores, ven una muestra si pertene
 
 Versión/pie **v0.76.0**. Sin migración ni dependencia nueva. Reconstruye/recrea API, worker y web juntos; conserva el monitor del asistente. Ambos README conservan solo las tres actualizaciones indicadas arriba. Consulta la [guía de recuperación, tablas y acceso](docs/recovery-personal-tables-sample-access-v0760.md) para alcance, límites del navegador, permisos y pruebas.
 
-## v0.75.0 — Comparaciones visuales y alertas del asistente
-
-Auditoría ofrece **Comparar cambios** con valores anteriores y nuevos legibles y **Comparar texto de revisiones** para revisiones exactas del cuaderno. **Historial → Comparar** utiliza el mismo resaltado: texto eliminado tachado, texto añadido subrayado y cambios de registros vinculados. Los nombres históricos provienen de las instantáneas; se indica cuando un registro antiguo no guardó el nombre. Los valores e identificadores completos siguen en Detalles técnicos. Las comparaciones respetan el acceso actual y conservan el historial científico.
-
-Los fallos del asistente generan una alerta interna para el solicitante con el último paso registrado y opciones de recuperación. Un proceso **assistant-monitor** separado detecta trabajos que llevan demasiado tiempo esperando o sin informar progreso, incluso si los workers de Celery no están disponibles. Las advertencias conservan el estado real del trabajo. Puedes actualizar el estado y abrir el trabajo o comprobante sin reiniciarlo. Las devoluciones repetidas y el monitor reutilizan el mismo resultado; el progreso y la finalización resuelven alertas antiguas. Se consolidan los avisos de fallo existentes para evitar duplicados.
-
-Versión/pie **v0.75.0**. Incluye **assistant.0011_job_progress_and_alerts** y el índice de cola **assistant.0012_job_health_queue_index**. Reconstruye/recrea **api, worker, web y assistant-monitor** juntos; Compose de producción inicia el monitor cuando la API migrada está disponible. Valores predeterminados: **10 minutos en cola** y **30 minutos sin un nuevo punto de progreso**, configurables por entorno. Sin dependencia nueva, SMTP ni modificación del historial. Ambos README conservan solo las tres versiones indicadas arriba. Consulta la [guía de comparaciones y alertas](docs/comparisons-and-job-alerts-v0750.md) para alcance, API, límites y despliegue.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.77.0`
+**Versión de desarrollo actual:** `v0.77.1`
 
 **Demo:** http://35.164.28.250
 
