@@ -150,6 +150,19 @@ def events_for_user(queryset, user):
     if not user or not user.is_authenticated:
         return queryset.none()
     if is_admin(user):
+        # Administrative audit access does not grant access to another
+        # project's sample content, including indirect entity references.
+        scoped = {kind: get_accessible_entity_queryset(entity, user) for kind, entity in {
+            "sample": "sample", "workitem": "work_item", "result": "result", "pipelinerun": "pipeline_run",
+        }.items()}
+        queryset = _identifier_aliases(queryset.alias(_audit_sample_kind=_kind(F("entity_type"))), "entity_id")
+        for kind, entities in scoped.items():
+            queryset = queryset.filter(~Q(_audit_sample_kind=kind) | _identifiers(entities, "entity_id"))
+        for index, path in enumerate(REFERENCE_PATHS):
+            kind_alias, id_alias = f"_audit_sample_ref_kind_{index}", f"_audit_sample_ref_id_{index}"
+            queryset = _identifier_aliases(queryset.alias(**{kind_alias: _kind(KT(f"payload__{path}__type")), id_alias: KT(f"payload__{path}__public_id")}), id_alias)
+            for kind, entities in scoped.items():
+                queryset = queryset.filter(Q(**{f"{kind_alias}__isnull": True}) | ~Q(**{kind_alias: kind}) | _identifiers(entities, id_alias))
         return queryset
 
     annotations = {"_audit_kind": _kind(F("entity_type"))}

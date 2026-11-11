@@ -1,3 +1,6 @@
+import FeedbackForm, { FormField } from "../components/FeedbackForm";
+import useFormFeedback from "../hooks/useFormFeedback";
+import ActionButton, { AccessNotice } from "../components/ActionGuidance";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useLocation } from "react-router-dom";
 import {
@@ -349,6 +352,7 @@ function resultDisplayValue(result) {
 }
 
 export default function SampleDetail() {
+  const transitionFeedback = useFormFeedback(), typeFeedback = useFormFeedback(), workFeedback = useFormFeedback(), attachmentFeedback = useFormFeedback();
   const { hash } = useLocation();
   const { id } = useParams();
 
@@ -465,8 +469,9 @@ export default function SampleDetail() {
   }
 
   useEffect(() => {
-    setSample(null);
+    // Clear the previous record before starting a request for the new route.
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSample(null);
     load();
     return () => { loadGeneration.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -582,7 +587,7 @@ export default function SampleDetail() {
       );
       await load();
     } catch (e) {
-      setErr(e.message || String(e));
+      transitionFeedback.reject(e);
     }
   }
 
@@ -607,7 +612,7 @@ export default function SampleDetail() {
       setSuccess("Work item created.");
       await load();
     } catch (e) {
-      setErr(e.message || String(e));
+      workFeedback.reject(e);
     }
   }
 
@@ -717,7 +722,7 @@ export default function SampleDetail() {
       setSuccess("Attachment uploaded.");
       await load();
     } catch (e) {
-      setErr(e.message || String(e));
+      attachmentFeedback.reject(e);
     }
   }
 
@@ -792,7 +797,7 @@ export default function SampleDetail() {
       setSuccess(`Sample type updated to ${updated.sample_type}.`);
       await load();
     } catch (e) {
-      setErr(e.message || String(e));
+      typeFeedback.reject(e);
     }
   }
 
@@ -864,7 +869,7 @@ export default function SampleDetail() {
 
       {err && <Alert variant="danger">{err}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
-      {readOnlyText && <Alert variant="info">{readOnlyText}</Alert>}
+      {sample && !userCanWrite && <AccessNotice access={sample.modification_access} fallback={readOnlyText || "Editing requires additional access. Ask the record owner or an administrator."} />}
 
       <nav aria-label="Sample record sections" className="d-flex gap-3 flex-wrap mb-4">
         <a href="#sample-experiments">Experiments ({experiments.length})</a>
@@ -1071,32 +1076,30 @@ export default function SampleDetail() {
             {userCanWrite && (
               <div className="col-lg-4">
                 <h5 className="section-title">Sample Classification</h5>
-                <Form onSubmit={updateSampleType} className="mb-4">
+                <FeedbackForm feedback={typeFeedback} onSubmit={updateSampleType} className="mb-4">
                   <Form.Group className="mb-2">
-                    <Form.Label>Sample Type</Form.Label>
-                    <Form.Control
+                    <FormField name="sample_type" label="Sample Type"><Form.Control required
                       value={sampleTypeInput}
                       onChange={(e) => setSampleTypeInput(e.target.value)}
                       placeholder="GENERAL, DNA, RNA..."
-                    />
+                    /></FormField>
                     <div className="feed-meta mt-1">
                       Used with the primary project to select a default pipeline.
                     </div>
                   </Form.Group>
-                  <Button type="submit" variant="outline-dark" size="sm">
+                  <ActionButton type="submit" variant="outline-dark" size="sm" reason="Complete the required fields before submitting." nextStep="Review the highlighted fields and their examples.">
                     Save Sample Type
-                  </Button>
-                </Form>
+                  </ActionButton>
+                </FeedbackForm>
 
                 <h5 className="section-title">Change Status</h5>
 
                 {allowed.length === 0 ? (
                   <span className="empty-state">No further transitions.</span>
                 ) : (
-                  <Form onSubmit={doTransition}>
+                  <FeedbackForm feedback={transitionFeedback} onSubmit={doTransition}>
                     <Form.Group className="mb-3">
-                      <Form.Label>New Status</Form.Label>
-                      <Form.Select
+                      <FormField name="new_status" label="New Status"><Form.Select required
                         value={statusTransitionTarget}
                         onChange={(e) =>
                           setStatusTransitionTarget(e.target.value)
@@ -1107,25 +1110,24 @@ export default function SampleDetail() {
                             {status}
                           </option>
                         ))}
-                      </Form.Select>
+                      </Form.Select></FormField>
                     </Form.Group>
 
                     <Form.Group className="mb-3">
-                      <Form.Label>Reason for change</Form.Label>
-                      <Form.Control
+                      <FormField name="reason" label="Reason for change" hint="Explain this change using at least 10 characters."><Form.Control required minLength={10}
                         as="textarea"
                         rows={3}
                         value={statusChangeReason}
                         onChange={(e) => setStatusChangeReason(e.target.value)}
                         placeholder="Example: QC review completed and results approved for reporting."
-                      />
+                      /></FormField>
                       <div className="feed-meta mt-1">
                         Required for status changes. This reason is saved in the
                         audit trail.
                       </div>
                     </Form.Group>
 
-                    <Button
+                    <ActionButton
                       type="submit"
                       variant="dark"
                       size="sm"
@@ -1133,10 +1135,10 @@ export default function SampleDetail() {
                         !statusTransitionTarget ||
                         statusChangeReason.trim().length < 10
                       }
-                    >
+                     reason="Complete the required fields before submitting." nextStep="Review the highlighted fields and their examples.">
                       Update Status
-                    </Button>
-                  </Form>
+                    </ActionButton>
+                  </FeedbackForm>
                 )}
               </div>
             )}
@@ -1490,24 +1492,24 @@ export default function SampleDetail() {
               <h5 className="section-title" id="sample-files">Sample Attachments</h5>
 
               {userCanWrite && (
-                <Form onSubmit={uploadSampleAttachment} className="mb-4">
+                <FeedbackForm feedback={attachmentFeedback} onSubmit={uploadSampleAttachment} className="mb-4">
                   <Row className="g-2 align-items-center">
                     <Col md={8}>
-                      <Form.Control
+                      <FormField name="file" label="Attachment file"><Form.Control required
                         type="file"
                         onChange={(e) =>
                           setSelectedAttachmentFile(e.target.files?.[0] || null)
                         }
-                      />
+                      /></FormField>
                     </Col>
 
                     <Col md={4}>
-                      <Button type="submit" variant="dark" className="w-100">
+                      <ActionButton type="submit" variant="dark" className="w-100" reason="Complete the required fields before submitting." nextStep="Review the highlighted fields and their examples.">
                         Upload
-                      </Button>
+                      </ActionButton>
                     </Col>
                   </Row>
-                </Form>
+                </FeedbackForm>
               )}
 
               {sampleAttachments.length === 0 && sharedAttachments.length === 0 ? (
@@ -1558,36 +1560,36 @@ export default function SampleDetail() {
               <h5 className="section-title">Work Items</h5>
 
               {userCanWrite && (
-                <Form onSubmit={createWorkItem} className="mb-4">
+                <FeedbackForm feedback={workFeedback} onSubmit={createWorkItem} className="mb-4">
                   <Row className="g-2">
                     <Col md={4}>
-                      <Form.Control
+                      <FormField name="name" label="Work item name"><Form.Control required
                         placeholder="Work item name"
                         value={newWorkItemName}
                         onChange={(e) => setNewWorkItemName(e.target.value)}
-                      />
+                      /></FormField>
                     </Col>
 
                     <Col md={6}>
-                      <Form.Control
+                      <FormField name="notes" label="Notes"><Form.Control
                         placeholder="Notes"
                         value={newWorkItemNotes}
                         onChange={(e) => setNewWorkItemNotes(e.target.value)}
-                      />
+                      /></FormField>
                     </Col>
 
                     <Col md={2}>
-                      <Button
+                      <ActionButton
                         type="submit"
                         variant="dark"
                         className="w-100"
                         disabled={!newWorkItemName}
-                      >
+                       reason="Complete the required fields before submitting." nextStep="Review the highlighted fields and their examples.">
                         Add
-                      </Button>
+                      </ActionButton>
                     </Col>
                   </Row>
-                </Form>
+                </FeedbackForm>
               )}
 
               {workItems.length === 0 ? (

@@ -53,7 +53,7 @@ def require_access(user, sample, review=False):
     if not user.is_active or sample.status in FINAL_SAMPLES:
         raise ValueError("This sample is inactive or final; no workflow change is available.")
     if review:
-        if not is_qc_reviewer(user) or not get_sample_access_queryset(Sample.objects.filter(pk=sample.pk), user).exists():
+        if not is_qc_reviewer(user) or not get_sample_access_queryset(Sample.objects.filter(pk=sample.pk), user, for_write=True).exists():
             raise ValueError("An authorized QC reviewer with current sample access is required.")
     elif not user_can_modify_sample(user, sample):
         raise ValueError("You have read-only access; an active Tech or Admin with sample write access is required.")

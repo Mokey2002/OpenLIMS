@@ -4,61 +4,38 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from core.permissions import is_admin, is_tech
 
 
-def get_sample_access_queryset(queryset, user):
+def get_sample_access_queryset(queryset, user, *, for_write=False):
     """
-    Admin:
-      - all samples
-
-    Tech:
-      - samples in assigned primary projects
-      - samples linked to assigned projects
-      - unassigned samples created by that tech
-
-    Viewer:
-      - samples in assigned primary projects
-      - samples linked to assigned projects
-      - no unassigned samples
+    All accounts see samples in their primary or linked projects, and samples
+    with neither a primary nor any linked project. Creating or being assigned a
+    sample does not bypass project visibility. Write permissions are separate.
+    for_write preserves the previous work/result/attachment operation scope;
+    seeing another person's unassigned sample does not permit changing its work.
     """
-    if not user or not user.is_authenticated:
+    if not user or not user.is_authenticated or not user.is_active:
         return queryset.none()
 
-    if is_admin(user):
-        return queryset
-
-    if is_tech(user):
-        return queryset.filter(
-            Q(project__members=user)
-            | Q(linked_projects__members=user)
-            | Q(project__isnull=True, created_by=user)
-        ).distinct()
-
-    return queryset.filter(
-        Q(project__members=user)
-        | Q(linked_projects__members=user)
-    ).distinct()
+    access = Q(project__members=user) | Q(linked_projects__members=user)
+    unassigned = Q(project__isnull=True, linked_projects__isnull=True)
+    if not for_write or is_admin(user):
+        access |= unassigned
+    elif is_tech(user):
+        access |= unassigned & Q(created_by=user)
+    return queryset.filter(access).distinct()
 
 
-def user_can_access_sample(user, sample):
-    if not user or not user.is_authenticated:
+def user_can_access_sample(user, sample, *, for_write=False):
+    if not user or not user.is_authenticated or not sample.pk:
         return False
-
-    if is_admin(user):
-        return True
-
-    if sample.project_id and sample.project.members.filter(id=user.id).exists():
-        return True
-
-    if sample.linked_projects.filter(members=user).exists():
-        return True
-
-    return is_tech(user) and sample.project_id is None and sample.created_by_id == user.id
+    from .models import Sample
+    return get_sample_access_queryset(Sample.objects.filter(pk=sample.pk), user, for_write=for_write).exists()
 
 
 def user_can_modify_sample(user, sample):
     """
     Linked-project membership gives visibility, not edit ownership.
     """
-    if not user or not user.is_authenticated:
+    if not user_can_access_sample(user, sample):
         return False
 
     if is_admin(user):

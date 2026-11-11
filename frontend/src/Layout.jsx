@@ -127,6 +127,7 @@ export default function Layout() {
   }
 
   async function logout() {
+    if (!window.dispatchEvent(new Event("openlims:before-logout", { cancelable: true }))) return;
     await apiLogout();
     nav("/login", { replace: true });
   }

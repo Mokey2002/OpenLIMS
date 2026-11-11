@@ -59,7 +59,7 @@ export default function AccessRequests() {
           if (!isAdmin(account)) setReview(null);
         }
       } catch (failure) {
-        if (!controller.signal.aborted && page > 1 && failure.message?.includes("404")) { setSearchParams({ status: status || "ALL", page: "1" }); return; }
+        if (!controller.signal.aborted && page > 1 && failure.status === 404) { setSearchParams({ status: status || "ALL", page: "1" }); return; }
         if (!controller.signal.aborted) setError(language === "es" ? "No se pudieron cargar las solicitudes. Inténtalo de nuevo." : "Could not load access requests. Try again.");
       } finally { if (!controller.signal.aborted) setLoading(false); }
     }, 0);

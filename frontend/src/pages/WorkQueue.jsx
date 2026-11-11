@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Badge,
@@ -7,14 +7,26 @@ import {
   Col,
   Form,
   Row,
-  Table,
 } from "react-bootstrap";
 import { apiGet, apiGetAll, apiPatch } from "../api";
 import { canWrite } from "../authz";
 import ConfirmedOperationCard from "../components/ConfirmedOperationCard";
 import useConfirmedOperation from "../hooks/useConfirmedOperation";
+import PersonalTable from "../components/PersonalTable";
+import useRememberedTableScroll from "../hooks/useRememberedTableScroll";
+import { AccessDetails, AccessNotice } from "../components/ActionGuidance";
 
 const BASE_WORK_TYPES = ["GENERAL", "SEQUENCING", "EXTRACTION", "PCR", "ANALYSIS"];
+const WORK_COLUMNS = [
+  { key: "work", label: "Work", value: row => `${row.id} ${row.name}`, render: row => `#${row.id} ${row.name}`, optional: false },
+  { key: "sample", label: "Sample", value: row => row.sample_code },
+  { key: "batch", label: "Batch", value: row => row.batch_code },
+  { key: "project", label: "Project", value: row => row.project_code },
+  { key: "work_type", label: "Type", value: row => row.work_type },
+  { key: "status", label: "Status", value: row => row.status, render: row => <Badge bg={statusVariant(row.status)}>{row.status}</Badge> },
+  { key: "assignee", label: "Assignee", value: row => row.assigned_to_username || "Unassigned" },
+  { key: "due", label: "Due", value: row => row.due_at, render: row => row.due_at ? new Date(row.due_at).toLocaleString() : "—" },
+];
 
 function statusVariant(status) {
   if (status === "COMPLETED") return "success";
@@ -28,6 +40,7 @@ export default function WorkQueue() {
   const [batches, setBatches] = useState([]);
   const [analysisDefinitions, setAnalysisDefinitions] = useState([]);
   const [me, setMe] = useState(null);
+  useRememberedTableScroll(me?.id, "work-queue", Boolean(me));
   const [error, setError] = useState("");
   const [batchId, setBatchId] = useState("");
   const [createType, setCreateType] = useState("SEQUENCING");
@@ -36,10 +49,8 @@ export default function WorkQueue() {
   const [scope, setScope] = useState("ALL");
   const [targetUsername, setTargetUsername] = useState("");
   const [sourceUsername, setSourceUsername] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
     setError("");
     try {
       const [workRows, batchRows, analysisRows, meData] = await Promise.all([
@@ -55,24 +66,14 @@ export default function WorkQueue() {
     } catch (requestError) {
       setError(requestError.message || String(requestError));
     }
-  }
+  }, []);
 
   const operation = useConfirmedOperation(load);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-  }, []);
-
-  const filteredItems = useMemo(
-    () =>
-      workItems.filter((item) => {
-        if (statusFilter && item.status !== statusFilter) return false;
-        if (typeFilter && item.work_type !== typeFilter) return false;
-        return true;
-      }),
-    [workItems, statusFilter, typeFilter]
-  );
+  }, [load]);
 
   const workTypes = useMemo(
     () => Array.from(new Set([
@@ -107,7 +108,7 @@ export default function WorkQueue() {
     );
   }
 
-  async function updateWorkStatus(item, nextStatus) {
+  const updateWorkStatus = useCallback(async (item, nextStatus) => {
     if (!nextStatus || nextStatus === item.status) return;
     setError("");
     try {
@@ -116,9 +117,17 @@ export default function WorkQueue() {
     } catch (requestError) {
       setError(requestError.message || String(requestError));
     }
-  }
+  }, [load]);
 
   const writable = canWrite(me);
+  const columns = useMemo(() => writable ? [...WORK_COLUMNS, {
+    key: "update", label: "Update", optional: false, sortable: false, value: () => "",
+    render: item => item.can_update === false ? item.update_access ? <AccessDetails access={item.update_access} /> : <span className="feed-meta">Read-only</span> : ["COMPLETED", "FAILED", "CANCELLED"].includes(item.status) ? <details className="small"><summary>Final</summary>Work Queue treats this work as final. Ask a lab manager about corrections.</details> : <Form.Select size="sm" aria-label={`Update work ${item.id}`} value={item.status} onChange={event => updateWorkStatus(item, event.target.value)}>{["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED", "CANCELLED"].map(status => <option key={status}>{status}</option>)}</Form.Select>,
+  }] : WORK_COLUMNS, [writable, updateWorkStatus]);
+  const filterOptions = useMemo(() => [
+    { key: "work_type", label: "Work type", options: workTypes },
+    { key: "status", label: "Work status", options: ["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED", "CANCELLED"] },
+  ], [workTypes]);
 
   return (
     <div className="w-100">
@@ -133,6 +142,7 @@ export default function WorkQueue() {
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
+      {me && !writable && <AccessNotice access={{ allowed: false, reason: "Updating work requires a technician or administrator role.", next_step: "Request the appropriate role or ask an administrator.", href: "/access-requests" }} />}
       {!writable && me && (
         <Alert variant="info">Work creation and assignment require a Tech or Director role.</Alert>
       )}
@@ -227,66 +237,9 @@ export default function WorkQueue() {
         <Card.Body>
           <div className="toolbar-row mb-3">
             <h5 className="section-title mb-0">Active and recent work</h5>
-            <Badge bg="dark">{filteredItems.length}</Badge>
+            <Badge bg="dark">{workItems.length}</Badge>
           </div>
-          <Row className="g-2 mb-3">
-            <Col md={4}>
-              <Form.Select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
-                <option value="">All work types</option>
-                {workTypes.map((type) => <option key={type}>{type}</option>)}
-              </Form.Select>
-            </Col>
-            <Col md={4}>
-              <Form.Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                <option value="">All statuses</option>
-                <option value="PENDING">PENDING</option>
-                <option value="IN_PROGRESS">IN_PROGRESS</option>
-                <option value="COMPLETED">COMPLETED</option>
-                <option value="FAILED">FAILED</option>
-                <option value="CANCELLED">CANCELLED</option>
-              </Form.Select>
-            </Col>
-          </Row>
-          {filteredItems.length === 0 ? (
-            <div className="empty-state">No work items match these filters.</div>
-          ) : (
-            <Table responsive hover className="app-table">
-              <thead><tr><th>Work</th><th>Sample</th><th>Batch</th><th>Project</th><th>Type</th><th>Status</th><th>Assignee</th><th>Due</th>{writable && <th>Update</th>}</tr></thead>
-              <tbody>
-                {filteredItems.map((item) => (
-                  <tr key={item.id}>
-                    <td>#{item.id} {item.name}</td>
-                    <td>{item.sample_code}</td>
-                    <td>{item.batch_code || "—"}</td>
-                    <td>{item.project_code || "—"}</td>
-                    <td>{item.work_type}</td>
-                    <td><Badge bg={statusVariant(item.status)}>{item.status}</Badge></td>
-                    <td>{item.assigned_to_username || "Unassigned"}</td>
-                    <td>{item.due_at ? new Date(item.due_at).toLocaleString() : "—"}</td>
-                    {writable && (
-                      <td>
-                        {["COMPLETED", "FAILED", "CANCELLED"].includes(item.status) ? (
-                          <span className="feed-meta">Final</span>
-                        ) : (
-                          <Form.Select
-                            size="sm"
-                            value={item.status}
-                            onChange={(event) => updateWorkStatus(item, event.target.value)}
-                          >
-                            <option value="PENDING">PENDING</option>
-                            <option value="IN_PROGRESS">IN_PROGRESS</option>
-                            <option value="COMPLETED">COMPLETED</option>
-                            <option value="FAILED">FAILED</option>
-                            <option value="CANCELLED">CANCELLED</option>
-                          </Form.Select>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          )}
+          <PersonalTable userId={me?.id} name="work-queue" title="Active and recent work" rows={workItems} columns={columns} filterOptions={filterOptions} emptyMessage="No work items match these filters." />
         </Card.Body>
       </Card>
     </div>

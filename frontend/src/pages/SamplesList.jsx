@@ -12,10 +12,30 @@ import {
   Pagination,
 } from "react-bootstrap";
 import { apiGet, apiPost, apiPostDownload } from "../api";
-import { isAdmin, isTech, canWrite } from "../authz";
+import { canWrite } from "../authz";
 import SampleFormFields from "../components/SampleFormFields";
 import ConfiguredIntake from "../components/ConfiguredIntake";
 import { useLanguage } from "../i18n";
+import useTablePreferences from "../hooks/useTablePreferences";
+import TableViewControls from "../components/TableViewControls";
+import useRememberedTableScroll from "../hooks/useRememberedTableScroll";
+import FeedbackForm, { FormField } from "../components/FeedbackForm";
+import useFormFeedback from "../hooks/useFormFeedback";
+import ActionButton, { AccessDetails, AccessNotice } from "../components/ActionGuidance";
+
+const SAMPLE_COLUMNS = [
+  { key: "id", label: "ID" }, { key: "sample_type", label: "Sample Type" },
+  { key: "project", label: "Primary Project" }, { key: "linked", label: "Linked Projects" },
+  { key: "status", label: "Status" }, { key: "container", label: "Container" },
+  { key: "location", label: "Location" }, { key: "created_by", label: "Created By" },
+  { key: "created_at", label: "Created At" },
+];
+const SAMPLE_SORTS = [
+  { value: "-created_at", label: "Newest first" }, { value: "created_at", label: "Oldest first" },
+  { value: "sample_id", label: "Sample ID ↑" }, { value: "-sample_id", label: "Sample ID ↓" },
+  { value: "status", label: "Status ↑" }, { value: "-status", label: "Status ↓" },
+];
+const SAMPLE_TABLE_DEFAULTS = { columns: SAMPLE_COLUMNS.map(column => column.key), sorts: SAMPLE_SORTS.map(sort => sort.value), sort: "-created_at", pageSize: 10, filters: { status: "", project: "", container: "" } };
 
 const STATUS_OPTIONS = [
   "",
@@ -82,7 +102,23 @@ async function downloadSelectedSamples(ids) {
   );
 }
 
+function sampleCell(sample, key) {
+  switch (key) {
+    case "id": return sample.id;
+    case "sample_type": return sample.sample_type || "GENERAL";
+    case "project": return sample.project_code ? <Badge bg="dark">{sample.project_code}</Badge> : "—";
+    case "linked": return linkedProjectBadges(sample);
+    case "status": return <Badge bg={statusVariant(sample.status)}>{sample.status}</Badge>;
+    case "container": return sample.container_code || "—";
+    case "location": return sample.location_name || "—";
+    case "created_by": return sample.created_by_username || "—";
+    case "created_at": return formatTimestamp(sample.created_at);
+    default: return "—";
+  }
+}
+
 export default function SamplesList() {
+  const createFeedback = useFormFeedback();
   const [searchParams] = useSearchParams();
   const { language } = useLanguage();
   const [sampleForms, setSampleForms] = useState([]);
@@ -91,8 +127,19 @@ export default function SamplesList() {
   const [projects, setProjects] = useState([]);
   const [containers, setContainers] = useState([]);
   const [me, setMe] = useState(null);
+  const { preferences, update: updateView, reset: resetView, ready: viewReady } = useTablePreferences(me?.id, "samples", SAMPLE_TABLE_DEFAULTS);
+  const { query: search, sort: ordering, page, pageSize, filters } = preferences;
+  const { status, project: projectFilter, container: containerFilter } = filters;
+  const setPage = value => updateView(current => ({ page: typeof value === "function" ? value(current.page) : value }));
+  const setSearch = value => updateView({ query: value, page: 1 });
+  const setStatus = value => updateView(current => ({ filters: { ...current.filters, status: value }, page: 1 }));
+  const setProjectFilter = value => updateView(current => ({ filters: { ...current.filters, project: value }, page: 1 }));
+  const setContainerFilter = value => updateView(current => ({ filters: { ...current.filters, container: value }, page: 1 }));
+  const appliedProject = useRef(null);
+  const urlProject = searchParams.get("project");
 
   const [err, setErr] = useState("");
+  const [supportError, setSupportError] = useState(false);
   const [success, setSuccess] = useState("");
   const [bulkResult, setBulkResult] = useState(null);
 
@@ -100,12 +147,8 @@ export default function SamplesList() {
   const [sampleType, setSampleType] = useState("GENERAL");
   const [projectId, setProjectId] = useState(() => searchParams.get("project") || "");
 
-  const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const sampleRequest = useRef(null);
-  const [status, setStatus] = useState("");
-  const [projectFilter, setProjectFilter] = useState(() => searchParams.get("project") || "");
-  const [containerFilter, setContainerFilter] = useState("");
 
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkStatus, setBulkStatus] = useState("");
@@ -115,40 +158,52 @@ export default function SamplesList() {
 
   const [exporting, setExporting] = useState(false);
 
-  const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [nextPageUrl, setNextPageUrl] = useState(null);
   const [previousPageUrl, setPreviousPageUrl] = useState(null);
+  const [rowsReady, setRowsReady] = useState(false);
+  useRememberedTableScroll(me?.id, "samples", rowsReady && viewReady);
 
   useEffect(() => {
     const controller = new AbortController();
     const options = { signal: controller.signal };
-    Promise.all([
+    apiGet("/api/me/", options).then(user => { if (!controller.signal.aborted) setMe(user); })
+      .catch(e => { if (!controller.signal.aborted) setErr(e.message || String(e)); });
+    Promise.allSettled([
       apiGet("/api/projects/", options), apiGet("/api/containers/", options),
-      apiGet("/api/me/", options), apiGet("/api/sample-forms/?active=1", options),
-    ]).then(([projectsData, containersData, meData, formsData]) => {
+      apiGet("/api/sample-forms/?active=1", options),
+    ]).then(results => {
       if (controller.signal.aborted) return;
+      const [projectsData, containersData, formsData] = results.map(result => result.status === "fulfilled" ? result.value : []);
       setProjects(projectsData.results || projectsData || []);
       setContainers(containersData.results || containersData || []);
-      setMe(meData);
-      setSampleForms(formsData.filter(f => f.published && !f.archived));
-    }).catch(e => { if (!controller.signal.aborted) setErr(e.message || String(e)); });
+      setSampleForms((formsData.results || formsData || []).filter(f => f.published && !f.archived));
+      setSupportError(results.some(result => result.status === "rejected"));
+    });
     return () => controller.abort();
   }, []);
 
   useEffect(() => {
+    if (viewReady && urlProject && appliedProject.current !== urlProject) {
+      appliedProject.current = urlProject;
+      updateView(current => current.filters.project === urlProject ? {} : { filters: { ...current.filters, project: urlProject }, page: 1 });
+    }
+  }, [viewReady, urlProject, updateView]);
+
+  useEffect(() => {
     if (search.trim() === debouncedSearch) return;
-    const timeout = setTimeout(() => { setDebouncedSearch(search.trim()); setPage(1); }, 250);
+    const timeout = setTimeout(() => setDebouncedSearch(search.trim()), 250);
     return () => clearTimeout(timeout);
   }, [search, debouncedSearch]);
 
   const load = useCallback(async () => {
+    if (!viewReady || search.trim() !== debouncedSearch) return;
     sampleRequest.current?.abort();
     const controller = new AbortController();
     sampleRequest.current = controller;
     setErr("");
     try {
-      const params = new URLSearchParams({ page: String(page) });
+      const params = new URLSearchParams({ page: String(page), page_size: String(pageSize), ordering });
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (status) params.set("status", status);
       if (projectFilter) params.set("project", projectFilter);
@@ -159,10 +214,15 @@ export default function SamplesList() {
       setTotalCount(data.count || 0);
       setNextPageUrl(data.next || null);
       setPreviousPageUrl(data.previous || null);
+      setRowsReady(true);
     } catch (e) {
+      if (!controller.signal.aborted && page > 1 && e.status === 404) {
+        updateView({ page: 1 });
+        return;
+      }
       if (!controller.signal.aborted) setErr(e.message || String(e));
     }
-  }, [debouncedSearch, status, projectFilter, containerFilter, page]);
+  }, [debouncedSearch, search, status, projectFilter, containerFilter, page, pageSize, ordering, viewReady, updateView]);
 
   useEffect(() => {
     // The effect starts an external request; state updates reflect its result.
@@ -179,23 +239,15 @@ export default function SamplesList() {
     return samples.length > 0 && selectedVisibleCount === samples.length;
   }, [samples, selectedVisibleCount]);
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / 10));
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  const userIsAdmin = isAdmin(me);
-  const userIsTech = isTech(me);
   const userCanWrite = canWrite(me);
 
-  const visibilityMessage = userIsAdmin
-    ? "Showing all samples, including unassigned samples, because you are an admin."
-    : userIsTech
-      ? "Showing samples from your assigned primary projects, linked projects, plus unassigned samples you created."
-      : "Showing samples from your assigned primary or linked projects only.";
+  const visibilityMessage = language === "es"
+    ? "Se muestran las muestras de tus proyectos principales o vinculados, y las muestras sin ningún proyecto."
+    : "Showing samples in your primary or linked projects, plus samples with no projects.";
 
-  const emptyMessage = userIsAdmin
-    ? "No samples found."
-    : userIsTech
-      ? "No samples found in your assigned primary/linked projects or unassigned samples you created."
-      : "No samples found in your assigned primary or linked projects. Ask an admin to add you to a project if you need access.";
+  const emptyMessage = language === "es" ? "Ninguna muestra accesible coincide con estos filtros." : "No accessible samples match these filters.";
 
   function toggleSelected(id) {
     setSelectedIds((prev) =>
@@ -246,7 +298,7 @@ export default function SamplesList() {
       setSuccess("Sample created.");
       await load();
     } catch (e) {
-      setErr(e.message || String(e));
+      createFeedback.reject(e);
     }
   }
 
@@ -376,6 +428,8 @@ export default function SamplesList() {
       </div>
 
       {err && <Alert variant="danger">{err}</Alert>}
+      {me && !userCanWrite && <AccessNotice access={{ allowed: false, reason: "Registering or changing samples requires a technician or administrator role.", next_step: "Request the appropriate role or ask an administrator.", href: "/access-requests" }} />}
+      {supportError && <Alert variant="warning">{language === "es" ? "No se pudieron cargar algunos filtros u opciones de registro. Actualiza esta página para reintentar." : "Some filters or registration options could not load. Refresh this page to retry."}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
 
       <Alert variant="info" className="mb-4">
@@ -388,28 +442,34 @@ export default function SamplesList() {
           <h5 className="section-title">Create Sample</h5>
           {canWrite(me) && <ConfiguredIntake projects={projects} onImported={load} />}
 
-          <Form onSubmit={createSample}>
+          <FeedbackForm feedback={createFeedback} onSubmit={createSample}>
             <SampleFormFields fields={sampleForms.find(f => f.code === sampleType.trim().toUpperCase())?.fields || []} values={formValues} onChange={setFormValues} />
             <Row className="g-2">
               <Col md={4}>
+                <FormField name="sample_id" label="Sample ID" hint="Use a unique sample ID, such as S-002. Maximum 64 characters.">
                 <Form.Control
+                  required maxLength={64}
                   value={sampleId}
                   onChange={(e) => setSampleId(e.target.value)}
                   placeholder="New sample id, e.g. S-002"
                 />
+                </FormField>
               </Col>
 
               <Col md={3}>
+                <FormField name="sample_type" label="Sample Type" hint="Choose a configured type or use GENERAL.">
                 <Form.Control
                   value={sampleType}
                   list="configured-sample-types"
                   onChange={(e) => { setSampleType(e.target.value); setFormValues({}); }}
                   placeholder="Sample type, e.g. DNA"
                 />
+                </FormField>
                 <datalist id="configured-sample-types">{[...new Set(sampleForms.map(f => f.code))].map(code => <option key={code} value={code}>{sampleForms.find(f => f.code === code)?.[language === "es" ? "name_es" : "name_en"]}</option>)}</datalist>
               </Col>
 
               <Col md={3}>
+                <FormField name="project" label="Primary Project">
                 <Form.Select
                   value={projectId}
                   onChange={(e) => setProjectId(e.target.value)}
@@ -422,15 +482,16 @@ export default function SamplesList() {
                     </option>
                   ))}
                 </Form.Select>
+                </FormField>
               </Col>
 
               <Col md={2}>
-                <Button type="submit" variant="dark" className="w-100">
+                <ActionButton type="submit" variant="dark" className="w-100">
                   Create
-                </Button>
+                </ActionButton>
               </Col>
             </Row>
-          </Form>
+          </FeedbackForm>
         </Card.Body>
       </Card>
       )}
@@ -557,17 +618,19 @@ export default function SamplesList() {
             </Col>
 
             <Col md={3}>
-              <Button
+              <ActionButton
                 variant="dark"
                 className="w-100"
                 onClick={applyBulkUpdate}
+                reason={selectedIds.length === 0 ? "Select at least one sample." : "Enter a reason with at least 10 characters before changing status."}
+                nextStep="Select samples below and review the bulk change fields."
                 disabled={
                   selectedIds.length === 0 ||
                   (bulkStatus && bulkReason.trim().length < 10)
                 }
               >
                 Apply to {selectedIds.length}
-              </Button>
+              </ActionButton>
             </Col>
           </Row>
 
@@ -606,14 +669,16 @@ export default function SamplesList() {
               Clear Selection
             </Button>
 
-            <Button
+            <ActionButton
               variant="outline-warning"
               size="sm"
               onClick={archiveSelected}
               disabled={selectedIds.length === 0 || bulkReason.trim().length < 10}
+              reason={selectedIds.length === 0 ? "Select at least one sample." : "Enter a reason with at least 10 characters before archiving."}
+              nextStep="Review the selected samples and enter the reason for this change."
             >
               Archive Selected
-            </Button>
+            </ActionButton>
 
             <Button
               variant="outline-primary"
@@ -654,6 +719,7 @@ export default function SamplesList() {
 
       <Card className="app-card">
         <Card.Body>
+          <TableViewControls title="Samples" columns={SAMPLE_COLUMNS} preferences={preferences} update={updateView} reset={resetView} sorts={SAMPLE_SORTS} search={false} />
           <div className="toolbar-row mb-3">
             <div className="feed-meta">
               Showing {samples.length} of {totalCount} samples
@@ -661,6 +727,7 @@ export default function SamplesList() {
 
             <Pagination className="mb-0">
               <Pagination.Prev
+                aria-label="Previous sample page"
                 disabled={!previousPageUrl || page === 1}
                 onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
               />
@@ -668,6 +735,7 @@ export default function SamplesList() {
               <Pagination.Item active>{page}</Pagination.Item>
 
               <Pagination.Next
+                aria-label="Next sample page"
                 disabled={!nextPageUrl || page >= totalPages}
                 onClick={() => setPage((currentPage) => currentPage + 1)}
               />
@@ -683,20 +751,13 @@ export default function SamplesList() {
                   <th>
                     <Form.Check
                       type="checkbox"
+                      aria-label="Select visible samples"
                       checked={allVisibleSelected}
                       onChange={toggleSelectAllVisible}
                     />
                   </th>
-                  <th>ID</th>
-                  <th>Sample ID</th>
-                  <th>Sample Type</th>
-                  <th>Primary Project</th>
-                  <th>Linked Projects</th>
-                  <th>Status</th>
-                  <th>Container</th>
-                  <th>Location</th>
-                  <th>Created By</th>
-                  <th>Created At</th>
+                  <th scope="col">Sample ID</th>
+                  {SAMPLE_COLUMNS.filter(column => preferences.columns.includes(column.key)).map(column => <th key={column.key} scope="col">{column.label}</th>)}
                 </tr>
               </thead>
 
@@ -706,41 +767,20 @@ export default function SamplesList() {
                     <td>
                       <Form.Check
                         type="checkbox"
+                        aria-label={`Select ${sample.sample_id}`}
                         checked={selectedIds.includes(sample.id)}
                         onChange={() => toggleSelected(sample.id)}
                       />
                     </td>
 
-                    <td>{sample.id}</td>
-
                     <td>
                       <Link to={`/samples/${sample.id}`}>
                         {sample.sample_id}
                       </Link>
+                      <AccessDetails access={sample.modification_access} />
                     </td>
 
-                    <td>{sample.sample_type || "GENERAL"}</td>
-
-                    <td>
-                      {sample.project_code ? (
-                        <Badge bg="dark">{sample.project_code}</Badge>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-
-                    <td>{linkedProjectBadges(sample)}</td>
-
-                    <td>
-                      <Badge bg={statusVariant(sample.status)}>
-                        {sample.status}
-                      </Badge>
-                    </td>
-
-                    <td>{sample.container_code || "-"}</td>
-                    <td>{sample.location_name || "-"}</td>
-                    <td>{sample.created_by_username || "-"}</td>
-                    <td>{formatTimestamp(sample.created_at)}</td>
+                    {SAMPLE_COLUMNS.filter(column => preferences.columns.includes(column.key)).map(column => <td key={column.key}>{sampleCell(sample, column.key)}</td>)}
                   </tr>
                 ))}
               </tbody>

@@ -42,7 +42,7 @@ export default function AssistantInstrumentUpload({ config, onPrepared, onBusy, 
       }
       onPrepared(data);
     } catch (error) {
-      if (error.name !== "AbortError") setError(error instanceof TypeError || error instanceof SyntaxError
+      if (error.name !== "AbortError") setError(error.status === 0 || error instanceof TypeError || error instanceof SyntaxError
         ? "The upload response was interrupted. Retry with the same run ID to recover the existing preview."
         : error.message || "The upload did not complete. Retry with the same run ID to recover its existing preview.");
     } finally {

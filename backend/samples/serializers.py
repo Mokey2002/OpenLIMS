@@ -21,6 +21,7 @@ class SampleSerializer(serializers.ModelSerializer):
     linked_project_summaries = serializers.SerializerMethodField()
     created_by_username = serializers.SerializerMethodField()
     can_modify = serializers.SerializerMethodField()
+    modification_access = serializers.SerializerMethodField()
     batch_code = serializers.SerializerMethodField()
     assigned_to_username = serializers.SerializerMethodField()
     custodian_username = serializers.CharField(
@@ -57,6 +58,7 @@ class SampleSerializer(serializers.ModelSerializer):
             "created_by",
             "created_by_username",
             "can_modify",
+            "modification_access",
             "created_at",
             "status_changed_at",
             "updated_at",
@@ -113,6 +115,15 @@ class SampleSerializer(serializers.ModelSerializer):
         if hasattr(obj, "_display_can_modify") and getattr(obj, "_display_permission_user", None) == getattr(user, "pk", None):
             return obj._display_can_modify
         return user_can_modify_sample(user, obj)
+
+    def get_modification_access(self, obj) -> dict:
+        from core.action_guidance import sample_modification_guidance, serializer_actor_roles
+        allowed = self.get_can_modify(obj)
+        if allowed:
+            from core.action_guidance import guidance
+            return guidance(True)
+        user, roles = serializer_actor_roles(self)
+        return sample_modification_guidance(obj, user, roles, allowed)
 
     def get_created_by_username(self, obj):
         return obj.created_by.username if obj.created_by else None
@@ -280,6 +291,13 @@ class SampleBatchSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 class SingleSampleAttachmentSerializer(serializers.ModelSerializer):
+    def validate_sample(self, sample):
+        from .access import user_can_access_sample
+        request = self.context.get("request")
+        if request and not user_can_access_sample(request.user, sample, for_write=True):
+            raise serializers.ValidationError("Choose an accessible sample for which you have attachment permissions.")
+        return sample
+
     filename = serializers.SerializerMethodField()
     uploaded_by_username = serializers.SerializerMethodField()
 

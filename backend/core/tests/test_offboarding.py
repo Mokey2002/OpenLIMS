@@ -34,7 +34,7 @@ class OffboardingTests(TestCase):
         cls.successor.groups.add(tech, qc)
         cls.target.user_permissions.add(Permission.objects.get(codename="change_user"))
         cls.project = Project.objects.create(code="HANDOVER", name="Handover study")
-        cls.project.members.add(cls.target, cls.successor)
+        cls.project.members.add(cls.target, cls.successor, cls.admin)
         cls.sample = Sample.objects.create(sample_id="PROTEIN-100", project=cls.project,
             created_by=cls.target, assigned_to=cls.target, custodian=cls.target)
         cls.work = WorkItem.objects.create(sample=cls.sample, name="Protein concentration", assigned_to=cls.target, created_by=cls.target)

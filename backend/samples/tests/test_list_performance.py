@@ -17,7 +17,7 @@ class SampleListPerformanceTests(APITestCase):
         cls.viewer.groups.add(Group.objects.get_or_create(name="viewer")[0])
         cls.admin = get_user_model().objects.create_user(username="list-admin", is_superuser=True)
         cls.primary = Project.objects.create(code="PRIMARY", name="Primary")
-        cls.primary.members.add(cls.tech, cls.viewer)
+        cls.primary.members.add(cls.tech, cls.viewer, cls.admin)
         cls.other = Project.objects.create(code="OTHER", name="Other")
         Sample.objects.bulk_create([Sample(sample_id=f"LIST-{i:03}", project=cls.primary) for i in range(60)])
         cls.linked = Sample.objects.create(sample_id="LINKED", project=cls.other)

@@ -30,8 +30,8 @@ def _result_request_help(user, instruction, example, *, failed_only=False):
     return f"{instruction} For example: {example.format(result=references[0])}."
 
 
-def _result_queryset(user):
-    allowed_samples = get_sample_access_queryset(Sample.objects.all(), user)
+def _result_queryset(user, *, for_write=False):
+    allowed_samples = get_sample_access_queryset(Sample.objects.all(), user, for_write=for_write)
     return (
         Result.objects.select_related(
             "work_item",
@@ -260,8 +260,8 @@ def _reason_from_message(message):
     return match.group(1).strip().rstrip(".") if match else ""
 
 
-def _get_result(result_id, user):
-    result = _result_queryset(user).filter(id=result_id).first()
+def _get_result(result_id, user, *, for_write=False):
+    result = _result_queryset(user, for_write=for_write).filter(id=result_id).first()
     if result:
         return result, None
     return None, f"Result R-{result_id} was not found or is not accessible."
@@ -580,7 +580,7 @@ def _propose_review_decision(message, user):
         return _error(denial)
 
     found = {
-        result.id: result for result in _result_queryset(user).filter(id__in=result_ids)
+        result.id: result for result in _result_queryset(user, for_write=True).filter(id__in=result_ids)
     }
     included = []
     excluded = []
@@ -676,7 +676,7 @@ def _propose_flag(message, user):
                 "Flag result {result} for review",
             )
         )
-    result, error = _get_result(result_id, user)
+    result, error = _get_result(result_id, user, for_write=True)
     if error:
         return _error(error)
     if not (is_admin(user) or is_tech(user) or is_qc_reviewer(user)):
@@ -723,7 +723,7 @@ def _propose_assign_failed(message, user):
     if not is_qc_reviewer(target):
         return _error(f"{target.username} is not an authorized QC reviewer.")
     results = list(
-        _result_queryset(user)
+        _result_queryset(user, for_write=True)
         .filter(qc_passed=False)
         .exclude(qc_assigned_to=target)[: assistant_bulk_max_records() + 1]
     )
@@ -849,7 +849,7 @@ def execute_qc_review(action):
                     "entered_by",
                 ).get(id=result_id)
                 allowed = (
-                    _result_queryset(action.requested_by).filter(id=result_id).exists()
+                    _result_queryset(action.requested_by, for_write=True).filter(id=result_id).exists()
                 )
                 if not allowed:
                     raise PermissionDenied("result is no longer accessible")

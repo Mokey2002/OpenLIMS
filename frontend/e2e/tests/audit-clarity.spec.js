@@ -126,12 +126,14 @@ for (const lostResponse of [false, true]) {
     if (lostResponse) {
       await page.getByPlaceholder('Write observations, rationale, or conclusions...').fill('Updated notes');
       await page.getByRole('button', { name: 'Save now', exact: true }).click();
-      await expect(page.getByText('Save failed — refresh required', { exact: true })).toBeVisible();
+      await expect(page.getByText('Save failed — your edits are still open', { exact: true })).toBeVisible();
     }
     await page.getByRole('button', { name: 'Save now', exact: true }).click();
     await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Save now', exact: true }).click();
-    await expect.poll(() => saves).toBe(lostResponse ? 3 : 2);
+    // Unchanged local content needs no additional save request. A lost response
+    // still retries the pending edit once and adopts the existing revision.
+    await expect.poll(() => saves).toBe(lostResponse ? 2 : 0);
     await page.getByRole('tab', { name: /^History / }).click();
     const history = page.getByRole('table').filter({ has: page.locator('th').filter({ hasText: /^Checksum$/ }) });
     await expect(history.locator('tbody').getByText(lostResponse ? 'r2' : 'r1', { exact: true })).toHaveCount(1);

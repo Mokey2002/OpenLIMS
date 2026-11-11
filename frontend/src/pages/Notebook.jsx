@@ -1,9 +1,10 @@
 import RevisionComparison from "../components/ChangeComparison";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useBlocker } from "react-router-dom";
 import {
   Alert, Badge, Button, Card, Col, Form, Modal, Nav, Row, Spinner, Tab, Table,
 } from "react-bootstrap";
-import { apiDownload, apiGet, apiGetAll, apiPatch, apiPost, apiPostForm } from "../api";
+import { apiDownload, apiGet, apiGetAll, apiPatch, apiPost, apiPostForm, apiPostResponse } from "../api";
 import ExperimentWorkflow from "../components/notebook/ExperimentWorkflow";
 import TemplateDesigner from "../components/notebook/TemplateDesigner";
 import BlockEditor from "../components/notebook/BlockEditor";
@@ -11,6 +12,12 @@ import { BLOCK_CATALOG, newBlock } from "../components/notebook/blockTypes";
 import { useLanguage } from "../i18n";
 import "./Notebook.css";
 import { selectNotebookRecord } from "./notebookSelection";
+import DraftRecovery from "../components/notebook/DraftRecovery";
+import { draftContent, notebookDraftKey, readNotebookDraft, recoveryStorage, removeNotebookDraft, sameDraftContent, storeNotebookDraft } from "../utils/notebookRecovery";
+import FeedbackForm, { FormField } from "../components/FeedbackForm";
+import useFormFeedback from "../hooks/useFormFeedback";
+import ActionButton, { AccessNotice } from "../components/ActionGuidance";
+import { notebookEditAccess } from "../utils/actionGuidance";
 
 const EDITABLE_STATES = new Set(["DRAFT", "IN_PROGRESS"]);
 const STATUS_OPTIONS = ["DRAFT", "IN_PROGRESS", "COMPLETED", "REVIEWED", "LOCKED"];
@@ -106,13 +113,11 @@ function notebookValues(notebook) {
 }
 
 function MultiUserSelect({ label, value, users, disabled, onChange, help }) {
-  return <Form.Group>
-    <Form.Label>{label}</Form.Label>
+  return <FormField name={label.toLowerCase().replaceAll(" ", "_")} label={label} hint={help}>
     <Form.Select multiple value={(value || []).map(String)} disabled={disabled} onChange={(event) => onChange(Array.from(event.target.selectedOptions, (option) => Number(option.value)))}>
       {users.map((user) => <option key={user.id} value={user.id}>{user.full_name || user.username} ({user.username})</option>)}
     </Form.Select>
-    {help && <Form.Text>{help}</Form.Text>}
-  </Form.Group>;
+  </FormField>;
 }
 
 function StatCard({ label, value, detail, variant = "dark" }) {
@@ -120,6 +125,7 @@ function StatCard({ label, value, detail, variant = "dark" }) {
 }
 
 export default function NotebookPage() {
+  const notebookFeedback = useFormFeedback(), experimentFeedback = useFormFeedback(), workflowFeedback = useFormFeedback();
   const { locale, language } = useLanguage();
   const say = (en, es) => language === "es" ? es : en;
   const [me, setMe] = useState(null);
@@ -143,6 +149,10 @@ export default function NotebookPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [saveState, setSaveState] = useState("");
+  const [recoveryDraft, setRecoveryDraft] = useState(null);
+  const [storageWarning, setStorageWarning] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [topTab, setTopTab] = useState("workspace");
   const [detailTab, setDetailTab] = useState("entry");
   const [notebookSearch, setNotebookSearch] = useState("");
@@ -170,22 +180,48 @@ export default function NotebookPage() {
   const dirtyRef = useRef(false);
   const editVersionRef = useRef(0);
   const linkTargetRequests = useRef(new Set());
+  const draftKeyRef = useRef(null);
+  const contentRef = useRef({ blocks: [], links: [] });
+  const saveChain = useRef(Promise.resolve(true));
+  const savedEditVersionRef = useRef(0);
+  const allowNavigationRef = useRef(false);
+  const blocker = useBlocker(() => dirtyRef.current && !allowNavigationRef.current);
+
+  useEffect(() => {
+    const beforeUnload = event => { if (dirtyRef.current) { event.preventDefault(); event.returnValue = ""; } };
+    const beforeLogout = event => {
+      if (dirtyRef.current && !window.confirm(language === "es" ? "Hay cambios sin guardar. ¿Salir de la cuenta de todos modos?" : "You have unsaved changes. Sign out anyway?")) event.preventDefault();
+      else allowNavigationRef.current = true;
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    window.addEventListener("openlims:before-logout", beforeLogout);
+    return () => { window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("openlims:before-logout", beforeLogout); };
+  }, [language]);
 
   function formatDate(value) {
     return value ? new Date(value).toLocaleString(locale) : "—";
   }
 
-  function adoptExperiment(experiment) {
+  function adoptExperiment(experiment, actor = me) {
     comparisonRequest.current?.abort();
     setComparisonLoading(false);
     setWorkflowEpoch(current => current + 1);
     selectionToken.current += 1;
     clearTimeout(autosaveTimer.current);
     dirtyRef.current = false;
+    setHasUnsavedChanges(false);
+    setSaveFailed(false);
     editVersionRef.current += 1;
+    savedEditVersionRef.current = editVersionRef.current;
     setSelected(experiment);
     setBlocks(withKeys(experiment?.current_revision_detail?.blocks || []));
     setLinks(revisionLinks(experiment?.current_revision_detail));
+    contentRef.current = draftContent(experiment?.current_revision_detail?.blocks || [], revisionLinks(experiment?.current_revision_detail));
+    draftKeyRef.current = experiment ? notebookDraftKey(actor?.id, experiment.public_id) : null;
+    const stored = readNotebookDraft(recoveryStorage(), draftKeyRef.current);
+    const alreadySaved = stored && sameDraftContent(stored, contentRef.current);
+    if (alreadySaved) removeNotebookDraft(recoveryStorage(), draftKeyRef.current);
+    setRecoveryDraft(alreadySaved ? null : stored);
     setExperimentMeta({ title: experiment?.title || "", assignees: experiment?.assignees || [] });
     revisionRef.current = experiment?.current_revision_detail?.public_id || "";
     setSaveState("");
@@ -265,7 +301,7 @@ export default function NotebookPage() {
       setSelectedNotebookId(targetNotebook?.id || null);
       setNotebookEditForm(targetNotebook ? notebookValues(targetNotebook) : null);
       setTemplateForm((current) => ({ ...current, notebook: targetNotebook?.permissions?.write ? String(targetNotebook.id) : "" }));
-      adoptExperiment(target);
+      adoptExperiment(target, meData);
       void loadAttachments(target);
     } catch (requestError) {
       if (auxiliaryToken === workspaceLoadToken.current) setError(requestError.message || String(requestError));
@@ -296,18 +332,32 @@ export default function NotebookPage() {
     if (!experiment?.permissions?.write || !EDITABLE_STATES.has(experiment.status)) return true;
     const token = selectionToken.current;
     const savedEditVersion = editVersionRef.current;
-    const expectedRevision = revisionRef.current;
     clearTimeout(autosaveTimer.current);
+    const run = async () => {
+    if (token !== selectionToken.current) return true;
+    if (savedEditVersion <= savedEditVersionRef.current) {
+      if (!dirtyRef.current) setSaveState("All changes saved");
+      return true;
+    }
+    const expectedRevision = revisionRef.current;
     setSaveState("Saving...");
     try {
-      const response = await apiPost(`/api/experiments/${experiment.id}/autosave/`, {
+      const result = await apiPostResponse(`/api/experiments/${experiment.id}/autosave/`, {
         blocks: serializableBlocks(nextBlocks), links: nextLinks, reason,
         expected_revision_public_id: expectedRevision,
       });
+      const response = await result.json().catch(() => ({}));
+      if (!result.ok) throw new Error(result.status === 409 || response.revision ? say("The saved experiment changed. Review the latest saved version before restoring your edits.", "El experimento guardado cambió. Revisa la última versión antes de restaurar tus cambios.") : say("Could not save your edits. Check your connection and access, then retry.", "No se pudieron guardar los cambios. Revisa la conexión y los permisos e inténtalo de nuevo."));
       if (token !== selectionToken.current || selected?.id !== experiment.id) return true;
       revisionRef.current = response.revision.public_id;
+      savedEditVersionRef.current = savedEditVersion;
       const hasNewerLocalChanges = editVersionRef.current !== savedEditVersion;
       dirtyRef.current = hasNewerLocalChanges;
+      setHasUnsavedChanges(hasNewerLocalChanges);
+      setSaveFailed(false);
+      if (hasNewerLocalChanges) {
+        setStorageWarning(!storeNotebookDraft(recoveryStorage(), draftKeyRef.current, contentRef.current, revisionRef.current));
+      } else removeNotebookDraft(recoveryStorage(), draftKeyRef.current);
       setSaveState(hasNewerLocalChanges ? "Unsaved changes" : response.created ? `Saved as r${response.revision.number}` : "All changes saved");
       setLinks((current) => current.map((link) => {
         const saved = response.revision.links.find((row) => row.entity_type === link.entity_type && String(row.entity_public_id) === String(link.public_id) && row.relation_type === link.relation_type);
@@ -328,16 +378,26 @@ export default function NotebookPage() {
       } : row));
       return true;
     } catch (requestError) {
-      setSaveState("Save failed — refresh required");
+      if (token !== selectionToken.current) return false;
+      setSaveState("Save failed — your edits are still open");
+      setSaveFailed(true);
       setError(requestError.message || String(requestError));
       return false;
     }
+    };
+    const pending = saveChain.current.catch(() => false).then(run);
+    saveChain.current = pending;
+    return pending;
   }
 
   function scheduleAutosave(nextBlocks, nextLinks) {
     if (!selected?.permissions?.write || !EDITABLE_STATES.has(selected.status)) return;
     dirtyRef.current = true;
+    setHasUnsavedChanges(true);
+    setSaveFailed(false);
     editVersionRef.current += 1;
+    contentRef.current = draftContent(nextBlocks, nextLinks);
+    setStorageWarning(!storeNotebookDraft(recoveryStorage(), draftKeyRef.current, contentRef.current, revisionRef.current));
     clearTimeout(autosaveTimer.current);
     setSaveState("Unsaved changes");
     const experiment = selected;
@@ -419,7 +479,7 @@ export default function NotebookPage() {
       setNotebookForm({ name: "", description: "", scope: "PROJECT", project: "" });
       setShowNotebookModal(false); setMessage(`Notebook ${created.name} created and selected.`);
       await load(null, created.id); setTopTab("workspace");
-    } catch (requestError) { setError(requestError.message || String(requestError)); }
+    } catch (requestError) { notebookFeedback.reject(requestError); }
   }
 
   async function updateNotebook(event) {
@@ -465,7 +525,7 @@ export default function NotebookPage() {
       setExperimentForm({ source: "blank", template: "", title: "", assignees: [] });
       setShowExperimentModal(false); setMessage("Experiment created and ready to edit.");
       await load(created.id, selectedNotebookId); setTopTab("workspace"); setDetailTab("entry");
-    } catch (requestError) { setError(requestError.message || String(requestError)); }
+    } catch (requestError) { experimentFeedback.reject(requestError); }
   }
 
   async function saveExperimentMeta(event) {
@@ -536,6 +596,7 @@ export default function NotebookPage() {
   }
 
   function openWorkflowAction(type, extra = {}) {
+    workflowFeedback.clear();
     setWorkflowAction({ type, comment: "", reason: "", signed_name: me?.full_name || me?.username || "",
       title: type === "clone" ? `Copy of ${selected?.title || "experiment"}` : "", ...extra });
   }
@@ -552,7 +613,7 @@ export default function NotebookPage() {
       else if (workflowAction.type === "restore") await apiPost(`/api/experiments/${selected.id}/restore/`, { revision_public_id: workflowAction.revision.public_id, reason: workflowAction.reason });
       const type = workflowAction.type; setWorkflowAction(null); setMessage(type === "clone" ? "Experiment cloned." : "Experiment workflow updated.");
       await load(response?.id || selected.id, selectedNotebookId);
-    } catch (requestError) { setError(requestError.message || String(requestError)); }
+    } catch (requestError) { workflowFeedback.reject(requestError); }
   }
 
   async function compareRevisions(event) {
@@ -579,6 +640,31 @@ export default function NotebookPage() {
     await load(selected?.id, selectedNotebookId);
   }
 
+  function restoreRecovery() {
+    if (!recoveryDraft || !selected?.permissions?.write || !EDITABLE_STATES.has(selected.status)) return;
+    const recovered = draftContent(recoveryDraft.blocks, recoveryDraft.links);
+    setBlocks(withKeys(recovered.blocks)); setLinks(recovered.links);
+    contentRef.current = recovered;
+    dirtyRef.current = true; setHasUnsavedChanges(true);
+    editVersionRef.current += 1;
+    setStorageWarning(!storeNotebookDraft(recoveryStorage(), draftKeyRef.current, recovered, revisionRef.current));
+    setRecoveryDraft(null); setSaveFailed(false);
+    setSaveState(say("Recovered draft — review and save your changes", "Borrador recuperado: revisa y guarda tus cambios"));
+    setError("");
+  }
+
+  async function reviewLatestVersion() {
+    clearTimeout(autosaveTimer.current);
+    const token = selectionToken.current, version = editVersionRef.current;
+    try {
+      await saveChain.current;
+      const latest = await apiGet(`/api/experiments/${selected.id}/?compact=1`);
+      if (token !== selectionToken.current || version !== editVersionRef.current) return;
+      adoptExperiment(latest);
+      setError("");
+    } catch { setError(say("Could not load the latest experiment. Your open edits have been kept.", "No se pudo cargar la última versión. Se conservaron los cambios abiertos.")); }
+  }
+
   const selectedNotebook = useMemo(() => notebooks.find((row) => String(row.id) === String(selectedNotebookId)) || null, [notebooks, selectedNotebookId]);
   const notebookTemplates = useMemo(() => templates.filter((row) => String(row.notebook) === String(selectedNotebookId)), [templates, selectedNotebookId]);
   const notebookExperiments = useMemo(() => experiments.filter((row) => String(row.notebook) === String(selectedNotebookId)), [experiments, selectedNotebookId]);
@@ -590,7 +676,8 @@ export default function NotebookPage() {
     return matchesText && matchesStatus && mine;
   }), [notebookExperiments, experimentSearch, statusFilter, myWorkOnly, me]);
   const targetOptions = linkTargets[linkForm.entity_type] || [];
-  const editable = Boolean(selected?.permissions?.write && EDITABLE_STATES.has(selected.status));
+  const canEdit = Boolean(selected?.permissions?.write && EDITABLE_STATES.has(selected.status));
+  const editable = canEdit && !recoveryDraft;
   const openComments = experiments.reduce((count, experiment) => (
     count + (experiment.open_comment_count ?? (experiment.comments || []).filter((comment) => !comment.resolved).length)
   ), 0);
@@ -607,6 +694,10 @@ export default function NotebookPage() {
     </div>
     {error && <Alert variant="danger" dismissible onClose={() => setError("")}>{error}</Alert>}
     {message && <Alert variant="success" dismissible onClose={() => setMessage("")}>{message}</Alert>}
+    {storageWarning && <Alert variant="warning">{say("Browser recovery storage is unavailable or full. Keep this page open until your edits are saved to the server.", "El almacenamiento de recuperación no está disponible o está lleno. Mantén la página abierta hasta guardar los cambios en el servidor.")}</Alert>}
+    {recoveryDraft && selected && <DraftRecovery key={`${selected.id}-${recoveryDraft.savedAt}`} draft={recoveryDraft} current={selected} canRestore={canEdit} onRestore={restoreRecovery} onDiscard={() => { removeNotebookDraft(recoveryStorage(), draftKeyRef.current); setRecoveryDraft(null); }} />}
+    {saveFailed && hasUnsavedChanges && <div className="d-flex flex-wrap gap-2 mb-3"><Button variant="primary" onClick={() => saveContent(blocks, links, "Retry notebook save")}>{say("Retry saving edits", "Reintentar guardar cambios")}</Button><Button variant="outline-secondary" onClick={reviewLatestVersion}>{say("Review latest saved version", "Revisar la última versión guardada")}</Button></div>}
+    <Modal show={blocker.state === "blocked"} onHide={() => blocker.reset?.()} centered><Modal.Header closeButton><Modal.Title>{say("Leave with unsaved changes?", "¿Salir con cambios sin guardar?")}</Modal.Title></Modal.Header><Modal.Body>{say("Your latest edits have not been saved to the server. Stay to save them, or leave and review the recovery copy when you return to this experiment in this tab.", "Los últimos cambios no se guardaron en el servidor. Quédate para guardarlos o vuelve a revisar la copia de recuperación en esta pestaña.")}{storageWarning && <p className="text-danger mt-2">{say("A browser recovery copy could not be stored. Leaving may lose your edits.", "No se pudo guardar una copia de recuperación. Si sales, puedes perder los cambios.")}</p>}</Modal.Body><Modal.Footer><Button variant="secondary" onClick={() => blocker.reset?.()}>{say("Stay on this page", "Permanecer en esta página")}</Button><Button variant="outline-danger" onClick={() => { allowNavigationRef.current = true; clearTimeout(autosaveTimer.current); blocker.proceed?.(); }}>{say("Leave page", "Salir de la página")}</Button></Modal.Footer></Modal>
 
     <details className="notebook-guide mb-4" open={notebooks.length === 0 ? true : undefined}>
       <summary>{say("How does the notebook work?", "¿Cómo funciona la bitácora?")}</summary>
@@ -697,9 +788,9 @@ export default function NotebookPage() {
       {designTemplate && <TemplateDesigner users={users} key={designTemplate.id} template={designTemplate} onClose={() => setDesignTemplate(null)} onSaved={updated => { setTemplates(current => current.map(row => row.id === updated.id ? updated : row)); setDesignTemplate(null); }} />}
     </Tab.Container>
 
-    <NotebookCreateModal show={showNotebookModal} onHide={() => setShowNotebookModal(false)} form={notebookForm} setForm={setNotebookForm} projects={projects} onSubmit={createNotebook} />
-    <ExperimentCreateModal show={showExperimentModal} onHide={() => setShowExperimentModal(false)} form={experimentForm} setForm={setExperimentForm} templates={notebookTemplates} users={users} onSubmit={createExperiment} />
-    <WorkflowModal action={workflowAction} setAction={setWorkflowAction} onSubmit={submitWorkflowAction} />
+    <NotebookCreateModal feedback={notebookFeedback} show={showNotebookModal} onHide={() => setShowNotebookModal(false)} form={notebookForm} setForm={setNotebookForm} projects={projects} onSubmit={createNotebook} />
+    <ExperimentCreateModal feedback={experimentFeedback} show={showExperimentModal} onHide={() => setShowExperimentModal(false)} form={experimentForm} setForm={setExperimentForm} templates={notebookTemplates} users={users} onSubmit={createExperiment} />
+    <WorkflowModal feedback={workflowFeedback} action={workflowAction} setAction={setWorkflowAction} onSubmit={submitWorkflowAction} />
   </div>;
 }
 
@@ -713,10 +804,12 @@ function ExperimentWorkspace(props) {
     onSave, onWorkflow, onDownload, onAddBlock, onSequenceFocus, onBlockChange, onBlockMove, onBlockDuplicate,
     onBlockRemove, onAddLink, onRemoveLink, onUploadAttachment, onAddComment, onResolveComment, onCompare,
     onSaveMeta, formatDate } = props;
+  const recordedAccess = notebookEditAccess(selected);
+  const editAccess = !editable && recordedAccess.allowed ? { allowed: false, reason: "Review your recovery copy before editing this experiment.", next_step: "Restore or discard the recovery copy shown above." } : recordedAccess;
   return <>
-    <Card className="app-card notebook-experiment-header mb-4"><Card.Body><div className="toolbar-row">
+    <Card className="app-card notebook-experiment-header mb-4"><Card.Body>{!editable && <AccessNotice access={editAccess} />}<div className="toolbar-row">
       <div><div className="inline-actions mb-2"><Badge bg={statusColor(selected.status)}>{statusLabel(selected.status)}</Badge><span className={`notebook-save-state ${saveState.includes("failed") ? "text-danger" : ""}`}>{saveState || `Revision ${selected.current_revision_detail?.number || 0}`}</span></div><h3 className="mb-1">{selected.title}</h3><div className="feed-meta">{selected.notebook_name} · {selected.project_code || "Private/team"} · created by {selected.created_by_username}</div></div>
-      <div className="inline-actions">{editable && <Button variant="outline-primary" onClick={onSave}>Save now</Button>}{editable && <Button variant="outline-dark" disabled={(selected.workflow_steps || []).some(step => step.status !== "COMPLETED")} onClick={() => onWorkflow("complete")}>Complete</Button>}{selected.permissions.review && selected.status === "COMPLETED" && <><Button variant="success" onClick={() => onWorkflow("approve")}>Approve</Button><Button variant="outline-warning" onClick={() => onWorkflow("changes")}>Request changes</Button></>}{selected.permissions.lock && selected.status === "REVIEWED" && <Button variant="dark" onClick={() => onWorkflow("lock")}>Lock</Button>}<Button variant="outline-secondary" onClick={() => onWorkflow("clone")}>Clone</Button><Button variant="outline-primary" onClick={onDownload}>PDF</Button></div>
+      <div className="inline-actions"><ActionButton access={editAccess} onClick={onSave} variant="outline-primary">Save now</ActionButton><ActionButton access={editAccess} variant="outline-dark" disabled={(selected.workflow_steps || []).some(step => step.status !== "COMPLETED")} reason="Complete the unfinished workflow steps first." nextStep="Open the workflow and finish its pending steps." onClick={() => onWorkflow("complete")}>Complete</ActionButton>{selected.status === "COMPLETED" && <><ActionButton variant="success" disabled={!selected.permissions.review} reason="Notebook review access is required." nextStep="Ask the notebook owner to grant review access or contact an authorized reviewer." onClick={() => onWorkflow("approve")}>Approve</ActionButton><ActionButton variant="outline-warning" disabled={!selected.permissions.review} reason="Notebook review access is required." nextStep="Ask the notebook owner to grant review access or contact an authorized reviewer." onClick={() => onWorkflow("changes")}>Request changes</ActionButton></>}{selected.status === "REVIEWED" && <ActionButton variant="dark" disabled={!selected.permissions.lock} reason="Notebook locking access is required." nextStep="Ask the notebook owner or an authorized administrator." onClick={() => onWorkflow("lock")}>Lock</ActionButton>}<ActionButton variant="outline-secondary" disabled={!selected.permissions.write} reason="Notebook edit access is required to create a copy." nextStep="Ask the notebook owner for an editable copy." onClick={() => onWorkflow("clone")}>Clone</ActionButton><Button variant="outline-primary" onClick={onDownload}>PDF</Button></div>
     </div></Card.Body></Card>
     <div className="notebook-context mb-3">
       <p className="mb-2">{editable
@@ -793,24 +886,24 @@ function NotebookManagement({ filteredNotebooks, selectedNotebook, notebookSearc
 
 function TemplateManagement({ form, setForm, notebooks, selected, selectedNotebook, templates, onCreate, onToggle, onUse, onEdit }) {
   const { language } = useLanguage();
-  return <Row className="g-4"><Col lg={5}><Card className="app-card"><Card.Body><h5 className="section-title">Create reusable template</h5><Form onSubmit={onCreate}><Form.Group className="mb-3"><Form.Label>Notebook</Form.Label><Form.Select required value={form.notebook} onChange={(event) => setForm({ ...form, notebook: event.target.value })}><option value="">Choose notebook</option>{notebooks.filter((notebook) => notebook.permissions.write).map((notebook) => <option key={notebook.id} value={notebook.id}>{notebook.name}</option>)}</Form.Select></Form.Group><Form.Group className="mb-3"><Form.Label>Template name</Form.Label><Form.Control required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Form.Group><Form.Group className="mb-3"><Form.Label>Description</Form.Label><Form.Control as="textarea" rows={2} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Form.Group><Form.Group className="mb-3"><Form.Label>Starting blocks</Form.Label><Form.Select value={form.source} onChange={(event) => setForm({ ...form, source: event.target.value })}><option value="default">Standard experiment structure</option><option value="current" disabled={!selected || String(selected.notebook) !== String(form.notebook)}>Copy the currently open experiment</option></Form.Select></Form.Group><Button type="submit" variant="dark">Create template</Button></Form></Card.Body></Card></Col><Col lg={7}><Card className="app-card"><Card.Body><h5 className="section-title mb-1">Templates in {selectedNotebook?.name || "notebook"}</h5><div className="feed-meta">Clone a consistent structure without changing the source.</div>{templates.length === 0 ? <div className="empty-state py-5">No templates in this notebook.</div> : <div className="d-grid gap-3 mt-3">{templates.map((template) => <div className={`notebook-template ${!template.active ? "inactive" : ""}`} key={template.id}><div className="toolbar-row"><div><div><strong>{template.name}</strong> <Badge bg={template.active ? "success" : "secondary"}>{template.active ? "Active" : "Inactive"}</Badge></div><p className="mb-1 mt-2">{template.description || "No description"}</p><div className="feed-meta">{template.blocks.length} blocks · {(template.workflow_steps || []).length} {language === "es" ? "pasos" : "workflow steps"} · created by {template.created_by_username || "System"}</div></div><div className="inline-actions">{selectedNotebook?.permissions?.write && <Button size="sm" variant="outline-dark" onClick={() => onEdit(template)}>{language === "es" ? "Editar estructura" : "Edit structure"}</Button>}{selectedNotebook?.permissions?.write && <Button size="sm" variant="outline-secondary" onClick={() => onToggle(template)}>{template.active ? "Deactivate" : "Activate"}</Button>}<Button size="sm" variant="dark" disabled={!template.active} onClick={() => onUse(template)}>Use template</Button></div></div></div>)}</div>}</Card.Body></Card></Col></Row>;
+  return <Row className="g-4"><Col lg={5}><Card className="app-card"><Card.Body><h5 className="section-title">Create reusable template</h5><Form onSubmit={onCreate}><Form.Group className="mb-3"><Form.Label>Notebook</Form.Label><Form.Select required value={form.notebook} onChange={(event) => setForm({ ...form, notebook: event.target.value })}><option value="">Choose notebook</option>{notebooks.filter((notebook) => notebook.permissions.write).map((notebook) => <option key={notebook.id} value={notebook.id}>{notebook.name}</option>)}</Form.Select></Form.Group><Form.Group className="mb-3"><Form.Label>Template name</Form.Label><Form.Control required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Form.Group><Form.Group className="mb-3"><Form.Label>Description</Form.Label><Form.Control as="textarea" rows={2} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Form.Group><Form.Group className="mb-3"><Form.Label>Starting blocks</Form.Label><Form.Select value={form.source} onChange={(event) => setForm({ ...form, source: event.target.value })}><option value="default">Standard experiment structure</option><option value="current" disabled={!selected || String(selected.notebook) !== String(form.notebook)}>Copy the currently open experiment</option></Form.Select></Form.Group><Button type="submit" variant="dark">Create template</Button></Form></Card.Body></Card></Col><Col lg={7}><Card className="app-card"><Card.Body><h5 className="section-title mb-1">Templates in {selectedNotebook?.name || "notebook"}</h5><div className="feed-meta">Clone a consistent structure without changing the source.</div>{templates.length === 0 ? <div className="empty-state py-5">No templates in this notebook.</div> : <div className="d-grid gap-3 mt-3">{templates.map((template) => <div className={`notebook-template ${!template.active ? "inactive" : ""}`} key={template.id}><div className="toolbar-row"><div><div><strong>{template.name}</strong> <Badge bg={template.active ? "success" : "secondary"}>{template.active ? "Active" : "Inactive"}</Badge></div><p className="mb-1 mt-2">{template.description || "No description"}</p><div className="feed-meta">{template.blocks.length} blocks · {(template.workflow_steps || []).length} {language === "es" ? "pasos" : "workflow steps"} · created by {template.created_by_username || "System"}</div></div><div className="inline-actions">{selectedNotebook?.permissions?.write && <Button size="sm" variant="outline-dark" onClick={() => onEdit(template)}>{language === "es" ? "Editar estructura" : "Edit structure"}</Button>}{selectedNotebook?.permissions?.write && <Button size="sm" variant="outline-secondary" onClick={() => onToggle(template)}>{template.active ? "Deactivate" : "Activate"}</Button>}<ActionButton size="sm" variant="dark" disabled={!template.active || !selectedNotebook?.permissions?.write} reason={!template.active ? "This template is inactive." : "Notebook edit access is required to use this template."} nextStep="Choose an active template in an editable notebook or ask its owner for help." onClick={() => onUse(template)}>Use template</ActionButton></div></div></div>)}</div>}</Card.Body></Card></Col></Row>;
 }
 
-function NotebookCreateModal({ show, onHide, form, setForm, projects, onSubmit }) {
-  return <Modal show={show} onHide={onHide} centered><Form onSubmit={onSubmit}><Modal.Header closeButton><Modal.Title>Create laboratory notebook</Modal.Title></Modal.Header><Modal.Body><Form.Group className="mb-3"><Form.Label>Name</Form.Label><Form.Control autoFocus required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Form.Group><Form.Group className="mb-3"><Form.Label>Description</Form.Label><Form.Control as="textarea" rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Form.Group><Form.Group className="mb-3"><Form.Label>Scope</Form.Label><Form.Select value={form.scope} onChange={(event) => setForm({ ...form, scope: event.target.value, project: event.target.value === "PROJECT" ? form.project : "" })}><option value="USER">Personal — visible only to you and people you share with</option><option value="TEAM">Team — visible to selected team members</option><option value="PROJECT">Project — governed by project membership</option></Form.Select></Form.Group>{form.scope === "PROJECT" && <Form.Group><Form.Label>Project</Form.Label><Form.Select required value={form.project} onChange={(event) => setForm({ ...form, project: event.target.value })}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</Form.Select></Form.Group>}</Modal.Body><Modal.Footer><Button variant="outline-secondary" onClick={onHide}>Cancel</Button><Button variant="dark" type="submit">Create notebook</Button></Modal.Footer></Form></Modal>;
+function NotebookCreateModal({ feedback, show, onHide, form, setForm, projects, onSubmit }) {
+  return <Modal show={show} onHide={onHide} centered><FeedbackForm feedback={feedback} onSubmit={onSubmit}><Modal.Header closeButton><Modal.Title>Create laboratory notebook</Modal.Title></Modal.Header><Modal.Body><FormField name="name" label="Name" className="mb-3"><Form.Control autoFocus required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField><FormField name="description" label="Description" className="mb-3"><Form.Control as="textarea" rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></FormField><FormField name="scope" label="Scope" className="mb-3"><Form.Select value={form.scope} onChange={(event) => setForm({ ...form, scope: event.target.value, project: event.target.value === "PROJECT" ? form.project : "" })}><option value="USER">Personal — visible only to you and people you share with</option><option value="TEAM">Team — visible to selected team members</option><option value="PROJECT">Project — governed by project membership</option></Form.Select></FormField>{form.scope === "PROJECT" && <FormField name="project" label="Project"><Form.Select required value={form.project} onChange={(event) => setForm({ ...form, project: event.target.value })}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</Form.Select></FormField>}</Modal.Body><Modal.Footer><Button variant="outline-secondary" onClick={onHide}>Cancel</Button><ActionButton variant="dark" type="submit">Create notebook</ActionButton></Modal.Footer></FeedbackForm></Modal>;
 }
 
-function ExperimentCreateModal({ show, onHide, form, setForm, templates, users, onSubmit }) {
-  return <Modal show={show} onHide={onHide} centered><Form onSubmit={onSubmit}><Modal.Header closeButton><Modal.Title>New experiment</Modal.Title></Modal.Header><Modal.Body><Form.Group className="mb-3"><Form.Label>Start from</Form.Label><Form.Select value={form.source} onChange={(event) => setForm({ ...form, source: event.target.value })}><option value="blank">Standard blank experiment</option><option value="template">Notebook template</option></Form.Select></Form.Group>{form.source === "template" && <Form.Group className="mb-3"><Form.Label>Template</Form.Label><Form.Select required value={form.template} onChange={(event) => setForm({ ...form, template: event.target.value })}><option value="">Choose template</option>{templates.filter((template) => template.active).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</Form.Select></Form.Group>}<Form.Group className="mb-3"><Form.Label>Experiment title</Form.Label><Form.Control autoFocus required={form.source === "blank"} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder={form.source === "template" ? "Optional — defaults to template name" : "Describe this experiment"} /></Form.Group><MultiUserSelect label="Assignees" users={users} value={form.assignees} onChange={(assignees) => setForm({ ...form, assignees })} /></Modal.Body><Modal.Footer><Button variant="outline-secondary" onClick={onHide}>Cancel</Button><Button variant="dark" type="submit">Create experiment</Button></Modal.Footer></Form></Modal>;
+function ExperimentCreateModal({ feedback, show, onHide, form, setForm, templates, users, onSubmit }) {
+  return <Modal show={show} onHide={onHide} centered><FeedbackForm feedback={feedback} onSubmit={onSubmit}><Modal.Header closeButton><Modal.Title>New experiment</Modal.Title></Modal.Header><Modal.Body><FormField name="source" label="Start from" className="mb-3"><Form.Select value={form.source} onChange={(event) => setForm({ ...form, source: event.target.value })}><option value="blank">Standard blank experiment</option><option value="template">Notebook template</option></Form.Select></FormField>{form.source === "template" && <FormField name="template" label="Template" className="mb-3"><Form.Select required value={form.template} onChange={(event) => setForm({ ...form, template: event.target.value })}><option value="">Choose template</option>{templates.filter((template) => template.active).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</Form.Select></FormField>}<FormField name="title" label="Experiment title" className="mb-3"><Form.Control autoFocus required={form.source === "blank"} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder={form.source === "template" ? "Optional — defaults to template name" : "Describe this experiment"} /></FormField><MultiUserSelect label="Assignees" users={users} value={form.assignees} onChange={(assignees) => setForm({ ...form, assignees })} /></Modal.Body><Modal.Footer><Button variant="outline-secondary" onClick={onHide}>Cancel</Button><ActionButton variant="dark" type="submit">Create experiment</ActionButton></Modal.Footer></FeedbackForm></Modal>;
 }
 
-function WorkflowModal({ action, setAction, onSubmit }) {
+function WorkflowModal({ feedback, action, setAction, onSubmit }) {
   if (!action) return null;
   const titles = { complete: "Complete experiment", approve: "Approve experiment", changes: "Request changes", lock: "Lock reviewed experiment", clone: "Clone experiment", restore: `Restore revision ${action.revision?.number || ""}` };
-  return <Modal show onHide={() => setAction(null)} centered><Form onSubmit={onSubmit}><Modal.Header closeButton><Modal.Title>{titles[action.type]}</Modal.Title></Modal.Header><Modal.Body>
-    {action.type === "clone" && <Form.Group><Form.Label>New experiment title</Form.Label><Form.Control required value={action.title} onChange={(event) => setAction({ ...action, title: event.target.value })} /></Form.Group>}
-    {["approve", "changes"].includes(action.type) && <><Form.Group className="mb-3"><Form.Label>{action.type === "approve" ? "Review comment" : "Required changes"}</Form.Label><Form.Control as="textarea" rows={3} required={action.type === "changes"} value={action.comment} onChange={(event) => setAction({ ...action, comment: event.target.value })} /></Form.Group><Form.Group><Form.Label>Signed name</Form.Label><Form.Control required value={action.signed_name} onChange={(event) => setAction({ ...action, signed_name: event.target.value })} /><Form.Text>This is an internal sign-off. Formal regulated electronic signatures remain a v1.0 hardening item.</Form.Text></Form.Group></>}
-    {["complete", "lock", "restore"].includes(action.type) && <Form.Group><Form.Label>Reason</Form.Label><Form.Control as="textarea" rows={3} required value={action.reason} onChange={(event) => setAction({ ...action, reason: event.target.value })} /></Form.Group>}
+  return <Modal show onHide={() => setAction(null)} centered><FeedbackForm feedback={feedback} onSubmit={onSubmit}><Modal.Header closeButton><Modal.Title>{titles[action.type]}</Modal.Title></Modal.Header><Modal.Body>
+    {action.type === "clone" && <FormField name="title" label="New experiment title"><Form.Control required value={action.title} onChange={(event) => setAction({ ...action, title: event.target.value })} /></FormField>}
+    {["approve", "changes"].includes(action.type) && <><FormField name="comment" label={action.type === "approve" ? "Review comment" : "Required changes"} className="mb-3"><Form.Control as="textarea" rows={3} required={action.type === "changes"} value={action.comment} onChange={(event) => setAction({ ...action, comment: event.target.value })} /></FormField><FormField name="signed_name" label="Signed name" hint="This is an internal sign-off. Formal regulated electronic signatures remain a v1.0 hardening item."><Form.Control required value={action.signed_name} onChange={(event) => setAction({ ...action, signed_name: event.target.value })} /></FormField></>}
+    {["complete", "lock", "restore"].includes(action.type) && <FormField name="reason" label="Reason"><Form.Control as="textarea" rows={3} required value={action.reason} onChange={(event) => setAction({ ...action, reason: event.target.value })} /></FormField>}
     {action.type === "lock" && <Alert variant="warning" className="mt-3 mb-0">Locking freezes the reviewed content. Create a clone if more work is needed.</Alert>}
-  </Modal.Body><Modal.Footer><Button variant="outline-secondary" onClick={() => setAction(null)}>Cancel</Button><Button variant={action.type === "lock" ? "dark" : action.type === "approve" ? "success" : "primary"} type="submit">Confirm</Button></Modal.Footer></Form></Modal>;
+  </Modal.Body><Modal.Footer><Button variant="outline-secondary" onClick={() => setAction(null)}>Cancel</Button><ActionButton variant={action.type === "lock" ? "dark" : action.type === "approve" ? "success" : "primary"} type="submit">Confirm</ActionButton></Modal.Footer></FeedbackForm></Modal>;
 }

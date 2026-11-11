@@ -1,4 +1,5 @@
 from django.utils import timezone
+from django.db.models import BooleanField, Exists, OuterRef, Value
 from rest_framework import serializers, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -6,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
-from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite, is_qc_reviewer
+from core.permissions import IsAuthenticatedReadOnlyOrTechAdminWrite, is_admin, is_tech, is_qc_reviewer
 from events.models import Event
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
@@ -85,9 +86,12 @@ class WorkItemViewSet(ModelViewSet):
         allowed_samples = get_sample_access_queryset(
             Sample.objects.all(),
             self.request.user,
+            for_write=self.request.method not in {"GET", "HEAD", "OPTIONS"},
         )
 
-        return queryset.filter(sample__in=allowed_samples)
+        writable_samples = get_sample_access_queryset(Sample.objects.all(), self.request.user, for_write=True)
+        can_update = Exists(writable_samples.filter(pk=OuterRef("sample_id"))) if is_admin(self.request.user) or is_tech(self.request.user) else Value(False, output_field=BooleanField())
+        return queryset.filter(sample__in=allowed_samples).annotate(_can_update=can_update, _can_update_user=Value(self.request.user.pk))
 
     def perform_update(self, serializer):
         if "qc_status" in self.request.data:
@@ -337,6 +341,7 @@ class ResultViewSet(ModelViewSet):
         allowed_samples = get_sample_access_queryset(
             Sample.objects.all(),
             self.request.user,
+            for_write=self.request.method not in {"GET", "HEAD", "OPTIONS"},
         )
 
         return queryset.filter(work_item__sample__in=allowed_samples)
@@ -391,6 +396,7 @@ class SampleAttachmentViewSet(ModelViewSet):
         allowed_samples = get_sample_access_queryset(
             Sample.objects.all(),
             self.request.user,
+            for_write=self.request.method not in {"GET", "HEAD", "OPTIONS"},
         )
 
         return queryset.filter(sample__in=allowed_samples)

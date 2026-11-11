@@ -1,4 +1,5 @@
 import { clearLegacyTokens, getCSRFToken } from "./auth";
+import { ApiError, responseError } from "./utils/formErrors";
 
 const API_BASE = "";
 const UNVERSIONED_API_PATHS = ["/api/health/", "/api/schema/", "/api/docs/"];
@@ -91,6 +92,7 @@ async function request(path, options = {}, retry = true) {
     return response;
   } catch (error) {
     if (tracked) mutationFailure = { state: "error" };
+    if (error instanceof TypeError && !options.signal?.aborted) throw new ApiError(0);
     throw error;
   } finally {
     if (tracked && --activeMutations === 0) publish(mutationFailure || { state: "success" });
@@ -174,9 +176,7 @@ function downloadResponseBlob(response, fallbackFilename) {
 
 export async function apiGet(path, { signal } = {}) {
   const response = await request(path, { method: "GET", signal });
-  if (!response.ok) {
-    throw new Error(`GET ${normalizeApiPath(path)} failed: ${response.status}`);
-  }
+  if (!response.ok) throw await responseError(response);
   return response.json();
 }
 
@@ -219,10 +219,7 @@ export async function apiPost(path, body, { signal } = {}) {
     body: JSON.stringify(body),
     signal,
   });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`POST ${normalizeApiPath(path)} failed: ${response.status} ${text}`);
-  }
+  if (!response.ok) throw await responseError(response);
   return response.status === 204 ? null : response.json();
 }
 
@@ -231,27 +228,19 @@ export async function apiPatch(path, body) {
     method: "PATCH",
     body: JSON.stringify(body),
   });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`PATCH ${normalizeApiPath(path)} failed: ${response.status} ${text}`);
-  }
+  if (!response.ok) throw await responseError(response);
   return response.status === 204 ? null : response.json();
 }
 
 export async function apiDelete(path) {
   const response = await request(path, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error(`DELETE ${normalizeApiPath(path)} failed: ${response.status}`);
-  }
+  if (!response.ok) throw await responseError(response);
   return true;
 }
 
 export async function apiPostForm(path, formData) {
   const response = await request(path, { method: "POST", body: formData });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`POST ${normalizeApiPath(path)} failed: ${response.status} ${text}`);
-  }
+  if (!response.ok) throw await responseError(response);
   return response.json();
 }
 
@@ -261,18 +250,13 @@ export function apiPostFormResponse(path, formData, { signal } = {}) {
 
 export async function apiPatchForm(path, formData) {
   const response = await request(path, { method: "PATCH", body: formData });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`PATCH ${normalizeApiPath(path)} failed: ${response.status} ${text}`);
-  }
+  if (!response.ok) throw await responseError(response);
   return response.json();
 }
 
 export async function apiDownload(path, fallbackFilename = "openlims-download") {
   const response = await request(path, { method: "GET" });
-  if (!response.ok) {
-    throw new Error(`GET ${normalizeApiPath(path)} failed: ${response.status}`);
-  }
+  if (!response.ok) throw await responseError(response);
   await downloadResponseBlob(response, fallbackFilename);
 }
 
@@ -281,10 +265,7 @@ export async function apiPostDownload(path, body, fallbackFilename = "openlims-d
     method: "POST",
     body: JSON.stringify(body),
   });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`POST ${normalizeApiPath(path)} failed: ${response.status} ${text}`);
-  }
+  if (!response.ok) throw await responseError(response);
   await downloadResponseBlob(response, fallbackFilename);
 }
 

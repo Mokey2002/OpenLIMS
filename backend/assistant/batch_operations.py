@@ -87,8 +87,8 @@ def work_plan(user, fields, *, handover=False, lock_ids=None):
         raise ValidationError('No unfinished accessible work matches this scope.')
     if Result.objects.filter(work_item__in=records).count() > 5000:
         raise ValidationError('This scope has too much result evidence. Narrow it to a smaller batch.')
-    target_samples = set(get_sample_access_queryset(Sample.objects.filter(pk__in=[r.sample_id for r in records]), target).values_list('pk', flat=True)) if target else set()
-    source_samples = set(get_sample_access_queryset(Sample.objects.filter(pk__in=[r.sample_id for r in records]), source).values_list('pk', flat=True)) if source else set()
+    target_samples = set(get_sample_access_queryset(Sample.objects.filter(pk__in=[r.sample_id for r in records]), target, for_write=True).values_list('pk', flat=True)) if target else set()
+    source_samples = set(get_sample_access_queryset(Sample.objects.filter(pk__in=[r.sample_id for r in records]), source, for_write=True).values_list('pk', flat=True)) if source else set()
     rows, eligible, excluded = [], [], []
     now = timezone.now()
     for work_item in records:
