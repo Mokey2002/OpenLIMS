@@ -1,0 +1,51 @@
+#!/bin/sh
+# Published with each release; requires Python 3.10+, Docker/Compose and curl.
+set -eu
+release=${OPENLIMS_RELEASE:-@VERSION@}
+repository=@REPOSITORY@
+installation=${OPENLIMS_DEMO_DIRECTORY:-"$PWD/openlims-demo"}
+port=${OPENLIMS_DEMO_PORT:-8080}
+for tool in python3 docker curl; do
+    command -v "$tool" >/dev/null 2>&1 || { printf 'Install %s before launching the demo.\n' "$tool" >&2; exit 1; }
+done
+python3 -c 'import re,sys; sys.exit(0 if sys.version_info >= (3,10) and re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", sys.argv[1]) else "Python 3.10+ and a stable release version are required.")' "$release"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+base="https://github.com/$repository/releases/download/$release"
+curl --fail --silent --show-error --location --connect-timeout 20 --max-time 120 --max-filesize 16777216 --proto '=https' --proto-redir '=https' "$base/openlims-$release.tar.gz" -o "$work/bundle.tar.gz"
+curl --fail --silent --show-error --location --connect-timeout 20 --max-time 120 --max-filesize 16777216 --proto '=https' --proto-redir '=https' "$base/SHA256SUMS" -o "$work/SHA256SUMS"
+python3 - "$work" "$release" <<'PY'
+import hashlib
+from pathlib import Path, PurePosixPath
+import re
+import sys
+import tarfile
+
+root, release = Path(sys.argv[1]), sys.argv[2]
+if sys.version_info < (3, 10) or not re.fullmatch(r"v\d+\.\d+\.\d+", release):
+    raise SystemExit("Python 3.10+ and a stable release version are required.")
+checksums = {}
+for line in (root / "SHA256SUMS").read_text().splitlines():
+    checksum, name = line.split(maxsplit=1)
+    checksums[name.strip().lstrip("*")] = checksum
+content = (root / "bundle.tar.gz").read_bytes()
+if len(content) > 16 * 1024 * 1024 or hashlib.sha256(content).hexdigest() != checksums.get(f"openlims-{release}.tar.gz"):
+    raise SystemExit("The release download did not pass its checksum check.")
+seen, total = set(), 0
+with tarfile.open(root / "bundle.tar.gz", "r:gz") as archive:
+    for member in archive:
+        path = PurePosixPath(member.name)
+        total += member.size
+        if (not member.isfile() or path.is_absolute() or ".." in path.parts or "\\" in member.name
+                or str(path) != member.name or member.name in seen or total > 16 * 1024 * 1024
+                or not (member.name in {"openlims", "release.json"} or member.name.startswith("installer/"))):
+            raise SystemExit("The release archive contains an unsupported entry.")
+        seen.add(member.name)
+        destination = root / "tools" / member.name
+        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        destination.write_bytes(archive.extractfile(member).read())
+        destination.chmod(0o700 if member.name == "openlims" else 0o600)
+if not {"openlims", "release.json", "installer/openlims_lifecycle.py"} <= seen:
+    raise SystemExit("The release archive is incomplete.")
+PY
+python3 "$work/tools/openlims" demo --directory "$installation" --port "$port" --version "$release" --repository "$repository"

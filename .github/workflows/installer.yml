@@ -1,10 +1,26 @@
-name: Installer checks and optional images
+name: Installer and release images
 on:
   pull_request:
-    paths: ["deploy/openlims", "deploy/installer/**", ".github/workflows/installer.yml"]
+    paths:
+      - "deploy/**"
+      - "scripts/*release*.py"
+      - "backend/Dockerfile"
+      - "backend/.dockerignore"
+      - "backend/requirements.txt"
+      - "backend/core/management/commands/bootstrap_demo.py"
+      - "frontend/Dockerfile"
+      - "frontend/.dockerignore"
+      - "frontend/package-lock.json"
+      - "VERSION"
+      - ".github/workflows/installer.yml"
+  release:
+    types: [published]
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: release-images-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: false
 jobs:
   checks:
     runs-on: ubuntu-latest
@@ -14,7 +30,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m unittest discover -s deploy/installer -p 'test_*.py' -v
-      - name: Validate Compose schema
+      - name: Validate both Compose modes
         env:
           OPENLIMS_DOMAIN: lims.example.org
           OPENLIMS_BACKEND_IMAGE: example/api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -23,35 +39,182 @@ jobs:
         run: |
           touch deploy/installer/.env
           docker compose -f deploy/installer/compose.yml --profile setup config --quiet
-  images:
-    if: github.event_name == 'workflow_dispatch'
+          docker compose -f deploy/installer/demo-compose.yml --profile setup config --quiet
+  release-gate:
+    timeout-minutes: 25
+    if: github.event_name == 'release'
     needs: checks
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
-    strategy:
-      matrix:
-        component: [backend, frontend]
+      actions: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify tag, main ancestry and successful application CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          test "$RELEASE_TAG" = "v$(cat VERSION)"
+          source_sha=$(git rev-parse HEAD)
+          git merge-base --is-ancestor "$source_sha" origin/main
+          python scripts/verify_release_ci.py --repository "$GITHUB_REPOSITORY" --commit "$source_sha"
+  images:
+    timeout-minutes: 45
+    needs: [checks, release-gate]
+    if: always() && needs.checks.result == 'success' && (github.event_name != 'release' || needs.release-gate.result == 'success')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PYTHON_IMAGE: public.ecr.aws/docker/library/python:3.12-slim
+      PYTHON_IMAGE_FALLBACK: docker.io/library/python:3.12-slim
+      POSTGRES_IMAGE: public.ecr.aws/docker/library/postgres:16
+      POSTGRES_IMAGE_FALLBACK: docker.io/library/postgres:16
+      REDIS_IMAGE: public.ecr.aws/docker/library/redis:7-alpine
+      REDIS_IMAGE_FALLBACK: docker.io/library/redis:7-alpine
+      NODE_IMAGE: public.ecr.aws/docker/library/node:22-alpine
+      NGINX_IMAGE: public.ecr.aws/docker/library/nginx:1.27-alpine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+      - id: release
+        name: Read the release version and source revision
+        run: |
+          python - <<'PY'
+          import os, re, subprocess
+          from pathlib import Path
+          value = 'v' + Path('VERSION').read_text().strip()
+          if not re.fullmatch(r'v\d+\.\d+\.\d+', value):
+              raise SystemExit('VERSION must identify a stable release.')
+          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={value}\ncommit={commit}\n')
+          PY
+      - name: Pull native base images with bounded retries and explicit fallbacks
+        run: |
+          python scripts/ci_pull_images.py
+          docker tag "$POSTGRES_IMAGE" postgres:16
+          docker tag "$REDIS_IMAGE" redis:7-alpine
+          python - <<'PY'
+          import os
+          from scripts.ci_pull_images import pull_with_fallback
+          pull_with_fallback(os.environ['NODE_IMAGE'], 'docker.io/library/node:22-alpine')
+          pull_with_fallback(os.environ['NGINX_IMAGE'], 'docker.io/library/nginx:1.27-alpine')
+          pull_with_fallback('public.ecr.aws/docker/library/registry:2', 'docker.io/library/registry:2')
+          PY
+          docker tag public.ecr.aws/docker/library/registry:2 registry:2
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          platforms: ${{ matrix.platform }}
+          load: true
+          provenance: false
+          tags: openlims-backend:smoke
+          build-args: |
+            PYTHON_IMAGE=${{ env.PYTHON_IMAGE }}
+            OPENLIMS_VERSION=${{ steps.release.outputs.version }}
+            OPENLIMS_REVISION=${{ steps.release.outputs.commit }}
+            OPENLIMS_SOURCE=https://github.com/${{ github.repository }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          platforms: ${{ matrix.platform }}
+          load: true
+          provenance: false
+          tags: openlims-frontend:smoke
+          build-args: |
+            NODE_IMAGE=${{ env.NODE_IMAGE }}
+            NGINX_IMAGE=${{ env.NGINX_IMAGE }}
+            OPENLIMS_VERSION=${{ steps.release.outputs.version }}
+            OPENLIMS_REVISION=${{ steps.release.outputs.commit }}
+            OPENLIMS_SOURCE=https://github.com/${{ github.repository }}
+      - name: Run PostgreSQL regressions inside the actual native backend image
+        run: python scripts/test_release_backend.py --backend-image openlims-backend:smoke
+      - name: Test native scientific tools, demo, API, worker, interrupted update and restore
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: python scripts/smoke_release.py --backend-image openlims-backend:smoke --frontend-image openlims-frontend:smoke --version "$RELEASE_VERSION"
+      - uses: docker/login-action@v3
+        if: github.event_name == 'release'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push only the tested native candidates
+        if: github.event_name == 'release'
+        env:
+          ARCH: ${{ matrix.arch }}
+          PLATFORM: ${{ matrix.platform }}
+          SOURCE_SHA: ${{ steps.release.outputs.commit }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          images = {}
+          for component in ('backend', 'frontend'):
+              name = f"ghcr.io/{os.environ['GITHUB_REPOSITORY'].lower()}-{component}"
+              tag = f"{name}:sha-{os.environ['SOURCE_SHA']}-{os.environ['ARCH']}"
+              subprocess.run(['docker', 'tag', f'openlims-{component}:smoke', tag], check=True)
+              subprocess.run(['docker', 'push', tag], check=True)
+              refs = json.loads(subprocess.check_output(['docker', 'image', 'inspect', tag, '--format', '{{json .RepoDigests}}'], text=True))
+              images[component] = next(ref for ref in refs if ref.startswith(name + '@'))
+          Path(f"digests-{os.environ['ARCH']}.json").write_text(json.dumps({'platform': os.environ['PLATFORM'], 'images': images}))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'release'
+        with:
+          name: release-digests-${{ matrix.arch }}
+          path: digests-${{ matrix.arch }}.json
+          retention-days: 14
+  publish:
+    timeout-minutes: 15
+    if: github.event_name == 'release'
+    needs: images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: docker/setup-buildx-action@v3
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-digests-*
+          path: candidates
+          merge-multiple: true
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - id: name
+      - name: Verify anonymous pulls and publish immutable release assets
         env:
-          REPOSITORY: ${{ github.repository }}
-        run: echo "repository=${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
-        id: build
-        with:
-          context: ./${{ matrix.component }}
-          push: true
-          tags: ghcr.io/${{ steps.name.outputs.repository }}-${{ matrix.component }}:${{ github.sha }}
-      - name: Report immutable reference
-        env:
-          IMAGE: ghcr.io/${{ steps.name.outputs.repository }}-${{ matrix.component }}@${{ steps.build.outputs.digest }}
-        run: echo "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ github.event.release.tag_name }}
+        run: |
+          python scripts/publish_release.py --version "$RELEASE_VERSION" --repository "$GITHUB_REPOSITORY" --commit "$(git rev-parse HEAD)" --candidates candidates --output release-artifacts
