@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.78.1.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -12,10 +12,10 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 ## Probar la demostración local
 
-Requiere Docker Engine/Desktop con Compose v2, Python 3.10+ y curl en Linux, macOS o WSL2. **Las descargas estarán disponibles cuando termine el flujo de publicación de v0.78.0.** No hay que compilar la aplicación.
+Requiere Docker Engine/Desktop con Compose v2, Python 3.10+ y curl en Linux, macOS o WSL2. **Las descargas estarán disponibles cuando termine el flujo de publicación de v0.78.1.** No hay que compilar la aplicación.
 
 ```bash
-curl -fsSL https://github.com/Mokey2002/OpenLIMS/releases/download/v0.78.0/openlims-demo.sh -o openlims-demo.sh && sh openlims-demo.sh
+curl -fsSL https://github.com/Mokey2002/OpenLIMS/releases/download/v0.78.1/openlims-demo.sh -o openlims-demo.sh && sh openlims-demo.sh
 ```
 
 Crea `./openlims-demo`, muestra la URL y contraseña generada y solo escucha en `127.0.0.1:8080`. Puedes elegir directorio o puerto con `OPENLIMS_DEMO_DIRECTORY` y `OPENLIMS_DEMO_PORT`.
@@ -24,7 +24,7 @@ Crea `./openlims-demo`, muestra la URL y contraseña generada y solo escucha en 
 ./openlims-demo/openlims doctor
 ./openlims-demo/openlims stop
 ./openlims-demo/openlims start
-./openlims-demo/openlims update --version v0.78.0
+./openlims-demo/openlims update --version v0.78.1
 ```
 
 Para actualizar, elige una versión **publicada** más reciente. Si ya está instalada, solo verifica la salud. Consulta la [guía de demo, producción y actualización](docs/prebuilt-releases-demo-updates-v0780.md). La instalación desde código sigue disponible abajo.
@@ -33,9 +33,17 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.1** | Espera al servidor PostgreSQL definitivo y conserva diagnósticos de CI con secretos ocultos. | [Guía de disponibilidad y diagnóstico](docs/release-smoke-readiness-v0781.md) |
 | **v0.78.0** | Imágenes para ambas arquitecturas, demostración local y actualizaciones con respaldo y reanudación. | [Guía de versiones, demo y actualizaciones](docs/prebuilt-releases-demo-updates-v0780.md) |
 | **v0.77.1** | Corrección de cuatro pruebas de CI con expectativas antiguas de errores y paginación; comprobación de recuperación tras fallos. | [Guía de regresiones de CI](docs/frontend-ci-regressions-v0771.md) |
-| **v0.77.0** | Errores junto a cada campo, valores conservados, foco en el primer error y explicaciones accesibles de acciones no disponibles. | [Guía de formularios y acceso](docs/form-feedback-action-guidance-v0770.md) |
+
+## v0.78.1 — Disponibilidad de PostgreSQL y diagnósticos de publicación
+
+Las comprobaciones de PostgreSQL esperan conexiones TCP. El servidor temporal de inicialización acepta conexiones por socket Unix antes de que esté disponible el servidor definitivo; las migraciones o restauraciones podían empezar demasiado pronto. Se corrigen las plantillas de demo/producción, el despliegue de producción desde código y las pruebas nativas. La prueba de restauración retrasa la inicialización deliberadamente y verifica que termine antes de restaurar los registros.
+
+Los fallos de las pruebas nativas muestran y conservan diagnósticos limitados durante siete días, incluidas operaciones del instalador y estado/logs de contenedores. Se ocultan credenciales generadas y contraseñas de conexión antes de publicarlos. No se suben configuración privada, respaldos ni archivos de muestras. El control de publicación se omite deliberadamente en los pull requests.
+
+Versión/pie **v0.78.1**. Ambos README conservan solo **v0.78.1, v0.78.0 y v0.77.1**. Sin migración de aplicación ni dependencia nueva. Consulta la [guía de disponibilidad y diagnóstico](docs/release-smoke-readiness-v0781.md).
 
 ## v0.78.0 — Imágenes precompiladas, demo y actualizaciones reanudables
 
@@ -43,7 +51,7 @@ La publicación construye y prueba imágenes de backend/frontend en ejecutores n
 
 El lanzador descarga un instalador pequeño y crea una demostración aislada en localhost con datos de ejemplo y credenciales generadas. El comando instalado permite iniciar, detener, verificar, respaldar y actualizar a una versión elegida. Antes de migrar detiene los procesos que escriben y respalda PostgreSQL, archivos y configuración. Una migración interrumpida conserva su punto de progreso para reanudar explícitamente. Las actualizaciones conservan los datos y no vuelven a cargar ejemplos ni restablecen contraseñas.
 
-Versión/pie **v0.78.0**. Ambos README conservan solo **v0.78.0, v0.77.1 y v0.77.0**. Sin migración de aplicación ni dependencia Python nueva. La publicación se ejecuta después de crear la versión revisada en GitHub; configurar el flujo no significa que las imágenes ya estén publicadas. Consulta la [guía de versiones, demo y actualizaciones](docs/prebuilt-releases-demo-updates-v0780.md).
+Versión/pie **v0.78.0**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de aplicación ni dependencia Python nueva. La publicación se ejecuta después de crear la versión revisada en GitHub; configurar el flujo no significa que las imágenes ya estén publicadas. Consulta la [guía de versiones, demo y actualizaciones](docs/prebuilt-releases-demo-updates-v0780.md).
 
 ## v0.77.1 — Correcciones de regresiones de CI del frontend
 
@@ -51,21 +59,13 @@ Cuatro pruebas del navegador esperaban mensajes HTTP técnicos o el nombre antig
 
 Versión/pie **v0.77.1**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Consulta la [guía de regresiones de CI](docs/frontend-ci-regressions-v0771.md) para causas y validación.
 
-## v0.77.0 — Errores claros y orientación sobre acciones no disponibles
-
-Los formularios principales de muestras, mediciones, usuarios, proyectos, inventario y cuadernos muestran errores junto a cada campo, enfocan el primer valor no válido y conservan lo introducido si se rechaza el guardado. Las ayudas describen formatos y rangos válidos. El resumen enlaza cada error, incluidas las mediciones anidadas. Cada formulario evita envíos repetidos mientras espera una respuesta. Ante un fallo de conexión conserva los valores y recomienda comprobar si se guardó el registro antes de reintentar.
-
-Las acciones no disponibles de guardar, completar, revisar, bloquear, clonar y usar plantillas explican el bloqueo con controles accesibles por teclado y pantalla táctil. Las respuestas de muestras y tareas incluyen motivos de acceso derivados de los permisos actuales del servidor. Las solicitudes de roles, los controles de membresía del proyecto o el propietario del cuaderno permiten dar el siguiente paso apropiado. Consultar una explicación no concede permisos, reintenta cambios ni modifica el historial científico. Las nuevas ayudas están disponibles en inglés y español.
-
-Versión/pie **v0.77.0**. Sin migración ni dependencia nueva. Reconstruye/recrea API, worker y web juntos y conserva el monitor del asistente. Ambos README conservan solo las tres actualizaciones indicadas arriba. Consulta la [guía de formularios y acceso](docs/form-feedback-action-guidance-v0770.md) para alcance, campos de API, límites y pruebas.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.0`
+**Versión de desarrollo actual:** `v0.78.1`
 
 **Demo:** http://35.164.28.250
 

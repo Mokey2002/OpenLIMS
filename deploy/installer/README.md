@@ -1,13 +1,15 @@
 # Image-based installation and updates
 
-OpenLIMS v0.78.0 adds versioned release bundles, a local demo and backed-up, resumable updates. See the complete [release, demo and update guide](../../docs/prebuilt-releases-demo-updates-v0780.md).
+This guide targets OpenLIMS **v0.78.1**, with versioned release bundles, a local demo and backed-up, resumable updates. See the complete [release, demo and update guide](../../docs/prebuilt-releases-demo-updates-v0780.md).
+
+PostgreSQL readiness uses TCP so initialization finishes before migrations or restores. See the [v0.78.1 readiness and CI diagnostics guide](../../docs/release-smoke-readiness-v0781.md).
 
 Requires Python 3.10+, Docker Engine/Desktop and Compose v2 supporting `up --wait`. The convenience demo launcher also needs curl. No application source build or host-side Node/application dependencies are needed. Release downloads exist only after the reviewed GitHub release workflow completes.
 
 ## Local demo
 
 ```bash
-curl -fsSL https://github.com/Mokey2002/OpenLIMS/releases/download/v0.78.0/openlims-demo.sh -o openlims-demo.sh && sh openlims-demo.sh
+curl -fsSL https://github.com/Mokey2002/OpenLIMS/releases/download/v0.78.1/openlims-demo.sh -o openlims-demo.sh && sh openlims-demo.sh
 ./openlims-demo/openlims doctor
 ./openlims-demo/openlims stop
 ./openlims-demo/openlims start
@@ -17,10 +19,10 @@ The demo binds only to localhost, creates a unique project/volumes, loads exampl
 
 ## Production
 
-Download/unpack the reviewed release's `openlims-v0.78.0.tar.gz`. Point the domain at a fresh server with ports 80/443 available:
+Download/unpack the reviewed release's `openlims-v0.78.1.tar.gz`. Point the domain at a fresh server with ports 80/443 available:
 
 ```bash
-python3 openlims install --directory /opt/openlims-install --domain lims.example.org --version v0.78.0
+python3 openlims install --directory /opt/openlims-install --domain lims.example.org --version v0.78.1
 /opt/openlims-install/openlims admin
 /opt/openlims-install/openlims doctor
 ```
@@ -32,8 +34,8 @@ Existing explicit `--backend-image ...@sha256:... --frontend-image ...@sha256:..
 ## Update, resume and backup
 
 ```bash
-/path/to/installation/openlims update --version v0.78.0
-/path/to/installation/openlims update --version v0.78.0 --resume
+/path/to/installation/openlims update --version v0.78.1
+/path/to/installation/openlims update --version v0.78.1 --resume
 /path/to/installation/openlims backup
 ```
 
@@ -49,6 +51,6 @@ Backups remain local. Configure off-server copies, retention and a restore drill
 
 La demostración local descarga imágenes verificadas, genera credenciales y solo publica localhost. Producción usa HTTPS y una cuenta creada con `admin`, sin usuarios de demostración. Ambos modos conservan configuración y volúmenes.
 
-`update --version v0.78.0` selecciona una versión publicada, respalda base de datos/archivos/configuración antes de migrar y comprueba los servicios. Si se interrumpe, corrige la causa y ejecuta el mismo comando con `--resume`. No restablece contraseñas ni vuelve a cargar los ejemplos. Los respaldos privados se conservan en `backups/`; cópialos fuera del servidor y verifica una restauración aislada.
+`update --version v0.78.1` selecciona una versión publicada, respalda base de datos/archivos/configuración antes de migrar y comprueba los servicios. Si se interrumpe, corrige la causa y ejecuta el mismo comando con `--resume`. No restablece contraseñas ni vuelve a cargar los ejemplos. Los respaldos privados se conservan en `backups/`; cópialos fuera del servidor y verifica una restauración aislada.
 
-Las instalaciones del instalador anterior pueden actualizarse con el CLI nuevo y `--directory`. Las instalaciones desde código conservan su flujo Git/reconstrucción. No se adoptan proyectos ajenos ni conexiones a bases externas. Las imágenes y descargas solo se anuncian cuando terminan las comprobaciones de CI, ambas arquitecturas y acceso público.
+Las instalaciones del instalador anterior pueden actualizarse con el CLI nuevo y `--directory`. Las instalaciones desde código conservan su flujo Git/reconstrucción. No se adoptan proyectos ajenos ni conexiones a bases externas. Las imágenes y descargas solo se anuncian cuando terminan las comprobaciones de CI, ambas arquitecturas y acceso público. Las comprobaciones esperan conexiones TCP de PostgreSQL para que termine la inicialización antes de migrar o restaurar.

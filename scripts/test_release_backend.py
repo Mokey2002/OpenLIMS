@@ -8,15 +8,17 @@ import secrets
 import subprocess
 import tempfile
 
+import release_diagnostics
 
-def check_image(image, work_directory=None):
+
+def check_image(image, work_directory=None, diagnostics=None):
     root = Path(tempfile.mkdtemp(prefix="openlims-image-tests-", dir=work_directory))
     project = "openlims-release-unit-" + secrets.token_hex(6)
     password, signing_key = secrets.token_hex(32), secrets.token_hex(64)
     services = {"services": {
         "db": {"image": "postgres:16", "environment": {"POSTGRES_USER": "openlims", "POSTGRES_DB": "openlims", "POSTGRES_PASSWORD": password},
                "volumes": ["database:/var/lib/postgresql/data"],
-               "healthcheck": {"test": ["CMD", "pg_isready", "-U", "openlims"], "interval": "2s", "timeout": "5s", "retries": 60}},
+               "healthcheck": {"test": ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "openlims", "-d", "openlims"], "interval": "2s", "timeout": "5s", "retries": 60}},
         "redis": {"image": "redis:7-alpine", "healthcheck": {"test": ["CMD", "redis-cli", "ping"], "interval": "2s", "timeout": "5s", "retries": 60}},
         "tests": {"image": image, "working_dir": "/app", "command": ["pytest", "-q", "--reuse-db"],
                   "environment": {"DATABASE_URL": f"postgres://openlims:{password}@db:5432/openlims", "DJANGO_SECRET_KEY": signing_key,
@@ -39,6 +41,11 @@ def check_image(image, work_directory=None):
         print(text[-18000:], flush=True)
         if result.returncode:
             raise RuntimeError("The actual backend image failed its PostgreSQL regression suite.")
+    except BaseException:
+        release_diagnostics.publish(diagnostics or root / "diagnostics.txt",
+                                    [("Backend image regression log", release_diagnostics.read_log(log))],
+                                    [password, signing_key])
+        raise
     finally:
         with log.open("ab") as output:
             subprocess.run(compose + ["down", "--volumes", "--remove-orphans"], stdout=output, stderr=output)
@@ -49,8 +56,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend-image", required=True)
     parser.add_argument("--work-directory", type=Path)
+    parser.add_argument("--diagnostics", type=Path, help="Write a redacted failure report for CI artifacts")
     args = parser.parse_args()
-    check_image(args.backend_image, args.work_directory)
+    check_image(args.backend_image, args.work_directory, args.diagnostics)
 
 
 if __name__ == "__main__":

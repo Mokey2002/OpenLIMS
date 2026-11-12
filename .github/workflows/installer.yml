@@ -151,11 +151,19 @@ jobs:
             OPENLIMS_REVISION=${{ steps.release.outputs.commit }}
             OPENLIMS_SOURCE=https://github.com/${{ github.repository }}
       - name: Run PostgreSQL regressions inside the actual native backend image
-        run: python scripts/test_release_backend.py --backend-image openlims-backend:smoke
+        run: python scripts/test_release_backend.py --backend-image openlims-backend:smoke --diagnostics "$RUNNER_TEMP/openlims-release-diagnostics/backend.txt"
       - name: Test native scientific tools, demo, API, worker, interrupted update and restore
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
-        run: python scripts/smoke_release.py --backend-image openlims-backend:smoke --frontend-image openlims-frontend:smoke --version "$RELEASE_VERSION"
+        run: python scripts/smoke_release.py --backend-image openlims-backend:smoke --frontend-image openlims-frontend:smoke --version "$RELEASE_VERSION" --diagnostics "$RUNNER_TEMP/openlims-release-diagnostics/smoke.txt"
+      - name: Retain redacted native-test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-diagnostics-${{ matrix.arch }}
+          path: ${{ runner.temp }}/openlims-release-diagnostics/*.txt
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: docker/login-action@v3
         if: github.event_name == 'release'
         with:
