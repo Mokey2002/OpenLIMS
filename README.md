@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.0-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.1-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -27,10 +27,10 @@
 
 ## Try the local demo
 
-Requires Docker Engine/Desktop with Compose v2, Python 3.10+ and curl on Linux, macOS or WSL2. **These downloads become available when the v0.78.0 release workflow completes.** No application source build is required.
+Requires Docker Engine/Desktop with Compose v2, Python 3.10+ and curl on Linux, macOS or WSL2. **These downloads become available when the v0.78.1 release workflow completes.** No application source build is required.
 
 ```bash
-curl -fsSL https://github.com/Mokey2002/OpenLIMS/releases/download/v0.78.0/openlims-demo.sh -o openlims-demo.sh && sh openlims-demo.sh
+curl -fsSL https://github.com/Mokey2002/OpenLIMS/releases/download/v0.78.1/openlims-demo.sh -o openlims-demo.sh && sh openlims-demo.sh
 ```
 
 The launcher creates `./openlims-demo`, prints the local URL and generated director password, and binds the demo to `127.0.0.1:8080`. Its data and configuration remain in that installation. Set `OPENLIMS_DEMO_DIRECTORY` or `OPENLIMS_DEMO_PORT` to choose another directory or port.
@@ -39,7 +39,7 @@ The launcher creates `./openlims-demo`, prints the local URL and generated direc
 ./openlims-demo/openlims doctor
 ./openlims-demo/openlims stop
 ./openlims-demo/openlims start
-./openlims-demo/openlims update --version v0.78.0
+./openlims-demo/openlims update --version v0.78.1
 ```
 
 For updates, select a newer **published** release; selecting the installed version performs health checks without changing data. See the [demo, production and update guide](docs/prebuilt-releases-demo-updates-v0780.md). The source-build installation below remains available.
@@ -52,9 +52,17 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.1** | Wait for final PostgreSQL startup and retain redacted native-test failure diagnostics. | [Release readiness and diagnostics](docs/release-smoke-readiness-v0781.md) |
 | **v0.78.0** | Versioned multi-platform image releases, a local demo launcher and backed-up, resumable image updates. | [Release, demo and update guide](docs/prebuilt-releases-demo-updates-v0780.md) |
 | **v0.77.1** | Fix four frontend CI regressions caused by outdated error-text and sample-pagination expectations; verify recovery after failures. | [Frontend CI regression guide](docs/frontend-ci-regressions-v0771.md) |
-| **v0.77.0** | Field-level form errors, retained input, first-error focus and accessible explanations for unavailable actions. | [Form feedback and action guidance](docs/form-feedback-action-guidance-v0770.md) |
+
+### v0.78.1 — PostgreSQL readiness and visible release diagnostics
+
+PostgreSQL health checks now require TCP readiness. The official image's temporary initialization server accepts Unix-socket connections before the final server is available; migrations or restores could otherwise start too soon. This change covers demo/production installer templates, source-built production and the native release tests. The restore drill deliberately delays initialization and verifies its completion before restoring scientific records.
+
+Failed native tests now print and retain bounded, redacted diagnostics for seven days, including installer operations and container health/logs. Generated credentials and connection passwords are removed before output; private configuration, database dumps and upload archives are not uploaded. The release gate remains intentionally skipped on pull requests.
+
+Version/footer **v0.78.1**. Both READMEs retain only **v0.78.1, v0.78.0 and v0.77.1** release updates. No application schema migration or dependency change. See the [readiness and diagnostics guide](docs/release-smoke-readiness-v0781.md).
 
 ### v0.78.0 — Prebuilt releases, local demo and resumable updates
 
@@ -62,7 +70,7 @@ Release automation builds and tests backend/frontend images on native **linux/am
 
 A one-command launcher downloads a small installer bundle and starts an isolated localhost demo with example data and generated credentials. The installed command supports start, stop, health checks, backup and selected-version updates. Updates pull and verify images first, stop application writers, back up PostgreSQL/uploads/configuration, apply migrations and check service health. Interrupted migrations retain a private checkpoint for explicit resume; demo data and credentials are not reseeded during updates.
 
-Version/footer **v0.78.0**. Both READMEs contain only **v0.78.0, v0.77.1 and v0.77.0** release updates. No application schema migration or new Python dependency. Publication runs after a reviewed GitHub release; creating the workflow does not mean images are already published. See the [release, demo and update guide](docs/prebuilt-releases-demo-updates-v0780.md) for prerequisites, first publication, supported installations and recovery.
+Version/footer **v0.78.0**. Both READMEs retain only the latest three release updates listed above. No application schema migration or new Python dependency. Publication runs after a reviewed GitHub release; creating the workflow does not mean images are already published. See the [release, demo and update guide](docs/prebuilt-releases-demo-updates-v0780.md) for prerequisites, first publication, supported installations and recovery.
 
 ### v0.77.1 — Frontend CI regression fixes
 
@@ -70,21 +78,13 @@ Four browser checks still expected raw HTTP error strings or the old sample pagi
 
 Version/footer **v0.77.1**; both READMEs retain only the latest three release updates listed above. See the [frontend CI regression guide](docs/frontend-ci-regressions-v0771.md) for causes and validation.
 
-### v0.77.0 — Clear form errors and actionable access guidance
-
-Core sample, measurement, user, project, inventory and notebook forms now show readable errors beside the affected fields, focus the first invalid input and retain entered values after a rejected save. Hints describe valid formats and ranges. A form summary links to each error, including nested measurements. Each form prevents repeated submissions while its request is pending; network failures preserve input and advise checking whether the record was saved before retrying.
-
-Unavailable notebook save, completion, review, locking, cloning and template actions now explain their blockers through keyboard- and touch-accessible information controls. Sample and work responses include read-only access explanations derived from existing server permission decisions. Role requests, project membership controls or the notebook owner provide the relevant next step. Viewing an explanation never grants access, retries a mutation or changes scientific history. New guidance is available in English and Spanish.
-
-Version/footer **v0.77.0**. No new migration or dependency. Rebuild/recreate API, worker and web together and retain the assistant monitor. Both READMEs retain only the latest three release updates listed above. See the [form feedback and action guidance guide](docs/form-feedback-action-guidance-v0770.md) for coverage, API fields, limits and validation.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.0`.
+**Current development version:** `v0.78.1`.
 
 ## Personal favorites
 
@@ -973,7 +973,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.78.0**.
+`frontend/src/version.js` file. The current application version is **v0.78.1**.
 
 Footer source:
 

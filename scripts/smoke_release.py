@@ -18,12 +18,42 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "deploy/installer"))
 import openlims_lifecycle as lifecycle
 from package_release import package
+import release_diagnostics
 
 
 def free_port():
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         return probe.getsockname()[1]
+
+
+def restore_backup(run, log, name, backup, sample_code, work):
+    # The official image's temporary server accepts Unix-socket connections while
+    # init scripts run. A delay makes the old premature-readiness race repeatable.
+    init = work / "restore-readiness.sh"
+    init.write_text("sleep 3\ntouch /tmp/openlims-initialization-complete\n")
+    init.chmod(0o644)
+    password = secrets.token_hex(24)
+    run(["docker", "run", "-d", "--name", name, "-e", "POSTGRES_PASSWORD=" + password,
+         "-e", "POSTGRES_DB=openlims", "-e", "POSTGRES_USER=openlims", "--mount",
+         f"type=bind,source={init.resolve()},target=/docker-entrypoint-initdb.d/001-readiness.sh,readonly", "postgres:16"])
+    for attempt in range(60):
+        with log.open("ab") as output:
+            result = subprocess.run(["docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", "openlims", "-d", "openlims"],
+                                    stdout=output, stderr=output)
+        if result.returncode == 0:
+            break
+        if attempt == 59:
+            raise RuntimeError("Restore database did not start.")
+        time.sleep(0.5)
+    run(["docker", "exec", name, "test", "-f", "/tmp/openlims-initialization-complete"])
+    with (backup / "database.dump").open("rb") as source:
+        run(["docker", "exec", "-i", name, "pg_restore", "-U", "openlims", "-d", "openlims", "--exit-on-error", "--no-owner"], input_file=source)
+    restored = run(["docker", "exec", name, "psql", "-U", "openlims", "-d", "openlims", "-Atc",
+                    f"SELECT sample_id FROM samples_sample WHERE sample_id = '{sample_code}'"], capture=True)
+    assert restored.strip() == sample_code
+    with tarfile.open(backup / "media.tar") as archive:
+        assert archive.extractfile("./release-smoke.txt").read() == b"protein observations retained"
 
 
 def smoke(args):
@@ -193,32 +223,17 @@ LABEL org.opencontainers.image.version={target_version}
         assert lifecycle.current_state(installation)["version"] == target_version
 
         print("Restoring the pre-upgrade backup into a separate database...", flush=True)
-        password = secrets.token_hex(24)
-        run(["docker", "run", "-d", "--name", restore, "-e", "POSTGRES_PASSWORD=" + password,
-             "-e", "POSTGRES_DB=openlims", "-e", "POSTGRES_USER=openlims", "postgres:16"])
-        for attempt in range(60):
-            with log.open("ab") as output:
-                result = subprocess.run(["docker", "exec", restore, "pg_isready", "-U", "openlims"], stdout=output, stderr=output)
-            if result.returncode == 0:
-                break
-            if attempt == 59:
-                raise RuntimeError("Restore database did not start.")
-            time.sleep(0.5)
-        with (backup / "database.dump").open("rb") as source:
-            run(["docker", "exec", "-i", restore, "pg_restore", "-U", "openlims", "-d", "openlims", "--exit-on-error", "--no-owner"], input_file=source)
-        restored = run(["docker", "exec", restore, "psql", "-U", "openlims", "-d", "openlims", "-Atc",
-                        f"SELECT sample_id FROM samples_sample WHERE sample_id = '{sample_code}'"], capture=True)
-        assert restored.strip() == sample_code
-        with tarfile.open(backup / "media.tar") as archive:
-            assert archive.extractfile("./release-smoke.txt").read() == b"protein observations retained"
+        restore_backup(run, log, restore, backup, sample_code, work)
         print("Release smoke passed: scientific tools, demo/login/API, Celery, failed/resumed migration, retained data and backup restore.", flush=True)
     finally:
+        failure = sys.exc_info()[1]
         if (installation / "installation.json").is_file():
             # Only the fresh, randomly named installation created in this smoke directory is removed.
             state = lifecycle.current_state(installation)
             if state["mode"] == "demo" and installation.is_relative_to(work) and state["project"].startswith("openlims-demo-"):
                 project = state["project"]
-                if sys.exc_info()[0] is not None:
+                containers = []
+                if failure is not None:
                     # Capture state/health and application logs, never container environment/configuration.
                     with log.open("ab") as output:
                         ids = subprocess.run(["docker", "compose", "--project-name", project,
@@ -226,12 +241,25 @@ LABEL org.opencontainers.image.version={target_version}
                                               "-f", str(installation / "compose.yml"), "ps", "--all", "--quiet"],
                                              stdout=subprocess.PIPE, stderr=output, text=True).stdout.splitlines()
                         for identifier in ids:
-                            subprocess.run(["docker", "inspect", "--format", "{{json .State}}", identifier], stdout=output, stderr=output)
-                            subprocess.run(["docker", "logs", "--tail", "30", identifier], stdout=output, stderr=output)
+                            status = subprocess.run(["docker", "inspect", "--format", "{{.Name}} {{json .State}}", identifier],
+                                                    stdout=subprocess.PIPE, stderr=output, text=True).stdout
+                            recent = subprocess.run(["docker", "logs", "--tail", "30", identifier],
+                                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
+                            containers.append(("Container " + identifier, status + recent))
+                            output.write((status + recent).encode())
+                if failure is not None:
+                    release_diagnostics.publish(args.diagnostics or work / "diagnostics.txt", [
+                        ("Smoke failure", str(failure)),
+                        ("Installer operations", release_diagnostics.read_log(installation / "operations.log")),
+                        ("Smoke and container diagnostics", release_diagnostics.read_log(log)),
+                    ] + containers, release_diagnostics.environment_secrets(installation / ".env"))
                 with log.open("ab") as output:
                     subprocess.run(["docker", "compose", "--project-name", project, "--project-directory", str(installation),
                                     "--env-file", str(installation / ".env"), "-f", str(installation / "compose.yml"),
                                     "down", "--volumes", "--remove-orphans"], stdout=output, stderr=output)
+        elif failure is not None:
+            release_diagnostics.publish(args.diagnostics or work / "diagnostics.txt",
+                                        [("Smoke failure", str(failure)), ("Smoke operations", release_diagnostics.read_log(log))])
         with log.open("ab") as output:
             subprocess.run(["docker", "rm", "-f", "-v", registry, restore], stdout=output, stderr=output)
         print(f"Private smoke diagnostics retained at {work}", flush=True)
@@ -243,6 +271,7 @@ def main():
     parser.add_argument("--frontend-image", required=True)
     parser.add_argument("--version", type=lifecycle.version, required=True)
     parser.add_argument("--work-directory", type=Path)
+    parser.add_argument("--diagnostics", type=Path, help="Write a redacted failure report for CI artifacts")
     smoke(parser.parse_args())
 
 
