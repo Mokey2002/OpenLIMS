@@ -130,7 +130,7 @@ class InstallerTests(unittest.TestCase):
     def test_first_install_initializes_before_application(self):
         commands = self.install_with_mock_services()
         setup = next(i for i, cmd in enumerate(commands) if cmd[-4:] == ["run", "--rm", "--no-deps", "setup"])
-        app = next(i for i, cmd in enumerate(commands) if cmd[-4:] == ["api", "worker", "web", "caddy"])
+        app = next(i for i, cmd in enumerate(commands) if "up" in cmd and "api" in cmd and "worker" in cmd)
         self.assertLess(setup, app)
 
     def test_running_application_resume_skips_migrations(self):
@@ -139,7 +139,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_migration_failure_never_starts_application(self):
         commands = self.install_with_mock_services(fail_setup=True)
-        self.assertFalse(any(cmd[-4:] == ["api", "worker", "web", "caddy"] for cmd in commands))
+        self.assertFalse(any("up" in cmd and "api" in cmd and "worker" in cmd for cmd in commands))
         self.assertTrue((self.root / "installation" / ".env").exists())
 
 

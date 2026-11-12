@@ -54,6 +54,13 @@ services:
       timeout: 15s
       start_period: 30s
       retries: 5
+  assistant-monitor:
+    image: ${OPENLIMS_BACKEND_IMAGE:?}
+    restart: unless-stopped
+    env_file: [".env"]
+    command: python manage.py monitor_assistant_actions --interval 60
+    depends_on:
+      api: {condition: service_healthy}
   web:
     image: ${OPENLIMS_FRONTEND_IMAGE:?}
     restart: unless-stopped

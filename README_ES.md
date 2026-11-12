@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.77.1.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.78.0.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -10,19 +10,46 @@ o `development`, en ese orden. Una variable `VITE_OPENLIMS_VERSION` explícita
 prevalece sobre la versión normal. Al cambiar de versión, actualiza `VERSION`,
 regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
+## Probar la demostración local
+
+Requiere Docker Engine/Desktop con Compose v2, Python 3.10+ y curl en Linux, macOS o WSL2. **Las descargas estarán disponibles cuando termine el flujo de publicación de v0.78.0.** No hay que compilar la aplicación.
+
+```bash
+curl -fsSL https://github.com/Mokey2002/OpenLIMS/releases/download/v0.78.0/openlims-demo.sh -o openlims-demo.sh && sh openlims-demo.sh
+```
+
+Crea `./openlims-demo`, muestra la URL y contraseña generada y solo escucha en `127.0.0.1:8080`. Puedes elegir directorio o puerto con `OPENLIMS_DEMO_DIRECTORY` y `OPENLIMS_DEMO_PORT`.
+
+```bash
+./openlims-demo/openlims doctor
+./openlims-demo/openlims stop
+./openlims-demo/openlims start
+./openlims-demo/openlims update --version v0.78.0
+```
+
+Para actualizar, elige una versión **publicada** más reciente. Si ya está instalada, solo verifica la salud. Consulta la [guía de demo, producción y actualización](docs/prebuilt-releases-demo-updates-v0780.md). La instalación desde código sigue disponible abajo.
+
 ## Tres versiones recientes
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.0** | Imágenes para ambas arquitecturas, demostración local y actualizaciones con respaldo y reanudación. | [Guía de versiones, demo y actualizaciones](docs/prebuilt-releases-demo-updates-v0780.md) |
 | **v0.77.1** | Corrección de cuatro pruebas de CI con expectativas antiguas de errores y paginación; comprobación de recuperación tras fallos. | [Guía de regresiones de CI](docs/frontend-ci-regressions-v0771.md) |
 | **v0.77.0** | Errores junto a cada campo, valores conservados, foco en el primer error y explicaciones accesibles de acciones no disponibles. | [Guía de formularios y acceso](docs/form-feedback-action-guidance-v0770.md) |
-| **v0.76.0** | Recuperación de borradores, vistas personales de tablas y acceso coherente a muestras por proyecto o sin proyectos. | [Guía de recuperación, tablas y acceso](docs/recovery-personal-tables-sample-access-v0760.md) |
+
+## v0.78.0 — Imágenes precompiladas, demo y actualizaciones reanudables
+
+La publicación construye y prueba imágenes de backend/frontend en ejecutores nativos **linux/amd64** y **linux/arm64**. Requiere CI de la aplicación aprobada, pruebas nativas de instalación/actualización/restauración y acceso anónimo a GHCR. Las imágenes versionadas y el manifiesto con hashes fijan versiones compatibles de API, worker, monitor del asistente y frontend. Los archivos publicados se comprueban antes de reutilizarlos y no se sobrescriben.
+
+El lanzador descarga un instalador pequeño y crea una demostración aislada en localhost con datos de ejemplo y credenciales generadas. El comando instalado permite iniciar, detener, verificar, respaldar y actualizar a una versión elegida. Antes de migrar detiene los procesos que escriben y respalda PostgreSQL, archivos y configuración. Una migración interrumpida conserva su punto de progreso para reanudar explícitamente. Las actualizaciones conservan los datos y no vuelven a cargar ejemplos ni restablecen contraseñas.
+
+Versión/pie **v0.78.0**. Ambos README conservan solo **v0.78.0, v0.77.1 y v0.77.0**. Sin migración de aplicación ni dependencia Python nueva. La publicación se ejecuta después de crear la versión revisada en GitHub; configurar el flujo no significa que las imágenes ya estén publicadas. Consulta la [guía de versiones, demo y actualizaciones](docs/prebuilt-releases-demo-updates-v0780.md).
 
 ## v0.77.1 — Correcciones de regresiones de CI del frontend
 
 Cuatro pruebas del navegador esperaban mensajes HTTP técnicos o el nombre antiguo del botón de paginación después de las mejoras de UX. Ahora comprueban mensajes legibles y el control accesible **Next sample page**. Se mantiene la comprobación de que un cambio de cuaderno fallido conserva el cuaderno/experimento actual y que un acceso inicial denegado permite seguir navegando. Las pruebas de historial siguen rechazando estados vacíos engañosos y ahora comprueban la recuperación cuando vuelve el servicio. No cambia el comportamiento de la aplicación, los permisos ni el esquema de datos.
 
-Versión/pie **v0.77.1**. Ambos README incluyen exactamente **v0.77.1, v0.77.0 y v0.76.0**. Consulta la [guía de regresiones de CI](docs/frontend-ci-regressions-v0771.md) para causas y validación.
+Versión/pie **v0.77.1**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Consulta la [guía de regresiones de CI](docs/frontend-ci-regressions-v0771.md) para causas y validación.
 
 ## v0.77.0 — Errores claros y orientación sobre acciones no disponibles
 
@@ -32,23 +59,13 @@ Las acciones no disponibles de guardar, completar, revisar, bloquear, clonar y u
 
 Versión/pie **v0.77.0**. Sin migración ni dependencia nueva. Reconstruye/recrea API, worker y web juntos y conserva el monitor del asistente. Ambos README conservan solo las tres actualizaciones indicadas arriba. Consulta la [guía de formularios y acceso](docs/form-feedback-action-guidance-v0770.md) para alcance, campos de API, límites y pruebas.
 
-## v0.76.0 — Recuperación de borradores y vistas personales
-
-Los cambios de contenido y enlaces del cuaderno guardan una copia por cuenta/experimento en la pestaña actual antes del autoguardado. Un fallo conserva los cambios abiertos; al volver puedes comparar y restaurar. Si otra persona guardó una revisión nueva, debes revisarla y confirmar antes de restaurar. El servidor sigue comprobando la revisión actual. La navegación avisa de cambios pendientes y los guardados lentos se ejecutan en orden. Recuperar un borrador no concede permisos ni crea revisiones por sí solo.
-
-Muestras, Cola de trabajo e Inventario recuerdan búsquedas, filtros, orden, columnas, tamaño y posición de página por cuenta en este navegador. Al volver de una muestra se recupera la vista anterior. Puedes restablecer la vista incluso sin resultados. Las selecciones de acciones masivas no se conservan y estas preferencias no cambian permisos.
-
-Todas las cuentas activas, incluidos administradores, ven una muestra si pertenecen al proyecto principal o a uno vinculado, o si la muestra no tiene ningún proyecto. Ser creador o responsable no evita la restricción. Se aplica a listas, lectura directa, búsqueda, exportación, trabajo relacionado, entidades compartidas, consultas del asistente y auditoría/informes de muestras. Los permisos de edición siguen separados. Un administrador puede incorporarse a un proyecto mediante los controles de membresía existentes.
-
-Versión/pie **v0.76.0**. Sin migración ni dependencia nueva. Reconstruye/recrea API, worker y web juntos; conserva el monitor del asistente. Ambos README conservan solo las tres actualizaciones indicadas arriba. Consulta la [guía de recuperación, tablas y acceso](docs/recovery-personal-tables-sample-access-v0760.md) para alcance, límites del navegador, permisos y pruebas.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.77.1`
+**Versión de desarrollo actual:** `v0.78.0`
 
 **Demo:** http://35.164.28.250
 

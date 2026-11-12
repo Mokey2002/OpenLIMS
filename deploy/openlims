@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Conservative, resumable fresh-server installer. Python standard library only."""
+"""Install, try and update OpenLIMS from release images. Python standard library only."""
 import argparse
+import errno
 import fcntl
 import json
 import os
@@ -14,6 +15,8 @@ import sys
 import urllib.request
 
 TEMPLATES = Path(__file__).resolve().parent / "installer"
+sys.path.insert(0, str(TEMPLATES))
+import openlims_lifecycle as lifecycle
 
 
 def domain(value):
@@ -85,16 +88,35 @@ def prepare(root, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["install", "doctor", "admin"])
-    parser.add_argument("--directory", type=Path, default=Path("openlims-install"))
+    parser.add_argument("command", choices=["install", "demo", "update", "backup", "doctor", "admin", "start", "stop"])
+    parser.add_argument("--directory", type=Path)
     parser.add_argument("--domain", type=domain)
     parser.add_argument("--backend-image", type=image)
     parser.add_argument("--frontend-image", type=image)
+    parser.add_argument("--version", type=lifecycle.version, help="Stable image release, such as v0.78.0")
+    parser.add_argument("--manifest", type=Path, help="Use an explicitly selected local release manifest")
+    parser.add_argument("--repository", type=lifecycle.repository, help="GitHub owner/repository for release downloads")
+    parser.add_argument("--port", type=lifecycle.port, default=8080, help="Local demo port (default: 8080)")
+    parser.add_argument("--resume", action="store_true", help="Resume the same interrupted update")
+    parser.add_argument("--from-version", type=lifecycle.version, help="One-time current-version declaration for an unversioned legacy installation")
     args = parser.parse_args()
+    if args.directory is None:
+        args.directory = Path("openlims-demo" if args.command == "demo" else "openlims-install")
+    if args.command == "install" and bool(args.backend_image) != bool(args.frontend_image):
+        parser.error("Specify both image digests, or select a release with --version.")
+    if args.command == "install" and args.backend_image and (args.version or args.manifest):
+        parser.error("Choose a release manifest or explicit image digests, not both.")
+    structured = args.directory / "installation.json"
+    modern = structured.is_file() and json.loads(structured.read_text()).get("schema") == 2
+    if (args.command in {"demo", "update", "backup", "start", "stop"}
+            or (args.command == "install" and not args.backend_image)
+            or (modern and args.command in {"doctor", "admin"})):
+        lifecycle.main(args)
+        return
     if args.command == "install" and not all((args.domain, args.backend_image, args.frontend_image)):
         parser.error("install requires --domain, --backend-image and --frontend-image")
     root = args.directory.resolve()
-    if root == Path("/") or root == Path.home() or root == Path.cwd():
+    if root == Path("/") or root == Path.home() or (root == Path.cwd() and not (root / "installation.json").is_file()):
         parser.error("Use a dedicated installation directory, not /, your home, or the current directory.")
     if not shutil.which("docker"):
         raise RuntimeError("Install Docker Engine and Docker Compose v2 first; no privileged installation is attempted.")
@@ -140,12 +162,12 @@ def main():
             # Never run migrations during a resume if application services are active.
             active = run(compose + ["ps", "--status", "running", "--services"],
                          capture_output=True, text=True).stdout.splitlines()
-            if not set(active) & {"api", "worker", "web", "caddy"}:
+            if not set(active) & {"api", "worker", "assistant-monitor", "web", "caddy"}:
                 print("Starting database and running initialization...", flush=True)
                 dc("up", "-d", "--wait", "--wait-timeout", "180", "db", "redis")
                 dc("run", "--rm", "--no-deps", "setup")
             print("Starting application and checking service health...", flush=True)
-            dc("up", "-d", "--wait", "--wait-timeout", "240", "api", "worker", "web", "caddy")
+            dc("up", "-d", "--wait", "--wait-timeout", "240", "api", "worker", "assistant-monitor", "web", "caddy")
         if args.command == "admin":
             run(compose + ["exec", "api", "python", "manage.py", "createsuperuser"])
             return
@@ -158,6 +180,8 @@ def main():
             with urllib.request.urlopen(f"https://{hostname}{path}", timeout=15) as response:
                 if response.status != 200:
                     raise RuntimeError("HTTPS health verification failed.")
+        if args.command == "install":
+            lifecycle.record_legacy_install(root, project)
         print(f"HTTPS and application checks passed: https://{hostname}")
         print("Run the admin command to create your account. No demo users were created.")
         print("NOT production-ready until off-server backups and a restore drill are configured and verified.")
@@ -170,6 +194,8 @@ if __name__ == "__main__":
         # Exceptions from remote services may embed URLs or connection credentials.
         if isinstance(error, RuntimeError):
             print(str(error), file=sys.stderr)
+        elif isinstance(error, OSError) and error.errno in (errno.ENOSPC, errno.EDQUOT):
+            print("Insufficient disk space. Free space in the installation directory and Docker storage, then repeat the same command. Existing data was retained.", file=sys.stderr)
         else:
             print("System, network, or configuration check failed. No data was deleted. Run doctor after resolving it.", file=sys.stderr)
         sys.exit(1)
