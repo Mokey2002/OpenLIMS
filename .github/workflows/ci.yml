@@ -104,7 +104,9 @@ jobs:
         run: docker compose -p openlims -f deploy/docker-compose.yml down -v
 
   frontend-e2e:
-    runs-on: ubuntu-latest
+    # Playwright 1.55.0 supports Ubuntu 24.04. Keep browser dependencies on
+    # that image when ubuntu-latest advances to a newer, unsupported release.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
