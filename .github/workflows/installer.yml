@@ -13,6 +13,7 @@ on:
       - "frontend/package-lock.json"
       - "VERSION"
       - ".github/workflows/installer.yml"
+      - ".github/workflows/recover-release.yml"
   release:
     types: [published]
   workflow_dispatch:

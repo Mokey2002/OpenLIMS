@@ -4,6 +4,8 @@ This guide targets OpenLIMS **v0.78.1**, with versioned release bundles, a local
 
 PostgreSQL readiness uses TCP so initialization finishes before migrations or restores. See the [v0.78.1 readiness and CI diagnostics guide](../../docs/release-smoke-readiness-v0781.md).
 
+For a partial v0.78.1 publication, the [v0.78.2 manifest verification and recovery guide](../../docs/release-manifest-verification-v0782.md) explains how to finish with the original tested images and installer source. The demo commands below remain pinned to v0.78.1.
+
 Requires Python 3.10+, Docker Engine/Desktop and Compose v2 supporting `up --wait`. The convenience demo launcher also needs curl. No application source build or host-side Node/application dependencies are needed. Release downloads exist only after the reviewed GitHub release workflow completes.
 
 ## Local demo
