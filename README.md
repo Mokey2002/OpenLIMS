@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.1-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.2-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -27,7 +27,7 @@
 
 ## Try the local demo
 
-Requires Docker Engine/Desktop with Compose v2, Python 3.10+ and curl on Linux, macOS or WSL2. **These downloads become available when the v0.78.1 release workflow completes.** No application source build is required.
+Requires Docker Engine/Desktop with Compose v2, Python 3.10+ and curl on Linux, macOS or WSL2. **These downloads become available when publication or recovery of the v0.78.1 release completes.** No application source build is required.
 
 ```bash
 curl -fsSL https://github.com/Mokey2002/OpenLIMS/releases/download/v0.78.1/openlims-demo.sh -o openlims-demo.sh && sh openlims-demo.sh
@@ -52,9 +52,17 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.2** | Accept valid Docker manifest lists and recover an existing release from its original tested images and installer source. | [Manifest verification and recovery](docs/release-manifest-verification-v0782.md) |
 | **v0.78.1** | Wait for final PostgreSQL startup and retain redacted native-test failure diagnostics. | [Release readiness and diagnostics](docs/release-smoke-readiness-v0781.md) |
 | **v0.78.0** | Versioned multi-platform image releases, a local demo launcher and backed-up, resumable image updates. | [Release, demo and update guide](docs/prebuilt-releases-demo-updates-v0780.md) |
-| **v0.77.1** | Fix four frontend CI regressions caused by outdated error-text and sample-pagination expectations; verify recovery after failures. | [Frontend CI regression guide](docs/frontend-ci-regressions-v0771.md) |
+
+### v0.78.2 — Docker manifest compatibility and release recovery
+
+The publisher accepts Docker manifest lists without OCI annotations while still requiring the exact tested AMD64/ARM64 image digests and their verified version/source labels. OCI index annotation checks and protection against replacing a different published tag remain enforced. A valid tag from partial publication is reused unchanged.
+
+The manual **Recover release publication** workflow can finish an existing release from its original successful native jobs and retained digest artifacts. It checks the original release gates and source commit, uses the installer and launcher bytes from that tag, and uploads missing assets without rebuilding images or moving tags. This lets the existing **v0.78.1** demo release complete; the demo command above stays pinned to v0.78.1.
+
+Version/footer **v0.78.2**. Both READMEs retain only **v0.78.2, v0.78.1 and v0.78.0** release updates. No application schema migration or dependency change. See the [manifest verification and recovery guide](docs/release-manifest-verification-v0782.md).
 
 ### v0.78.1 — PostgreSQL readiness and visible release diagnostics
 
@@ -62,7 +70,7 @@ PostgreSQL health checks now require TCP readiness. The official image's tempora
 
 Failed native tests now print and retain bounded, redacted diagnostics for seven days, including installer operations and container health/logs. Generated credentials and connection passwords are removed before output; private configuration, database dumps and upload archives are not uploaded. The release gate remains intentionally skipped on pull requests.
 
-Version/footer **v0.78.1**. Both READMEs retain only **v0.78.1, v0.78.0 and v0.77.1** release updates. No application schema migration or dependency change. See the [readiness and diagnostics guide](docs/release-smoke-readiness-v0781.md).
+Version/footer **v0.78.1**. Both READMEs retain only the latest three release updates listed above. No application schema migration or dependency change. See the [readiness and diagnostics guide](docs/release-smoke-readiness-v0781.md).
 
 ### v0.78.0 — Prebuilt releases, local demo and resumable updates
 
@@ -72,19 +80,13 @@ A one-command launcher downloads a small installer bundle and starts an isolated
 
 Version/footer **v0.78.0**. Both READMEs retain only the latest three release updates listed above. No application schema migration or new Python dependency. Publication runs after a reviewed GitHub release; creating the workflow does not mean images are already published. See the [release, demo and update guide](docs/prebuilt-releases-demo-updates-v0780.md) for prerequisites, first publication, supported installations and recovery.
 
-### v0.77.1 — Frontend CI regression fixes
-
-Four browser checks still expected raw HTTP error strings or the old sample pagination name after the recent UX updates. They now assert the readable error messages and **Next sample page** accessible control. Notebook tests still verify that a failed switch preserves the current notebook/experiment and that denied initial access leaves navigation usable. History tests still reject misleading empty-success states and now verify recovery after the service returns. No application behavior, permissions or database schema changed.
-
-Version/footer **v0.77.1**; both READMEs retain only the latest three release updates listed above. See the [frontend CI regression guide](docs/frontend-ci-regressions-v0771.md) for causes and validation.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.1`.
+**Current development version:** `v0.78.2`.
 
 ## Personal favorites
 
@@ -973,7 +975,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.78.1**.
+`frontend/src/version.js` file. The current application version is **v0.78.2**.
 
 Footer source:
 

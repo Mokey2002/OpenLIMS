@@ -1,0 +1,61 @@
+name: Recover release publication
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Existing stable release tag, for example v0.78.1
+        required: true
+        type: string
+      original_run_id:
+        description: Original release workflow run with successful AMD64 and ARM64 image jobs
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: release-images-${{ inputs.release_version }}
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test the recovery publisher
+        run: python -m unittest discover -s deploy/installer -p 'test_*.py' -v
+      - uses: docker/setup-buildx-action@v3
+      - name: Verify the original release gates, native tests and source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          ORIGINAL_RUN_ID: ${{ inputs.original_run_id }}
+        run: |
+          python scripts/recover_release.py --repository "$GITHUB_REPOSITORY" --version "$RELEASE_VERSION" --run-id "$ORIGINAL_RUN_ID" --source-directory "$RUNNER_TEMP/openlims-release-source"
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.original_run_id }}
+          pattern: release-digests-*
+          path: candidates
+          merge-multiple: true
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Complete publication from the original tested image digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          source_sha=$(git -C "$RUNNER_TEMP/openlims-release-source" rev-parse HEAD)
+          python scripts/publish_release.py --version "$RELEASE_VERSION" --repository "$GITHUB_REPOSITORY" --commit "$source_sha" --source-directory "$RUNNER_TEMP/openlims-release-source" --candidates candidates --output release-artifacts

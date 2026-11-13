@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.1.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.78.2.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -12,7 +12,7 @@ regenera `frontend/src/version.js` y mantén sincronizadas ambas guías.
 
 ## Probar la demostración local
 
-Requiere Docker Engine/Desktop con Compose v2, Python 3.10+ y curl en Linux, macOS o WSL2. **Las descargas estarán disponibles cuando termine el flujo de publicación de v0.78.1.** No hay que compilar la aplicación.
+Requiere Docker Engine/Desktop con Compose v2, Python 3.10+ y curl en Linux, macOS o WSL2. **Las descargas estarán disponibles cuando termine la publicación o recuperación de v0.78.1.** No hay que compilar la aplicación.
 
 ```bash
 curl -fsSL https://github.com/Mokey2002/OpenLIMS/releases/download/v0.78.1/openlims-demo.sh -o openlims-demo.sh && sh openlims-demo.sh
@@ -33,9 +33,17 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.2** | Compatibilidad con listas Docker y recuperación con imágenes probadas y archivos de la versión original. | [Verificación y recuperación](docs/release-manifest-verification-v0782.md) |
 | **v0.78.1** | Espera al servidor PostgreSQL definitivo y conserva diagnósticos de CI con secretos ocultos. | [Guía de disponibilidad y diagnóstico](docs/release-smoke-readiness-v0781.md) |
 | **v0.78.0** | Imágenes para ambas arquitecturas, demostración local y actualizaciones con respaldo y reanudación. | [Guía de versiones, demo y actualizaciones](docs/prebuilt-releases-demo-updates-v0780.md) |
-| **v0.77.1** | Corrección de cuatro pruebas de CI con expectativas antiguas de errores y paginación; comprobación de recuperación tras fallos. | [Guía de regresiones de CI](docs/frontend-ci-regressions-v0771.md) |
+
+## v0.78.2 — Compatibilidad de manifiestos y recuperación de publicaciones
+
+El publicador acepta listas de manifiestos Docker sin anotaciones OCI y sigue exigiendo los hashes exactos de las imágenes AMD64/ARM64 probadas, con etiquetas de versión y código verificadas. Se mantienen las comprobaciones de anotaciones OCI y la protección contra reemplazar una etiqueta publicada diferente. Una etiqueta válida de una publicación parcial se reutiliza sin modificarla.
+
+El flujo manual **Recover release publication** completa una versión existente con las pruebas nativas aprobadas y archivos de hashes del flujo original. Verifica sus controles de publicación y commit, usa los archivos originales del instalador y lanzador y sube lo que falta sin reconstruir imágenes ni mover etiquetas. Permite completar la demo **v0.78.1**; el comando de demostración sigue fijado a esa versión.
+
+Versión/pie **v0.78.2**. Ambos README conservan solo **v0.78.2, v0.78.1 y v0.78.0**. Sin migración de aplicación ni dependencia nueva. Consulta la [guía de verificación y recuperación](docs/release-manifest-verification-v0782.md).
 
 ## v0.78.1 — Disponibilidad de PostgreSQL y diagnósticos de publicación
 
@@ -43,7 +51,7 @@ Las comprobaciones de PostgreSQL esperan conexiones TCP. El servidor temporal de
 
 Los fallos de las pruebas nativas muestran y conservan diagnósticos limitados durante siete días, incluidas operaciones del instalador y estado/logs de contenedores. Se ocultan credenciales generadas y contraseñas de conexión antes de publicarlos. No se suben configuración privada, respaldos ni archivos de muestras. El control de publicación se omite deliberadamente en los pull requests.
 
-Versión/pie **v0.78.1**. Ambos README conservan solo **v0.78.1, v0.78.0 y v0.77.1**. Sin migración de aplicación ni dependencia nueva. Consulta la [guía de disponibilidad y diagnóstico](docs/release-smoke-readiness-v0781.md).
+Versión/pie **v0.78.1**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de aplicación ni dependencia nueva. Consulta la [guía de disponibilidad y diagnóstico](docs/release-smoke-readiness-v0781.md).
 
 ## v0.78.0 — Imágenes precompiladas, demo y actualizaciones reanudables
 
@@ -53,19 +61,13 @@ El lanzador descarga un instalador pequeño y crea una demostración aislada en 
 
 Versión/pie **v0.78.0**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de aplicación ni dependencia Python nueva. La publicación se ejecuta después de crear la versión revisada en GitHub; configurar el flujo no significa que las imágenes ya estén publicadas. Consulta la [guía de versiones, demo y actualizaciones](docs/prebuilt-releases-demo-updates-v0780.md).
 
-## v0.77.1 — Correcciones de regresiones de CI del frontend
-
-Cuatro pruebas del navegador esperaban mensajes HTTP técnicos o el nombre antiguo del botón de paginación después de las mejoras de UX. Ahora comprueban mensajes legibles y el control accesible **Next sample page**. Se mantiene la comprobación de que un cambio de cuaderno fallido conserva el cuaderno/experimento actual y que un acceso inicial denegado permite seguir navegando. Las pruebas de historial siguen rechazando estados vacíos engañosos y ahora comprueban la recuperación cuando vuelve el servicio. No cambia el comportamiento de la aplicación, los permisos ni el esquema de datos.
-
-Versión/pie **v0.77.1**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Consulta la [guía de regresiones de CI](docs/frontend-ci-regressions-v0771.md) para causas y validación.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.1`
+**Versión de desarrollo actual:** `v0.78.2`
 
 **Demo:** http://35.164.28.250
 

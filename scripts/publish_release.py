@@ -13,10 +13,28 @@ import urllib.parse
 import urllib.request
 
 from package_release import package
-from openlims_lifecycle import repository, version
+from openlims_lifecycle import REQUIRED_FILES, repository, version
 
 ACCEPT = ", ".join(["application/vnd.oci.image.index.v1+json", "application/vnd.oci.image.manifest.v1+json",
                     "application/vnd.docker.distribution.manifest.list.v2+json", "application/vnd.docker.distribution.manifest.v2+json"])
+OCI_INDEX = "application/vnd.oci.image.index.v1+json"
+DOCKER_LIST = "application/vnd.docker.distribution.manifest.list.v2+json"
+
+
+def validate_source(source, release_version, commit):
+    """Pin installer bytes to the image source, including during recovery."""
+    source = source.resolve()
+    head = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+    if head != commit:
+        raise RuntimeError("Installer source checkout does not match the release image commit.")
+    if (source / "VERSION").read_text().strip().removeprefix("v") != release_version.removeprefix("v"):
+        raise RuntimeError("Installer source VERSION does not match the selected release.")
+    for name in ["VERSION", "deploy/demo.sh.in", *["deploy/" + name for name in sorted(REQUIRED_FILES)]]:
+        path = source / name
+        committed = subprocess.run(["git", "-C", str(source), "show", f"{commit}:{name}"], check=True, capture_output=True).stdout
+        if path.is_symlink() or path.read_bytes() != committed:
+            raise RuntimeError("Installer source files differ from their committed release bytes.")
+    return source
 
 
 class Registry:
@@ -97,6 +115,10 @@ def validate_candidates(records, selected_repository, release_version, commit, r
 
 
 def verify_index(index, candidates, release_version, commit):
+    """Match already-validated native images without replacing an existing tag."""
+    media_type = index.get("mediaType")
+    if index.get("schemaVersion") != 2 or media_type not in (OCI_INDEX, DOCKER_LIST):
+        raise RuntimeError("Unsupported release index format; expected an OCI index or Docker manifest list.")
     descriptors = index.get("manifests", [])
     actual = {}
     for item in descriptors:
@@ -106,10 +128,18 @@ def verify_index(index, candidates, release_version, commit):
             raise RuntimeError("A release index contains duplicate platforms.")
         actual[key] = item.get("digest")
     expected = {platform: reference.split("@", 1)[1] for platform, reference in candidates.items()}
+    if actual != expected:
+        raise RuntimeError("An existing version tag contains different platform image digests. Publish a new version rather than replacing it.")
     annotations = index.get("annotations", {})
-    if (actual != expected or annotations.get("org.opencontainers.image.version") != release_version
-            or annotations.get("org.opencontainers.image.revision") != commit):
-        raise RuntimeError("An existing version tag differs. Publish a new version rather than replacing it.")
+    if not isinstance(annotations, dict):
+        raise RuntimeError("Invalid release index annotations.")
+    # Docker manifest lists have no OCI index-annotation field. Their exact
+    # native digests still bind the version/source labels checked by
+    # validate_candidates. OCI indices retain the required annotation checks.
+    for key, value in (("org.opencontainers.image.version", release_version),
+                       ("org.opencontainers.image.revision", commit)):
+        if (media_type == OCI_INDEX or key in annotations) and annotations.get(key) != value:
+            raise RuntimeError("The release index has missing or conflicting version/source revision annotations.")
 
 
 def publish_indices(candidates, selected_repository, release_version, commit, registry, run=subprocess.run):
@@ -156,14 +186,17 @@ def main():
     parser.add_argument("--commit", required=True)
     parser.add_argument("--candidates", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--source-directory", type=Path, default=Path(__file__).resolve().parents[1],
+                        help="Checkout of the original release commit; keeps recovery bundles pinned to their source")
     args = parser.parse_args()
     if not re.fullmatch(r"[a-f0-9]{40}", args.commit):
         parser.error("A complete source commit is required.")
+    source = validate_source(args.source_directory, args.version, args.commit)
     records = [json.loads(path.read_text()) for path in sorted(args.candidates.glob("digests-*.json"))]
     registry = Registry()
     candidates = validate_candidates(records, args.repository, args.version, args.commit, registry)
     images = publish_indices(candidates, args.repository, args.version, args.commit, registry)
-    package(args.output, args.version, args.repository, args.commit, images["backend"], images["frontend"])
+    package(args.output, args.version, args.repository, args.commit, images["backend"], images["frontend"], source=source)
     publish_assets(args.output, args.repository, args.version)
     print(f"Published verified {args.version} release indices and installer assets.")
 

@@ -67,9 +67,86 @@ class PublicationTests(unittest.TestCase):
             publisher.validate_candidates(self.records, self.repository, self.version, self.commit, self.registry)
 
     def index(self):
-        return {"annotations": {"org.opencontainers.image.version": self.version, "org.opencontainers.image.revision": self.commit},
+        return {"schemaVersion": 2, "mediaType": publisher.OCI_INDEX,
+                "annotations": {"org.opencontainers.image.version": self.version, "org.opencontainers.image.revision": self.commit},
                 "manifests": [{"platform": {"os": "linux", "architecture": record["platform"].split("/")[1]},
                                "digest": record["images"]["backend"].split("@")[1]} for record in self.records]}
+
+    def docker_list(self):
+        result = self.index()
+        result["mediaType"] = publisher.DOCKER_LIST
+        result.pop("annotations")
+        return result
+
+    def _validated_candidates(self):
+        return publisher.validate_candidates(self.records, self.repository, self.version, self.commit, self.registry)
+
+    def test_docker_manifest_list_matches_validated_native_images_without_oci_annotations(self):
+        candidates = self._validated_candidates()
+        publisher.verify_index(self.docker_list(), candidates["backend"], self.version, self.commit)
+
+    def test_oci_index_still_requires_version_and_revision_annotations(self):
+        index = self.index()
+        index.pop("annotations")
+        with self.assertRaisesRegex(RuntimeError, "missing or conflicting"):
+            publisher.verify_index(index, self._validated_candidates()["backend"], self.version, self.commit)
+
+    def test_docker_manifest_list_refuses_conflicting_metadata(self):
+        for key in ("org.opencontainers.image.version", "org.opencontainers.image.revision"):
+            index = self.docker_list()
+            index["annotations"] = {key: "different"}
+            with self.subTest(key=key), self.assertRaisesRegex(RuntimeError, "conflicting"):
+                publisher.verify_index(index, self._validated_candidates()["backend"], self.version, self.commit)
+
+    def test_docker_manifest_list_does_not_bypass_native_version_or_source_checks(self):
+        first = next(iter(self.configs.values()))["config"]["Labels"]
+        for key in ("org.opencontainers.image.version", "org.opencontainers.image.revision", "org.opencontainers.image.source"):
+            original = first[key]
+            first[key] = "different"
+            with self.subTest(key=key), self.assertRaisesRegex(RuntimeError, "wrong platform, source revision or version"):
+                self._validated_candidates()
+            first[key] = original
+
+    def test_docker_manifest_list_rejects_changed_digests_or_platforms(self):
+        candidates = self._validated_candidates()["backend"]
+        for mutation in ("digest", "duplicate", "platform"):
+            index = self.docker_list()
+            if mutation == "digest":
+                index["manifests"][0]["digest"] = "sha256:" + "d" * 64
+            elif mutation == "duplicate":
+                index["manifests"].append(index["manifests"][0])
+            else:
+                index["manifests"][0]["platform"]["architecture"] = "386"
+            with self.subTest(mutation=mutation), self.assertRaises(RuntimeError):
+                publisher.verify_index(index, candidates, self.version, self.commit)
+
+    def test_partial_publication_reuses_valid_docker_tag_and_only_creates_missing_component(self):
+        candidates = self._validated_candidates()
+        self.registry.manifest.side_effect = [(self.docker_list(), "sha256:" + "d" * 64), None,
+                                              (self.docker_list(), "sha256:" + "e" * 64)]
+        run = Mock()
+        images = publisher.publish_indices(candidates, self.repository, self.version, self.commit, self.registry, run)
+        self.assertEqual(images["backend"], "ghcr.io/example/openlims-backend@sha256:" + "d" * 64)
+        self.assertEqual(images["frontend"], "ghcr.io/example/openlims-frontend@sha256:" + "e" * 64)
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("--tag") + 1], "ghcr.io/example/openlims-frontend:" + self.version)
+
+    def test_existing_docker_tag_with_different_images_is_never_overwritten(self):
+        candidates = self._validated_candidates()
+        index = self.docker_list()
+        index["manifests"][0]["digest"] = "sha256:" + "d" * 64
+        self.registry.manifest.side_effect = None
+        self.registry.manifest.return_value = index, "sha256:" + "e" * 64
+        run = Mock()
+        with self.assertRaisesRegex(RuntimeError, "different platform image digests"):
+            publisher.publish_indices(candidates, self.repository, self.version, self.commit, self.registry, run)
+        run.assert_not_called()
+
+    def test_unknown_index_formats_are_not_accepted_by_compatibility_handling(self):
+        index = self.docker_list()
+        index["mediaType"] = "application/example"
+        with self.assertRaisesRegex(RuntimeError, "Unsupported release index format"):
+            publisher.verify_index(index, self._validated_candidates()["backend"], self.version, self.commit)
 
     def test_index_must_preserve_exact_verified_digests_and_unique_platforms(self):
         candidates = {record["platform"]: record["images"]["backend"] for record in self.records}
@@ -87,10 +164,12 @@ class PublicationTests(unittest.TestCase):
 
     def test_existing_different_version_tag_is_never_overwritten(self):
         self.registry.manifest.side_effect = None
-        self.registry.manifest.return_value = ({"manifests": [], "annotations": {}}, "sha256:" + "d" * 64)
+        index = self.index()
+        index["manifests"] = []
+        self.registry.manifest.return_value = (index, "sha256:" + "d" * 64)
         run = Mock()
         candidates = {"backend": {record["platform"]: record["images"]["backend"] for record in self.records}}
-        with self.assertRaises(RuntimeError):
+        with self.assertRaisesRegex(RuntimeError, "different platform image digests"):
             publisher.publish_indices(candidates, self.repository, self.version, self.commit, self.registry, run)
         run.assert_not_called()
 
