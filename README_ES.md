@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.2.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.78.3.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -33,9 +33,15 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.3** | Ejecuta las pruebas de navegador en Ubuntu 24.04, compatible con la versión fijada de Playwright. | [Flujo de pruebas del navegador](.github/workflows/ci.yml) |
 | **v0.78.2** | Compatibilidad con listas Docker y recuperación con imágenes probadas y archivos de la versión original. | [Verificación y recuperación](docs/release-manifest-verification-v0782.md) |
 | **v0.78.1** | Espera al servidor PostgreSQL definitivo y conserva diagnósticos de CI con secretos ocultos. | [Guía de disponibilidad y diagnóstico](docs/release-smoke-readiness-v0781.md) |
-| **v0.78.0** | Imágenes para ambas arquitecturas, demostración local y actualizaciones con respaldo y reanudación. | [Guía de versiones, demo y actualizaciones](docs/prebuilt-releases-demo-updates-v0780.md) |
+
+## v0.78.3 — Ubuntu compatible para las pruebas del navegador
+
+Las pruebas de navegador usan **Ubuntu 24.04**, compatible con **Playwright 1.55.0**. El cambio de `ubuntu-latest` de GitHub a Ubuntu 26.04 hacía fallar la instalación de dependencias de Chromium antes de ejecutar las pruebas. Fijar la imagen compatible permite instalar Chromium y ejecutar la suite existente en el sistema operativo admitido.
+
+Versión/pie **v0.78.3**. Ambos README conservan solo **v0.78.3, v0.78.2 y v0.78.1**. El comando de demostración sigue fijado a v0.78.1, cuya publicación se completa mediante el flujo de recuperación.
 
 ## v0.78.2 — Compatibilidad de manifiestos y recuperación de publicaciones
 
@@ -43,7 +49,7 @@ El publicador acepta listas de manifiestos Docker sin anotaciones OCI y sigue ex
 
 El flujo manual **Recover release publication** completa una versión existente con las pruebas nativas aprobadas y archivos de hashes del flujo original. Verifica sus controles de publicación y commit, usa los archivos originales del instalador y lanzador y sube lo que falta sin reconstruir imágenes ni mover etiquetas. Permite completar la demo **v0.78.1**; el comando de demostración sigue fijado a esa versión.
 
-Versión/pie **v0.78.2**. Ambos README conservan solo **v0.78.2, v0.78.1 y v0.78.0**. Sin migración de aplicación ni dependencia nueva. Consulta la [guía de verificación y recuperación](docs/release-manifest-verification-v0782.md).
+Versión/pie **v0.78.2**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de aplicación ni dependencia nueva. Consulta la [guía de verificación y recuperación](docs/release-manifest-verification-v0782.md).
 
 ## v0.78.1 — Disponibilidad de PostgreSQL y diagnósticos de publicación
 
@@ -53,21 +59,13 @@ Los fallos de las pruebas nativas muestran y conservan diagnósticos limitados d
 
 Versión/pie **v0.78.1**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de aplicación ni dependencia nueva. Consulta la [guía de disponibilidad y diagnóstico](docs/release-smoke-readiness-v0781.md).
 
-## v0.78.0 — Imágenes precompiladas, demo y actualizaciones reanudables
-
-La publicación construye y prueba imágenes de backend/frontend en ejecutores nativos **linux/amd64** y **linux/arm64**. Requiere CI de la aplicación aprobada, pruebas nativas de instalación/actualización/restauración y acceso anónimo a GHCR. Las imágenes versionadas y el manifiesto con hashes fijan versiones compatibles de API, worker, monitor del asistente y frontend. Los archivos publicados se comprueban antes de reutilizarlos y no se sobrescriben.
-
-El lanzador descarga un instalador pequeño y crea una demostración aislada en localhost con datos de ejemplo y credenciales generadas. El comando instalado permite iniciar, detener, verificar, respaldar y actualizar a una versión elegida. Antes de migrar detiene los procesos que escriben y respalda PostgreSQL, archivos y configuración. Una migración interrumpida conserva su punto de progreso para reanudar explícitamente. Las actualizaciones conservan los datos y no vuelven a cargar ejemplos ni restablecen contraseñas.
-
-Versión/pie **v0.78.0**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de aplicación ni dependencia Python nueva. La publicación se ejecuta después de crear la versión revisada en GitHub; configurar el flujo no significa que las imágenes ya estén publicadas. Consulta la [guía de versiones, demo y actualizaciones](docs/prebuilt-releases-demo-updates-v0780.md).
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.2`
+**Versión de desarrollo actual:** `v0.78.3`
 
 **Demo:** http://35.164.28.250
 
