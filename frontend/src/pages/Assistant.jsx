@@ -1,3 +1,4 @@
+import GettingStartedActions from "../components/GettingStartedActions";
 import AssistantConversations from "../components/AssistantConversations";
 import AssistantJobStatus from "../components/AssistantJobStatus";
 import AssistantLabOperation from "../components/AssistantLabOperation";
@@ -46,12 +47,12 @@ function badgeVariantForProvider(provider) {
 
 export default function Assistant() {
   const location = useLocation();
-  return <AssistantSession key={location.key} initialPage={location.state?.assistantPage} />;
+  return <AssistantSession key={location.key} initialPage={location.state?.assistantPage} initialPrompt={location.state?.prompt} />;
 }
 
-function AssistantSession({ initialPage }) {
+function AssistantSession({ initialPage, initialPrompt }) {
   const [selectedPage, setSelectedPage] = useState(() => pageSelection(initialPage));
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(initialPrompt || "");
   const [conversationContext, setConversationContext] = useState({});
   const [conversationId, setConversationId] = useState(null);
   const transport = useAssistantRequest();
@@ -494,7 +495,7 @@ function AssistantSession({ initialPage }) {
 
       <Card className="app-card">
         <Card.Body>
-          <h5 className="section-title">Example questions</h5>
+          <h5 className="section-title">Example questions</h5><p className="text-muted">Start with a task. The assistant will ask for the details it needs; changes still require your confirmation.</p><div className="mb-3"><GettingStartedActions /></div>
 
           <div className="d-flex flex-wrap gap-2">
             {starterPrompts.map((prompt) => (

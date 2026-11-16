@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.3.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.78.4.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -33,15 +33,23 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.4** | Formularios más sencillos, términos y unidades explicados, prioridades en Mi trabajo y comandos del asistente en páginas vacías. | [Pruebas de usabilidad](frontend/e2e/tests/usability.spec.js) |
 | **v0.78.3** | Ejecuta las pruebas de navegador en Ubuntu 24.04, compatible con la versión fijada de Playwright. | [Flujo de pruebas del navegador](.github/workflows/ci.yml) |
 | **v0.78.2** | Compatibilidad con listas Docker y recuperación con imágenes probadas y archivos de la versión original. | [Verificación y recuperación](docs/release-manifest-verification-v0782.md) |
-| **v0.78.1** | Espera al servidor PostgreSQL definitivo y conserva diagnósticos de CI con secretos ocultos. | [Guía de disponibilidad y diagnóstico](docs/release-smoke-readiness-v0781.md) |
+
+## v0.78.4 — Formularios sencillos y trabajo diario con acciones
+
+Los formularios de muestras, proyectos, mapeos de instrumentos y muestras derivadas muestran primero los campos esenciales y agrupan los ajustes opcionales en **Más opciones**. Los valores se conservan al cerrar la sección y la validación muestra los campos que necesitan corrección. Las explicaciones de mapeo y alícuota incluyen ejemplos y orientación sobre unidades; la interfaz no convierte unidades.
+
+**Mi trabajo** prioriza las tareas vencidas y las que necesitan revisión o repetición, con acciones como **Revisar resultados** y **Continuar experimento**. Las páginas vacías ofrecen **Registrar muestras** e **Importar un archivo de instrumento**: estos comandos rellenan el asistente sin enviar una solicitud. La nueva orientación está disponible en inglés y español.
+
+Versión/pie **v0.78.4**. Ambos README conservan solo **v0.78.4, v0.78.3 y v0.78.2**. Sin migración de aplicación ni dependencia nueva. El comando de demostración sigue fijado a v0.78.1.
 
 ## v0.78.3 — Ubuntu compatible para las pruebas del navegador
 
 Las pruebas de navegador usan **Ubuntu 24.04**, compatible con **Playwright 1.55.0**. El cambio de `ubuntu-latest` de GitHub a Ubuntu 26.04 hacía fallar la instalación de dependencias de Chromium antes de ejecutar las pruebas. Fijar la imagen compatible permite instalar Chromium y ejecutar la suite existente en el sistema operativo admitido.
 
-Versión/pie **v0.78.3**. Ambos README conservan solo **v0.78.3, v0.78.2 y v0.78.1**. El comando de demostración sigue fijado a v0.78.1, cuya publicación se completa mediante el flujo de recuperación.
+Versión/pie **v0.78.3**. Ambos README conservan solo las tres actualizaciones indicadas arriba. El comando de demostración sigue fijado a v0.78.1, cuya publicación se completa mediante el flujo de recuperación.
 
 ## v0.78.2 — Compatibilidad de manifiestos y recuperación de publicaciones
 
@@ -51,21 +59,13 @@ El flujo manual **Recover release publication** completa una versión existente 
 
 Versión/pie **v0.78.2**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de aplicación ni dependencia nueva. Consulta la [guía de verificación y recuperación](docs/release-manifest-verification-v0782.md).
 
-## v0.78.1 — Disponibilidad de PostgreSQL y diagnósticos de publicación
-
-Las comprobaciones de PostgreSQL esperan conexiones TCP. El servidor temporal de inicialización acepta conexiones por socket Unix antes de que esté disponible el servidor definitivo; las migraciones o restauraciones podían empezar demasiado pronto. Se corrigen las plantillas de demo/producción, el despliegue de producción desde código y las pruebas nativas. La prueba de restauración retrasa la inicialización deliberadamente y verifica que termine antes de restaurar los registros.
-
-Los fallos de las pruebas nativas muestran y conservan diagnósticos limitados durante siete días, incluidas operaciones del instalador y estado/logs de contenedores. Se ocultan credenciales generadas y contraseñas de conexión antes de publicarlos. No se suben configuración privada, respaldos ni archivos de muestras. El control de publicación se omite deliberadamente en los pull requests.
-
-Versión/pie **v0.78.1**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de aplicación ni dependencia nueva. Consulta la [guía de disponibilidad y diagnóstico](docs/release-smoke-readiness-v0781.md).
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.3`
+**Versión de desarrollo actual:** `v0.78.4`
 
 **Demo:** http://35.164.28.250
 

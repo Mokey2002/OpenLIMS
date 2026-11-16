@@ -13,6 +13,7 @@ import {
 } from "react-bootstrap";
 import { apiGet, apiPost, apiPostDownload } from "../api";
 import { canWrite } from "../authz";
+import GettingStartedActions from "../components/GettingStartedActions";
 import SampleFormFields from "../components/SampleFormFields";
 import ConfiguredIntake from "../components/ConfiguredIntake";
 import { useLanguage } from "../i18n";
@@ -440,10 +441,8 @@ export default function SamplesList() {
       <Card className="app-card mb-4">
         <Card.Body>
           <h5 className="section-title">Create Sample</h5>
-          {canWrite(me) && <ConfiguredIntake projects={projects} onImported={load} />}
 
           <FeedbackForm feedback={createFeedback} onSubmit={createSample}>
-            <SampleFormFields fields={sampleForms.find(f => f.code === sampleType.trim().toUpperCase())?.fields || []} values={formValues} onChange={setFormValues} />
             <Row className="g-2">
               <Col md={4}>
                 <FormField name="sample_id" label="Sample ID" hint="Use a unique sample ID, such as S-002. Maximum 64 characters.">
@@ -467,8 +466,10 @@ export default function SamplesList() {
                 </FormField>
                 <datalist id="configured-sample-types">{[...new Set(sampleForms.map(f => f.code))].map(code => <option key={code} value={code}>{sampleForms.find(f => f.code === code)?.[language === "es" ? "name_es" : "name_en"]}</option>)}</datalist>
               </Col>
-
-              <Col md={3}>
+            </Row>
+            <SampleFormFields fields={sampleForms.find(f => f.code === sampleType.trim().toUpperCase())?.fields || []} values={formValues} onChange={setFormValues}>
+              <Row>
+                <Col md={6}>
                 <FormField name="project" label="Primary Project">
                 <Form.Select
                   value={projectId}
@@ -484,14 +485,11 @@ export default function SamplesList() {
                 </Form.Select>
                 </FormField>
               </Col>
-
-              <Col md={2}>
-                <ActionButton type="submit" variant="dark" className="w-100">
-                  Create
-                </ActionButton>
-              </Col>
-            </Row>
+              </Row>
+            </SampleFormFields>
+            <ActionButton type="submit" variant="dark">Create</ActionButton>
           </FeedbackForm>
+          {canWrite(me) && <details className="mt-4"><summary>Import several samples from a CSV file</summary><div className="mt-3"><ConfiguredIntake projects={projects} onImported={load} /></div></details>}
         </Card.Body>
       </Card>
       )}
@@ -743,7 +741,7 @@ export default function SamplesList() {
           </div>
 
           {samples.length === 0 ? (
-            <div className="empty-state"><h5>{language === "es" ? "No hay muestras que mostrar" : "No samples to show"}</h5><p>{emptyMessage}</p><p>{language === "es" ? "Revisa los filtros. Si tienes permiso, registra una muestra con el formulario de arriba; de lo contrario, solicita acceso al administrador de tu proyecto." : "Check your filters. If you have access, register a sample using the form above; otherwise, ask your project administrator for access."}</p><Link className="btn btn-outline-dark" to="/projects">{language === "es" ? "Ver mis proyectos" : "View my projects"}</Link></div>
+            <div className="empty-state"><h5>{language === "es" ? "No hay muestras que mostrar" : "No samples to show"}</h5><p>{emptyMessage}</p><p>{language === "es" ? "Revisa los filtros. Si tienes permiso, registra una muestra con el formulario de arriba; de lo contrario, solicita acceso al administrador de tu proyecto." : "Check your filters. If you have access, register a sample using the form above; otherwise, ask your project administrator for access."}</p><Link className="btn btn-outline-dark" to="/projects">{language === "es" ? "Ver mis proyectos" : "View my projects"}</Link><div className="mt-3"><GettingStartedActions /></div></div>
           ) : (
             <Table responsive hover className="app-table align-middle">
               <thead>
