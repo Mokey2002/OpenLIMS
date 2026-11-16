@@ -58,6 +58,7 @@ test('server field errors retain all sample inputs and reset only after a confir
   await page.goto('/samples'); const form = sampleForm(page);
   await sampleId(page).fill('PROTEIN-001');
   await form.locator('[name="sample_type"]').fill('PROTEIN');
+  await form.locator('summary').filter({ hasText: /^More options$/ }).click();
   await form.locator('[name="project"]').selectOption('1');
   await form.getByRole('button', { name: 'Create', exact: true }).click();
   await expect(sampleId(page)).toBeFocused();
