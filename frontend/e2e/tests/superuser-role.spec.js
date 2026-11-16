@@ -36,6 +36,7 @@ for (const fallback of [false, true]) {
     const form = page.locator("form").filter({ has: page.getByPlaceholder("New sample id, e.g. S-002") });
     await form.getByPlaceholder("New sample id, e.g. S-002").fill("PROTEIN-001");
     await form.getByPlaceholder("Sample type, e.g. DNA").fill("PROTEIN");
+    await form.locator("summary").filter({ hasText: /^More options$/ }).click();
     await form.getByRole("combobox").filter({ has: page.locator('option[value="7"]') }).selectOption("7");
     await form.getByRole("button", { name: "Create", exact: true }).click();
     await expect(page.getByText("Sample created.", { exact: true })).toBeVisible();

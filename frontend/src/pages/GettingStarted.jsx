@@ -1,3 +1,4 @@
+import LabSetupChecklist from "../components/LabSetupChecklist";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Badge, Button, Card, Form, Spinner } from "react-bootstrap";
 import { Link } from "react-router-dom";
@@ -21,10 +22,11 @@ export default function GettingStarted() {
     setError("");
     try {
       const status = await apiGet("/api/onboarding/");
+      if (current !== generation.current) return;
+      setData(status);
       const choices = status.enabled && !status.experiment
         ? await apiGetAll("/api/experiment-templates/?for_onboarding=1", Infinity) : [];
       if (current !== generation.current) return;
-      setData(status);
       setTemplates(choices);
       setSelected(previous => choices.some(choice => String(choice.id) === previous) ? previous : "");
     } catch {
@@ -48,7 +50,7 @@ export default function GettingStarted() {
     setError("");
     try {
       const result = await apiPost("/api/onboarding/", { template: Number(selected), title: title.trim() });
-      if (current === generation.current) setData(result);
+      if (current === generation.current) setData(previous => ({ ...previous, ...result }));
     } catch {
       if (current === generation.current) setError("start");
     } finally {
@@ -63,13 +65,14 @@ export default function GettingStarted() {
   return <div style={{ maxWidth: 900 }} className="mx-auto">
     <div className="d-flex justify-content-between align-items-start gap-3 mb-4">
       <div><h1>{t("Getting started", "Primeros pasos")}</h1>
-        <p>{t("Start a real experiment using your lab’s workflow. You can leave and resume here at any time.", "Inicia un experimento real con el flujo de tu laboratorio. Puedes salir y continuar aquí cuando quieras.")}</p></div>
+        <p>{t("Set up your team, project, and first sample, then start an experiment when you need one. You can leave and resume here at any time.", "Configura tu equipo, proyecto y primera muestra; después inicia un experimento cuando lo necesites. Puedes salir y continuar aquí cuando quieras.")}</p></div>
       <Button variant="outline-secondary" onClick={load} disabled={busy}>{t("Refresh", "Actualizar")}</Button>
     </div>
     {error && <Alert variant="danger">{error === "start"
       ? t("Could not confirm experiment creation. Refresh to check whether it was saved, or retry. Ask your lab manager to check the template and your edit access if this continues.", "No se pudo confirmar la creación. Actualiza para comprobar si se guardó o inténtalo de nuevo. Si continúa, pide al responsable revisar la plantilla y tus permisos.")
       : t("Could not load onboarding. Please refresh to retry.", "No se pudieron cargar los primeros pasos. Pulsa Actualizar para reintentar.")}</Alert>}
     {!data && !error && <Spinner animation="border" />}
+    <LabSetupChecklist setup={data?.lab_setup} />
     {data && !data.enabled && <Alert variant="info">{t("The notebook module is disabled. Ask your administrator to enable it before starting an experiment. You can still open My Work and the projects shared with you.", "El módulo de bitácora está desactivado. Pide al administrador activarlo antes de iniciar un experimento. Puedes consultar Mi trabajo y los proyectos compartidos contigo.")}</Alert>}
     {data?.enabled && !experiment && <Card className="mb-4"><Card.Body>
       <h2 className="h4">{t("1. Choose your lab workflow", "1. Elige el flujo de tu laboratorio")}</h2>

@@ -89,7 +89,10 @@ class OnboardingTests(APITestCase):
         settings = SystemSettings.load()
         settings.notebook_enabled = False
         settings.save()
-        self.assertEqual(self.client.get("/api/onboarding/").data, {"enabled": False, "experiment": None})
+        response = self.client.get("/api/onboarding/")
+        self.assertFalse(response.data["enabled"])
+        self.assertIsNone(response.data["experiment"])
+        self.assertIn("lab_setup", response.data)
         self.assertEqual(self.start().status_code, 404)
         self.client.force_authenticate(None)
         self.assertIn(self.client.get("/api/onboarding/").status_code, (401, 403))

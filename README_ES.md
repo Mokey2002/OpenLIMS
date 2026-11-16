@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.4.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.78.5.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -33,9 +33,17 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.5** | Lista de configuración inicial y orientación sobre estados, bloqueos y siguientes pasos de las muestras según los permisos. | [Pruebas de configuración y orientación](frontend/e2e/tests/guided-setup.spec.js) |
 | **v0.78.4** | Formularios más sencillos, términos y unidades explicados, prioridades en Mi trabajo y comandos del asistente en páginas vacías. | [Pruebas de usabilidad](frontend/e2e/tests/usability.spec.js) |
 | **v0.78.3** | Ejecuta las pruebas de navegador en Ubuntu 24.04, compatible con la versión fijada de Playwright. | [Flujo de pruebas del navegador](.github/workflows/ci.yml) |
-| **v0.78.2** | Compatibilidad con listas Docker y recuperación con imágenes probadas y archivos de la versión original. | [Verificación y recuperación](docs/release-manifest-verification-v0782.md) |
+
+## v0.78.5 — Configuración guiada y siguientes pasos de las muestras
+
+**Primeros pasos** incluye una lista para añadir usuarios, crear un proyecto y registrar la primera muestra. El progreso refleja registros guardados y se actualiza al volver; sigue disponible con la bitácora desactivada. Las cuentas sin permisos de administración reciben orientación adecuada sin acceder a información privada sobre la configuración de usuarios.
+
+Cada muestra explica su estado y qué hacer a continuación, incluidos pasos activos, dependencias, fallos y revisiones de calidad pendientes. Los enlaces abren la sección correspondiente de flujo, tareas, resultados, historial o estado. Las cuentas de lectura reciben orientación para consultar registros y se mantienen las validaciones, aprobaciones y motivos obligatorios. La nueva orientación está disponible en inglés y español.
+
+Versión/pie **v0.78.5**. Ambos README conservan solo **v0.78.5, v0.78.4 y v0.78.3**. Sin migración de esquema ni dependencia nueva. El comando de demostración sigue fijado a v0.78.1.
 
 ## v0.78.4 — Formularios sencillos y trabajo diario con acciones
 
@@ -43,7 +51,7 @@ Los formularios de muestras, proyectos, mapeos de instrumentos y muestras deriva
 
 **Mi trabajo** prioriza las tareas vencidas y las que necesitan revisión o repetición, con acciones como **Revisar resultados** y **Continuar experimento**. Las páginas vacías ofrecen **Registrar muestras** e **Importar un archivo de instrumento**: estos comandos rellenan el asistente sin enviar una solicitud. La nueva orientación está disponible en inglés y español.
 
-Versión/pie **v0.78.4**. Ambos README conservan solo **v0.78.4, v0.78.3 y v0.78.2**. Sin migración de aplicación ni dependencia nueva. El comando de demostración sigue fijado a v0.78.1.
+Versión/pie **v0.78.4**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de aplicación ni dependencia nueva. El comando de demostración sigue fijado a v0.78.1.
 
 ## v0.78.3 — Ubuntu compatible para las pruebas del navegador
 
@@ -51,21 +59,13 @@ Las pruebas de navegador usan **Ubuntu 24.04**, compatible con **Playwright 1.55
 
 Versión/pie **v0.78.3**. Ambos README conservan solo las tres actualizaciones indicadas arriba. El comando de demostración sigue fijado a v0.78.1, cuya publicación se completa mediante el flujo de recuperación.
 
-## v0.78.2 — Compatibilidad de manifiestos y recuperación de publicaciones
-
-El publicador acepta listas de manifiestos Docker sin anotaciones OCI y sigue exigiendo los hashes exactos de las imágenes AMD64/ARM64 probadas, con etiquetas de versión y código verificadas. Se mantienen las comprobaciones de anotaciones OCI y la protección contra reemplazar una etiqueta publicada diferente. Una etiqueta válida de una publicación parcial se reutiliza sin modificarla.
-
-El flujo manual **Recover release publication** completa una versión existente con las pruebas nativas aprobadas y archivos de hashes del flujo original. Verifica sus controles de publicación y commit, usa los archivos originales del instalador y lanzador y sube lo que falta sin reconstruir imágenes ni mover etiquetas. Permite completar la demo **v0.78.1**; el comando de demostración sigue fijado a esa versión.
-
-Versión/pie **v0.78.2**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de aplicación ni dependencia nueva. Consulta la [guía de verificación y recuperación](docs/release-manifest-verification-v0782.md).
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.4`
+**Versión de desarrollo actual:** `v0.78.5`
 
 **Demo:** http://35.164.28.250
 
