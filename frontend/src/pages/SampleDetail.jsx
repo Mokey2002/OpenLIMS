@@ -1,3 +1,4 @@
+import SampleWorkflowGuide from "../components/SampleWorkflowGuide";
 import FeedbackForm, { FormField } from "../components/FeedbackForm";
 import useFormFeedback from "../hooks/useFormFeedback";
 import ActionButton, { AccessNotice } from "../components/ActionGuidance";
@@ -14,7 +15,7 @@ import {
   Table,
 } from "react-bootstrap";
 import { apiGet, apiGetAll, apiPatch, apiPost, apiPostForm } from "../api";
-import { canWrite, readOnlyMessage } from "../authz";
+import { canWrite, isQcReviewer, readOnlyMessage } from "../authz";
 import SampleValuesEditor from "../components/SampleValuesEditor";
 import WorkflowStepForm from "../components/WorkflowStepForm";
 import { useAssistantPageRecord } from "../assistantPageContext";
@@ -871,6 +872,8 @@ export default function SampleDetail() {
       {success && <Alert variant="success">{success}</Alert>}
       {sample && !userCanWrite && <AccessNotice access={sample.modification_access} fallback={readOnlyText || "Editing requires additional access. Ask the record owner or an administrator."} />}
 
+      <SampleWorkflowGuide sample={sample} allowed={allowed} runs={pipelineRuns} canModify={userCanWrite} canReview={isQcReviewer(me)} />
+
       <nav aria-label="Sample record sections" className="d-flex gap-3 flex-wrap mb-4">
         <a href="#sample-experiments">Experiments ({experiments.length})</a>
         <a href="#sample-results">Results ({resultRows.length})</a>
@@ -1092,7 +1095,7 @@ export default function SampleDetail() {
                   </ActionButton>
                 </FeedbackForm>
 
-                <h5 className="section-title">Change Status</h5>
+                <h5 className="section-title" id="sample-status">Change Status</h5>
 
                 {allowed.length === 0 ? (
                   <span className="empty-state">No further transitions.</span>
@@ -1150,7 +1153,7 @@ export default function SampleDetail() {
         <Card.Body>
           <div className="toolbar-row mb-3">
             <div>
-              <h5 className="section-title mb-0">Pipeline Execution</h5>
+              <h5 className="section-title mb-0" id="sample-workflow">Pipeline Execution</h5>
               <div className="feed-meta">
                 Ordered procedure steps, current work, QC gates, and execution history.
               </div>
@@ -1557,7 +1560,7 @@ export default function SampleDetail() {
         <div className="col-lg-7">
           <Card className="app-card h-100">
             <Card.Body>
-              <h5 className="section-title">Work Items</h5>
+              <h5 className="section-title" id="sample-work-items">Work Items</h5>
 
               {userCanWrite && (
                 <FeedbackForm feedback={workFeedback} onSubmit={createWorkItem} className="mb-4">

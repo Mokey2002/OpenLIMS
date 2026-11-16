@@ -9,6 +9,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from settings_app.models import SystemSettings
+from core.permissions import is_admin, is_tech
+from projects.models import Project
+from samples.models import Sample
+from samples.access import get_sample_access_queryset
 from .models import ExperimentOnboarding, ExperimentTemplate
 from .permissions import notebooks_for_user, user_can_notebook
 from .services import instantiate_template
@@ -34,6 +38,20 @@ def progress(user):
     }}
 
 
+def lab_setup(user):
+    """Report saved records, without exposing user or private-project existence."""
+    admin = is_admin(user)
+    projects = Project.objects.all() if admin else Project.objects.filter(members=user)
+    return {
+        "users_added": get_user_model().objects.filter(is_active=True).exclude(pk=user.pk).exists() if admin else None,
+        "project_created": projects.exists(),
+        "sample_registered": get_sample_access_queryset(Sample.objects.all(), user).exists(),
+        "can_add_users": admin,
+        "can_create_project": admin,
+        "can_register_sample": admin or is_tech(user),
+    }
+
+
 class StartSerializer(serializers.Serializer):
     template = serializers.IntegerField(min_value=1)
     title = serializers.CharField(max_length=255)
@@ -43,7 +61,7 @@ class OnboardingView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(progress(request.user))
+        return Response({**progress(request.user), "lab_setup": lab_setup(request.user)})
 
     @transaction.atomic
     def post(self, request):
