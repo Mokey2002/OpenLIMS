@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.3-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.4-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -52,15 +52,23 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.4** | Simplify forms, explain laboratory terms and units, prioritize My Work, and offer useful empty-state assistant commands. | [Usability browser regressions](frontend/e2e/tests/usability.spec.js) |
 | **v0.78.3** | Run browser CI on Ubuntu 24.04, supported by the pinned Playwright version. | [Browser-test workflow](.github/workflows/ci.yml) |
 | **v0.78.2** | Accept valid Docker manifest lists and recover an existing release from its original tested images and installer source. | [Manifest verification and recovery](docs/release-manifest-verification-v0782.md) |
-| **v0.78.1** | Wait for final PostgreSQL startup and retain redacted native-test failure diagnostics. | [Release readiness and diagnostics](docs/release-smoke-readiness-v0781.md) |
+
+### v0.78.4 — Simpler forms and actionable daily work
+
+Sample, project, instrument-mapping, and derived-sample forms put essential fields first and group optional settings under **More options**. Optional values survive collapsing the section, and validation reveals fields that need correction. Mapping and aliquot explanations include examples and unit guidance; the interface does not convert units.
+
+**My Work** prioritizes overdue assignments and items needing review or retry, with **Review results**, **Continue experiment**, and other task actions. Helpful empty states offer **Register samples** and **Import an instrument file** commands that prefill the assistant without sending a request. New guidance is available in English and Spanish.
+
+Version/footer **v0.78.4**. Both READMEs retain only **v0.78.4, v0.78.3 and v0.78.2** release updates. No application schema migration or dependency change. The demo command remains pinned to v0.78.1.
 
 ### v0.78.3 — Supported Ubuntu runner for browser tests
 
 Browser CI now uses **Ubuntu 24.04**, which the pinned **Playwright 1.55.0** supports. GitHub's move of `ubuntu-latest` to Ubuntu 26.04 made Chromium dependency installation fail before any browser tests ran. Pinning the supported image lets the existing Chromium installation and complete browser suite run on a compatible operating system.
 
-Version/footer **v0.78.3**. Both READMEs retain only **v0.78.3, v0.78.2 and v0.78.1** release updates. The demo command stays pinned to the v0.78.1 release completed by the recovery workflow.
+Version/footer **v0.78.3**. Both READMEs retain only the latest three release updates listed above. The demo command stays pinned to the v0.78.1 release completed by the recovery workflow.
 
 ### v0.78.2 — Docker manifest compatibility and release recovery
 
@@ -70,21 +78,13 @@ The manual **Recover release publication** workflow can finish an existing relea
 
 Version/footer **v0.78.2**. Both READMEs retain only the latest three release updates listed above. No application schema migration or dependency change. See the [manifest verification and recovery guide](docs/release-manifest-verification-v0782.md).
 
-### v0.78.1 — PostgreSQL readiness and visible release diagnostics
-
-PostgreSQL health checks now require TCP readiness. The official image's temporary initialization server accepts Unix-socket connections before the final server is available; migrations or restores could otherwise start too soon. This change covers demo/production installer templates, source-built production and the native release tests. The restore drill deliberately delays initialization and verifies its completion before restoring scientific records.
-
-Failed native tests now print and retain bounded, redacted diagnostics for seven days, including installer operations and container health/logs. Generated credentials and connection passwords are removed before output; private configuration, database dumps and upload archives are not uploaded. The release gate remains intentionally skipped on pull requests.
-
-Version/footer **v0.78.1**. Both READMEs retain only the latest three release updates listed above. No application schema migration or dependency change. See the [readiness and diagnostics guide](docs/release-smoke-readiness-v0781.md).
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.3`.
+**Current development version:** `v0.78.4`.
 
 ## Personal favorites
 
@@ -973,7 +973,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.78.3**.
+`frontend/src/version.js` file. The current application version is **v0.78.4**.
 
 Footer source:
 

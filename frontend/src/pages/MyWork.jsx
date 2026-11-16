@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Row, Spinner, Table } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api";
+import { prioritizeWork, workAction } from "../utils/workPriorities.mjs";
+import GettingStartedActions from "../components/GettingStartedActions";
 import WorkspacePreferences from "../components/WorkspacePreferences";
 import { defaultWorkspace } from "../workspaceDefaults";
 import { useLanguage } from "../i18n";
@@ -33,7 +35,7 @@ function SummaryCard({ label, value, hint, to }) {
 
 export default function MyWork() {
   const [view, setView] = useState(defaultWorkspace);
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -81,7 +83,7 @@ export default function MyWork() {
 
   const summary = data.summary;
   const alertCount = summary.inventory_alerts + summary.unread_notifications;
-  const visibleWork = data.assigned_work.filter(item => (!view.status || item.status === view.status) && `${item.name} ${item.sample_code} ${item.project_code}`.toLowerCase().includes(view.query.toLowerCase()));
+  const visibleWork = prioritizeWork(data.assigned_work).filter(item => (!view.status || item.status === view.status) && `${item.name} ${item.sample_code} ${item.project_code}`.toLowerCase().includes(view.query.toLowerCase()));
   const columnLabels = language === "es" ? { name: "Trabajo", sample: "Muestra", status: "Estado", qc: "QC", due: "Vencimiento" } : { name: "Work", sample: "Sample", status: "Status", qc: "QC", due: "Due" };
 
   return (
@@ -97,6 +99,19 @@ export default function MyWork() {
         <Button variant="outline-dark" size="sm" onClick={load} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</Button>
       </div>
 
+      <Card className="app-card mb-4">
+        <Card.Body>
+          <h3 className="h5">{t("Your priorities")}</h3>
+          <p className="text-muted">{t("Overdue work comes first, followed by results needing review or a retry. Open an item to check its details before acting.")}</p>
+          <div className="d-flex gap-2 flex-wrap">
+            {summary.overdue > 0 && <Button href="#overdue" variant="outline-danger">{t("Check overdue work")} ({summary.overdue})</Button>}
+            {summary.qc > 0 && <Button as={Link} to="/qc-review" variant="outline-dark">{t("Review results")} ({summary.qc})</Button>}
+            {data.notebook_enabled && summary.experiments > 0 && <Button as={Link} to="/notebook" variant="outline-dark">{t("Continue experiment")} ({summary.experiments})</Button>}
+            {summary.requests > 0 && <Button as={Link} to="/workflow-requests" variant="outline-dark">{t("Review requests")} ({summary.requests})</Button>}
+          </div>
+          {summary.assigned === 0 && summary.overdue === 0 && summary.qc === 0 && summary.experiments === 0 && summary.requests === 0 && <><p>{t("You have no active priorities. Register a sample or import a file to begin, or ask your project administrator to assign work.")}</p><GettingStartedActions /></>}
+        </Card.Body>
+      </Card>
       <WorkspacePreferences value={view} onChange={setView} />
       <p><Link to="/getting-started">{language === "es" ? "Primeros pasos: tu primer experimento" : "Getting started: your first experiment"}</Link></p>
       {view.widgets.includes("summary") && <Row className="g-3 mb-4">
@@ -117,14 +132,15 @@ export default function MyWork() {
                 <Link to="/work-queue">Open queue</Link>
               </div>
               {visibleWork.length === 0 ? (
-                <div className="text-muted">No active work is assigned to you.</div>
+                <div className="text-muted">{t(data.assigned_work.length ? "No assigned work matches these filters. Clear the search or status filter to see your work." : "No active work is assigned to you. Ask your project administrator to assign work, or register a sample to get started.")}</div>
               ) : (
                 <Table responsive hover size="sm" className="align-middle mb-0">
-                  <thead><tr>{view.columns.map(key => <th scope="col" key={key}>{columnLabels[key]}</th>)}</tr></thead>
+                  <thead><tr>{view.columns.map(key => <th scope="col" key={key}>{columnLabels[key]}</th>)}<th scope="col">{t("Next action")}</th></tr></thead>
                   <tbody>
                     {visibleWork.map((item) => (
                       <tr key={item.id}>
                         {view.columns.map(key => <td key={key} className={key === "due" && isPast(item.due_at) ? "text-danger fw-semibold" : ""}>{({ name: item.name, sample: item.sample_code || "—", status: <Badge bg={statusVariant(item.status)}>{item.status}</Badge>, qc: <Badge bg={statusVariant(item.qc_status)}>{item.qc_status}</Badge>, due: item.due_at ? new Date(item.due_at).toLocaleString() : "—" })[key]}</td>)}
+                        <td><Button as={Link} size="sm" variant="outline-dark" to={workAction(item).to} aria-label={`${t(workAction(item).label)}: ${item.name} · ${item.sample_code || ""}`}>{t(workAction(item).label)}</Button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -135,7 +151,7 @@ export default function MyWork() {
         </Col>}
 
         <Col xl={5}>
-          {view.widgets.includes("overdue") && <Card className="shadow-sm border-0 mb-4">
+          {(view.widgets.includes("overdue") || summary.overdue > 0) && <Card id="overdue" className="shadow-sm border-0 mb-4">
             <Card.Body>
               <h5>Overdue</h5>
               {data.overdue.length === 0 ? <div className="text-muted">Nothing overdue.</div> : data.overdue.map((item) => (

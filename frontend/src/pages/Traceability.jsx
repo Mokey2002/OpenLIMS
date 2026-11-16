@@ -1,3 +1,4 @@
+import MoreOptions from "../components/MoreOptions";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
 import { Link } from "react-router-dom";
@@ -125,16 +126,42 @@ export default function Traceability() {
         <Card className="app-card mb-4">
           <Card.Body>
             <h5 className="section-title">Create aliquot or derived sample</h5>
+            <p className="text-muted">An aliquot is a measured portion of an existing sample, such as 0.5 mL taken from a 2 mL tube. A derived sample is material produced from another sample, such as DNA extracted from blood.</p>
             <Form onSubmit={createDerivedSample}>
               <Row className="g-3">
-                <Col md={3}><Form.Label>New sample ID</Form.Label><Form.Control required value={form.sample_id} onChange={(event) => setForm({ ...form, sample_id: event.target.value })} placeholder={`${selected.sample_id}-A1`} /></Col>
-                <Col md={2}><Form.Label>Relationship</Form.Label><Form.Select value={form.relationship_type} onChange={(event) => setForm({ ...form, relationship_type: event.target.value })}><option value="ALIQUOT">Aliquot</option><option value="DERIVED">Derived sample</option><option value="SPLIT">Split</option><option value="POOL_COMPONENT">Pool component</option></Form.Select></Col>
-                <Col md={2}><Form.Label>Sample type</Form.Label><Form.Control value={form.sample_type} onChange={(event) => setForm({ ...form, sample_type: event.target.value })} placeholder={selected.sample_type} /></Col>
-                <Col md={2}><Form.Label>Quantity</Form.Label><Form.Control type="number" min="0" step="any" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></Col>
-                <Col md={1}><Form.Label>Unit</Form.Label><Form.Control value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="mL" /></Col>
-                <Col md={2} className="d-flex align-items-end"><Button className="w-100" type="submit" variant="dark" disabled={saving || !form.sample_id || form.reason.trim().length < 10}>{saving ? "Creating..." : "Create"}</Button></Col>
-                <Col xs={12}><Form.Label>Reason</Form.Label><Form.Control required minLength={10} value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} placeholder="Describe why this aliquot or derived sample is being created" /></Col>
+                <Col md={6}>
+                  <Form.Label htmlFor="derivation-id">New sample ID</Form.Label>
+                  <Form.Control id="derivation-id" required value={form.sample_id} onChange={(event) => setForm({ ...form, sample_id: event.target.value })} placeholder={`${selected.sample_id}-A1`} />
+                </Col>
+                <Col md={6}>
+                  <Form.Label htmlFor="derivation-relationship">Relationship</Form.Label>
+                  <Form.Select id="derivation-relationship" value={form.relationship_type} onChange={(event) => setForm({ ...form, relationship_type: event.target.value })}>
+                    <option value="ALIQUOT">Aliquot</option><option value="DERIVED">Derived sample</option><option value="SPLIT">Split</option><option value="POOL_COMPONENT">Pool component</option>
+                  </Form.Select>
+                </Col>
+                <Col xs={12}>
+                  <Form.Label htmlFor="derivation-reason">Reason</Form.Label>
+                  <Form.Control id="derivation-reason" required minLength={10} value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} placeholder="Describe why this aliquot or derived sample is being created" />
+                </Col>
               </Row>
+              <MoreOptions>
+                <Row className="g-3">
+                  <Col md={4}>
+                    <Form.Label htmlFor="derivation-type">Sample type</Form.Label>
+                    <Form.Control id="derivation-type" value={form.sample_type} onChange={(event) => setForm({ ...form, sample_type: event.target.value })} placeholder={selected.sample_type} />
+                  </Col>
+                  <Col md={4}>
+                    <Form.Label htmlFor="derivation-quantity">Quantity</Form.Label>
+                    <Form.Control id="derivation-quantity" aria-describedby="derivation-units" type="number" min="0" step="any" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} />
+                  </Col>
+                  <Col md={4}>
+                    <Form.Label htmlFor="derivation-unit">Unit</Form.Label>
+                    <Form.Control id="derivation-unit" aria-describedby="derivation-units" value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="mL" />
+                  </Col>
+                  <Col xs={12}><Form.Text id="derivation-units">Match the quantity to its unit: 0.5 mL, 500 µL, or 10 mg. No unit conversion is applied.</Form.Text></Col>
+                </Row>
+              </MoreOptions>
+              <Button type="submit" variant="dark" disabled={saving || !form.sample_id || form.reason.trim().length < 10}>{saving ? "Creating..." : "Create"}</Button>
             </Form>
           </Card.Body>
         </Card>

@@ -1,3 +1,4 @@
+import MoreOptions from "../components/MoreOptions";
 import FeedbackForm, { FormField } from "../components/FeedbackForm";
 import useFormFeedback from "../hooks/useFormFeedback";
 import ActionButton from "../components/ActionGuidance";
@@ -182,14 +183,13 @@ export default function Projects() {
                   /></FormField>
                 </Col>
 
-                <Col md={5}>
-                  <FormField name="description" label="Description"><Form.Control
+              </Row>
+              <MoreOptions>
+                <FormField name="description" label="Description"><Form.Control
                     placeholder="Description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                   /></FormField>
-                </Col>
-              </Row>
 
               <div className="mt-4">
                 <div className="feed-meta mb-2">Team Members</div>
@@ -253,6 +253,7 @@ export default function Projects() {
                 </div>
               </div>
 
+              </MoreOptions>
               <div className="mt-4">
                 <ActionButton type="submit" variant="dark">
                   Create Project

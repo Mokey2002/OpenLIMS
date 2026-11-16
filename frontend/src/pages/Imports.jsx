@@ -1,3 +1,5 @@
+import GettingStartedActions from "../components/GettingStartedActions";
+import MoreOptions from "../components/MoreOptions";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -560,11 +562,14 @@ export default function Imports() {
             <Card className="app-card h-100">
               <Card.Body>
                 <h5 className="section-title">Create Column Mapping</h5>
+                <p className="text-muted">A mapping tells OpenLIMS where to save each column in your file. For example, map a column named concentration to the result key concentration. Values keep the instrument’s units; mapping does not convert units.</p>
 
                 <Form onSubmit={createMapping}>
                   <Row className="g-2">
                     <Col md={3}>
-                      <Form.Select
+                      <Form.Label htmlFor="mapping-mappingInstrument">Instrument profile</Form.Label>
+                        <Form.Select
+                        id="mapping-mappingInstrument"
                         value={mappingInstrument}
                         onChange={(e) => setMappingInstrument(e.target.value)}
                       >
@@ -577,23 +582,31 @@ export default function Imports() {
                     </Col>
 
                     <Col md={3}>
-                      <Form.Control
+                      <Form.Label htmlFor="mapping-mappingSourceColumn">File column name</Form.Label>
+                        <Form.Control
+                        required id="mapping-mappingSourceColumn" aria-describedby="mapping-mappingSourceColumn-help"
                         placeholder="Source column"
                         value={mappingSourceColumn}
                         onChange={(e) => setMappingSourceColumn(e.target.value)}
                       />
+                      <Form.Text id="mapping-mappingSourceColumn-help">Copy the column heading exactly, for example concentration_ng_uL.</Form.Text>
                     </Col>
 
                     <Col md={3}>
-                      <Form.Control
+                      <Form.Label htmlFor="mapping-mappingTargetKey">Result key</Form.Label>
+                        <Form.Control
+                        required id="mapping-mappingTargetKey" aria-describedby="mapping-mappingTargetKey-help"
                         placeholder="Target key"
                         value={mappingTargetKey}
                         onChange={(e) => setMappingTargetKey(e.target.value)}
                       />
+                      <Form.Text id="mapping-mappingTargetKey-help">Use the result field expected by your analysis, for example concentration.</Form.Text>
                     </Col>
 
                     <Col md={3}>
-                      <Form.Select
+                      <Form.Label htmlFor="mapping-mappingValueType">Value type</Form.Label>
+                        <Form.Select
+                        id="mapping-mappingValueType"
                         value={mappingValueType}
                         onChange={(e) => setMappingValueType(e.target.value)}
                       >
@@ -603,8 +616,14 @@ export default function Imports() {
                       </Form.Select>
                     </Col>
 
-                    <Col md={2}>
-                      <Form.Control
+                  </Row>
+                  <MoreOptions>
+                    <p className="text-muted small">Minimum and maximum use the same units as the file values. For example, use 0 and 100 for a percentage stored from 0 to 100.</p>
+                    <Row className="g-2">
+                    <Col md={3}>
+                      <Form.Label htmlFor="mapping-mappingMinValue">Minimum (optional)</Form.Label>
+                        <Form.Control
+                        type="number" step="any" id="mapping-mappingMinValue"
                         placeholder="Min"
                         value={mappingMinValue}
                         onChange={(e) => setMappingMinValue(e.target.value)}
@@ -612,7 +631,9 @@ export default function Imports() {
                     </Col>
 
                     <Col md={2}>
-                      <Form.Control
+                      <Form.Label htmlFor="mapping-mappingMaxValue">Maximum (optional)</Form.Label>
+                        <Form.Control
+                        type="number" step="any" id="mapping-mappingMaxValue"
                         placeholder="Max"
                         value={mappingMaxValue}
                         onChange={(e) => setMappingMaxValue(e.target.value)}
@@ -620,13 +641,19 @@ export default function Imports() {
                     </Col>
 
                     <Col md={6}>
-                      <Form.Control
+                      <Form.Label htmlFor="mapping-mappingAllowedValues">Allowed values (optional)</Form.Label>
+                        <Form.Control
+                        id="mapping-mappingAllowedValues" aria-describedby="mapping-mappingAllowedValues-help"
                         placeholder="Allowed values, comma-separated"
                         value={mappingAllowedValues}
                         onChange={(e) => setMappingAllowedValues(e.target.value)}
                       />
+                      <Form.Text id="mapping-mappingAllowedValues-help">For text results, list choices separated by commas, for example PASS, FAIL.</Form.Text>
                     </Col>
 
+                    </Row>
+                  </MoreOptions>
+                  <Row>
                     <Col md={2}>
                       <Button
                         type="submit"
@@ -651,7 +678,7 @@ export default function Imports() {
                     </div>
 
                     {selectedProfile.column_mappings?.length === 0 ? (
-                      <div className="empty-state">No mappings yet.</div>
+                      <div className="empty-state">No mappings yet. Add one mapping for each result column you want to import using the form above. The sample ID column is set in the instrument profile.</div>
                     ) : (
                       <Table responsive hover className="app-table">
                         <thead>
@@ -1183,7 +1210,7 @@ export default function Imports() {
           <h5 className="section-title">Import History</h5>
 
           {jobs.length === 0 ? (
-            <div className="empty-state">No import jobs yet.</div>
+            <div className="empty-state"><h5>No import jobs yet.</h5><p>Choose an instrument profile, a project, and a CSV file in the upload form above. Preview the rows before importing to check sample IDs and result values.</p><GettingStartedActions /></div>
           ) : (
             <Table responsive hover className="app-table">
               <thead>
