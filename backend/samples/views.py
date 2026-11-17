@@ -138,6 +138,31 @@ class SampleViewSet(ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrTechAdminWrite]
     serializer_class = SampleSerializer
 
+    @action(detail=False, methods=["get"], url_path="accession-lookup")
+    def accession_lookup(self, request):
+        from .accession import lookup
+        return lookup(request)
+
+    @action(detail=False, methods=["post"], url_path="accession-register")
+    def accession_register(self, request):
+        from .accession import register
+        return register(self, request)
+
+    @action(detail=True, methods=["post"], url_path="receive")
+    def receive(self, request, pk=None):
+        from .accession import receive
+        return receive(self, request)
+
+    @action(detail=True, methods=["post"], url_path="verify-label")
+    def verify_label(self, request, pk=None):
+        from .accession import verify
+        return verify(self, request)
+
+    @action(detail=True, methods=["post"], url_path="accession-label")
+    def accession_label(self, request, pk=None):
+        from .accession import print_label
+        return print_label(self, request)
+
     def get_queryset(self):
         queryset = (
             Sample.objects

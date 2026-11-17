@@ -312,3 +312,14 @@ class SingleSampleAttachment(models.Model):
 
     def __str__(self):
         return f"{self.sample.sample_id} - {self.filename()}"
+
+
+class SampleAccession(models.Model):
+    """One physical receipt per sample, with a separately recorded label check."""
+    sample = models.OneToOneField(Sample, on_delete=models.PROTECT, related_name="accession")
+    receipt = models.OneToOneField(SampleCustodyEvent, on_delete=models.PROTECT, related_name="accession")
+    label_verified_at = models.DateTimeField(null=True, blank=True)
+    label_verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="verified_sample_labels",
+    )

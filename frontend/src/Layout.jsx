@@ -29,6 +29,7 @@ const routeLabels = {
   "/assistant": "Assistant",
   "/projects": "Projects",
   "/samples": "Samples",
+  "/receive-sample": "Receive sample",
   "/traceability": "Sample Traceability",
   "/inventory": "Inventory",
   "/registry": "Biological Registry",
@@ -160,6 +161,7 @@ export default function Layout() {
               </NavDropdown>
 
               <NavDropdown title="Receive" id="receive-nav">
+                <DropdownItemLink to="/receive-sample">Receive sample</DropdownItemLink>
                 <DropdownItemLink to="/samples">Samples</DropdownItemLink>
                 <DropdownItemLink to="/workflow-requests">Workflow Requests</DropdownItemLink>
                 <DropdownItemLink to="/inventory">Inventory</DropdownItemLink>

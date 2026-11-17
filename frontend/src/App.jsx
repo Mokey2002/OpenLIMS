@@ -13,6 +13,7 @@ const MyProfile = lazyPage(() => import("./pages/MyProfile"));
 const AccessRequests = lazyPage(() => import("./pages/AccessRequests"));
 const MyWork = lazyPage(() => import("./pages/MyWork"));
 const GettingStarted = lazyPage(() => import("./pages/GettingStarted"));
+const ReceiveSample = lazyPage(() => import("./pages/ReceiveSample"));
 const SamplesList = lazyPage(() => import("./pages/SamplesList"));
 const SampleDetail = lazyPage(() => import("./pages/SampleDetail"));
 const Inventory = lazyPage(() => import("./pages/Inventory"));
@@ -68,6 +69,7 @@ const router = createBrowserRouter(createRoutesFromElements(
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="getting-started" element={<GettingStarted />} />
             <Route path="assistant" element={<Assistant />} />
+            <Route path="receive-sample" element={<ReceiveSample />} />
             <Route path="samples" element={<SamplesList />} />
             <Route path="samples/:id" element={<SampleDetail />} />
             <Route path="traceability" element={<Traceability />} />

@@ -875,6 +875,7 @@ export default function SampleDetail() {
       <SampleWorkflowGuide sample={sample} allowed={allowed} runs={pipelineRuns} canModify={userCanWrite} canReview={isQcReviewer(me)} />
 
       <nav aria-label="Sample record sections" className="d-flex gap-3 flex-wrap mb-4">
+        <Link to={`/receive-sample?barcode=${encodeURIComponent(sample.sample_id)}`}>Receive / verify label</Link>
         <a href="#sample-experiments">Experiments ({experiments.length})</a>
         <a href="#sample-results">Results ({resultRows.length})</a>
         <a href="#sample-files">Files ({sampleAttachments.length + sharedAttachments.length})</a>
