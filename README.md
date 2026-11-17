@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.6-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.7-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -52,9 +52,21 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.7** | Stage CSV or Excel results, skip identical external rows, review conflicts, and retry corrected rows. | [Instrument result imports](#instrument-result-imports) |
 | **v0.78.6** | Receive samples with keyboard barcode scanners, prevent duplicate registration, record physical receipt, print Code 128 labels, and scan to confirm. | [Barcode accessioning guide](docs/barcode-accessioning-v0786.md) |
 | **v0.78.5** | Guide first-time lab setup and show sample workflow position, blockers, and permission-aware next steps. | [Setup and sample guidance tests](frontend/e2e/tests/guided-setup.spec.js) |
-| **v0.78.4** | Simplify forms, explain laboratory terms and units, prioritize My Work, and offer useful empty-state assistant commands. | [Usability browser regressions](frontend/e2e/tests/usability.spec.js) |
+
+### v0.78.7 — Staged instrument result imports
+
+Rebuild the backend to install the Excel reader and apply migration `imports.0009_importrowreceipt`. The footer shows **v0.78.7**.
+
+#### Instrument result imports
+
+1. In **Imports**, select an instrument profile and optional project. Upload a UTF-8 CSV, TSV, or text export using the profile's delimiter, or choose an `.xlsx` workbook. For a multi-sheet workbook, preview to list its sheets, select one, and preview that sheet.
+2. For safe retries, enter a stable **Source system** and provide an `external_id` column. Each ID identifies one source row within that instrument and source system. Identical rows are skipped. Changed data under an existing ID is reported as a conflict and never overwrites measurements. Review conflicts against the upstream source before assigning an ID to a genuinely new row.
+3. Queue the import after reviewing the preview. Open its details to download the full row report. For a rejected keyed row, choose **Correct row**, edit its fields, and queue the correction. The child import links to the original row and leaves the original report intact.
+
+Instrument API clients can opt in with a top-level `source_system` and an `external_id` on each row. API requests still require a unique `run_id` per instrument. The same external key works across uploads and API requests. Older imports and uploads without a source system retain their existing result mapping behavior and have no external receipts. Excel imports read stored cell values. Recalculate and save formula cells in Excel before upload.
 
 ### v0.78.6 — Barcode sample accessioning
 
@@ -62,7 +74,7 @@ For updates, select a newer **published** release; selecting the installed versi
 
 Physical receipt records the receiving account, server time and reason separately from registration. Download Code 128 PDFs in 100 × 50 mm, 75 × 35 mm or A4 sizes, attach the label, then scan it again to confirm the selected tube. Wrong-label scans do not change records. Read-only and project permissions apply throughout, existing custody receipts are preserved, and the assistant is not involved.
 
-Version/footer **v0.78.6**. Both READMEs retain only **v0.78.6, v0.78.5 and v0.78.4** release updates. Run migration `samples.0017_sampleaccession`; no dependency change. See the [barcode accessioning guide](docs/barcode-accessioning-v0786.md) for setup and audit details. The demo command remains pinned to v0.78.1.
+Version/footer **v0.78.6**. Run migration `samples.0017_sampleaccession`; no dependency change. See the [barcode accessioning guide](docs/barcode-accessioning-v0786.md) for setup and audit details. The demo command remains pinned to v0.78.1.
 
 ### v0.78.5 — Guided lab setup and sample next steps
 
@@ -72,21 +84,13 @@ Each sample record now explains its current status and what to do next, includin
 
 Version/footer **v0.78.5**. Both READMEs retain only the latest three release updates listed above. No schema migration or dependency change. The demo command remains pinned to v0.78.1.
 
-### v0.78.4 — Simpler forms and actionable daily work
-
-Sample, project, instrument-mapping, and derived-sample forms put essential fields first and group optional settings under **More options**. Optional values survive collapsing the section, and validation reveals fields that need correction. Mapping and aliquot explanations include examples and unit guidance; the interface does not convert units.
-
-**My Work** prioritizes overdue assignments and items needing review or retry, with **Review results**, **Continue experiment**, and other task actions. Helpful empty states offer **Register samples** and **Import an instrument file** commands that prefill the assistant without sending a request. New guidance is available in English and Spanish.
-
-Version/footer **v0.78.4**. Both READMEs retain only the latest three release updates listed above. No application schema migration or dependency change. The demo command remains pinned to v0.78.1.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.6`.
+**Current development version:** `v0.78.7`.
 
 ## Personal favorites
 
@@ -975,7 +979,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.78.6**.
+`frontend/src/version.js` file. The current application version is **v0.78.7**.
 
 Footer source:
 

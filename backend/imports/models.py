@@ -121,3 +121,21 @@ class ImportRowRepair(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['parent', 'row_number'], name='unique_current_import_row_repair')]
+
+
+class ImportRowReceipt(models.Model):
+    """An accepted external row and the job that committed its measurements."""
+    instrument = models.ForeignKey(InstrumentProfile, on_delete=models.CASCADE)
+    source_system = models.CharField(max_length=128)
+    external_id = models.CharField(max_length=128)
+    fingerprint = models.CharField(max_length=64)
+    job = models.ForeignKey(ImportJob, on_delete=models.PROTECT, related_name="row_receipts")
+    row_number = models.PositiveIntegerField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instrument", "source_system", "external_id"],
+                name="unique_instrument_external_import_row",
+            ),
+        ]

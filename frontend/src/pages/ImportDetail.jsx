@@ -4,11 +4,13 @@ import {
   Badge,
   Button,
   Card,
+  Form,
   ProgressBar,
   Table,
 } from "react-bootstrap";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
+import { canWrite } from "../authz";
 
 function statusVariant(status) {
   switch (status) {
@@ -69,26 +71,31 @@ function normalizeSkippedRows(summary) {
   return Array.isArray(skipped) ? skipped : [];
 }
 
-function downloadSkippedRowsCsv(job) {
-  const skippedRows = normalizeSkippedRows(job.summary);
+function downloadRowReport(job) {
+  const report = job.summary?.row_report;
+  const rows = report?.length ? report.map(({ issues, values, ...row }) => ({
+    ...row,
+    issues: issues ? JSON.stringify(issues) : "",
+    values: values ? JSON.stringify(values) : "",
+  })) : normalizeSkippedRows(job.summary);
 
-  if (skippedRows.length === 0) return;
+  if (!rows.length) return;
 
   const headers = Array.from(
-    skippedRows.reduce((set, row) => {
+    rows.reduce((set, row) => {
       Object.keys(row || {}).forEach((key) => set.add(key));
       return set;
     }, new Set())
   );
 
   const escapeCsv = (value) => {
-    const stringValue =
-      value === null || value === undefined ? "" : String(value);
+    const text = value == null ? "" : String(value);
+    const stringValue = /^[\s]*[=+@-]|^[\t\r\n]/.test(text) ? `'${text}` : text;
 
     if (
       stringValue.includes(",") ||
       stringValue.includes('"') ||
-      stringValue.includes("\n")
+      /[\r\n]/.test(stringValue)
     ) {
       return `"${stringValue.replaceAll('"', '""')}"`;
     }
@@ -98,7 +105,7 @@ function downloadSkippedRowsCsv(job) {
 
   const csv = [
     headers.join(","),
-    ...skippedRows.map((row) =>
+    ...rows.map((row) =>
       headers.map((header) => escapeCsv(row?.[header])).join(",")
     ),
   ].join("\n");
@@ -108,7 +115,7 @@ function downloadSkippedRowsCsv(job) {
 
   const link = document.createElement("a");
   link.href = url;
-  link.download = `import-job-${job.id}-skipped-rows.csv`;
+  link.download = `import-job-${job.id}-row-report.csv`;
   link.click();
 
   URL.revokeObjectURL(url);
@@ -116,7 +123,10 @@ function downloadSkippedRowsCsv(job) {
 
 export default function ImportDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const [correction, setCorrection] = useState(null);
 
+  const [me, setMe] = useState(null);
   const [job, setJob] = useState(null);
   const [err, setErr] = useState("");
   const [success, setSuccess] = useState("");
@@ -140,6 +150,10 @@ async function load() {
     setLoading(false);
   }
 }
+
+  useEffect(() => {
+    apiGet("/api/me/").then(setMe).catch(() => setMe(null));
+  }, []);
 
   useEffect(() => {
     load();
@@ -168,14 +182,29 @@ async function load() {
     }
   }
 
+  async function retryCorrection(event) {
+    event.preventDefault();
+    setErr("");
+    setRetrying(true);
+    try {
+      const child = await apiPost(`/api/import-jobs/${id}/retry/`, { corrections: [correction] });
+      setCorrection(null);
+      navigate(`/imports/${child.id}`);
+    } catch (error) {
+      setErr(error.message || String(error));
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   const summary = useMemo(() => safeSummary(job), [job]);
   const skippedRows = useMemo(() => normalizeSkippedRows(summary), [summary]);
   const progress = getProgressPercent(job);
 
   const canRetry =
-    job &&
+    canWrite(me) && job &&
     job.source_type === "UPLOAD" &&
-    !["PENDING", "RUNNING"].includes(job.status);
+    job.status === "FAILED" && !summary.assistant_upload && !summary.tabular?.parent_job_id;
 
   if (loading) {
     return (
@@ -373,17 +402,52 @@ async function load() {
       <Card className="app-card mb-4">
         <Card.Body>
           <div className="toolbar-row mb-3">
-            <h5 className="section-title mb-0">Skipped Rows</h5>
+            <h5 className="section-title mb-0">Import Row Report</h5>
 
             <Button
               variant="outline-dark"
               size="sm"
-              onClick={() => downloadSkippedRowsCsv(job)}
-              disabled={skippedRows.length === 0}
+              onClick={() => downloadRowReport(job)}
+              disabled={!skippedRows.length && !summary.row_report?.length}
             >
               Download CSV
             </Button>
           </div>
+
+          {summary.tabular?.parent_job_id && (
+            <p><Link to={`/imports/${summary.tabular.parent_job_id}`}>Original import</Link></p>
+          )}
+          {summary.tabular?.source_system && (
+            <>
+              <p>
+                {(summary.row_report || []).filter((row) => row.outcome === "IDENTICAL").length} identical rows skipped.
+              </p>
+              {(canWrite(me) && !summary.tabular.parent_job_id ? summary.row_report || [] : []).filter((row) => row.outcome === "REJECTED").map((row) => (
+                <Button key={row.row} type="button" variant="outline-dark" size="sm" className="me-2 mb-2"
+                  onClick={() => setCorrection({ row: row.row, values: { external_id: "", ...row.values } })}>
+                  Correct row {row.row}
+                </Button>
+              ))}
+            </>
+          )}
+          {correction && (
+            <Form onSubmit={retryCorrection} className="mb-3">
+              <h6>Correct row {correction.row}</h6>
+              {Object.entries(correction.values).map(([column, value], index) => (
+                <Form.Group className="mb-2" key={column} controlId={`correct-import-field-${index}`}>
+                  <Form.Label>{column}</Form.Label>
+                  <Form.Control value={value ?? ""} onChange={(event) => {
+                    const nextValue = event.target.value;
+                    setCorrection((current) => ({
+                      ...current, values: { ...current.values, [column]: nextValue },
+                    }));
+                  }} />
+                </Form.Group>
+              ))}
+              <Button type="submit" disabled={retrying}>Retry corrected row</Button>
+              <Button type="button" variant="link" onClick={() => setCorrection(null)}>Cancel</Button>
+            </Form>
+          )}
 
           {skippedRows.length === 0 ? (
             <div className="empty-state">No skipped rows for this import.</div>

@@ -3,7 +3,7 @@ import io
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count
 
 from rest_framework import serializers, status, viewsets
@@ -30,14 +30,15 @@ from samples.access import (
 )
 from sequences.models import Sequence
 
-from .models import ImportJob, InstrumentColumnMapping, InstrumentProfile
+from .models import ImportJob, ImportRowReceipt, ImportRowRepair, InstrumentColumnMapping, InstrumentProfile
 from .serializers import (
     ImportJobSerializer,
     InstrumentColumnMappingSerializer,
     InstrumentProfileSerializer,
 )
 from .tasks import process_import_job, process_rows, validate_mapped_value
-from .csv_utils import get_csv_dict_reader
+from .row_identity import classify_receipt, row_identity
+from .tabular import read_tabular
 
 
 class InstrumentProfileViewSet(viewsets.ModelViewSet):
@@ -98,9 +99,9 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
     def _lock_editable_job(self, pk):
         job = ImportJob.objects.select_for_update().get(pk=pk)
-        if job.summary.get("assistant_upload"):
+        if job.summary.get("assistant_upload") or "tabular" in job.summary:
             raise serializers.ValidationError({
-                "detail": "Keep this assistant import's run identity and receipt. Use its chat revalidation or recovery controls."
+                "detail": "Import identity and receipts are immutable. Use the import's retry controls."
             })
         return job
 
@@ -152,17 +153,47 @@ class ImportJobViewSet(viewsets.ModelViewSet):
     def _validate_mapped_value(self, mapping, raw_value):
         return validate_mapped_value(mapping, raw_value)
 
-    def _parse_preview(self, instrument, uploaded_file, project=None):
-        mappings = {m.source_column: m for m in instrument.column_mappings.all()}
+    def _tabular_options(self):
+        return {
+            "sheet": serializers.CharField(max_length=31, trim_whitespace=False, required=False),
+            "source_system": serializers.CharField(max_length=128, required=False),
+        }
 
-        uploaded_file.seek(0)
-        decoded = uploaded_file.read().decode("utf-8")
-        uploaded_file.seek(0)
-
+    def _tabular_input(self, uploaded_file, instrument):
+        options = serializers.Serializer(data=self.request.data)
+        options.fields.update(self._tabular_options())
+        options.is_valid(raise_exception=True)
+        config = dict(options.validated_data)
         try:
-            reader, csv_metadata = get_csv_dict_reader(decoded, instrument)
-        except ValueError as exc:
-            raise serializers.ValidationError({"uploaded_file": str(exc)})
+            validate_uploaded_file(uploaded_file, [".csv", ".tsv", ".txt", ".xlsx"])
+            rows, metadata = read_tabular(uploaded_file, instrument, config.get("sheet"))
+        except ValidationError as exc:
+            raise serializers.ValidationError({"uploaded_file": exc.messages}) from exc
+        except (ValueError, csv.Error) as exc:
+            raise serializers.ValidationError({"uploaded_file": str(exc)}) from exc
+        if metadata.get("sheet"):
+            config["sheet"] = metadata["sheet"]
+        if rows is not None and config.get("source_system"):
+            headers = metadata["fieldnames"]
+            if "external_id" not in headers:
+                raise serializers.ValidationError({"uploaded_file": "A source system requires an external_id column."})
+            if len(headers) != len(set(headers)):
+                raise serializers.ValidationError({"uploaded_file": "Column names must be unique for keyed imports."})
+        return rows, metadata, config
+
+    def _parse_preview(self, instrument, rows, csv_metadata, project=None, source_system=None):
+        mappings = {m.source_column: m for m in instrument.column_mappings.all()}
+        existing_receipts = {}
+        if source_system:
+            keys = {str(row["external_id"]).strip() for row in rows if row.get("external_id")}
+            existing_receipts = {
+                receipt.external_id: receipt
+                for receipt in ImportRowReceipt.objects.filter(
+                    instrument=instrument, source_system=source_system, external_id__in=keys,
+                )
+            }
+        seen = {}
+        preview_job = ImportJob(instrument=instrument, project=project)
 
         rows_processed = 0
         existing_samples = 0
@@ -171,10 +202,10 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         skipped_rows = []
         preview_rows = []
 
-        for row in reader:
+        for row in rows:
             rows_processed += 1
 
-            sample_code = row.get(instrument.sample_id_column)
+            sample_code = str(row.get(instrument.sample_id_column) or "").strip()
 
             if not sample_code:
                 skipped_rows.append(
@@ -207,6 +238,10 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                         "reason": "Sample exists but you do not have permission to import results into it.",
                     }
                 )
+                preview_rows.append({
+                    "row": rows_processed, "sample_id": sample_code, "outcome": "REJECTED",
+                    "valid_result_cells": 0, "errors": [skipped_rows[-1]],
+                })
                 continue
 
             if sample_exists:
@@ -237,11 +272,36 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                 row_valid_cells += 1
                 valid_result_cells += 1
 
+            outcome = "READY"
+            if source_system:
+                if len(sample_code) > Sample._meta.get_field("sample_id").max_length:
+                    row_errors.append({"reason": "Sample ID exceeds 64 characters."})
+                if None in row:
+                    row_errors.append({"reason": "More values than header columns."})
+                try:
+                    external_id, fingerprint = row_identity(preview_job, row)
+                except ValueError as exc:
+                    row_errors.append({"reason": str(exc)})
+                if row_errors:
+                    outcome = "REJECTED"
+                elif external_id in existing_receipts:
+                    outcome, reason = classify_receipt(existing_receipts[external_id], fingerprint)
+                    row_errors.append({"reason": reason})
+                elif external_id in seen:
+                    outcome = "IDENTICAL" if seen[external_id] == fingerprint else "CONFLICT"
+                    row_errors.append({"reason": "This external ID appears earlier in the upload."})
+                else:
+                    seen[external_id] = fingerprint
+                if outcome in {"REJECTED", "CONFLICT"}:
+                    skipped_rows.extend({"row": rows_processed, **issue} for issue in row_errors)
+
             preview_rows.append(
                 {
                     "row": rows_processed,
                     "sample_id": sample_code,
                     "exists": sample_exists,
+                    "external_id": row.get("external_id"),
+                    "outcome": outcome,
                     "valid_result_cells": row_valid_cells,
                     "errors": row_errors,
                 }
@@ -333,15 +393,6 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            validate_uploaded_file(
-                uploaded_file,
-                allowed_extensions=[".csv", ".tsv", ".txt"],
-            )
-            validate_text_file(uploaded_file)
-        except ValidationError as e:
-            return self._validation_error_response(e)
-
-        try:
             instrument = (
                 InstrumentProfile.objects.prefetch_related("column_mappings").get(
                     id=instrument_id
@@ -359,7 +410,12 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            summary = self._parse_preview(instrument, uploaded_file, project=project)
+            rows, metadata, config = self._tabular_input(uploaded_file, instrument)
+            if rows is None:
+                return Response({"sheet_required": True, "sheets": metadata["sheets"]})
+            summary = self._parse_preview(
+                instrument, rows, metadata, project=project, source_system=config.get("source_system"),
+            )
         except serializers.ValidationError as exc:
             return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         summary["project_id"] = project.id if project else None
@@ -735,16 +791,9 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
         validate_sample_project_assignment(self.request.user, project)
 
-        try:
-            validate_uploaded_file(
-                uploaded_file,
-                allowed_extensions=[".csv", ".tsv", ".txt"],
-            )
-            validate_text_file(uploaded_file)
-        except ValidationError as e:
-            raise serializers.ValidationError(
-                {"uploaded_file": e.messages if hasattr(e, "messages") else str(e)}
-            )
+        _, metadata, config = self._tabular_input(uploaded_file, serializer.validated_data["instrument"])
+        if metadata.get("sheets") and not metadata.get("sheet"):
+            raise serializers.ValidationError({"sheet": "Select an Excel sheet before importing."})
 
         requires_confirmation = str(
             self.request.data.get("assistant_confirmation", "")
@@ -761,15 +810,14 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                 if requires_confirmation
                 else "Queued"
             ),
-            summary=(
-                {"awaiting_assistant_confirmation": True}
-                if requires_confirmation
-                else {}
-            ),
+            summary={
+                "tabular": config,
+                **({"awaiting_assistant_confirmation": True} if requires_confirmation else {}),
+            },
         )
 
         if not requires_confirmation:
-            process_import_job.delay(job.id)
+            transaction.on_commit(lambda: process_import_job.delay(job.id))
 
     @action(detail=True, methods=["get"], url_path="status")
     def status(self, request, pk=None):
@@ -859,26 +907,20 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         return Response(data)
 
     @action(detail=True, methods=["post"], url_path="retry")
+    @transaction.atomic
     def retry(self, request, pk=None):
-        job = self.get_object()
+        job = ImportJob.objects.select_for_update().get(pk=self.get_object().pk)
         if job.summary.get("assistant_upload"):
-            return Response({"detail": "Revalidate this import in the assistant before retrying."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Revalidate this import in the assistant before retrying."}, status=400)
 
-        if job.source_type != "UPLOAD":
-            return Response(
-                {
-                    "detail": (
-                        "Only CSV upload import jobs can be retried from this endpoint."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        if "corrections" in request.data:
+            return self._retry_corrected_rows(request, job)
 
-        if job.status in ["PENDING", "RUNNING"]:
-            return Response(
-                {"detail": "This import job is already queued or running."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        if job.source_type != "UPLOAD" or job.status != "FAILED" or job.summary.get("tabular", {}).get("parent_job_id"):
+            return Response({"detail": "Only failed uploads can be retried in full."}, status=400)
+
+        if job.work_items.exists():
+            return Response({"detail": "This older job already saved measurements. Review its results before importing again."}, status=409)
 
         if not job.uploaded_file:
             return Response(
@@ -894,7 +936,8 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         job.progress_message = "Retry queued"
         job.summary = {
             "retry_of_job_id": job.id,
-            "previous_summary": previous_summary,
+            "previous_summary": {key: value for key, value in previous_summary.items() if key != "previous_summary"},
+            "tabular": previous_summary.get("tabular", {}),
         }
         job.save(
             update_fields=[
@@ -918,10 +961,54 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             },
         )
 
-        process_import_job.delay(job.id)
+        transaction.on_commit(lambda: process_import_job.delay(job.id))
 
         serializer = self.get_serializer(job)
         return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
+
+    def _retry_corrected_rows(self, request, job):
+        config = job.summary.get("tabular", {})
+        if job.status != "COMPLETED" or not config.get("source_system") or config.get("parent_job_id"):
+            raise serializers.ValidationError({"corrections": "Corrections require a completed keyed import."})
+        validate_sample_project_assignment(request.user, job.project)
+
+        class CorrectionSerializer(serializers.Serializer):
+            row = serializers.IntegerField(min_value=1)
+            values = serializers.DictField(child=serializers.CharField(
+                max_length=32767, allow_blank=True, allow_null=True, trim_whitespace=False,
+            ))
+
+        serializer = CorrectionSerializer(data=request.data["corrections"], many=True, allow_empty=False, max_length=100)
+        serializer.is_valid(raise_exception=True)
+        eligible = {item["row"] for item in job.summary["row_report"] if item["outcome"] == "REJECTED"}
+        source_rows = [item["row"] for item in serializer.validated_data]
+        if len(set(source_rows)) != len(source_rows) or not set(source_rows) <= eligible:
+            raise serializers.ValidationError({"corrections": "Select each rejected source row at most once."})
+        current_repairs = job.row_repairs.filter(row_number__in=source_rows).select_related("child")
+        for repair in current_repairs:
+            child = repair.child
+            outcome = next((row["outcome"] for row in child.summary.get("row_report", [])
+                            if row["row"] == repair.row_number), None)
+            if child.status in {"PENDING", "RUNNING"} or outcome in {"IMPORTED", "IDENTICAL"}:
+                raise serializers.ValidationError({"corrections": f"Row {repair.row_number} already has a queued or successful correction."})
+
+        child = ImportJob.objects.create(
+            instrument=job.instrument, project=job.project, uploaded_by=request.user,
+            status="PENDING", progress_message="Corrected rows queued",
+            summary={"tabular": {
+                "source_system": config["source_system"],
+                "parent_job_id": job.id,
+                "original_rows": source_rows,
+                "corrected_rows": [item["values"] for item in serializer.validated_data],
+            }},
+        )
+        for row_number in source_rows:
+            ImportRowRepair.objects.update_or_create(
+                parent=job, row_number=row_number,
+                defaults={"child": child, "created_by": request.user},
+            )
+        transaction.on_commit(lambda: process_import_job.delay(child.id))
+        return Response(self.get_serializer(child).data, status=status.HTTP_202_ACCEPTED)
 
     @action(
         detail=False,
@@ -962,30 +1049,30 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if not isinstance(rows, list) or len(rows) == 0:
+        if not isinstance(rows, list) or not rows or not all(isinstance(row, dict) for row in rows):
             return Response(
                 {"detail": "rows must be a non-empty list."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if ImportJob.objects.filter(instrument=instrument, run_id=run_id).exists():
-            return Response(
-                {"detail": "Duplicate run_id for this instrument."},
-                status=status.HTTP_409_CONFLICT,
-            )
-
-        job = ImportJob.objects.create(
-            instrument=instrument,
-            project_id=project_id if project_id else None,
-            uploaded_by=None,
-            run_id=run_id,
-            source_type="API",
-            status="RUNNING",
-            progress_current=0,
-            progress_total=len(rows),
-            progress_message="Processing API payload",
-            summary={},
-        )
+        options = serializers.Serializer(data=request.data)
+        options.fields["source_system"] = self._tabular_options()["source_system"]
+        options.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                job, created = ImportJob.objects.get_or_create(
+                    instrument=instrument, run_id=run_id,
+                    defaults={
+                        "project_id": project_id or None,
+                        "source_type": "API", "status": "RUNNING",
+                        "progress_total": len(rows), "progress_message": "Processing API payload",
+                        "summary": {"tabular": dict(options.validated_data)},
+                    },
+                )
+        except IntegrityError:
+            return Response({"detail": "Invalid project or import identity."}, status=400)
+        if not created:
+            return Response({"detail": "Duplicate run_id for this instrument."}, status=409)
 
         try:
             with transaction.atomic():
@@ -1011,7 +1098,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                         "instrument_code": instrument.code,
                         "instrument_name": instrument.name,
                         "run_id": run_id,
-                        **summary,
+                        **{key: value for key, value in summary.items() if key != "row_report"},
                     },
                 )
 
@@ -1028,7 +1115,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
         except Exception as e:
             job.status = "FAILED"
             job.summary = {"error": str(e)}
-            job.progress_message = f"API ingest failed: {str(e)}"
+            job.progress_message = f"API ingest failed: {e}"[:255]
             job.save()
 
             return Response(

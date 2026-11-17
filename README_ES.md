@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.6.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.78.7.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -33,9 +33,17 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.7** | Vista previa de CSV y Excel, detección de filas idénticas, revisión de conflictos y reintento de correcciones. | [Importación de resultados](#v0787--importación-de-resultados-de-instrumentos) |
 | **v0.78.6** | Recepción con lectores de teclado, registro sin duplicados, recepción física, etiquetas Code 128 y confirmación mediante escaneo. | [Guía de recepción por código de barras](docs/barcode-accessioning-v0786.md) |
 | **v0.78.5** | Lista de configuración inicial y orientación sobre estados, bloqueos y siguientes pasos de las muestras según los permisos. | [Pruebas de configuración y orientación](frontend/e2e/tests/guided-setup.spec.js) |
-| **v0.78.4** | Formularios más sencillos, términos y unidades explicados, prioridades en Mi trabajo y comandos del asistente en páginas vacías. | [Pruebas de usabilidad](frontend/e2e/tests/usability.spec.js) |
+
+## v0.78.7 — Importación de resultados de instrumentos
+
+En **Imports**, selecciona un instrumento y un proyecto opcional, carga un archivo CSV o Excel y revisa la vista previa. Si el libro contiene varias hojas, selecciona la hoja y vuelve a revisar la vista previa.
+
+Para reintentos seguros, indica el sistema de origen e incluye la columna `external_id`. Se omiten las filas idénticas y se señalan como conflictos los cambios para un ID existente. Descarga el informe de filas desde el detalle de la importación. Puedes corregir una fila rechazada y enviarla como una importación vinculada a la original.
+
+Reconstruye el backend para instalar el lector de Excel y aplica la migración `imports.0009_importrowreceipt`. El pie de página muestra **v0.78.7**.
 
 ## v0.78.6 — Recepción de muestras por código de barras
 
@@ -43,7 +51,7 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 La recepción física registra la cuenta receptora, la hora del servidor y el motivo por separado del registro. Descarga etiquetas Code 128 en PDF de 100 × 50 mm, 75 × 35 mm o A4, coloca la etiqueta y escanéala de nuevo para confirmar el tubo seleccionado. Una etiqueta incorrecta no cambia registros. Se respetan los permisos, se conservan las recepciones anteriores y el asistente no interviene.
 
-Versión/pie **v0.78.6**. Ambos README conservan solo **v0.78.6, v0.78.5 y v0.78.4**. Ejecuta la migración `samples.0017_sampleaccession`; sin dependencia nueva. Consulta la [guía de recepción](docs/barcode-accessioning-v0786.md) para configuración y auditoría. El comando de demostración sigue fijado a v0.78.1.
+Versión/pie **v0.78.6**. Ejecuta la migración `samples.0017_sampleaccession`; sin dependencia nueva. Consulta la [guía de recepción](docs/barcode-accessioning-v0786.md) para configuración y auditoría. El comando de demostración sigue fijado a v0.78.1.
 
 ## v0.78.5 — Configuración guiada y siguientes pasos de las muestras
 
@@ -53,21 +61,13 @@ Cada muestra explica su estado y qué hacer a continuación, incluidos pasos act
 
 Versión/pie **v0.78.5**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de esquema ni dependencia nueva. El comando de demostración sigue fijado a v0.78.1.
 
-## v0.78.4 — Formularios sencillos y trabajo diario con acciones
-
-Los formularios de muestras, proyectos, mapeos de instrumentos y muestras derivadas muestran primero los campos esenciales y agrupan los ajustes opcionales en **Más opciones**. Los valores se conservan al cerrar la sección y la validación muestra los campos que necesitan corrección. Las explicaciones de mapeo y alícuota incluyen ejemplos y orientación sobre unidades; la interfaz no convierte unidades.
-
-**Mi trabajo** prioriza las tareas vencidas y las que necesitan revisión o repetición, con acciones como **Revisar resultados** y **Continuar experimento**. Las páginas vacías ofrecen **Registrar muestras** e **Importar un archivo de instrumento**: estos comandos rellenan el asistente sin enviar una solicitud. La nueva orientación está disponible en inglés y español.
-
-Versión/pie **v0.78.4**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de aplicación ni dependencia nueva. El comando de demostración sigue fijado a v0.78.1.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.6`
+**Versión de desarrollo actual:** `v0.78.7`
 
 **Demo:** http://35.164.28.250
 
