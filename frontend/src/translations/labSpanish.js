@@ -865,4 +865,6 @@ export const labSpanish = {
   "An aliquot is a measured portion of an existing sample, such as 0.5 mL taken from a 2 mL tube. A derived sample is material produced from another sample, such as DNA extracted from blood.": "Una alícuota es una porción medida de una muestra existente, como 0,5 mL de un tubo de 2 mL. Una muestra derivada es material producido a partir de otra muestra, como ADN extraído de sangre.",
   "Match the quantity to its unit: 0.5 mL, 500 µL, or 10 mg. No unit conversion is applied.": "Indica la unidad de la cantidad: 0,5 mL, 500 µL o 10 mg. No se convierten las unidades.",
   "Import several samples from a CSV file": "Importar varias muestras desde un archivo CSV",
+  "Receive sample": "Recibir muestra",
+  "Receive / verify label": "Recibir / verificar etiqueta",
 };

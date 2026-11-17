@@ -421,6 +421,7 @@ export default function SamplesList() {
         </div>
 
         <div className="inline-actions">
+          <Link className="btn btn-outline-dark btn-sm" to="/receive-sample">{language === "es" ? "Recibir muestra" : "Receive sample"}</Link>
           <Badge bg="dark">{selectedIds.length} selected</Badge>
           <Button variant="outline-dark" size="sm" onClick={load}>
             Refresh

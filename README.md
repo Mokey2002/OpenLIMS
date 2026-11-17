@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.5-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.6-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -52,9 +52,17 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.6** | Receive samples with keyboard barcode scanners, prevent duplicate registration, record physical receipt, print Code 128 labels, and scan to confirm. | [Barcode accessioning guide](docs/barcode-accessioning-v0786.md) |
 | **v0.78.5** | Guide first-time lab setup and show sample workflow position, blockers, and permission-aware next steps. | [Setup and sample guidance tests](frontend/e2e/tests/guided-setup.spec.js) |
 | **v0.78.4** | Simplify forms, explain laboratory terms and units, prioritize My Work, and offer useful empty-state assistant commands. | [Usability browser regressions](frontend/e2e/tests/usability.spec.js) |
-| **v0.78.3** | Run browser CI on Ubuntu 24.04, supported by the pinned Playwright version. | [Browser-test workflow](.github/workflows/ci.yml) |
+
+### v0.78.6 — Barcode sample accessioning
+
+**Receive → Receive sample** supports USB keyboard scanners and manual entry. Existing barcodes open the accessible sample; new codes start registration with a receiving project, sample type, and the lab’s published required fields. Unique identifiers and serialized receipt/confirmation requests prevent duplicate records on retries or concurrent scans.
+
+Physical receipt records the receiving account, server time and reason separately from registration. Download Code 128 PDFs in 100 × 50 mm, 75 × 35 mm or A4 sizes, attach the label, then scan it again to confirm the selected tube. Wrong-label scans do not change records. Read-only and project permissions apply throughout, existing custody receipts are preserved, and the assistant is not involved.
+
+Version/footer **v0.78.6**. Both READMEs retain only **v0.78.6, v0.78.5 and v0.78.4** release updates. Run migration `samples.0017_sampleaccession`; no dependency change. See the [barcode accessioning guide](docs/barcode-accessioning-v0786.md) for setup and audit details. The demo command remains pinned to v0.78.1.
 
 ### v0.78.5 — Guided lab setup and sample next steps
 
@@ -62,7 +70,7 @@ For updates, select a newer **published** release; selecting the installed versi
 
 Each sample record now explains its current status and what to do next, including active pipeline steps, dependencies, failures, and pending quality review. Links open the relevant workflow, work, result, history, or status section. Read-only users receive inspection guidance, and existing status validation, approvals, and reason requirements remain in place. New guidance supports English and Spanish.
 
-Version/footer **v0.78.5**. Both READMEs retain only **v0.78.5, v0.78.4 and v0.78.3** release updates. No schema migration or dependency change. The demo command remains pinned to v0.78.1.
+Version/footer **v0.78.5**. Both READMEs retain only the latest three release updates listed above. No schema migration or dependency change. The demo command remains pinned to v0.78.1.
 
 ### v0.78.4 — Simpler forms and actionable daily work
 
@@ -72,19 +80,13 @@ Sample, project, instrument-mapping, and derived-sample forms put essential fiel
 
 Version/footer **v0.78.4**. Both READMEs retain only the latest three release updates listed above. No application schema migration or dependency change. The demo command remains pinned to v0.78.1.
 
-### v0.78.3 — Supported Ubuntu runner for browser tests
-
-Browser CI now uses **Ubuntu 24.04**, which the pinned **Playwright 1.55.0** supports. GitHub's move of `ubuntu-latest` to Ubuntu 26.04 made Chromium dependency installation fail before any browser tests ran. Pinning the supported image lets the existing Chromium installation and complete browser suite run on a compatible operating system.
-
-Version/footer **v0.78.3**. Both READMEs retain only the latest three release updates listed above. The demo command stays pinned to the v0.78.1 release completed by the recovery workflow.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.5`.
+**Current development version:** `v0.78.6`.
 
 ## Personal favorites
 
@@ -973,7 +975,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.78.5**.
+`frontend/src/version.js` file. The current application version is **v0.78.6**.
 
 Footer source:
 

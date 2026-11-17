@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.5.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.78.6.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -33,9 +33,17 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.6** | Recepción con lectores de teclado, registro sin duplicados, recepción física, etiquetas Code 128 y confirmación mediante escaneo. | [Guía de recepción por código de barras](docs/barcode-accessioning-v0786.md) |
 | **v0.78.5** | Lista de configuración inicial y orientación sobre estados, bloqueos y siguientes pasos de las muestras según los permisos. | [Pruebas de configuración y orientación](frontend/e2e/tests/guided-setup.spec.js) |
 | **v0.78.4** | Formularios más sencillos, términos y unidades explicados, prioridades en Mi trabajo y comandos del asistente en páginas vacías. | [Pruebas de usabilidad](frontend/e2e/tests/usability.spec.js) |
-| **v0.78.3** | Ejecuta las pruebas de navegador en Ubuntu 24.04, compatible con la versión fijada de Playwright. | [Flujo de pruebas del navegador](.github/workflows/ci.yml) |
+
+## v0.78.6 — Recepción de muestras por código de barras
+
+**Receive → Recibir muestra** admite lectores USB de teclado y entrada manual. Los códigos existentes abren la muestra accesible; los nuevos inician un registro con proyecto receptor, tipo de muestra y campos obligatorios publicados por el laboratorio. Los identificadores únicos y las solicitudes serializadas de recepción y confirmación evitan duplicados al reintentar o escanear simultáneamente.
+
+La recepción física registra la cuenta receptora, la hora del servidor y el motivo por separado del registro. Descarga etiquetas Code 128 en PDF de 100 × 50 mm, 75 × 35 mm o A4, coloca la etiqueta y escanéala de nuevo para confirmar el tubo seleccionado. Una etiqueta incorrecta no cambia registros. Se respetan los permisos, se conservan las recepciones anteriores y el asistente no interviene.
+
+Versión/pie **v0.78.6**. Ambos README conservan solo **v0.78.6, v0.78.5 y v0.78.4**. Ejecuta la migración `samples.0017_sampleaccession`; sin dependencia nueva. Consulta la [guía de recepción](docs/barcode-accessioning-v0786.md) para configuración y auditoría. El comando de demostración sigue fijado a v0.78.1.
 
 ## v0.78.5 — Configuración guiada y siguientes pasos de las muestras
 
@@ -43,7 +51,7 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 Cada muestra explica su estado y qué hacer a continuación, incluidos pasos activos, dependencias, fallos y revisiones de calidad pendientes. Los enlaces abren la sección correspondiente de flujo, tareas, resultados, historial o estado. Las cuentas de lectura reciben orientación para consultar registros y se mantienen las validaciones, aprobaciones y motivos obligatorios. La nueva orientación está disponible en inglés y español.
 
-Versión/pie **v0.78.5**. Ambos README conservan solo **v0.78.5, v0.78.4 y v0.78.3**. Sin migración de esquema ni dependencia nueva. El comando de demostración sigue fijado a v0.78.1.
+Versión/pie **v0.78.5**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de esquema ni dependencia nueva. El comando de demostración sigue fijado a v0.78.1.
 
 ## v0.78.4 — Formularios sencillos y trabajo diario con acciones
 
@@ -53,19 +61,13 @@ Los formularios de muestras, proyectos, mapeos de instrumentos y muestras deriva
 
 Versión/pie **v0.78.4**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de aplicación ni dependencia nueva. El comando de demostración sigue fijado a v0.78.1.
 
-## v0.78.3 — Ubuntu compatible para las pruebas del navegador
-
-Las pruebas de navegador usan **Ubuntu 24.04**, compatible con **Playwright 1.55.0**. El cambio de `ubuntu-latest` de GitHub a Ubuntu 26.04 hacía fallar la instalación de dependencias de Chromium antes de ejecutar las pruebas. Fijar la imagen compatible permite instalar Chromium y ejecutar la suite existente en el sistema operativo admitido.
-
-Versión/pie **v0.78.3**. Ambos README conservan solo las tres actualizaciones indicadas arriba. El comando de demostración sigue fijado a v0.78.1, cuya publicación se completa mediante el flujo de recuperación.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.5`
+**Versión de desarrollo actual:** `v0.78.6`
 
 **Demo:** http://35.164.28.250
 
