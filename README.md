@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.8-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.9-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -52,9 +52,15 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.9** | Explain navigation links, instrument QC actions, and import identifiers in context. | [Navigation and import guidance](#navigation-and-import-guidance) |
 | **v0.78.8** | Run Snakemake quality checks on completed instrument exports and download a report. | [Instrument export QC](#instrument-export-qc) |
 | **v0.78.7** | Stage CSV or Excel results, skip identical external rows, review conflicts, and retry corrected rows. | [Instrument result imports](#instrument-result-imports) |
-| **v0.78.6** | Receive samples with keyboard barcode scanners, prevent duplicate registration, record physical receipt, print Code 128 labels, and scan to confirm. | [Barcode accessioning guide](docs/barcode-accessioning-v0786.md) |
+
+### v0.78.9 — Navigation and import guidance
+
+#### Navigation and import guidance
+
+Imports and Workflow Designer show descriptions on hover or keyboard focus. The import details page explains what Run analysis and Download QC report do. The staging form includes expandable examples for Source system and External ID.
 
 ### v0.78.8 — Instrument export QC with Snakemake
 
@@ -66,7 +72,7 @@ For updates, select a newer **published** release; selecting the installed versi
 
 The dedicated `qc-worker` runs the bundled, versioned workflow with Snakemake 9.14.6. Each run records the import, selected columns, input fingerprint, and workflow version. Technicians and administrators with import access can retry a failed analysis using the saved inputs. Viewers with import access can download finished reports.
 
-For a source deployment, rebuild the backend images, start `qc-worker`, and apply migration `imports.0010_instrumentqcrun`. The standard Compose startup applies the migration through the API service. The footer shows **v0.78.8**.
+For a source deployment, rebuild the backend images, start `qc-worker`, and apply migration `imports.0010_instrumentqcrun`. The standard Compose startup applies the migration through the API service.
 
 ### v0.78.7 — Staged instrument result imports
 
@@ -94,7 +100,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.8`.
+**Current development version:** `v0.78.9`.
 
 ## Personal favorites
 
@@ -987,7 +993,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.78.8**.
+`frontend/src/version.js` file. The current application version is **v0.78.9**.
 
 Footer source:
 

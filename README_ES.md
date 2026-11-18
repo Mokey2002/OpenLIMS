@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.8.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.78.9.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -33,9 +33,15 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.9** | Ayuda contextual para la navegación, las acciones de control de calidad y los identificadores de importación. | [Ayuda de navegación e importación](#ayuda-de-navegación-e-importación) |
 | **v0.78.8** | Control de calidad de exportaciones de instrumentos con Snakemake e informe descargable. | [Control de calidad de exportaciones](#control-de-calidad-de-exportaciones) |
 | **v0.78.7** | Vista previa de CSV y Excel, detección de filas idénticas, revisión de conflictos y reintento de correcciones. | [Importación de resultados](#v0787--importación-de-resultados-de-instrumentos) |
-| **v0.78.6** | Recepción con lectores de teclado, registro sin duplicados, recepción física, etiquetas Code 128 y confirmación mediante escaneo. | [Guía de recepción por código de barras](docs/barcode-accessioning-v0786.md) |
+
+## v0.78.9 — Guía de navegación e importación
+
+### Ayuda de navegación e importación
+
+Imports y Workflow Designer muestran descripciones al pasar el cursor o al enfocar con el teclado. El detalle de la importación explica las acciones de control de calidad. El formulario incluye ejemplos desplegables del sistema de origen y del ID externo.
 
 ## v0.78.8 — Control de calidad de instrumentos con Snakemake
 
@@ -47,7 +53,7 @@ El informe se descarga desde la misma importación. Indica lecturas vacías, no 
 
 El servicio `qc-worker` ejecuta el flujo incluido con Snakemake 9.14.6 y guarda la versión, huella de los datos y columnas seleccionadas. Los técnicos y administradores con acceso pueden reintentar un análisis fallido con los mismos datos guardados.
 
-Reconstruye las imágenes del backend, inicia `qc-worker` y aplica la migración `imports.0010_instrumentqcrun`. El servicio API aplica la migración al iniciar Compose. El pie de página muestra **v0.78.8**.
+Reconstruye las imágenes del backend, inicia `qc-worker` y aplica la migración `imports.0010_instrumentqcrun`. El servicio API aplica la migración al iniciar Compose.
 
 ## v0.78.7 — Importación de resultados de instrumentos
 
@@ -73,7 +79,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.8`
+**Versión de desarrollo actual:** `v0.78.9`
 
 **Demo:** http://35.164.28.250
 
