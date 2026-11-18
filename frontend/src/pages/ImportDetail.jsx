@@ -11,6 +11,7 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import { canWrite } from "../authz";
+import ImportAnalysis from "../components/ImportAnalysis";
 
 function statusVariant(status) {
   switch (status) {
@@ -256,6 +257,11 @@ async function load() {
 
       {err && <Alert variant="danger">{err}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
+
+      {job.status === "COMPLETED" && job.source_type === "UPLOAD" && job.uploaded_file
+        && !summary.assistant_upload && summary.csv_metadata?.fieldnames?.length > 0 && (
+          <ImportAnalysis key={job.id} importId={job.id} canRun={canWrite(me)} />
+        )}
 
       <div className="row g-4 mb-4">
         <div className="col-lg-8">

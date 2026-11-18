@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.7.** El pie de página usa `OPENLIMS_VERSION` del archivo
+**Versión actual: v0.78.8.** El pie de página usa `OPENLIMS_VERSION` del archivo
 generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
@@ -33,9 +33,21 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.8** | Control de calidad de exportaciones de instrumentos con Snakemake e informe descargable. | [Control de calidad de exportaciones](#control-de-calidad-de-exportaciones) |
 | **v0.78.7** | Vista previa de CSV y Excel, detección de filas idénticas, revisión de conflictos y reintento de correcciones. | [Importación de resultados](#v0787--importación-de-resultados-de-instrumentos) |
 | **v0.78.6** | Recepción con lectores de teclado, registro sin duplicados, recepción física, etiquetas Code 128 y confirmación mediante escaneo. | [Guía de recepción por código de barras](docs/barcode-accessioning-v0786.md) |
-| **v0.78.5** | Lista de configuración inicial y orientación sobre estados, bloqueos y siguientes pasos de las muestras según los permisos. | [Pruebas de configuración y orientación](frontend/e2e/tests/guided-setup.spec.js) |
+
+## v0.78.8 — Control de calidad de instrumentos con Snakemake
+
+### Control de calidad de exportaciones
+
+Abre una importación de archivo completada en **Imports** y elige **Run analysis**. Confirma el archivo y la hoja de Excel, si corresponde, y elige la columna de lecturas numéricas. Para verificar la cobertura de una placa, elige también la columna de pocillos y el formato de 96 o 384 pocillos. Usa una placa por archivo u hoja.
+
+El informe se descarga desde la misma importación. Indica lecturas vacías, no numéricas o no finitas, y señala pocillos inválidos, repetidos o faltantes si se eligió una placa. La numeración cuenta filas de datos después de la cabecera.
+
+El servicio `qc-worker` ejecuta el flujo incluido con Snakemake 9.14.6 y guarda la versión, huella de los datos y columnas seleccionadas. Los técnicos y administradores con acceso pueden reintentar un análisis fallido con los mismos datos guardados.
+
+Reconstruye las imágenes del backend, inicia `qc-worker` y aplica la migración `imports.0010_instrumentqcrun`. El servicio API aplica la migración al iniciar Compose. El pie de página muestra **v0.78.8**.
 
 ## v0.78.7 — Importación de resultados de instrumentos
 
@@ -53,21 +65,13 @@ La recepción física registra la cuenta receptora, la hora del servidor y el mo
 
 Versión/pie **v0.78.6**. Ejecuta la migración `samples.0017_sampleaccession`; sin dependencia nueva. Consulta la [guía de recepción](docs/barcode-accessioning-v0786.md) para configuración y auditoría. El comando de demostración sigue fijado a v0.78.1.
 
-## v0.78.5 — Configuración guiada y siguientes pasos de las muestras
-
-**Primeros pasos** incluye una lista para añadir usuarios, crear un proyecto y registrar la primera muestra. El progreso refleja registros guardados y se actualiza al volver; sigue disponible con la bitácora desactivada. Las cuentas sin permisos de administración reciben orientación adecuada sin acceder a información privada sobre la configuración de usuarios.
-
-Cada muestra explica su estado y qué hacer a continuación, incluidos pasos activos, dependencias, fallos y revisiones de calidad pendientes. Los enlaces abren la sección correspondiente de flujo, tareas, resultados, historial o estado. Las cuentas de lectura reciben orientación para consultar registros y se mantienen las validaciones, aprobaciones y motivos obligatorios. La nueva orientación está disponible en inglés y español.
-
-Versión/pie **v0.78.5**. Ambos README conservan solo las tres actualizaciones indicadas arriba. Sin migración de esquema ni dependencia nueva. El comando de demostración sigue fijado a v0.78.1.
-
 **Sistema de gestión de información de laboratorio de código abierto, autohospedado y orientado a flujos de trabajo prácticos.**
 
 OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control de calidad, importaciones de instrumentos, análisis bioinformáticos, migraciones y auditoría en una misma plataforma.
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.7`
+**Versión de desarrollo actual:** `v0.78.8`
 
 **Demo:** http://35.164.28.250
 

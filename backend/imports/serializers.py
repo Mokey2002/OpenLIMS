@@ -123,3 +123,16 @@ class ImportJobSerializer(serializers.ModelSerializer):
             return 0
 
         return round((obj.progress_current / obj.progress_total) * 100)
+
+
+class InstrumentQCParametersSerializer(serializers.Serializer):
+    reading_column = serializers.CharField(max_length=256, trim_whitespace=False)
+    well_column = serializers.CharField(max_length=256, trim_whitespace=False, allow_blank=True, default="")
+    plate_size = serializers.ChoiceField(choices=[96, 384], allow_null=True, default=None)
+
+    def validate(self, data):
+        if bool(data["well_column"]) != bool(data["plate_size"]):
+            raise serializers.ValidationError("Choose both a well column and plate size to check plate coverage.")
+        if data["reading_column"] == data["well_column"]:
+            raise serializers.ValidationError("Choose different columns for readings and wells.")
+        return data

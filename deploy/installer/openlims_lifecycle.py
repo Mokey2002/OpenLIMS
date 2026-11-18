@@ -22,7 +22,7 @@ TEMPLATES = Path(__file__).resolve().parent
 TOOL_ROOT = TEMPLATES.parent
 REQUIRED_FILES = {"openlims", "installer/openlims_lifecycle.py", "installer/compose.yml",
                   "installer/demo-compose.yml", "installer/Caddyfile"}
-APPLICATION_SERVICES = ("caddy", "web", "worker", "assistant-monitor", "api")
+APPLICATION_SERVICES = ("caddy", "web", "worker", "qc-worker", "assistant-monitor", "api")
 LEGACY_HASHES = {"compose.yml": "4534ddf1163d6cfb72e49afbf9e049a76bb0d6fb7dd6ed25545fb09db7b944cb",
                  "Caddyfile": "bdacf6f6f3e4a8bc082ecf51a1c984cb8f8d27d8b2fe487acd76a14029213790"}
 VERSION_PATTERN = re.compile(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\Z")

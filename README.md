@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.7-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.8-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -52,9 +52,21 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.8** | Run Snakemake quality checks on completed instrument exports and download a report. | [Instrument export QC](#instrument-export-qc) |
 | **v0.78.7** | Stage CSV or Excel results, skip identical external rows, review conflicts, and retry corrected rows. | [Instrument result imports](#instrument-result-imports) |
 | **v0.78.6** | Receive samples with keyboard barcode scanners, prevent duplicate registration, record physical receipt, print Code 128 labels, and scan to confirm. | [Barcode accessioning guide](docs/barcode-accessioning-v0786.md) |
-| **v0.78.5** | Guide first-time lab setup and show sample workflow position, blockers, and permission-aware next steps. | [Setup and sample guidance tests](frontend/e2e/tests/guided-setup.spec.js) |
+
+### v0.78.8 — Instrument export QC with Snakemake
+
+#### Instrument export QC
+
+1. Open a completed instrument file import in **Imports** and choose **Run analysis**. The form shows the saved export and, for Excel, the sheet used for import.
+2. Choose the numeric reading column. To check plate coverage, also choose a well column and a 96- or 384-well layout. Use one plate per export or Excel sheet.
+3. Run QC and open the report from the same import. It lists blank, non-numeric, or non-finite readings, and reports invalid, repeated, and missing well positions when plate coverage is selected. Report row numbers count data rows after the header, as in the import report.
+
+The dedicated `qc-worker` runs the bundled, versioned workflow with Snakemake 9.14.6. Each run records the import, selected columns, input fingerprint, and workflow version. Technicians and administrators with import access can retry a failed analysis using the saved inputs. Viewers with import access can download finished reports.
+
+For a source deployment, rebuild the backend images, start `qc-worker`, and apply migration `imports.0010_instrumentqcrun`. The standard Compose startup applies the migration through the API service. The footer shows **v0.78.8**.
 
 ### v0.78.7 — Staged instrument result imports
 
@@ -76,21 +88,13 @@ Physical receipt records the receiving account, server time and reason separatel
 
 Version/footer **v0.78.6**. Run migration `samples.0017_sampleaccession`; no dependency change. See the [barcode accessioning guide](docs/barcode-accessioning-v0786.md) for setup and audit details. The demo command remains pinned to v0.78.1.
 
-### v0.78.5 — Guided lab setup and sample next steps
-
-**Getting started** now includes a checklist for adding lab users, creating a project, and registering the first sample. Progress comes from saved records and refreshes when you return; it remains available when Notebook is disabled. Non-administrators receive access-appropriate guidance without seeing private user-setup information.
-
-Each sample record now explains its current status and what to do next, including active pipeline steps, dependencies, failures, and pending quality review. Links open the relevant workflow, work, result, history, or status section. Read-only users receive inspection guidance, and existing status validation, approvals, and reason requirements remain in place. New guidance supports English and Spanish.
-
-Version/footer **v0.78.5**. Both READMEs retain only the latest three release updates listed above. No schema migration or dependency change. The demo command remains pinned to v0.78.1.
-
 **OpenLIMS** is an open-source, self-hosted Laboratory Information Management System built to support practical lab workflows such as sample tracking, project organization, collaborative experiment notebooks, inventory custody, internal workflow requests, instrument data ingestion, sequence analysis, local BLAST search, mass spectrometry review, legacy data migration, audit trails, reporting, role-based access control, and an assistant with optional OpenAI or local Ollama support that remains read-only unless a user explicitly confirms a supported action.
 
 The project is designed as a lightweight, configurable, production-style foundation for research labs, small biotech teams, core facilities, and developer teams that need more structure than spreadsheets but do not want the cost or complexity of a traditional enterprise LIMS.
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.7`.
+**Current development version:** `v0.78.8`.
 
 ## Personal favorites
 
@@ -771,7 +775,7 @@ docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.
 docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml ps
 ```
 
-Wait for `db`, `redis`, and `api` to show healthy, and for `web` and `worker` to be running. The API applies database migrations and collects static files automatically. If it is still starting, check its progress:
+Wait for `db`, `redis`, and `api` to show healthy, and for `web`, `worker`, and `qc-worker` to be running. The API applies database migrations and collects static files automatically. If it is still starting, check its progress:
 
 ```bash
 docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml logs --tail=80 api
@@ -844,7 +848,7 @@ For editing source code with live reload, use this alternative **instead of** th
 
 ```bash
 cp deploy/.env.example deploy/.env
-docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.yml up -d --build db redis api worker assistant-monitor
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.yml up -d --build db redis api worker qc-worker assistant-monitor
 ```
 
 The development API runs migrations automatically. Once it is running, create an administrator:
@@ -979,7 +983,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.78.7**.
+`frontend/src/version.js` file. The current application version is **v0.78.8**.
 
 Footer source:
 

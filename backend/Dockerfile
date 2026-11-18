@@ -23,6 +23,12 @@ RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca; fi; \
     pip install --no-cache-dir -r requirements.txt
 
+COPY requirements-instrument-qc.txt /tmp/requirements-instrument-qc.txt
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca; fi; \
+    python -m venv /opt/openlims/snakemake && \
+    /opt/openlims/snakemake/bin/pip install --no-cache-dir -r /tmp/requirements-instrument-qc.txt
+
 COPY . /app
 
 ARG OPENLIMS_VERSION=development

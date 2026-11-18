@@ -1,7 +1,10 @@
+import logging
 import math
 
 from celery import shared_task
+from django.core.exceptions import PermissionDenied
 from django.db import OperationalError, transaction
+from django.utils import timezone
 
 from core.realtime import broadcast_job_update
 from events.models import Event
@@ -10,10 +13,12 @@ from samples.models import Sample
 from samples.access import user_can_modify_sample
 from results.models import WorkItem, Result
 
-from .models import ImportJob, InstrumentProfile
+from .models import ImportJob, InstrumentProfile, InstrumentQCRun
 from .row_identity import claim_row
 from .tabular import read_tabular
 
+
+logger = logging.getLogger(__name__)
 
 def broadcast_import_job_update(job, message):
     from django.db import connection
@@ -517,3 +522,70 @@ def _process_tabular_job(job_id):
 def process_assistant_import_job(job_id, action_id):
     from .assistant_uploads import process_prepared_job
     return process_prepared_job(job_id, action_id)
+
+
+@shared_task(
+    acks_late=True, reject_on_worker_lost=True, ignore_result=True,
+)
+def run_instrument_qc(run_id):
+    from .instrument_qc import RUN_TIMEOUT, execute_workflow, user_can_run_qc
+
+    runs = InstrumentQCRun.objects.filter(pk=run_id)
+    now = timezone.now()
+    if not runs.filter(status=InstrumentQCRun.QUEUED, deadline_at__gt=now).update(
+        status=InstrumentQCRun.RUNNING, started_at=now, deadline_at=now + RUN_TIMEOUT,
+        progress_message="Checking the readings and well positions.",
+    ):
+        return
+
+    run = runs.select_related("requested_by").get()
+    running = runs.filter(status=InstrumentQCRun.RUNNING)
+
+    def report_progress():
+        running.update(progress_message="Preparing the report.")
+
+    try:
+        if not user_can_run_qc(run.requested_by, run.job_id):
+            raise PermissionDenied("The requester no longer has access to run this analysis.")
+        report = execute_workflow(run, report_progress)
+        if not user_can_run_qc(run.requested_by, run.job_id):
+            raise PermissionDenied("The requester no longer has access to run this analysis.")
+    except (TimeoutError, PermissionDenied, FileNotFoundError) as exc:
+        if isinstance(exc, TimeoutError):
+            message = "The analysis timed out. Retry to run it again."
+        elif isinstance(exc, PermissionDenied):
+            message = "The requester lost access. Ask a project technician or admin to retry."
+        else:
+            message = "The instrument QC worker is missing a workflow file or the Snakemake executable."
+        running.update(status=InstrumentQCRun.FAILED, progress_message=message, finished_at=timezone.now())
+        return
+    except Exception:
+        logger.exception("Instrument QC run %s failed.", run_id)
+        running.update(
+            status=InstrumentQCRun.FAILED,
+            progress_message="Analysis failed. Check the instrument QC worker logs and retry.",
+            finished_at=timezone.now(),
+        )
+        return
+
+    now = timezone.now()
+    running.filter(deadline_at__gt=now).update(
+        status=InstrumentQCRun.COMPLETED,
+        progress_message="Report ready.",
+        finished_at=now,
+        engine_version=report["engine_version"],
+        report_summary=report["summary"],
+        report_issues=report["issues"],
+    )
+
+
+def deliver_instrument_qc(run_id):
+    try:
+        run_instrument_qc.apply_async(args=(run_id,), retry=False)
+    except Exception:
+        logger.exception("Could not queue instrument QC run %s.", run_id)
+        InstrumentQCRun.objects.filter(pk=run_id, status=InstrumentQCRun.QUEUED).update(
+            status=InstrumentQCRun.FAILED,
+            progress_message="Could not queue the analysis. Check the instrument QC worker and retry.",
+            finished_at=timezone.now(),
+        )

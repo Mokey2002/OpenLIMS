@@ -1,13 +1,18 @@
 import csv
+import hashlib
 import io
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Count
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
@@ -30,13 +35,20 @@ from samples.access import (
 )
 from sequences.models import Sequence
 
-from .models import ImportJob, ImportRowReceipt, ImportRowRepair, InstrumentColumnMapping, InstrumentProfile
+from .instrument_qc import (
+    ACTIVE_STATUSES, QUEUE_TIMEOUT, TIMEOUT_MESSAGE, WORKFLOW_VERSION, available_input,
+    encode_input, serialize_run, snapshot_export, user_can_run_qc, workflow_digest,
+)
+from .models import (
+    ImportJob, ImportRowReceipt, ImportRowRepair, InstrumentColumnMapping, InstrumentProfile, InstrumentQCRun,
+)
 from .serializers import (
     ImportJobSerializer,
+    InstrumentQCParametersSerializer,
     InstrumentColumnMappingSerializer,
     InstrumentProfileSerializer,
 )
-from .tasks import process_import_job, process_rows, validate_mapped_value
+from .tasks import deliver_instrument_qc, process_import_job, process_rows, validate_mapped_value
 from .row_identity import classify_receipt, row_identity
 from .tabular import read_tabular
 
@@ -99,7 +111,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
 
     def _lock_editable_job(self, pk):
         job = ImportJob.objects.select_for_update().get(pk=pk)
-        if job.summary.get("assistant_upload") or "tabular" in job.summary:
+        if job.summary.get("assistant_upload") or "tabular" in job.summary or job.qc_runs.exists():
             raise serializers.ValidationError({
                 "detail": "Import identity and receipts are immutable. Use the import's retry controls."
             })
@@ -905,6 +917,98 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             )
 
         return Response(data)
+
+    @action(detail=True, methods=["get", "post"], url_path="qc-runs")
+    def qc_runs(self, request, pk=None):
+        job = self.get_object()
+        if request.method == "POST":
+            return self._queue_instrument_qc(request, job.pk)
+        now = timezone.now()
+        runs = job.qc_runs.defer("input_rows", "report_issues").order_by("-pk")[:10]
+        source = available_input(job)
+        return Response({
+            "workflow": {
+                "name": "Instrument export QC",
+                "version": WORKFLOW_VERSION,
+                **source,
+            } if source else None,
+            "runs": [serialize_run(run, now) for run in runs],
+        })
+
+    @action(detail=True, methods=["post"], url_path=r"qc-runs/(?P<run_id>\d+)/retry")
+    def qc_retry(self, request, pk=None, run_id=None):
+        return self._queue_instrument_qc(request, self.get_object().pk, retry_id=int(run_id))
+
+    @transaction.atomic
+    def _queue_instrument_qc(self, request, job_id, retry_id=None):
+        job = ImportJob.objects.select_for_update().get(pk=job_id)
+        if not user_can_run_qc(request.user, job.pk):
+            raise NotFound()
+
+        now = timezone.now()
+        active = job.qc_runs.filter(status__in=ACTIVE_STATUSES)
+        active.filter(deadline_at__lte=now).update(
+            status=InstrumentQCRun.FAILED, progress_message=TIMEOUT_MESSAGE, finished_at=now,
+        )
+        if active.exists():
+            return Response({"detail": "An analysis is already in progress."}, status=status.HTTP_409_CONFLICT)
+
+        previous = None
+        if retry_id is not None:
+            previous = get_object_or_404(job.qc_runs.defer("report_issues"), pk=retry_id)
+            latest = job.qc_runs.order_by("-pk").values_list("pk", flat=True).first()
+            if previous.status != InstrumentQCRun.FAILED or previous.pk != latest:
+                raise serializers.ValidationError({"detail": "Only the latest failed analysis can be retried."})
+            metadata = previous.input_metadata
+            rows = previous.input_rows
+            version = previous.workflow_version
+            definition = previous.workflow_sha256
+            input_digest = previous.input_sha256
+        else:
+            source = available_input(job)
+            if not source:
+                raise serializers.ValidationError({"detail": "Choose a completed file import with a saved export."})
+
+            parameters = InstrumentQCParametersSerializer(data=request.data)
+            parameters.is_valid(raise_exception=True)
+            fields = [parameters.validated_data["reading_column"], parameters.validated_data["well_column"]]
+            if any(field and field not in source["columns"] for field in fields):
+                raise serializers.ValidationError({"detail": "Select columns from the saved export."})
+
+            try:
+                metadata = snapshot_export(job, dict(parameters.validated_data))
+            except ValueError as exc:
+                raise serializers.ValidationError({"detail": str(exc)}) from exc
+            input_digest = hashlib.sha256(encode_input(metadata)).hexdigest()
+            rows = metadata.pop("rows")
+            version = WORKFLOW_VERSION
+            definition = workflow_digest(version)
+
+        run = job.qc_runs.create(
+            requested_by=request.user, retry_of=previous, workflow_version=version,
+            workflow_sha256=definition, input_sha256=input_digest, input_metadata=metadata,
+            input_rows=rows, deadline_at=timezone.now() + QUEUE_TIMEOUT,
+        )
+        transaction.on_commit(lambda: deliver_instrument_qc(run.pk))
+        return Response(serialize_run(run, now), status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=True, methods=["get"], url_path=r"qc-runs/(?P<run_id>\d+)/report")
+    def qc_report(self, request, pk=None, run_id=None):
+        job = self.get_object()
+        run = get_object_or_404(
+            job.qc_runs.defer("input_rows"),
+            pk=run_id, status=InstrumentQCRun.COMPLETED,
+        )
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="instrument-qc-{run.pk}.csv"'
+        response["Cache-Control"] = "private, no-store"
+        writer = csv.DictWriter(response, ["type", "data_row", "well", "detail"])
+        writer.writeheader()
+        if run.report_issues:
+            writer.writerows(run.report_issues)
+        else:
+            writer.writerow({"type": "PASS", "detail": "All checked readings and well positions passed."})
+        return response
 
     @action(detail=True, methods=["post"], url_path="retry")
     @transaction.atomic

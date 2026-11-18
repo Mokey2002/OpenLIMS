@@ -2,6 +2,7 @@ version: "3.9"
 
 services:
   db:
+    networks: [default, instrument_qc]
     image: ${POSTGRES_IMAGE:-postgres:16}
     container_name: openlims-db
     restart: unless-stopped
@@ -13,6 +14,7 @@ services:
       - "5433:5432"   # avoid local 5432 conflicts
 
   redis:
+    networks: [default, instrument_qc]
     image: ${REDIS_IMAGE:-redis:7}
     container_name: openlims-redis
     restart: unless-stopped
@@ -64,6 +66,33 @@ services:
       - redis
 
 
+  qc-worker:
+    build:
+      context: ../backend
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim}
+    restart: unless-stopped
+    env_file: [.env]
+    command: >-
+      sh -c "python manage.py migrate --check &&
+      exec celery -A config worker -l info -Q instrument_qc -n instrument-qc@%h
+      --concurrency=1 --prefetch-multiplier=1"
+    networks: [instrument_qc]
+    read_only: true
+    tmpfs: ["/tmp:size=128m"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    cpus: 1.0
+    mem_limit: 768m
+    pids_limit: 96
+    depends_on: [api]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d instrument-qc@$$HOSTNAME --timeout 5 | grep -q pong"]
+      interval: 30s
+      timeout: 15s
+      start_period: 30s
+      retries: 5
+
   assistant-monitor:
     build:
       context: ../backend
@@ -92,3 +121,7 @@ volumes:
   postgres_data:
   media_data:
   static_data:
+
+networks:
+  instrument_qc:
+    internal: true
