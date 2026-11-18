@@ -31,6 +31,12 @@ CELERY_TASK_ALWAYS_EAGER = os.getenv(
     "CELERY_TASK_ALWAYS_EAGER", "false"
 ).lower() in {"1", "true", "yes", "on"}
 CELERY_TASK_EAGER_PROPAGATES = CELERY_TASK_ALWAYS_EAGER
+CELERY_TASK_ROUTES = {
+    "imports.tasks.run_instrument_qc": {"queue": "instrument_qc"},
+}
+SNAKEMAKE_EXECUTABLE = env(
+    "OPENLIMS_SNAKEMAKE_EXECUTABLE", default="/opt/openlims/snakemake/bin/snakemake",
+)
 
 DEBUG = env.bool("DJANGO_DEBUG", default=True)
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="change-me")

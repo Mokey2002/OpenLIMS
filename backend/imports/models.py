@@ -139,3 +139,39 @@ class ImportRowReceipt(models.Model):
                 name="unique_instrument_external_import_row",
             ),
         ]
+
+
+class InstrumentQCRun(models.Model):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+    job = models.ForeignKey(ImportJob, on_delete=models.PROTECT, related_name="qc_runs")
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+    )
+    retry_of = models.ForeignKey("self", on_delete=models.PROTECT, null=True, blank=True)
+    workflow_version = models.CharField(max_length=16)
+    workflow_sha256 = models.CharField(max_length=64)
+    input_sha256 = models.CharField(max_length=64)
+    input_metadata = models.JSONField()
+    input_rows = models.JSONField()
+    status = models.CharField(max_length=12, default=QUEUED)
+    progress_message = models.CharField(max_length=255, default="Waiting for the analysis worker.")
+    engine_version = models.CharField(max_length=16, blank=True)
+    report_summary = models.JSONField(default=dict, blank=True)
+    report_issues = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    deadline_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["job"],
+                condition=models.Q(status__in=["QUEUED", "RUNNING"]),
+                name="one_active_instrument_qc_run",
+            ),
+        ]

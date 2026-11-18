@@ -86,4 +86,5 @@ def get_csv_dict_reader(decoded, instrument):
         "detected_header_row": header_row_index,
         "skipped_metadata_rows": header_row_index,
         "fieldnames": fieldnames,
+        "delimiter": instrument.delimiter,
     }

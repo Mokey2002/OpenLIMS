@@ -1,0 +1,32 @@
+rule all:
+    input:
+        "report.json"
+
+
+rule check_readings:
+    input:
+        "input.json"
+    output:
+        "readings.json"
+    script:
+        "check_readings.py"
+
+
+rule check_wells:
+    input:
+        "input.json"
+    output:
+        "wells.json"
+    script:
+        "check_wells.py"
+
+
+rule write_report:
+    input:
+        export="input.json",
+        readings="readings.json",
+        wells="wells.json"
+    output:
+        "report.json"
+    script:
+        "write_report.py"
