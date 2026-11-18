@@ -1,5 +1,3 @@
-import csv
-import io
 import math
 
 from celery import shared_task
@@ -12,8 +10,9 @@ from samples.models import Sample
 from samples.access import user_can_modify_sample
 from results.models import WorkItem, Result
 
-from .models import ImportJob
-from .csv_utils import get_csv_dict_reader
+from .models import ImportJob, InstrumentProfile
+from .row_identity import claim_row
+from .tabular import read_tabular
 
 
 def broadcast_import_job_update(job, message):
@@ -110,6 +109,26 @@ def process_rows(job, rows, actor=None, *, mappings=None):
     samples_created = 0
     results_created = 0
     skipped_rows = []
+    row_report = []
+    tabular = job.summary.get("tabular")
+    keyed = bool(tabular and tabular.get("source_system"))
+    if keyed:
+        # Serialize competing claims for an instrument, including batches whose IDs
+        # appear in opposite orders. The caller owns the data transaction.
+        InstrumentProfile.objects.select_for_update().get(pk=instrument.pk)
+    original_rows = tabular.get("original_rows") if tabular else None
+
+    def report(row_number, row, outcome, issues=()):
+        if tabular is not None:
+            row_report.append({
+                "row": row_number,
+                "sample_id": row.get(instrument.sample_id_column) or "",
+                "external_id": row.get("external_id") or "",
+                "outcome": outcome,
+                "issues": list(issues),
+                **({"values": {k: v for k, v in row.items() if k is not None}}
+                   if keyed and outcome in {"REJECTED", "CONFLICT"} else {}),
+            })
 
     created_sample_ids = []
     matched_sample_ids = []
@@ -128,18 +147,52 @@ def process_rows(job, rows, actor=None, *, mappings=None):
     for row in rows:
         rows_processed += 1
 
-        sample_code = row.get(instrument.sample_id_column)
+        row_number = original_rows[rows_processed - 1] if original_rows else rows_processed
+        issue_start = len(skipped_rows)
+        sample_code = str(row.get(instrument.sample_id_column) or "").strip()
 
         if not sample_code:
             skipped_rows.append(
                 {
-                    "row": rows_processed,
+                    "row": row_number,
                     "reason": f"Missing sample ID column '{instrument.sample_id_column}'",
                 }
             )
+            report(row_number, row, "REJECTED", skipped_rows[issue_start:])
             continue
 
-        sample_code = str(sample_code).strip()
+        if keyed:
+            issues = []
+            for column, mapping in mappings.items():
+                validation = validate_mapped_value(mapping, row.get(column))
+                if not validation["ok"]:
+                    issues.append({"row": row_number, "sample_id": sample_code,
+                                   "column": column, "reason": validation["reason"]})
+            if len(sample_code) > Sample._meta.get_field("sample_id").max_length:
+                issues.append({"row": row_number, "reason": "Sample ID exceeds 64 characters."})
+            if None in row:
+                issues.append({"row": row_number, "reason": "More values than header columns."})
+            if issues:
+                skipped_rows.extend(issues)
+                report(row_number, row, "REJECTED", issues)
+                continue
+
+            sample = Sample.objects.filter(sample_id=sample_code).first()
+            if sample and actor and not user_can_modify_sample(actor, sample):
+                issue = {"row": row_number, "reason": "Sample exists but this user cannot import results into it."}
+                skipped_rows.append(issue)
+                report(row_number, row, "REJECTED", [issue])
+                continue
+            try:
+                outcome, reason, receipt = claim_row(job, row, row_number)
+            except ValueError as exc:
+                outcome, reason = "REJECTED", str(exc)
+            if outcome != "IMPORTED":
+                issue = {"row": row_number, "sample_id": sample_code, "reason": reason}
+                if outcome != "IDENTICAL":
+                    skipped_rows.append(issue)
+                report(row_number, row, outcome, [issue])
+                continue
 
         defaults = {
             "status": "RECEIVED",
@@ -157,11 +210,14 @@ def process_rows(job, rows, actor=None, *, mappings=None):
         if not created and actor and not user_can_modify_sample(actor, sample):
             skipped_rows.append(
                 {
-                    "row": rows_processed,
+                    "row": row_number,
                     "sample_id": sample_code,
                     "reason": "Sample exists but this user cannot import results into it.",
                 }
             )
+            if keyed:
+                receipt.delete()
+            report(row_number, row, "REJECTED", skipped_rows[issue_start:])
             continue
 
         touched_sample_ids.append(sample.id)
@@ -233,7 +289,7 @@ def process_rows(job, rows, actor=None, *, mappings=None):
             if not validation["ok"]:
                 skipped_rows.append(
                     {
-                        "row": rows_processed,
+                        "row": row_number,
                         "sample_id": sample_code,
                         "column": source_column,
                         "reason": validation["reason"],
@@ -285,6 +341,9 @@ def process_rows(job, rows, actor=None, *, mappings=None):
 
             results_created += 1
 
+        issues = skipped_rows[issue_start:]
+        report(row_number, row, "IMPORTED_WITH_WARNINGS" if issues else "IMPORTED", issues)
+
         job.progress_current = rows_processed
         job.progress_message = f"Processed {rows_processed} of {len(rows)} rows"
         job.save(update_fields=["progress_current", "progress_message"])
@@ -295,6 +354,7 @@ def process_rows(job, rows, actor=None, *, mappings=None):
         )
 
     return {
+        **({"tabular": tabular, "row_report": row_report} if tabular is not None else {}),
         "rows_processed": rows_processed,
         "samples_matched": samples_matched,
         "samples_created": samples_created,
@@ -307,104 +367,114 @@ def process_rows(job, rows, actor=None, *, mappings=None):
     }
 
 
-@shared_task
+@shared_task(acks_late=True, reject_on_worker_lost=True)
 def process_import_job(job_id):
     if ImportJob.objects.filter(pk=job_id, summary__has_key="assistant_upload").exists():
         from .assistant_uploads import process_prepared_job
         return process_prepared_job(job_id)
-    # Claim the job once. Celery redelivery, eager test execution, or a delayed
-    # duplicate message must not create a second work item/result set.
     with transaction.atomic():
-        # Lock only the import job. Some related records are nullable, and
-        # PostgreSQL rejects SELECT FOR UPDATE across those outer joins.
-        job = ImportJob.objects.select_for_update().get(id=job_id)
-        if job.status in {"RUNNING", "COMPLETED"}:
-            return job.summary
-        job.status = "RUNNING"
-        job.progress_message = "Reading CSV file"
-        job.save(update_fields=["status", "progress_message"])
+        result = _process_tabular_job(job_id)
+    if isinstance(result, Exception):
+        raise result
+    return result
 
+
+def _process_tabular_job(job_id):
+    # Lock only the import job. Some related records are nullable, and
+    # PostgreSQL rejects SELECT FOR UPDATE across those outer joins.
+    job = ImportJob.objects.select_for_update().get(id=job_id)
+    if job.status != "PENDING":
+        return job.summary
+    job.status = "RUNNING"
+    job.progress_message = "Reading staged rows"
+    job.save(update_fields=["status", "progress_message"])
+
+    initial_summary = job.summary.copy()
     try:
-        broadcast_import_job_update(
-            job,
-            f"Import running: {job.instrument.code}",
-        )
-
-        job.uploaded_file.seek(0)
-        decoded = job.uploaded_file.read().decode("utf-8")
-        job.uploaded_file.seek(0)
-
-        reader, csv_metadata = get_csv_dict_reader(decoded, job.instrument)
-        rows = list(reader)
-
-        summary = process_rows(job, rows, actor=job.uploaded_by)
-        summary["csv_metadata"] = csv_metadata
-
-        job.status = "COMPLETED"
-        job.summary = summary
-        job.progress_current = summary["rows_processed"]
-        job.progress_total = summary["rows_processed"]
-        job.progress_message = "Import completed"
-        job.save(
-            update_fields=[
-                "status",
-                "summary",
-                "progress_current",
-                "progress_total",
-                "progress_message",
-            ]
-        )
-
-        job.refresh_from_db()
-
-        broadcast_import_job_update(
-            job,
-            f"Import completed: {job.instrument.code}",
-        )
-
-        Event.objects.create(
-            entity_type="ImportJob",
-            entity_id=str(job.id),
-            action="RESULTS_IMPORTED",
-            actor=job.uploaded_by,
-            payload={
-                "instrument_code": job.instrument.code,
-                "instrument_name": job.instrument.name,
-                "run_id": job.run_id,
-                **summary,
-            },
-        )
-
-        from assistant.lifecycle import finish_queued_action
-
-        finish_queued_action(
-            action_type="QUEUE_IMPORT",
-            result_key="import_job_id",
-            result_id=job.id,
-            succeeded=True,
-            result_updates={
-                "job_status": job.status,
-                "rows_processed": summary.get("rows_processed", 0),
-                "samples_created": summary.get("samples_created", 0),
-                "results_created": summary.get("results_created", 0),
-                "skipped_row_count": len(summary.get("skipped_rows", [])),
-            },
-        )
-
-        if job.uploaded_by:
-            Notification.objects.create(
-                user=job.uploaded_by,
-                title="Import completed",
-                message=f"{job.instrument.code} import finished. {summary['results_created']} results created.",
-                link="/imports",
+        with transaction.atomic():
+            broadcast_import_job_update(
+                job,
+                f"Import running: {job.instrument.code}",
             )
 
-        return summary
+            tabular = job.summary.get("tabular", {})
+            if "corrected_rows" in tabular:
+                rows, csv_metadata = tabular["corrected_rows"], {}
+            else:
+                rows, csv_metadata = read_tabular(job.uploaded_file, job.instrument, tabular.get("sheet"))
+                if rows is None:
+                    raise ValueError("Select an Excel sheet before importing.")
+            job.summary.setdefault("tabular", tabular)
+
+            summary = process_rows(job, rows, actor=job.uploaded_by)
+            summary["csv_metadata"] = csv_metadata
+            summary["tabular"] = {k: v for k, v in tabular.items() if k != "corrected_rows"}
+
+            job.status = "COMPLETED"
+            job.summary = summary
+            job.progress_current = summary["rows_processed"]
+            job.progress_total = summary["rows_processed"]
+            job.progress_message = "Import completed"
+            job.save(
+                update_fields=[
+                    "status",
+                    "summary",
+                    "progress_current",
+                    "progress_total",
+                    "progress_message",
+                ]
+            )
+
+            job.refresh_from_db()
+
+            transaction.on_commit(
+                lambda: broadcast_import_job_update(job, f"Import completed: {job.instrument.code}"),
+                robust=True,
+            )
+
+            Event.objects.create(
+                entity_type="ImportJob",
+                entity_id=str(job.id),
+                action="RESULTS_IMPORTED",
+                actor=job.uploaded_by,
+                payload={
+                    "instrument_code": job.instrument.code,
+                    "instrument_name": job.instrument.name,
+                    "run_id": job.run_id,
+                    **{key: value for key, value in summary.items() if key != "row_report"},
+                },
+            )
+
+            from assistant.lifecycle import finish_queued_action
+
+            finish_queued_action(
+                action_type="QUEUE_IMPORT",
+                result_key="import_job_id",
+                result_id=job.id,
+                succeeded=True,
+                result_updates={
+                    "job_status": job.status,
+                    "rows_processed": summary.get("rows_processed", 0),
+                    "samples_created": summary.get("samples_created", 0),
+                    "results_created": summary.get("results_created", 0),
+                    "skipped_row_count": len(summary.get("skipped_rows", [])),
+                },
+            )
+
+            if job.uploaded_by:
+                Notification.objects.create(
+                    user=job.uploaded_by,
+                    title="Import completed",
+                    message=f"{job.instrument.code} import finished. {summary['results_created']} results created.",
+                    link="/imports",
+                )
+
+            return summary
 
     except Exception as e:
         job.status = "FAILED"
-        job.summary = {"error": str(e)}
-        job.progress_message = f"Import failed: {str(e)}"
+        job.summary = {**initial_summary, "error": str(e)}
+        job.progress_message = f"Import failed: {e}"[:255]
         job.save(
             update_fields=[
                 "status",
@@ -415,9 +485,9 @@ def process_import_job(job_id):
 
         job.refresh_from_db()
 
-        broadcast_import_job_update(
-            job,
-            f"Import failed: {job.instrument.code}",
+        transaction.on_commit(
+            lambda: broadcast_import_job_update(job, f"Import failed: {job.instrument.code}"),
+            robust=True,
         )
 
         from assistant.lifecycle import finish_queued_action
@@ -440,7 +510,7 @@ def process_import_job(job_id):
                 link="/imports",
             )
 
-        raise
+        return e
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True, autoretry_for=(OperationalError, OSError), retry_backoff=True, retry_kwargs={"max_retries": 5})

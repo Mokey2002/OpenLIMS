@@ -122,6 +122,9 @@ export default function Imports() {
   const [requireAssistantConfirmation, setRequireAssistantConfirmation] =
     useState(false);
 
+  const [sourceSystem, setSourceSystem] = useState("");
+  const [sheets, setSheets] = useState([]);
+  const [sheet, setSheet] = useState("");
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -309,9 +312,13 @@ export default function Imports() {
       formData.append("instrument", uploadInstrument);
       if (uploadProject) formData.append("project", uploadProject);
       formData.append("uploaded_file", uploadFile);
+      if (sheet) formData.append("sheet", sheet);
+      if (sourceSystem.trim()) formData.append("source_system", sourceSystem.trim());
 
       const data = await apiPostForm("/api/import-jobs/preview/", formData);
-      setPreviewData(data);
+      setSheets(data.sheets || data.csv_metadata?.sheets || []);
+      if (data.csv_metadata?.sheet) setSheet(data.csv_metadata.sheet);
+      if (!data.sheet_required) setPreviewData(data);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -331,6 +338,8 @@ export default function Imports() {
       formData.append("instrument", uploadInstrument);
       if (uploadProject) formData.append("project", uploadProject);
       formData.append("uploaded_file", uploadFile);
+      if (sheet) formData.append("sheet", sheet);
+      if (sourceSystem.trim()) formData.append("source_system", sourceSystem.trim());
       if (requireAssistantConfirmation) {
         formData.append("assistant_confirmation", "true");
       }
@@ -338,11 +347,13 @@ export default function Imports() {
       const createdJob = await apiPostForm("/api/import-jobs/", formData);
 
       setUploadFile(null);
+      setSheet("");
+      setSheets([]);
       setPreviewData(null);
       setLastLiveUpdate(
         requireAssistantConfirmation
           ? `Import job #${createdJob.id} is waiting. Open the Assistant and ask: Queue import job #${createdJob.id}.`
-          : "CSV import queued. Progress will update automatically."
+          : "Result import queued. Progress will update automatically."
       );
 
       await load();
@@ -716,15 +727,15 @@ export default function Imports() {
 
       <Card className="app-card mb-4">
         <Card.Body>
-          <h5 className="section-title">Run CSV Result Import</h5>
+          <h5 className="section-title">Stage CSV or Excel Results</h5>
 
           <Form onSubmit={uploadImportJob}>
             <Row className="g-2 align-items-center mb-3">
               <Col md={4}>
                 <Form.Select
                   value={uploadInstrument}
-                  onChange={(e) => setUploadInstrument(e.target.value)}
-                  disabled={!userCanWrite}
+                  onChange={(e) => { setUploadInstrument(e.target.value); setPreviewData(null); }}
+                  disabled={!userCanWrite || previewLoading}
                 >
                   <option value="">Select instrument</option>
                   {profiles.map((p) => (
@@ -738,8 +749,8 @@ export default function Imports() {
               <Col md={4}>
                 <Form.Select
                   value={uploadProject}
-                  onChange={(e) => setUploadProject(e.target.value)}
-                  disabled={!userCanWrite}
+                  onChange={(e) => { setUploadProject(e.target.value); setPreviewData(null); }}
+                  disabled={!userCanWrite || previewLoading}
                 >
                   <option value="">No project / unassigned import</option>
                   {projects.map((p) => (
@@ -753,19 +764,45 @@ export default function Imports() {
               <Col md={4}>
                 <Form.Control
                   type="file"
-                  accept=".csv,text/csv"
-                  disabled={!userCanWrite}
-                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  accept=".csv,.tsv,.txt,.xlsx"
+                  disabled={!userCanWrite || previewLoading}
+                  onChange={(e) => {
+                    setUploadFile(e.target.files?.[0] || null);
+                    setSheet("");
+                    setSheets([]);
+                    setPreviewData(null);
+                  }}
                 />
               </Col>
             </Row>
+
+            <Form.Group className="mb-3" controlId="result-import-source">
+              <Form.Label>Source system</Form.Label>
+              <Form.Control
+                value={sourceSystem}
+                maxLength={128}
+                disabled={!userCanWrite || previewLoading}
+                onChange={(e) => { setSourceSystem(e.target.value); setPreviewData(null); }}
+              />
+              <Form.Text>For safe retries, enter the source system and include an external_id column.</Form.Text>
+            </Form.Group>
+
+            {sheets.length > 1 && (
+              <Form.Group className="mb-3" controlId="result-import-sheet">
+                <Form.Label>Excel sheet</Form.Label>
+                <Form.Select value={sheet} disabled={!userCanWrite || previewLoading} onChange={(e) => { setSheet(e.target.value); setPreviewData(null); }}>
+                  <option value="">Select a sheet and preview it</option>
+                  {sheets.map((name) => <option key={name} value={name}>{name}</option>)}
+                </Form.Select>
+              </Form.Group>
+            )}
 
             <Form.Check
               type="checkbox"
               className="mb-3"
               label="Require explicit confirmation in the OpenLIMS Assistant"
               checked={requireAssistantConfirmation}
-              disabled={!userCanWrite}
+              disabled={!userCanWrite || previewLoading}
               onChange={(e) =>
                 setRequireAssistantConfirmation(e.target.checked)
               }
@@ -782,7 +819,7 @@ export default function Imports() {
                     !userCanWrite || !uploadInstrument || !uploadFile || previewLoading
                   }
                 >
-                  {previewLoading ? "Previewing..." : "Preview CSV Import"}
+                  {previewLoading ? "Previewing..." : "Preview Import"}
                 </Button>
               </Col>
 
@@ -791,11 +828,11 @@ export default function Imports() {
                   type="submit"
                   variant="dark"
                   className="w-100"
-                  disabled={!userCanWrite || !uploadInstrument || !uploadFile}
+                  disabled={!userCanWrite || !previewData || previewLoading}
                 >
                   {requireAssistantConfirmation
                     ? "Prepare for Assistant Confirmation"
-                    : "Queue CSV Import"}
+                    : "Queue Import"}
                 </Button>
               </Col>
             </Row>
@@ -858,8 +895,8 @@ export default function Imports() {
                 {previewData.skipped_rows?.length > 0 && (
                   <Alert variant="warning">
                     <strong>Skipped rows:</strong>{" "}
-                    {previewData.skipped_rows.length} row(s) will be skipped
-                    because of validation or access restrictions.
+                    {new Set(previewData.skipped_rows.map((issue) => issue.row)).size} row(s) flagged
+                    for validation, access, or identity issues.
                   </Alert>
                 )}
 
@@ -880,13 +917,13 @@ export default function Imports() {
                         <tr key={row.row}>
                           <td>{row.row}</td>
                           <td>{row.sample_id}</td>
-                          <td>{row.exists ? "Existing" : "Will create"}</td>
+                          <td>{row.outcome === "READY" ? (row.exists ? "Existing" : "Will create") : row.outcome}</td>
                           <td>{row.valid_result_cells}</td>
                           <td>
                             {row.errors?.length > 0
                               ? row.errors.map((error, idx) => (
                                   <div key={idx} className="text-danger small">
-                                    {error.column}: {error.reason}
+                                    {error.column ? `${error.column}: ` : ""}{error.reason}
                                   </div>
                                 ))
                               : "-"}

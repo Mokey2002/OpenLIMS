@@ -47,7 +47,8 @@ def get_csv_dict_reader(decoded, instrument):
     If auto_detect_header is true, the parser finds the row containing
     instrument.sample_id_column. Otherwise it uses instrument.header_row_index.
     """
-    lines = _non_empty_lines(decoded)
+    physical_lines = decoded.splitlines(keepends=True)
+    lines = [index for index, line in enumerate(physical_lines) if line.strip()]
 
     if not lines:
         raise ValueError("Uploaded CSV file has no readable rows.")
@@ -65,10 +66,10 @@ def get_csv_dict_reader(decoded, instrument):
             "Header row index is beyond the number of readable rows in the file."
         )
 
-    csv_text = "\n".join(lines[header_row_index:])
+    csv_text = "".join(physical_lines[lines[header_row_index]:])
 
     reader = csv.DictReader(
-        io.StringIO(csv_text),
+        io.StringIO(csv_text, newline=""),
         delimiter=instrument.delimiter,
     )
 
