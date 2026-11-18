@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   Badge,
   Button,
@@ -7,7 +7,9 @@ import {
   Nav,
   Navbar,
   NavDropdown,
+  OverlayTrigger,
   Spinner,
+  Tooltip,
 } from "react-bootstrap";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { apiGet, logout as apiLogout } from "./api";
@@ -59,8 +61,24 @@ const routeLabels = {
   "/data-migration": "Data Migration",
 };
 
-function DropdownItemLink({ to, children }) {
-  return <NavDropdown.Item as={NavLink} to={to}>{children}</NavDropdown.Item>;
+function DropdownItemLink({ to, children, hint }) {
+  const hintId = useId();
+  if (!hint) return <NavDropdown.Item as={NavLink} to={to}>{children}</NavDropdown.Item>;
+
+  return (
+    <>
+      <OverlayTrigger
+        placement="bottom"
+        trigger={["hover", "focus"]}
+        overlay={<Tooltip aria-hidden="true">{hint}</Tooltip>}
+      >
+        <NavDropdown.Item as={NavLink} to={to} aria-describedby={hintId}>
+          {children}
+        </NavDropdown.Item>
+      </OverlayTrigger>
+      <span id={hintId} className="visually-hidden">{hint}</span>
+    </>
+  );
 }
 
 function validIdentity(user) {
@@ -157,7 +175,7 @@ export default function Layout() {
                 <DropdownItemLink to="/dashboard">Dashboard</DropdownItemLink>
                 <DropdownItemLink to="/projects">Projects</DropdownItemLink>
                 <DropdownItemLink to="/assistant">Assistant</DropdownItemLink>
-                {userIsAdmin && <DropdownItemLink to="/workflow-designer">Workflow Designer</DropdownItemLink>}
+                {userIsAdmin && <DropdownItemLink to="/workflow-designer" hint="Build reusable workflow templates with ordered steps.">Workflow Designer</DropdownItemLink>}
               </NavDropdown>
 
               <NavDropdown title="Receive" id="receive-nav">
@@ -165,7 +183,7 @@ export default function Layout() {
                 <DropdownItemLink to="/samples">Samples</DropdownItemLink>
                 <DropdownItemLink to="/workflow-requests">Workflow Requests</DropdownItemLink>
                 <DropdownItemLink to="/inventory">Inventory</DropdownItemLink>
-                {(userIsAdmin || userIsTech) && <DropdownItemLink to="/imports">Imports</DropdownItemLink>}
+                {(userIsAdmin || userIsTech) && <DropdownItemLink to="/imports" hint="Preview and import CSV or Excel results.">Imports</DropdownItemLink>}
                 {featureFlags.registry && <DropdownItemLink to="/registry">Biological Registry</DropdownItemLink>}
               </NavDropdown>
 

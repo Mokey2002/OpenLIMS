@@ -53,6 +53,8 @@ Reconstruye las imágenes del backend, inicia `qc-worker` y aplica la migración
 
 En **Imports**, selecciona un instrumento y un proyecto opcional, carga un archivo CSV o Excel y revisa la vista previa. Si el libro contiene varias hojas, selecciona la hoja y vuelve a revisar la vista previa.
 
+Al pasar el cursor o enfocar con el teclado **Imports** o **Workflow Designer**, aparece una breve descripción. En el formulario de importación, abre **Acerca del sistema de origen** y **Acerca del ID externo** para ver ejemplos. En una importación completada, **Ejecutar análisis** abre el selector de columnas. **Descargar informe de control de calidad** guarda un CSV con las filas y los pocillos marcados cuando hay un informe disponible.
+
 Para reintentos seguros, indica el sistema de origen e incluye la columna `external_id`. Se omiten las filas idénticas y se señalan como conflictos los cambios para un ID existente. Descarga el informe de filas desde el detalle de la importación. Puedes corregir una fila rechazada y enviarla como una importación vinculada a la original.
 
 Reconstruye el backend para instalar el lector de Excel y aplica la migración `imports.0009_importrowreceipt`. El pie de página muestra **v0.78.7**.
