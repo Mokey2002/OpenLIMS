@@ -232,7 +232,11 @@ counts, and reconciliation keep available stock auditable.
 
 ## 📥 Instrument Imports
 
-OpenLIMS supports CSV-based instrument imports and direct API ingestion.
+Open **Receive → Imports** to preview and import CSV or Excel results. Hover over or keyboard-focus **Imports** for a short description. **Plan → Workflow Designer** has a similar tooltip for reusable workflow templates.
+
+In the staging form, expand **About Source system** and **About External ID** for examples of values to reuse when exporting the same rows again. On a completed file import, **Run analysis** opens the QC column selector. **Download QC report** saves a CSV of flagged rows and wells when a report is available.
+
+OpenLIMS also supports direct API ingestion.
 
 Instrument profiles define:
 

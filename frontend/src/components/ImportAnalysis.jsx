@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, Row } from "react-bootstrap";
 import { apiDownload, apiGet, apiPost } from "../api";
 
@@ -11,6 +11,7 @@ function countLabel(count, singular, plural = `${singular}s`) {
 
 function RunResult({ run, onDownload }) {
   const summary = run.summary;
+  const downloadHintId = useId();
   return (
     <div>
       <p role="status" className="mb-2">
@@ -37,9 +38,13 @@ function RunResult({ run, onDownload }) {
               countLabel(summary.invalid_wells, "invalid well entry", "invalid well entries"),
             ].map((label) => ` · ${label}`).join("")}
           </p>
-          <Button size="sm" variant="outline-primary" onClick={() => onDownload(run)}>
+          <Button size="sm" variant="outline-primary" aria-describedby={downloadHintId}
+            onClick={() => onDownload(run)}>
             Download QC report
           </Button>
+          <p id={downloadHintId} className="small text-body-secondary mt-1 mb-0">
+            Download a CSV of flagged rows and wells.
+          </p>
         </>
       )}
       <details className="mt-2 small">
@@ -58,6 +63,7 @@ function RunResult({ run, onDownload }) {
 }
 
 export default function ImportAnalysis({ importId, canRun }) {
+  const runHintId = useId();
   const path = `/api/import-jobs/${importId}/qc-runs/`;
   const [data, setData] = useState(null);
   const [form, setForm] = useState(null);
@@ -129,9 +135,14 @@ export default function ImportAnalysis({ importId, canRun }) {
         <div className="toolbar-row mb-3">
           <h2 className="h5 section-title mb-0">Instrument export QC</h2>
           {canRun && workflow && !form && (
-            <Button size="sm" disabled={active || busy} onClick={showForm}>
-              Run analysis
-            </Button>
+            <div>
+              <Button size="sm" disabled={active || busy} aria-describedby={runHintId} onClick={showForm}>
+                Run analysis
+              </Button>
+              <p id={runHintId} className="small text-body-secondary mt-1 mb-0">
+                Choose columns to check readings and, optionally, well coverage.
+              </p>
+            </div>
           )}
         </div>
         {error && <Alert variant="danger">{error}</Alert>}
@@ -193,9 +204,6 @@ export default function ImportAnalysis({ importId, canRun }) {
           </Form>
         )}
 
-        {!latest && workflow && !form && (
-          <p className="mb-0 text-body-secondary">Check numeric readings and optionally check a 96- or 384-well plate for missing or repeated wells.</p>
-        )}
         {latest && (
           <>
             <RunResult run={latest} onDownload={download} />

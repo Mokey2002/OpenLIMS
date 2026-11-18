@@ -780,11 +780,28 @@ export default function Imports() {
               <Form.Label>Source system</Form.Label>
               <Form.Control
                 value={sourceSystem}
+                aria-describedby="result-import-source-hint"
                 maxLength={128}
                 disabled={!userCanWrite || previewLoading}
                 onChange={(e) => { setSourceSystem(e.target.value); setPreviewData(null); }}
               />
-              <Form.Text>For safe retries, enter the source system and include an external_id column.</Form.Text>
+              <Form.Text id="result-import-source-hint">
+                For safe retries, enter the source system and include an external_id column.
+              </Form.Text>
+              <details className="small mt-2">
+                <summary><span aria-hidden="true">ⓘ </span>About Source system</summary>
+                <p className="mt-1 mb-0">
+                  Use a consistent name, such as Plate Reader A, for repeat exports from the same source.
+                </p>
+              </details>
+              <details className="small mt-1">
+                <summary><span aria-hidden="true">ⓘ </span>About External ID</summary>
+                <p className="mt-1 mb-0">
+                  Put a unique, stable ID for each source row, such as RUN-042-A01, in the external_id column.
+                  Reuse the ID when re-exporting that row. With the same instrument and source system, OpenLIMS
+                  skips identical rows and flags changed rows as conflicts.
+                </p>
+              </details>
             </Form.Group>
 
             {sheets.length > 1 && (
