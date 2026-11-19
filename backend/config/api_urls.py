@@ -102,6 +102,7 @@ from notebook.views import (
     ExperimentViewSet,
     NotebookViewSet,
 )
+from workflow_requests.portal import RequesterPortalViewSet
 from workflow_requests.views import (
     AssayRequestTypeViewSet,
     RequestResourceRequirementViewSet,
@@ -209,6 +210,7 @@ router.register(r"workflow-request-items", WorkflowRequestItemViewSet, basename=
 router.register(r"workflow-request-messages", WorkflowRequestMessageViewSet, basename="workflow-request-message")
 router.register(r"workflow-request-run-groups", WorkflowRunGroupViewSet, basename="workflow-request-run-group")
 router.register(r"workflow-request-reports", WorkflowRequestReportViewSet, basename="workflow-request-report")
+router.register(r"requester-requests", RequesterPortalViewSet, basename="requester-request")
 router.register(r"entity-links", EntityLinkViewSet, basename="entity-link")
 router.register(
     r"shared-attachments",

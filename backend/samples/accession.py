@@ -10,6 +10,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 from rest_framework.response import Response
 
 from events.models import Event
+from workflow_requests.intake import registered_submission, submission_context, submission_for_barcode
 from .access import require_sample_modify_access, user_can_access_sample
 from .models import Sample, SampleAccession, SampleCustodyEvent
 from .serializers import SampleSerializer
@@ -63,14 +64,19 @@ def state(sample, request):
     receipt = accession.receipt if accession else sample.custody_events.filter(
         action=SampleCustodyEvent.ACTION_RECEIVE
     ).select_related("performed_by").order_by("occurred_at", "id").first()
-    return {
+    barcode = primary_barcode(sample)
+    result = {
         "sample": SampleSerializer(sample, context={"request": request}).data,
-        "barcode": primary_barcode(sample),
+        "barcode": barcode,
         "receipt": {"received_at": receipt.occurred_at, "received_by": receipt.performed_by.username,
                     "scanned_code": receipt.scanned_code} if receipt else None,
         "label_verified_at": accession.label_verified_at if accession else None,
         "label_verified_by": accession.label_verified_by.username if accession and accession.label_verified_by else None,
     }
+    submission = registered_submission(sample, barcode, request.user)
+    if submission:
+        result["submission"] = submission
+    return result
 
 
 def require_active(request):
@@ -82,9 +88,17 @@ def lookup(request):
     require_active(request)
     code = code_from(request.query_params)["barcode"]
     sample = resolve(code, request.user)
-    return Response({"kind": "existing", **state(sample, request)} if sample else {"kind": "new", "barcode": code})
+    if sample:
+        return Response({"kind": "existing", **state(sample, request)})
+    submission = submission_for_barcode(code, request.user)
+    if submission:
+        return Response({
+            "kind": "new", "barcode": submission.submission_barcode, "submission": submission_context(submission),
+        })
+    return Response({"kind": "new", "barcode": code})
 
 
+@transaction.atomic
 def register(view, request):
     require_active(request)
     code = code_from(request.data)["barcode"]
@@ -92,13 +106,21 @@ def register(view, request):
         raise ValidationError({"barcode": "New sample barcodes must be at most 64 characters and must not use the reserved OPENLIMS-SAMPLE- prefix."})
     if resolve(code, request.user):
         raise ValidationError({"barcode": "This identifier is unavailable. Scan again to open its sample."})
+    submission = submission_for_barcode(code, request.user, lock=True)
+    if submission:
+        if submission.sample_id:
+            raise ValidationError({"barcode": "This submission already has a sample. Scan again to open it."})
+        code = submission.submission_barcode
     # Do not accept status, actor, schema, receipt or confirmation fields from a scanner/client.
     payload = {key: request.data[key] for key in ("sample_type", "project", "form_values") if key in request.data}
     if not payload.get("project"):
         raise ValidationError({"project": "Choose the project receiving this sample."})
     if not payload.get("sample_type"):
         raise ValidationError({"sample_type": "Choose a sample type."})
-    serializer = SampleSerializer(data={**payload, "sample_id": code}, context={"request": request})
+    serializer = SampleSerializer(
+        data={**payload, "sample_id": code},
+        context={"request": request, "submission_barcode": code if submission else None},
+    )
     serializer.is_valid(raise_exception=True)
     from custom_fields.models import SampleForm
     if SampleForm.objects.filter(published=True).exists() and not serializer.validated_data.get("form_schema"):
@@ -106,9 +128,17 @@ def register(view, request):
     # Existing sample visibility requires project membership, even for administrators.
     if not serializer.validated_data["project"].members.filter(pk=request.user.pk).exists():
         raise ValidationError({"project": "Join the receiving project before registering a sample here."})
+    if submission and serializer.validated_data["project"].pk != submission.request.project_id:
+        raise ValidationError({"project": "Use the project on the submission label."})
     try:
         with transaction.atomic():
-            view.perform_create(serializer)
+            if submission:
+                # The approved test request assigns and starts this sample's pipeline.
+                sample = serializer.save(created_by=request.user)
+                submission.sample = sample
+                submission.save(update_fields=["sample", "updated_at"])
+            else:
+                view.perform_create(serializer)
             from assistant.models import BarcodeLabel
             BarcodeLabel.objects.create(sample=serializer.instance, template="ACCESSION_SAMPLE", barcode=code)
     except IntegrityError:

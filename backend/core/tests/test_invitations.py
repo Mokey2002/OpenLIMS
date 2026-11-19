@@ -20,9 +20,9 @@ class InvitationTests(APITestCase):
         self.admin = User.objects.create_superuser('owner', 'owner@example.org', 'secret')
         self.client.force_authenticate(self.admin)
 
-    def create_invited(self):
+    def create_invited(self, role='tech'):
         response = self.client.post('/api/v1/admin-users/', {
-            'username': 'scientist', 'email': 'scientist@example.org', 'role': 'tech',
+            'username': 'scientist', 'email': 'scientist@example.org', 'role': role,
             'send_invitation': True,
         })
         self.assertEqual(response.status_code, 201, response.data)
@@ -51,6 +51,16 @@ class InvitationTests(APITestCase):
         self.assertTrue(account['password_ready'])
         self.assertEqual(account['invitation_event'], 'USER_PASSWORD_SET')
         self.assertIsNotNone(account['invitation_updated_at'])
+
+    def test_requester_invitation_leads_to_the_portal(self):
+        user, response = self.create_invited(role='requester')
+        self.assertEqual(response.data['invitation_status'], 'sent')
+        self.assertIn('https://lims.example.org:8443/requester', mail.outbox[0].body)
+        result = APIClient().post('/api/v1/auth/set-password/', {
+            **self.credentials(), 'password': 'Long-private-password-927!'})
+        self.assertEqual(result.status_code, 200, result.data)
+        self.assertTrue(result.data['requester_portal'])
+        self.assertEqual(Notification.objects.filter(user=user, link='/requester').count(), 2)
 
     def test_existing_account_invitation_does_not_replace_password(self):
         user = User.objects.create_user('existing', 'existing@example.org', 'original-password')

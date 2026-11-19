@@ -11,6 +11,7 @@ from inventory.models import InventoryLot, InventoryReservation
 from inventory.units import UnitConversionError, convert_quantity, units_compatible
 from notifications.models import Notification
 from pipelines.services import start_pipeline
+from samples.models import Sample
 
 from .models import (
     RequestResourceRequirement,
@@ -36,6 +37,26 @@ def validate_submission_form(schema, data):
         if expected and not isinstance(data[field], expected):
             raise ValidationError({"form_data": f"'{field}' must be {definition['type']}."})
     return data
+
+
+def portal_form_schema(schema):
+    if not isinstance(schema, dict):
+        raise ValidationError({"form_schema": "Use an object for the portal submission schema."})
+    properties = schema.get("properties", {})
+    required = schema.get("required", [])
+    if (
+        not isinstance(properties, dict)
+        or not isinstance(required, list)
+        or any(not isinstance(name, str) or not name for name in required)
+        or any(
+            not isinstance(definition, dict)
+            or ("enum" in definition and not isinstance(definition["enum"], list))
+            or ("type" in definition and not isinstance(definition["type"], str))
+            for definition in properties.values()
+        )
+    ):
+        raise ValidationError({"form_schema": "Use a properties object and a list of required field names."})
+    return properties, required
 
 
 def next_request_number():
@@ -95,9 +116,26 @@ def approve_request(*, workflow_request, actor, pipeline=None, reason="", group_
     pipeline = pipeline or workflow_request.assigned_pipeline or workflow_request.request_type.default_pipeline
     if not pipeline:
         raise ValidationError({"pipeline": "Assign a pipeline before approval."})
-    items = list(workflow_request.items.select_related("sample", "registry_record"))
+    items = list(workflow_request.items.select_related("sample__accession__receipt", "registry_record"))
     if not items:
         raise ValidationError({"items": "A request needs at least one item."})
+    submitted_items = [item for item in items if item.submission_reference]
+    if submitted_items:
+        samples = {
+            sample.pk: sample
+            for sample in Sample.objects.select_for_update(of=("self",))
+            .filter(pk__in=[item.sample_id for item in submitted_items])
+            .select_related("accession__receipt")
+            .order_by("pk")
+        }
+        for item in submitted_items:
+            item.sample = samples.get(item.sample_id)
+            if (
+                not item.submission_received_at
+                or item.sample.project_id != workflow_request.project_id
+                or item.sample.status in (Sample.STATUS_ARCHIVED, Sample.STATUS_CANCELLED)
+            ):
+                raise ValidationError({"items": "Receive all submitted samples in this project before approving the request."})
 
     runs = []
     reservations = []

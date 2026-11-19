@@ -21,10 +21,12 @@ def check(image):
     # Keep bind mounts under the checkout, shared with the local Docker daemon.
     with tempfile.TemporaryDirectory(prefix='.media-check-', dir=checkout) as folder:
         root = Path(folder)
-        for path in [root, root / 'media', root / 'media/assistant_artifacts', root / 'media/imports', root / 'html']:
+        for path in [root, root / 'media', root / 'media/assistant_artifacts', root / 'media/imports',
+                     root / 'media/workflow_requests', root / 'media/workflow_requests/test-request', root / 'html']:
             path.mkdir(exist_ok=True)
             path.chmod(0o755)
         fixtures = {'media/assistant_artifacts/source.csv': 'private-source\n',
+                    'media/workflow_requests/test-request/result.pdf': 'private-workflow-report\n',
                     'media/imports/assistant-1234567890abcdef1234567890abcdef.csv': 'private-legacy-source\n',
                     'media/imports/instrument.csv': 'ordinary-media\n',
                     'media/imports/assistant-calibration.csv': 'ordinary-assistant-named-media\n',
@@ -60,7 +62,10 @@ def check(image):
                 '/media/imports/assistant-1234567890abcdef1234567890abcdef.csv',
                 '/media/imports/%61ssistant-1234567890abcdef1234567890abcdef.csv',
                 '/media/imports//assistant-1234567890abcdef1234567890abcdef.csv',
-                '/media/public/%2e%2e/assistant_artifacts/source.csv']:
+                '/media/public/%2e%2e/assistant_artifacts/source.csv',
+                '/media/workflow_requests', '/media/workflow_requests/test-request/result.pdf',
+                '/media/workflow%5Frequests/test-request/result.pdf',
+                '/media/public/%2e%2e/workflow_requests/test-request/result.pdf']:
                 status, body = get(path)
                 assert status == 404 and 'private-' not in body, (path, status)
                 results[path] = status

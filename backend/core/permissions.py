@@ -42,6 +42,10 @@ def is_viewer(user):
     return has_role(user, "viewer")
 
 
+def is_requester_only(user):
+    return bool(user and not user.is_superuser and has_role(user, "requester"))
+
+
 def is_qc_reviewer(user):
     return is_admin(user) or has_role(user, "qc_reviewer")
 

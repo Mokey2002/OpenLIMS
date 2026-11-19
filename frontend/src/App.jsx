@@ -52,6 +52,7 @@ const Traceability = lazyPage(() => import("./pages/Traceability"));
 const Registry = lazyPage(() => import("./pages/Registry"));
 const NotebookPage = lazyPage(() => import("./pages/Notebook"));
 const WorkflowRequests = lazyPage(() => import("./pages/WorkflowRequests"));
+const RequesterPortal = lazyPage(() => import("./pages/RequesterPortal"));
 
 function RouteFallback() {
   return <div className="py-5 text-center text-muted">Loading…</div>;
@@ -62,6 +63,7 @@ const router = createBrowserRouter(createRoutesFromElements(
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/set-password" element={<SetPassword />} />
+          <Route path="/requester/:requestId?" element={<RequesterPortal />} />
           <Route path="/" element={<Layout />}>
             <Route index element={<MyWork />} />
             <Route path="me" element={<MyProfile />} />

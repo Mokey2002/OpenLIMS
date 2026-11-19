@@ -27,6 +27,7 @@ from .models import (
     WorkflowRunGroup,
 )
 from .permissions import user_can_operate_request, user_can_submit, workflow_requests_for_user
+from .files import report_download
 from .serializers import (
     AssayRequestTypeSerializer,
     RequestResourceRequirementSerializer,
@@ -77,7 +78,7 @@ class WorkflowRequestViewSet(viewsets.ModelViewSet):
             workflow_requests_for_user(self.request.user)
             .select_related("request_type", "project", "requester", "assigned_pipeline", "approved_by")
             .prefetch_related(
-                "items__sample", "items__registry_record", "items__pipeline_run__steps__work_item__results",
+                "items__sample__accession__receipt", "items__registry_record", "items__pipeline_run__steps__work_item__results",
                 "messages__author", "reports", "run_groups__items", "run_groups__pipeline_runs",
             )
         )
@@ -136,9 +137,13 @@ class WorkflowRequestViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         raise ValidationError({"detail": "Workflow requests are retained for audit history."})
 
+    def _locked_request(self):
+        return WorkflowRequest.objects.select_for_update().get(pk=self.get_object().pk)
+
+    @transaction.atomic
     @action(detail=True, methods=["post"])
     def triage(self, request, pk=None):
-        workflow_request = self.get_object()
+        workflow_request = self._locked_request()
         if not user_can_operate_request(request.user, workflow_request):
             raise PermissionDenied("You cannot triage this request.")
         if workflow_request.status != WorkflowRequest.STATUS_SUBMITTED:
@@ -169,9 +174,10 @@ class WorkflowRequestViewSet(viewsets.ModelViewSet):
         )
         return Response({"request": self.get_serializer(workflow_request).data, "reservation_count": len(reservations), "pipeline_runs": [str(run.public_id) for run in runs]})
 
+    @transaction.atomic
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
-        workflow_request = self.get_object()
+        workflow_request = self._locked_request()
         if not is_admin(request.user):
             raise PermissionDenied("Only a director can reject workflow requests.")
         if workflow_request.status not in {WorkflowRequest.STATUS_SUBMITTED, WorkflowRequest.STATUS_TRIAGE}:
@@ -188,9 +194,10 @@ class WorkflowRequestViewSet(viewsets.ModelViewSet):
         record_audit_event(entity=workflow_request, action="WORKFLOW_REQUEST_REJECTED", actor=request.user, reason=reason, after={"status": workflow_request.status})
         return Response(self.get_serializer(workflow_request).data)
 
+    @transaction.atomic
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
-        workflow_request = self.get_object()
+        workflow_request = self._locked_request()
         if not (is_admin(request.user) or workflow_request.requester_id == request.user.pk):
             raise PermissionDenied("Only the requester or a director can cancel this request.")
         if workflow_request.status not in {WorkflowRequest.STATUS_DRAFT, WorkflowRequest.STATUS_SUBMITTED, WorkflowRequest.STATUS_TRIAGE}:
@@ -224,7 +231,7 @@ class WorkflowRequestItemViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = WorkflowRequestItemSerializer
 
     def get_queryset(self):
-        return WorkflowRequestItem.objects.filter(request__in=workflow_requests_for_user(self.request.user)).select_related("request", "sample", "registry_record", "pipeline_run").prefetch_related("pipeline_run__steps__work_item__results")
+        return WorkflowRequestItem.objects.filter(request__in=workflow_requests_for_user(self.request.user)).select_related("request", "sample__accession__receipt", "registry_record", "pipeline_run").prefetch_related("pipeline_run__steps__work_item__results")
 
 
 class WorkflowRequestMessageViewSet(viewsets.ModelViewSet):
@@ -270,8 +277,10 @@ class WorkflowRequestReportViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = WorkflowRequestReport.objects.filter(request__in=workflow_requests_for_user(self.request.user)).select_related("request", "uploaded_by", "approved_by")
-        if is_admin(self.request.user) or is_tech(self.request.user):
+        if is_admin(self.request.user):
             return queryset
+        if is_tech(self.request.user):
+            return queryset.filter(Q(approved=True) | Q(request__project__members=self.request.user)).distinct()
         return queryset.filter(approved=True)
 
     def perform_create(self, serializer):
@@ -281,14 +290,37 @@ class WorkflowRequestReportViewSet(viewsets.ModelViewSet):
         upload = serializer.validated_data["file"]
         serializer.save(uploaded_by=self.request.user, checksum_sha256=file_checksum(upload))
 
+    @action(detail=True, methods=["get"])
+    def download(self, request, pk=None):
+        return report_download(self.get_object())
+
+    @transaction.atomic
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
         if not is_admin(request.user):
             raise PermissionDenied("Only a director can approve reports.")
-        report = self.get_object()
+        report = WorkflowRequestReport.objects.select_for_update().select_related("request").get(pk=self.get_object().pk)
+        if report.approved:
+            return Response(self.get_serializer(report).data)
         report.approved = True
         report.approved_by = request.user
         report.approved_at = timezone.now()
         report.save(update_fields=["approved", "approved_by", "approved_at"])
-        Notification.objects.create(user=report.request.requester, title=f"Approved report for {report.request.request_number}", message=report.title, link=f"/workflow-requests?request={report.request.public_id}")
+        portal_submission = report.request.items.exclude(submission_reference="").exists()
+        notification_link = (
+            f"/requester/{report.request.public_id}" if portal_submission
+            else f"/workflow-requests?request={report.request.public_id}"
+        )
+        Notification.objects.create(
+            user=report.request.requester,
+            title=f"Approved report for {report.request.request_number}",
+            message=report.title,
+            link=notification_link,
+        )
+        record_audit_event(
+            entity=report.request,
+            action="WORKFLOW_REQUEST_REPORT_APPROVED",
+            actor=request.user,
+            details={"report_public_id": str(report.public_id)},
+        )
         return Response(self.get_serializer(report).data)

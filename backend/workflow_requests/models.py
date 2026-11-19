@@ -29,6 +29,7 @@ class AssayRequestType(PublicIDModel):
     default_priority = models.CharField(max_length=16, default="NORMAL")
     sla_hours = models.PositiveIntegerField(default=120)
     active = models.BooleanField(default=True)
+    portal_enabled = models.BooleanField(default=False)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -150,12 +151,15 @@ class WorkflowRequest(PublicIDModel):
 
 
 class WorkflowRequestItem(PublicIDModel):
+    SUBMISSION_BARCODE_PREFIX = "OLR-"
+
     request = models.ForeignKey(WorkflowRequest, on_delete=models.CASCADE, related_name="items")
     sample = models.ForeignKey("samples.Sample", on_delete=models.PROTECT, null=True, blank=True, related_name="workflow_request_items")
     registry_record = models.ForeignKey("registry.RegistryRecord", on_delete=models.PROTECT, null=True, blank=True, related_name="workflow_request_items")
     study_public_id = models.UUIDField(null=True, blank=True)
     pipeline_run = models.ForeignKey("pipelines.PipelineRun", on_delete=models.PROTECT, null=True, blank=True, related_name="workflow_request_items")
     notes = models.TextField(blank=True)
+    submission_reference = models.CharField(max_length=64, blank=True)
     status = models.CharField(max_length=20, default="PENDING")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -169,12 +173,23 @@ class WorkflowRequestItem(PublicIDModel):
 
     def clean(self):
         super().clean()
-        if not any([self.sample_id, self.registry_record_id, self.study_public_id]):
-            raise ValidationError("A request item must link a sample, registry record, or study.")
+        if not any([self.sample_id, self.registry_record_id, self.study_public_id, self.submission_reference]):
+            raise ValidationError("A request item must link a sample, registry record, study, or pending submission.")
         if self.sample_id and self.sample.project_id != self.request.project_id:
             raise ValidationError({"sample": "The sample belongs to another project."})
         if self.registry_record_id and self.registry_record.project_id not in {None, self.request.project_id}:
             raise ValidationError({"registry_record": "The registry record belongs to another project."})
+
+    @property
+    def submission_barcode(self):
+        return f"{self.SUBMISSION_BARCODE_PREFIX}{self.public_id.hex}" if self.submission_reference else None
+
+    @property
+    def submission_received_at(self):
+        if not self.submission_reference or not self.sample_id:
+            return None
+        accession = getattr(self.sample, "accession", None)
+        return accession.receipt.occurred_at if accession else None
 
 
 class WorkflowRunGroup(PublicIDModel):

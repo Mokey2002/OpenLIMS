@@ -59,7 +59,7 @@ export default function ReceiveSample() {
     await run(async () => {
       try {
         const result = await apiPost("/api/samples/accession-register/", {
-          barcode: selected.barcode, project: Number(project), sample_type: sampleType, form_values: values,
+          barcode: selected.barcode, project: Number(receivingProject), sample_type: sampleType, form_values: values,
         });
         setSelected(result); setScannedCode(result.barcode);
       } catch (e) { feedback.reject(e); }
@@ -79,6 +79,9 @@ export default function ReceiveSample() {
   const writable = canWrite(me) && (!selected?.sample || selected.sample.can_modify !== false);
   const terminal = ["ARCHIVED", "CANCELLED"].includes(selected?.sample?.status);
   const schema = forms.find(f => f.code === sampleType.trim().toUpperCase());
+  const submission = selected?.submission;
+  const receivingProject = submission ? String(submission.project) : project;
+  const canRegister = Boolean(receivingProject) && projects.some(row => String(row.id) === receivingProject);
   return <div className="mx-auto" style={{ maxWidth: 1000 }} data-testid="receive-sample-page">
     <h1>{t("Receive sample", "Recibir muestra")}</h1>
     <p className="text-muted">{t("Scan a tube with a USB keyboard scanner and press Enter, or type its barcode. Each tube is registered once; physical receipt and label confirmation are separate recorded steps.", "Escanea un tubo con un lector USB de teclado y pulsa Intro, o escribe su código. Cada tubo se registra una vez; la recepción física y la confirmación de etiqueta se registran por separado.")}</p>
@@ -95,12 +98,16 @@ export default function ReceiveSample() {
           <Button type="submit" disabled={!scan.trim()}>{busy ? t("Working…", "Procesando…") : t("Look up barcode", "Buscar código")}</Button>
         </Form>
       </Card.Body></Card>
+      {submission && <Alert variant="info">
+        <Link to={`/workflow-requests?request=${submission.request_public_id}`}>{submission.request_number}</Link>
+        {" · "}{submission.reference}{" · "}{submission.project_name}
+      </Alert>}
       {selected?.kind === "new" && <Card className="app-card mb-4"><Card.Body>
         <h2 className="h4">{t("1. Register new sample", "1. Registrar nueva muestra")}</h2>
         {!writable ? <Alert variant="info">{t("Ask an administrator or technician to register this tube. Your account is read-only.", "Pide a un administrador o técnico que registre el tubo. Tu cuenta es de lectura.")}</Alert> :
           <FeedbackForm feedback={feedback} onSubmit={register}>
             <FormField name="barcode" label={t("Barcode / sample ID", "Código / identificador de muestra")} hint={t("Up to 64 printable ASCII characters. The barcode becomes the unique sample ID.", "Hasta 64 caracteres ASCII imprimibles. El código será el identificador único de la muestra.")}><Form.Control value={selected.barcode} readOnly required maxLength={64} /></FormField>
-            <Row><Col md={6}><FormField name="project" label={t("Receiving project", "Proyecto receptor")}><Form.Select required value={project} onChange={e => setProject(e.target.value)}>
+            <Row><Col md={6}><FormField name="project" label={t("Receiving project", "Proyecto receptor")}><Form.Select required disabled={Boolean(submission)} value={receivingProject} onChange={e => setProject(e.target.value)}>
               <option value="">{t("Choose a project", "Elige un proyecto")}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
             </Form.Select></FormField></Col>
             <Col md={6}><FormField name="sample_type" label={t("Sample type", "Tipo de muestra")}><Form.Select required value={sampleType} onChange={e => { setSampleType(e.target.value); setValues({}); }}>
@@ -110,7 +117,8 @@ export default function ReceiveSample() {
             </Col></Row>
             <SampleFormFields fields={schema?.fields || []} values={values} onChange={setValues} />
             {!projects.length && <Alert variant="info">{t("No receiving projects are available. Open Projects or ask an administrator to add you as a member before registering a tube.", "No hay proyectos receptores disponibles. Abre Proyectos o pide a un administrador que te añada como miembro antes de registrar un tubo.")} <Link to="/projects">{t("Open projects", "Abrir proyectos")}</Link></Alert>}
-            <Button type="submit" disabled={!project || selected.barcode.length > 64}>{t("Register sample", "Registrar muestra")}</Button>
+            {submission && !canRegister && <Alert variant="info">{t("Join the submission’s project before registering this sample.", "Únete al proyecto de la solicitud antes de registrar la muestra.")}</Alert>}
+            <Button type="submit" disabled={!canRegister || selected.barcode.length > 64}>{t("Register sample", "Registrar muestra")}</Button>
           </FeedbackForm>}
       </Card.Body></Card>}
       {selected?.sample && <>

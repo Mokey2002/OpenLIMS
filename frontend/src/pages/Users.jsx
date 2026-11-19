@@ -483,6 +483,7 @@ export default function Users() {
                     <option value="tech">Lab Tech</option>
                     <option value="viewer">Viewer</option>
                     <option value="qc_reviewer">QC reviewer</option>
+                    <option value="requester">Requester (portal only)</option>
                   </Form.Select>
                 </FormField>
               </Col>
@@ -600,6 +601,7 @@ export default function Users() {
                             <option value="tech">Lab Tech</option>
                             <option value="viewer">Viewer</option>
                             <option value="qc_reviewer">QC reviewer</option>
+                            <option value="requester">Requester (portal only)</option>
                           </Form.Select>
                         ) : roles.length > 0 ? (
                           <div className="d-flex gap-1 flex-wrap">

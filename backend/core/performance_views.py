@@ -49,12 +49,16 @@ class SessionBootstrapView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    requester_access = True
 
     def get(self, request):
+        user = MeSerializer(request.user).data
+        if not user["is_superuser"] and "requester" in user["roles"]:
+            return Response({"user": user, "feature_flags": {}, "unread_notification_count": 0})
         settings_obj = SystemSettings.load()
         return Response(
             {
-                "user": MeSerializer(request.user).data,
+                "user": user,
                 "feature_flags": settings_obj.feature_flags,
                 "unread_notification_count": Notification.objects.filter(
                     user=request.user,

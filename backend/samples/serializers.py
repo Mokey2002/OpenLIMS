@@ -95,6 +95,17 @@ class SampleSerializer(serializers.ModelSerializer):
             return "GENERAL"
         return normalized
 
+    def validate_sample_id(self, value):
+        from workflow_requests.intake import SUBMISSION_BARCODE
+
+        if (
+            SUBMISSION_BARCODE.fullmatch(value)
+            and value != self.context.get("submission_barcode")
+            and (not self.instance or value != self.instance.sample_id)
+        ):
+            raise serializers.ValidationError("Scan this submission barcode in Receive sample to register it.")
+        return value
+
     def get_linked_project_summaries(self, obj):
         projects = getattr(obj, "_prefetched_objects_cache", {}).get("linked_projects")
         if projects is None:

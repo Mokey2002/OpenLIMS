@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, Row, Spinner, Table } from "react-bootstrap";
-import { apiGet, apiGetAll, apiPost, apiPostForm } from "../api";
+import { Link, useSearchParams } from "react-router-dom";
+import { apiDownload, apiGet, apiGetAll, apiPatch, apiPost, apiPostForm } from "../api";
 import { isAdmin, isTech } from "../authz";
 
 function badge(status) {
@@ -12,7 +13,28 @@ function PipelineDag({ pipeline }) {
   return <div className="d-flex flex-wrap gap-3 align-items-stretch">{pipeline.steps.map((step) => <Card className="soft-card" style={{ minWidth: 180 }} key={step.id}><Card.Body><Badge bg="dark">Step {step.position}</Badge><div className="fw-semibold mt-2">{step.display_name}</div><div className="feed-meta">After: {step.dependency_positions?.length ? step.dependency_positions.join(", ") : "start"}</div>{step.requires_qc && <Badge bg="warning" text="dark" className="mt-2">QC gate</Badge>}{step.optional && <Badge bg="secondary" className="mt-2 ms-1">Optional</Badge>}</Card.Body></Card>)}</div>;
 }
 
+function SubmissionSamples({ items, canOperate }) {
+  return <Card className="app-card"><Card.Body>
+    <h5 className="section-title">Submission samples</h5>
+    <ul className="list-unstyled mb-0">
+      {items.map(item => <li key={item.public_id} className="border-top py-2">
+        <div className="toolbar-row">
+          <div>
+            <strong>{item.submission_reference}</strong>
+            <div><code>{item.submission_barcode}</code></div>
+          </div>
+          {item.submission_received_at ? <Badge bg="success">Received</Badge>
+            : canOperate ? <Link to={`/receive-sample?barcode=${encodeURIComponent(item.submission_barcode)}`}>Receive sample</Link>
+              : <span className="text-muted">Awaiting receipt</span>}
+        </div>
+      </li>)}
+    </ul>
+  </Card.Body></Card>;
+}
+
 export default function WorkflowRequests() {
+  const [search] = useSearchParams();
+  const linkedRequest = search.get("request");
   const [me, setMe] = useState(null);
   const [requestTypes, setRequestTypes] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -27,10 +49,24 @@ export default function WorkflowRequests() {
   const [form, setForm] = useState({ request_type: "", project: "", title: "", priority: "NORMAL", form_data: "{}", sample_ids: [] });
   const [messageText, setMessageText] = useState("");
   const [reportFile, setReportFile] = useState(null);
-  const [attachments, setAttachments] = useState([]);
+  const [attachments, setAttachments] = useState({ requestId: null, rows: [] });
   const [attachmentFile, setAttachmentFile] = useState(null);
   const [typeForm, setTypeForm] = useState({ code: "SEQUENCING", name: "Sequencing request", description: "", form_schema: '{\n  "type": "object",\n  "required": ["read_length"],\n  "properties": {\n    "read_length": { "type": "integer" }\n  }\n}', default_pipeline: "", project: "", sla_hours: 120 });
   const [resourceForm, setResourceForm] = useState({ request_type: "", inventory_item: "", quantity: "1", unit: "reaction" });
+
+  async function loadAttachments(target) {
+    if (!target) return;
+    const rows = await apiGetAll(`/api/shared-attachments/?target_type=workflow_request&target_public_id=${target.public_id}`);
+    setAttachments({ requestId: target.id, rows });
+  }
+
+  async function selectRequest(target) {
+    setSelected(target);
+    setReportFile(null);
+    setAttachmentFile(null);
+    try { await loadAttachments(target); }
+    catch (requestError) { setError(requestError.message); }
+  }
 
   async function load(selectId = null) {
     setError("");
@@ -40,13 +76,11 @@ export default function WorkflowRequests() {
         apiGetAll("/api/projects/"), apiGetAll("/api/samples/"), apiGetAll("/api/pipeline-templates/"), apiGetAll("/api/inventory-items/"),
       ]);
       setMe(meData); setRequestTypes(typeRows); setRequests(requestRows); setProjects(projectRows); setSamples(sampleRows); setPipelines(pipelineRows); setInventoryItems(itemRows);
-      const target = requestRows.find((row) => String(row.id) === String(selectId || selected?.id)) || requestRows[0] || null;
+      const target = requestRows.find(row => String(row.id) === String(selectId || selected?.id))
+        || requestRows.find(row => row.public_id === linkedRequest)
+        || requestRows[0] || null;
       setSelected(target);
-      setAttachments(
-        target
-          ? await apiGetAll(`/api/shared-attachments/?target_type=workflow_request&target_public_id=${target.public_id}`)
-          : []
-      );
+      await loadAttachments(target);
     } catch (requestError) {
       setError(requestError.message || String(requestError));
     } finally {
@@ -100,9 +134,35 @@ export default function WorkflowRequests() {
     payload.append("request", selected.id);
     payload.append("title", reportFile.name);
     payload.append("file", reportFile);
-    await apiPostForm("/api/workflow-request-reports/", payload);
-    setReportFile(null);
-    await load(selected.id);
+    const form = event.currentTarget;
+    try {
+      await apiPostForm("/api/workflow-request-reports/", payload);
+      form.reset();
+      setReportFile(null);
+      setMessage("Report uploaded. A director can release it to the requester.");
+      await load(selected.id);
+    } catch (requestError) { setError(requestError.message); }
+  }
+
+  async function approveReport(report) {
+    try {
+      await apiPost(`/api/workflow-request-reports/${report.id}/approve/`, {});
+      setMessage("Report released to the requester.");
+      await load(selected.id);
+    } catch (requestError) { setError(requestError.message); }
+  }
+
+  async function downloadReport(report) {
+    try { await apiDownload(report.file, report.title); }
+    catch (requestError) { setError(requestError.message); }
+  }
+
+  async function togglePortalTest(type) {
+    try {
+      const updated = await apiPatch(`/api/assay-request-types/${type.id}/`, { portal_enabled: !type.portal_enabled });
+      setRequestTypes(current => current.map(row => row.id === updated.id ? updated : row));
+      setError("");
+    } catch (requestError) { setError(requestError.message); }
   }
 
   async function uploadAttachment(event) {
@@ -135,6 +195,9 @@ export default function WorkflowRequests() {
   const projectSamples = samples.filter((sample) => String(sample.project) === String(form.project));
   const selectedPipeline = pipelines.find((pipeline) => pipeline.id === selected?.assigned_pipeline);
   const canOperate = isAdmin(me) || isTech(me);
+  const submissions = selected?.items.filter(item => item.submission_reference) || [];
+  const heldForReceipt = submissions.some(item => !item.submission_received_at);
+  const selectedAttachments = attachments.requestId === selected?.id ? attachments.rows : [];
   const selectedType = useMemo(() => requestTypes.find((type) => String(type.id) === String(form.request_type)), [requestTypes, form.request_type]);
 
   if (loading) return <div className="d-flex gap-2 align-items-center"><Spinner size="sm" /><span>Loading workflow requests...</span></div>;
@@ -147,13 +210,31 @@ export default function WorkflowRequests() {
 
     {isAdmin(me) && <Card className="app-card mb-4"><Card.Body><h5 className="section-title">Director configuration</h5><Row className="g-4"><Col lg={7}><Form onSubmit={createType}><Row className="g-2"><Col md={3}><Form.Control required placeholder="Code" value={typeForm.code} onChange={(event) => setTypeForm({ ...typeForm, code: event.target.value })} /></Col><Col md={5}><Form.Control required placeholder="Name" value={typeForm.name} onChange={(event) => setTypeForm({ ...typeForm, name: event.target.value })} /></Col><Col md={4}><Form.Select value={typeForm.default_pipeline} onChange={(event) => setTypeForm({ ...typeForm, default_pipeline: event.target.value })}><option value="">Default pipeline</option>{pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.code}</option>)}</Form.Select></Col><Col md={4}><Form.Select value={typeForm.project} onChange={(event) => setTypeForm({ ...typeForm, project: event.target.value })}><option value="">All projects</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code}</option>)}</Form.Select></Col><Col md={2}><Form.Control type="number" min="1" value={typeForm.sla_hours} onChange={(event) => setTypeForm({ ...typeForm, sla_hours: event.target.value })} /></Col><Col md={6}><Form.Control value={typeForm.description} onChange={(event) => setTypeForm({ ...typeForm, description: event.target.value })} placeholder="Description" /></Col><Col xs={12}><Form.Control as="textarea" rows={5} value={typeForm.form_schema} onChange={(event) => setTypeForm({ ...typeForm, form_schema: event.target.value })} /></Col><Col xs={12}><Button type="submit">Create request type</Button></Col></Row></Form></Col><Col lg={5}><Form onSubmit={addRequirement}><Form.Select className="mb-2" required value={resourceForm.request_type} onChange={(event) => setResourceForm({ ...resourceForm, request_type: event.target.value })}><option value="">Request type</option>{requestTypes.map((type) => <option key={type.id} value={type.id}>{type.code}</option>)}</Form.Select><Form.Select className="mb-2" required value={resourceForm.inventory_item} onChange={(event) => { const item = inventoryItems.find((row) => String(row.id) === event.target.value); setResourceForm({ ...resourceForm, inventory_item: event.target.value, unit: item?.default_unit || "unit" }); }}><option value="">Required material</option>{inventoryItems.map((item) => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</Form.Select><Row className="g-2 mb-2"><Col><Form.Control type="number" min="0" step="any" value={resourceForm.quantity} onChange={(event) => setResourceForm({ ...resourceForm, quantity: event.target.value })} /></Col><Col><Form.Control value={resourceForm.unit} onChange={(event) => setResourceForm({ ...resourceForm, unit: event.target.value })} /></Col></Row><Button type="submit" variant="outline-dark">Add material requirement</Button></Form></Col></Row></Card.Body></Card>}
 
-    <Row className="g-4"><Col lg={4}><Card className="app-card"><Card.Body><h5 className="section-title">Requests</h5><div className="d-grid gap-2">{requests.map((request) => <Button key={request.id} variant={selected?.id === request.id ? "dark" : "outline-secondary"} className="text-start" onClick={() => setSelected(request)}><div>{request.request_number} · {request.title}</div><small>{request.project_code} · {request.priority} · {request.status}</small></Button>)}</div></Card.Body></Card></Col><Col lg={8}>{selected ? <div className="d-grid gap-4">
-      <Card className="app-card"><Card.Body><div className="toolbar-row"><div><h4 className="mb-1">{selected.request_number} — {selected.title}</h4><div className="feed-meta">Requested by {selected.requester_username} · due {selected.due_at ? new Date(selected.due_at).toLocaleString() : "not set"}</div></div><div className="inline-actions"><Badge bg={badge(selected.status)}>{selected.status}</Badge><Badge bg="secondary">{selected.priority}</Badge></div></div><div className="inline-actions mt-3">{canOperate && selected.status === "SUBMITTED" && <Button size="sm" variant="outline-warning" onClick={() => requestAction("triage", {})}>Start triage</Button>}{isAdmin(me) && ["SUBMITTED", "TRIAGE"].includes(selected.status) && <><Button size="sm" variant="success" onClick={() => requestAction("approve", { pipeline: selected.assigned_pipeline, reason: "Request and capacity approved" })}>Approve and reserve</Button><Button size="sm" variant="outline-danger" onClick={() => requestAction("reject", { reason: "Request rejected by director" })}>Reject</Button></>}{canOperate && ["APPROVED", "IN_PROGRESS"].includes(selected.status) && <Button size="sm" variant="outline-primary" onClick={() => requestAction("refresh_status")}>Refresh execution status</Button>}{selected.requester_username === me?.username && ["DRAFT", "SUBMITTED", "TRIAGE"].includes(selected.status) && <Button size="sm" variant="outline-secondary" onClick={() => requestAction("cancel", { reason: "Cancelled by requester" })}>Cancel request</Button>}</div></Card.Body></Card>
+    {isAdmin(me) && requestTypes.length > 0 && <Card className="app-card mb-4"><Card.Body>
+      <h5 className="section-title">Tests in the requester portal</h5>
+      <p className="text-muted">Publish active request types with a default pipeline. Requesters see tests available to their projects.</p>
+      <ul className="list-unstyled mb-0">
+        {requestTypes.map(type => <li key={type.id} className="toolbar-row border-top py-2">
+          <div>{type.code} · {type.name} <span className="text-muted">{type.project_code}</span></div>
+          <Form.Check type="switch" id={`portal-test-${type.id}`}
+            label={type.portal_enabled ? "Published to portal" : "Publish to portal"}
+            aria-label={`${type.name} — ${type.portal_enabled ? "Published to portal" : "Publish to portal"}`}
+            checked={Boolean(type.portal_enabled)}
+            disabled={!type.portal_enabled && (!type.active || !pipelines.find(pipeline => pipeline.id === type.default_pipeline)?.active)}
+            onChange={() => togglePortalTest(type)} />
+        </li>)}
+      </ul>
+    </Card.Body></Card>}
+
+    <Row className="g-4"><Col lg={4}><Card className="app-card"><Card.Body><h5 className="section-title">Requests</h5><div className="d-grid gap-2">{requests.map((request) => <Button key={request.id} variant={selected?.id === request.id ? "dark" : "outline-secondary"} className="text-start" onClick={() => selectRequest(request)}><div>{request.request_number} · {request.title}</div><small>{request.project_code} · {request.priority} · {request.status}</small></Button>)}</div></Card.Body></Card></Col><Col lg={8}>{selected ? <div className="d-grid gap-4">
+      <Card className="app-card"><Card.Body><div className="toolbar-row"><div><h4 className="mb-1">{selected.request_number} — {selected.title}</h4><div className="feed-meta">Requested by {selected.requester_username} · due {selected.due_at ? new Date(selected.due_at).toLocaleString() : "not set"}</div></div><div className="inline-actions"><Badge bg={badge(selected.status)}>{selected.status}</Badge><Badge bg="secondary">{selected.priority}</Badge></div></div><div className="inline-actions mt-3">{canOperate && selected.status === "SUBMITTED" && <Button size="sm" variant="outline-warning" onClick={() => requestAction("triage", {})}>Start triage</Button>}{isAdmin(me) && ["SUBMITTED", "TRIAGE"].includes(selected.status) && <><Button size="sm" variant="success" disabled={heldForReceipt} onClick={() => requestAction("approve", { pipeline: selected.assigned_pipeline, reason: "Request and capacity approved" })}>Approve and reserve</Button><Button size="sm" variant="outline-danger" onClick={() => requestAction("reject", { reason: "Request rejected by director" })}>Reject</Button></>}{canOperate && ["APPROVED", "IN_PROGRESS"].includes(selected.status) && <Button size="sm" variant="outline-primary" onClick={() => requestAction("refresh_status")}>Refresh execution status</Button>}{selected.requester_username === me?.username && ["DRAFT", "SUBMITTED", "TRIAGE"].includes(selected.status) && <Button size="sm" variant="outline-secondary" onClick={() => requestAction("cancel", { reason: "Cancelled by requester" })}>Cancel request</Button>}</div></Card.Body></Card>
+      {submissions.length > 0 && <SubmissionSamples items={submissions}
+        canOperate={canOperate && ["SUBMITTED", "TRIAGE"].includes(selected.status)} />}
       <Card className="app-card"><Card.Body><h5 className="section-title">Assigned dependency graph</h5><PipelineDag pipeline={selectedPipeline} /></Card.Body></Card>
-      <Card className="app-card"><Card.Body><h5 className="section-title">Samples, reservations, execution, results, and QC</h5>{selected.items.map((item) => <Card className="soft-card mb-3" key={item.public_id}><Card.Body><div className="toolbar-row"><strong>{item.sample_code || item.registry_id}</strong><Badge bg="secondary">{item.status}</Badge></div>{item.reservations.map((reservation) => <div className="feed-meta" key={reservation.public_id}>Reserved {reservation.quantity} {reservation.unit} from {reservation.lot_code} · {reservation.status}</div>)}{item.execution?.steps.map((step) => <div className="feed-item mt-2" key={step.position}><strong>{step.position}. {step.name}</strong> · {step.status}<div className="feed-meta">Work: {step.work_item_status || "not activated"} · QC: {step.qc_status || "—"}</div>{step.results.map((result) => <Badge bg="light" text="dark" className="me-1" key={result.key}>{result.key}: {String(result.value)} {result.unit}</Badge>)}</div>)}</Card.Body></Card>)}</Card.Body></Card>
+      <Card className="app-card"><Card.Body><h5 className="section-title">Samples, reservations, execution, results, and QC</h5>{selected.items.filter(item => !item.submission_reference || item.sample).map((item) => <Card className="soft-card mb-3" key={item.public_id}><Card.Body><div className="toolbar-row"><strong>{item.sample_code || item.registry_id}</strong><Badge bg="secondary">{item.status}</Badge></div>{item.reservations.map((reservation) => <div className="feed-meta" key={reservation.public_id}>Reserved {reservation.quantity} {reservation.unit} from {reservation.lot_code} · {reservation.status}</div>)}{item.execution?.steps.map((step) => <div className="feed-item mt-2" key={step.position}><strong>{step.position}. {step.name}</strong> · {step.status}<div className="feed-meta">Work: {step.work_item_status || "not activated"} · QC: {step.qc_status || "—"}</div>{step.results.map((result) => <Badge bg="light" text="dark" className="me-1" key={result.key}>{result.key}: {String(result.value)} {result.unit}</Badge>)}</div>)}</Card.Body></Card>)}</Card.Body></Card>
       <Card className="app-card"><Card.Body><h5 className="section-title">Requester-visible messages</h5><Form onSubmit={postMessage} className="mb-3"><Row className="g-2"><Col><Form.Control required value={messageText} onChange={(event) => setMessageText(event.target.value)} placeholder="Message the requester or laboratory" /></Col><Col xs="auto"><Button type="submit">Send</Button></Col></Row></Form>{selected.messages.map((row) => <div className="feed-item mb-2" key={row.public_id}><strong>{row.author_username}</strong><div>{row.body}</div><div className="feed-meta">{new Date(row.created_at).toLocaleString()}</div></div>)}</Card.Body></Card>
-      <Card className="app-card"><Card.Body><h5 className="section-title">Request attachments</h5><Form onSubmit={uploadAttachment} className="mb-3"><Row className="g-2"><Col><Form.Control type="file" onChange={(event) => setAttachmentFile(event.target.files?.[0] || null)} /></Col><Col xs="auto"><Button type="submit" disabled={!attachmentFile}>Upload attachment</Button></Col></Row></Form>{attachments.length === 0 ? <div className="empty-state">No request attachments.</div> : attachments.map((attachment) => <div className="feed-item mb-2" key={attachment.public_id}><a href={attachment.file}>{attachment.display_name || attachment.filename}</a><div className="feed-meta">{attachment.uploaded_by_username} · SHA-256 {attachment.sha256.slice(0, 12)}…</div></div>)}</Card.Body></Card>
-      <Card className="app-card"><Card.Body><h5 className="section-title">Approved reports</h5>{canOperate && <Form onSubmit={uploadReport} className="mb-3"><Row className="g-2"><Col><Form.Control type="file" onChange={(event) => setReportFile(event.target.files?.[0] || null)} /></Col><Col xs="auto"><Button type="submit" disabled={!reportFile}>Upload report</Button></Col></Row></Form>}<Table responsive className="app-table"><thead><tr><th>Report</th><th>Checksum</th><th>Status</th><th></th></tr></thead><tbody>{selected.reports.map((report) => <tr key={report.public_id}><td><a href={report.file}>{report.title}</a></td><td><code>{report.checksum_sha256.slice(0, 12)}…</code></td><td>{report.approved ? "Approved" : "Pending approval"}</td><td>{isAdmin(me) && !report.approved && <Button size="sm" onClick={async () => { await apiPost(`/api/workflow-request-reports/${report.id}/approve/`, {}); await load(selected.id); }}>Approve report</Button>}</td></tr>)}</tbody></Table></Card.Body></Card>
+      <Card className="app-card"><Card.Body><h5 className="section-title">Request attachments</h5><Form key={selected.id} onSubmit={uploadAttachment} className="mb-3"><Row className="g-2"><Col><Form.Control type="file" onChange={(event) => setAttachmentFile(event.target.files?.[0] || null)} /></Col><Col xs="auto"><Button type="submit" disabled={!attachmentFile}>Upload attachment</Button></Col></Row></Form>{selectedAttachments.length === 0 ? <div className="empty-state">No request attachments.</div> : selectedAttachments.map((attachment) => <div className="feed-item mb-2" key={attachment.public_id}><a href={attachment.file}>{attachment.display_name || attachment.filename}</a><div className="feed-meta">{attachment.uploaded_by_username} · SHA-256 {attachment.sha256.slice(0, 12)}…</div></div>)}</Card.Body></Card>
+      <Card className="app-card"><Card.Body><h5 className="section-title">Reports</h5>{canOperate && <Form key={selected.id} onSubmit={uploadReport} className="mb-3"><Row className="g-2"><Col><Form.Control type="file" onChange={(event) => setReportFile(event.target.files?.[0] || null)} /></Col><Col xs="auto"><Button type="submit" disabled={!reportFile}>Upload report</Button></Col></Row></Form>}<Table responsive className="app-table"><thead><tr><th>Report</th><th>Checksum</th><th>Status</th><th></th></tr></thead><tbody>{selected.reports.map((report) => <tr key={report.public_id}><td><Button size="sm" variant="link" className="p-0" onClick={() => downloadReport(report)}>{report.title}</Button></td><td><code>{report.checksum_sha256.slice(0, 12)}…</code></td><td>{report.approved ? "Released" : "Pending approval"}</td><td>{isAdmin(me) && !report.approved && <Button size="sm" onClick={() => approveReport(report)}>Release report</Button>}</td></tr>)}</tbody></Table></Card.Body></Card>
     </div> : <Card className="app-card"><Card.Body><div className="empty-state">Choose a request.</div></Card.Body></Card>}</Col></Row>
   </div>;
 }

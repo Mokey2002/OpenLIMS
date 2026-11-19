@@ -17,7 +17,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from events.models import Event
 from .authentication import enforce_csrf
-from .permissions import IsAdminOnly
+from .permissions import IsAdminOnly, is_requester_only
 from .user_safety import (
     LastAdministratorConflict, LastAdministratorError, last_administrator_id,
     lock_api_administrator, protect_api_update, protect_user_deletion, user_administration,
@@ -255,9 +255,17 @@ class UserAdminViewSet(ModelViewSet):
         user = serializer.save()
 
         from notifications.models import Notification
-        Notification.objects.create(user=user, title="Welcome to OpenLIMS / Bienvenido a OpenLIMS",
-                                    message="Start your first experiment with your lab's workflow. / Inicia tu primer experimento con el flujo de tu laboratorio.",
-                                    link="/getting-started")
+        portal_account = is_requester_only(user)
+        Notification.objects.create(
+            user=user,
+            title="Welcome to OpenLIMS / Bienvenido a OpenLIMS",
+            message=(
+                "Submit and track tests in the requester portal. / Envía y consulta pruebas en el portal de solicitudes."
+                if portal_account
+                else "Start your first experiment with your lab's workflow. / Inicia tu primer experimento con el flujo de tu laboratorio."
+            ),
+            link="/requester" if portal_account else "/getting-started",
+        )
 
         Event.objects.create(
             entity_type="User",

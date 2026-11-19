@@ -14,6 +14,10 @@ export function isViewer(me) {
   return hasRole(me, "viewer");
 }
 
+export function isRequesterOnly(me) {
+  return !me?.is_superuser && Boolean(hasRole(me, "requester"));
+}
+
 export function isQcReviewer(me) {
   return isAdmin(me) || hasRole(me, "qc_reviewer");
 }
