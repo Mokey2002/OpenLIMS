@@ -1,7 +1,10 @@
 from rest_framework import serializers
+from rest_framework.reverse import reverse
 
 from inventory.models import InventoryReservation
 
+from .permissions import user_can_operate_request
+from .services import portal_form_schema
 from .models import (
     AssayRequestType,
     RequestResourceRequirement,
@@ -36,10 +39,20 @@ class AssayRequestTypeSerializer(serializers.ModelSerializer):
         fields = [
             "id", "public_id", "code", "name", "description", "version", "form_schema",
             "default_pipeline", "default_pipeline_code", "project", "project_code",
-            "default_priority", "sla_hours", "active", "resource_requirements",
+            "default_priority", "sla_hours", "active", "portal_enabled", "resource_requirements",
             "created_by", "created_at", "updated_at",
         ]
         read_only_fields = ["id", "public_id", "default_pipeline_code", "project_code", "created_by", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        instance = self.instance
+        portal_enabled = attrs.get("portal_enabled", instance.portal_enabled if instance else False)
+        pipeline = attrs.get("default_pipeline", instance.default_pipeline if instance else None)
+        if portal_enabled and (not pipeline or not pipeline.active):
+            raise serializers.ValidationError({"default_pipeline": "Choose an active default pipeline before publishing this test."})
+        if portal_enabled:
+            portal_form_schema(attrs.get("form_schema", instance.form_schema if instance else {}))
+        return attrs
 
 
 class WorkflowRequestItemSerializer(serializers.ModelSerializer):
@@ -48,6 +61,7 @@ class WorkflowRequestItemSerializer(serializers.ModelSerializer):
     pipeline_run_public_id = serializers.UUIDField(source="pipeline_run.public_id", read_only=True)
     execution = serializers.SerializerMethodField()
     reservations = serializers.SerializerMethodField()
+    submission_received_at = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = WorkflowRequestItem
@@ -55,8 +69,12 @@ class WorkflowRequestItemSerializer(serializers.ModelSerializer):
             "id", "public_id", "request", "sample", "sample_code", "registry_record",
             "registry_id", "study_public_id", "pipeline_run", "pipeline_run_public_id",
             "notes", "status", "execution", "reservations", "created_at", "updated_at",
+            "submission_reference", "submission_barcode", "submission_received_at",
         ]
-        read_only_fields = ["id", "public_id", "pipeline_run", "pipeline_run_public_id", "execution", "reservations", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "public_id", "pipeline_run", "pipeline_run_public_id", "execution", "reservations",
+            "created_at", "updated_at", "submission_reference", "submission_barcode", "submission_received_at",
+        ]
 
     def get_execution(self, obj):
         if not obj.pipeline_run_id:
@@ -116,6 +134,15 @@ class WorkflowRequestReportSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "public_id", "checksum_sha256", "uploaded_by", "uploaded_by_username", "approved", "approved_by", "approved_by_username", "approved_at", "created_at"]
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["file"] = reverse(
+            "api-v1:workflow-request-report-download",
+            kwargs={"pk": instance.pk},
+            request=self.context.get("request"),
+        )
+        return data
+
 
 class WorkflowRunGroupSerializer(serializers.ModelSerializer):
     batch_code = serializers.CharField(source="batch.code", read_only=True)
@@ -171,10 +198,8 @@ class WorkflowRequestSerializer(serializers.ModelSerializer):
         return WorkflowRequestMessageSerializer(messages, many=True, context=self.context).data
 
     def get_reports(self, obj):
-        from core.permissions import is_admin, is_tech
-
         user = self.context.get("request").user if self.context.get("request") else None
         reports = obj.reports.all()
-        if not user or not (is_admin(user) or is_tech(user)):
+        if not user_can_operate_request(user, obj):
             reports = reports.filter(approved=True)
         return WorkflowRequestReportSerializer(reports, many=True, context=self.context).data

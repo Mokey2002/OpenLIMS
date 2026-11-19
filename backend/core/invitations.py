@@ -23,6 +23,7 @@ from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, Ou
 from events.models import Event
 from notifications.models import Notification
 from .authentication import enforce_csrf
+from .permissions import is_requester_only
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,16 @@ def send_invitation(user, actor):
     token = default_token_generator.make_token(user)
     # Fragments are not sent to the web server in requests or referrer headers.
     link = f'{origin}/set-password#uid={uid}&token={token}'
+    if is_requester_only(user):
+        next_step = (
+            f'After setting your password, sign in to the requester portal / '
+            f'Después de establecer tu contraseña, inicia sesión en el portal de solicitudes:\n{origin}/requester\n'
+        )
+    else:
+        next_step = (
+            'After signing in, open Getting started to begin your first lab workflow.\n'
+            'Después de iniciar sesión, abre Primeros pasos para comenzar el flujo de tu laboratorio.\n'
+        )
     body = (
         f'Welcome to OpenLIMS / Bienvenido a OpenLIMS\n\n'
         f'Username / Usuario: {user.username}\n\n'
@@ -55,8 +66,7 @@ def send_invitation(user, actor):
         f'Este enlace vence en {settings.PASSWORD_RESET_TIMEOUT // 3600} horas y solo puede usarse una vez.\n'
         'If you did not expect this invitation, contact your lab administrator.\n'
         'Si no esperabas esta invitación, contacta al administrador del laboratorio.\n'
-        '\nAfter signing in, open Getting started to begin your first lab workflow.\n'
-        'Después de iniciar sesión, abre Primeros pasos para comenzar el flujo de tu laboratorio.\n'
+        f'\n{next_step}'
     )
     try:
         sent = send_mail('OpenLIMS — Set your password / Establece tu contraseña', body,
@@ -122,7 +132,8 @@ class AcceptInvitationView(APIView):
             Event.objects.create(entity_type='User', entity_id=str(user.pk),
                                  action='USER_PASSWORD_SET', actor=user,
                                  payload={'user_id': user.pk})
+            portal_account = is_requester_only(user)
             Notification.objects.create(user=user, title='Password saved / Contraseña guardada',
                                         message='Your account password was set. Contact your administrator if this was not you. / Se guardó tu contraseña. Contacta al administrador si no fuiste tú.',
-                                        link='/getting-started')
-        return Response({'detail': 'Password saved. You can now sign in.'})
+                                        link='/requester' if portal_account else '/getting-started')
+        return Response({'detail': 'Password saved. You can now sign in.', 'requester_portal': portal_account})

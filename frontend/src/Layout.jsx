@@ -11,10 +11,10 @@ import {
   Spinner,
   Tooltip,
 } from "react-bootstrap";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { apiGet, logout as apiLogout } from "./api";
 import { clearLegacyTokens } from "./auth";
-import { isAdmin, isTech } from "./authz";
+import { isAdmin, isRequesterOnly, isTech } from "./authz";
 import { OPENLIMS_VERSION } from "./version";
 import { useLanguage } from "./i18n";
 import RouteContent from "./components/RouteContent";
@@ -117,6 +117,7 @@ export default function Layout() {
           }
           setMe(fallbackUser);
           setIdentityLoadError("");
+          if (isRequesterOnly(fallbackUser)) return;
 
           try {
             const fallbackFlags = await apiGet("/api/v1/feature-flags/");
@@ -159,6 +160,11 @@ export default function Layout() {
     setGlobalSearch("");
   }
 
+  if (loadingMe) return <div className="py-5 text-center" role="status">
+    <Spinner size="sm" className="me-2" />Loading…
+  </div>;
+  if (isRequesterOnly(me)) return <Navigate to="/requester" replace />;
+
   return (
     <>
       <Navbar bg="dark" variant="dark" expand="xl" sticky="top" className="mb-4 shadow-sm">
@@ -182,6 +188,7 @@ export default function Layout() {
                 <DropdownItemLink to="/receive-sample">Receive sample</DropdownItemLink>
                 <DropdownItemLink to="/samples">Samples</DropdownItemLink>
                 <DropdownItemLink to="/workflow-requests">Workflow Requests</DropdownItemLink>
+                <DropdownItemLink to="/requester">Requester portal</DropdownItemLink>
                 <DropdownItemLink to="/inventory">Inventory</DropdownItemLink>
                 {(userIsAdmin || userIsTech) && <DropdownItemLink to="/imports" hint="Preview and import CSV or Excel results.">Imports</DropdownItemLink>}
                 {featureFlags.registry && <DropdownItemLink to="/registry">Biological Registry</DropdownItemLink>}
@@ -232,12 +239,10 @@ export default function Layout() {
             </Form>
 
             <div className="d-flex align-items-center gap-3">
-              {loadingMe ? <Spinner animation="border" size="sm" variant="light" /> : (
-                <div className="text-light small text-xl-end">
-                  <div className="fw-semibold" data-testid="current-user-name">{me?.username || identityLoadError || "Account unavailable"}</div>
-                  <div className="text-light opacity-75" data-testid="current-user-roles">{me?.roles?.length ? me.roles.join(", ") : (identityLoadError ? "Unable to load role" : "No assigned role")}</div>
-                </div>
-              )}
+              <div className="text-light small text-xl-end">
+                <div className="fw-semibold" data-testid="current-user-name">{me?.username || identityLoadError || "Account unavailable"}</div>
+                <div className="text-light opacity-75" data-testid="current-user-roles">{me?.roles?.length ? me.roles.join(", ") : (identityLoadError ? "Unable to load role" : "No assigned role")}</div>
+              </div>
               <Button as={NavLink} to="/me" variant="outline-light" size="sm">My profile</Button>
               <Button as={NavLink} to="/getting-started" variant="outline-light" size="sm">Getting started</Button>
               <Button variant="outline-light" size="sm" onClick={logout}>Logout</Button>

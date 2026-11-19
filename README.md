@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.9-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.10-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -52,9 +52,21 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.10** | Submit test requests, print submission labels, track receipt and status, and download released reports. | [Requester portal](#requester-portal) |
 | **v0.78.9** | Explain navigation links, instrument QC actions, and import identifiers in context. | [Navigation and import guidance](#navigation-and-import-guidance) |
 | **v0.78.8** | Run Snakemake quality checks on completed instrument exports and download a report. | [Instrument export QC](#instrument-export-qc) |
-| **v0.78.7** | Stage CSV or Excel results, skip identical external rows, review conflicts, and retry corrected rows. | [Instrument result imports](#instrument-result-imports) |
+
+### v0.78.10 — Requester portal
+
+#### Requester portal
+
+1. A director creates or invites a **Requester (portal only)** in **Admin → Users**, then adds the account to the appropriate project. Internal lab users can open **Receive → Requester portal** with their existing accounts.
+2. In **Workflow Requests → Tests in the requester portal**, publish an active request type with an active default pipeline. Use a project-specific request type when the test should only be listed for that project.
+3. Requesters sign in at `/requester`, choose a project and test, and enter one reference per sample. Download the PDF, print at actual size on 100 × 50 mm labels, and attach each label to the matching sample.
+4. Staff scan the submission label in **Receive sample**, register the tube in the preselected project, and record physical receipt. Once the submitted samples are received, a director can approve the request and start the test workflow.
+5. Requesters track receipt and request status in **My test requests**. Staff upload reports in **Workflow Requests**, and a director releases each report. The requester can then download it from the portal.
+
+Portal accounts are assigned to projects by the lab and can access their own requests in those projects. On upgrade, apply migration `workflow_requests.0002_requester_portal` and rebuild both the API and web images. The web image blocks direct media URLs for workflow request reports.
 
 ### v0.78.9 — Navigation and import guidance
 
@@ -100,7 +112,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.9`.
+**Current development version:** `v0.78.10`.
 
 ## Personal favorites
 
@@ -126,6 +138,7 @@ directly from the repository owner.
 | **Notebook** | Scoped collaborative notebooks, block experiments, immutable revisions, comments, assignments, review/sign-off, locking, cloning, and provenance-rich PDF export |
 | **Inventory** | Site-to-well location hierarchy, generic barcodes, plate maps, reagent/lot metadata, immutable scan ledger, reservations, alerts, and cycle-count reconciliation |
 | **Workflow Requests** | Configurable internal assay forms, triage/approval, SLAs, pipeline assignment, resource reservation, batch/plate grouping, requester messages, execution status, and approved reports |
+| **Requester portal** | Project-scoped test requests, printable sample labels, receipt and status tracking, and released report downloads |
 | **Imports** | Instrument CSV imports, flexible header detection, direct instrument/API ingestion |
 | **Migration** | Legacy CSV migration profiles, reusable field mappings, preview/dry-run, queued imports, row review |
 | **External IDs** | Preserve legacy sample IDs and aliases from older systems |
@@ -993,7 +1006,7 @@ The health check verifies:
 ## 🔖 Frontend Version Footer
 
 The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.78.9**.
+`frontend/src/version.js` file. The current application version is **v0.78.10**.
 
 Footer source:
 

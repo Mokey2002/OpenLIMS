@@ -22,19 +22,19 @@ from core.search_views import GlobalSearchView
 
 
 def private_assistant_media(request):
-    """Assistant evidence and source files require authenticated download views."""
+    """Private artifacts and reports are only served through download views."""
     return HttpResponseNotFound()
 
 
 LEGACY_ASSISTANT_SOURCE = r"imports/assistant-[0-9a-f]{32}(?:_[A-Za-z0-9]{7})?\.(?:csv|tsv|txt)"
+PRIVATE_MEDIA_PATH = re.compile(r"(?:assistant_artifacts|workflow_requests)(?:/.*)?|" + LEGACY_ASSISTANT_SOURCE)
 
 
 def serve_public_media(request, path, document_root=None):
     # Django's static view normalizes separators and dot components before
     # opening a file. Apply the same normalization before the privacy check.
     normalized = posixpath.normpath(path).lstrip('/')
-    if (normalized == 'assistant_artifacts' or normalized.startswith('assistant_artifacts/')
-            or re.fullmatch(LEGACY_ASSISTANT_SOURCE, normalized)):
+    if PRIVATE_MEDIA_PATH.fullmatch(normalized):
         return private_assistant_media(request)
     return serve(request, path, document_root=document_root)
 
@@ -102,7 +102,7 @@ urlpatterns = [
 
 urlpatterns += [re_path(
     r"^" + re.escape(urlsplit(settings.MEDIA_URL).path.lstrip("/"))
-    + r"(?:assistant_artifacts(?:/.*)?|" + LEGACY_ASSISTANT_SOURCE + r")$",
+    + r"(?:" + PRIVATE_MEDIA_PATH.pattern + r")$",
     private_assistant_media,
     name="private-assistant-media",
 )]

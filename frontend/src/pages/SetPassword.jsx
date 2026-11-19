@@ -13,6 +13,7 @@ export default function SetPassword() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [portalAccount, setPortalAccount] = useState(false);
   async function submit(event) {
     event.preventDefault();
     setError("");
@@ -22,10 +23,11 @@ export default function SetPassword() {
     }
     setBusy(true);
     try {
-      await apiPost("/api/auth/set-password/", { ...credentials, password });
+      const response = await apiPost("/api/auth/set-password/", { ...credentials, password });
       window.history.replaceState(null, "", window.location.pathname);
       setPassword("");
       setConfirmation("");
+      setPortalAccount(Boolean(response.requester_portal));
       setDone(true);
     } catch {
       setError("Unable to set password. Use a strong password or request a new link.");
@@ -36,7 +38,9 @@ export default function SetPassword() {
   return <main className="container py-5" style={{ maxWidth: 520 }}>
     <Card><Card.Body>
       <h1 className="h4">Set your OpenLIMS password</h1>
-      {done ? <Alert variant="success">Password saved. Sign in, then open Getting started to begin your lab’s workflow.</Alert> :
+      {done ? <Alert variant="success">{portalAccount
+        ? "Password saved. Sign in to the requester portal."
+        : "Password saved. Sign in, then open Getting started to begin your lab’s workflow."}</Alert> :
         !credentials.uid || !credentials.token ? <Alert variant="warning">Invalid password link. Request a new link or contact your administrator.</Alert> :
         <Form onSubmit={submit}>
           <p>Choose your own password to access your account.</p>
@@ -52,7 +56,7 @@ export default function SetPassword() {
           <Button type="submit" disabled={busy}>{busy ? "Saving..." : "Save password"}</Button>
         </Form>}
       <Link to="/forgot-password" className="d-block mt-3">Request a new password reset link</Link>
-      <Link to="/login" className="d-block mt-3">Sign in</Link>
+      <Link to={portalAccount ? "/login?return_to=%2Frequester" : "/login"} className="d-block mt-3">Sign in</Link>
     </Card.Body></Card>
   </main>;
 }

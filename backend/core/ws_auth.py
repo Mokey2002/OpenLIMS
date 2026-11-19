@@ -8,6 +8,7 @@ from django.contrib.auth.models import AnonymousUser
 from rest_framework_simplejwt.exceptions import TokenError, AuthenticationFailed
 from rest_framework_simplejwt.tokens import AccessToken
 from .authentication import CookieJWTAuthentication
+from .permissions import is_requester_only
 
 
 User = get_user_model()
@@ -22,7 +23,8 @@ def get_user_from_token(token):
         if not user_id:
             return AnonymousUser()
 
-        return CookieJWTAuthentication().get_user(access_token)
+        user = CookieJWTAuthentication().get_user(access_token)
+        return AnonymousUser() if is_requester_only(user) else user
 
     except (TokenError, AuthenticationFailed, User.DoesNotExist):
         return AnonymousUser()

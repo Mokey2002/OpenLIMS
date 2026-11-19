@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, Row } from "react-bootstrap";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { login } from "../api";
+import { isRequesterOnly } from "../authz";
 
 const demoAccounts = [
   {
@@ -53,6 +54,9 @@ const demoAccounts = [
 
 export default function Login() {
   const nav = useNavigate();
+  const [search] = useSearchParams();
+  const returnTo = search.get("return_to") || "";
+  const portalReturn = /^\/requester(?:\/[a-f0-9-]{36})?\/?$/.test(returnTo) ? returnTo : "";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -67,8 +71,8 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await login(username, password);
-      nav("/");
+      const session = await login(username, password);
+      nav(portalReturn || (isRequesterOnly(session?.user) ? "/requester" : "/"), { replace: true });
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -121,22 +125,18 @@ export default function Login() {
 
           <h1 className="fw-bold mb-2">OpenLIMS</h1>
 
-          <p className="text-muted mb-0">
-            For the best demo experience, start with the Director account first.
-          </p>
+          <p className="text-muted mb-0">{portalReturn ? "Requester portal" : "For the best demo experience, start with the Director account first."}</p>
         </div>
 
         {err && <Alert variant="danger">{err}</Alert>}
 
-        <Row className="g-4 align-items-stretch">
+        <Row className="g-4 align-items-stretch justify-content-center">
           <Col lg={5}>
             <Card className="app-card border-0 shadow-sm h-100">
               <Card.Body className="p-4">
                 <h4 className="mb-2">Sign in</h4>
 
-                <p className="text-muted">
-                  Use your OpenLIMS account or try one of the demo roles.
-                </p>
+                <p className="text-muted">{portalReturn ? "Use the account provided by your lab." : "Use your OpenLIMS account or try one of the demo roles."}</p>
 
                 <Form onSubmit={submit}>
                   <Form.Group className="mb-3" controlId="openlims-username">
@@ -170,13 +170,13 @@ export default function Login() {
                   </Button>
                 </Form>
                 <Link to="/forgot-password" className="d-block mt-3">Forgot password?</Link>
-
+                {!portalReturn && <Link to="/login?return_to=%2Frequester" className="d-block mt-2">Requester portal sign-in</Link>}
 
               </Card.Body>
             </Card>
           </Col>
 
-          <Col lg={7}>
+          {!portalReturn && <Col lg={7}>
             <Card className="app-card border-0 shadow-sm h-100">
               <Card.Body className="p-4">
                 <div className="mb-3">
@@ -232,7 +232,7 @@ export default function Login() {
                 </Alert>
               </Card.Body>
             </Card>
-          </Col>
+          </Col>}
         </Row>
       </div>
     </div>

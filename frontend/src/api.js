@@ -27,9 +27,10 @@ function withPageSize(path, pageSize) {
 
 function redirectToLogin() {
   clearLegacyTokens();
-  if (window.location.pathname !== "/login") {
-    window.location.href = "/login";
-  }
+  const path = window.location.pathname;
+  if (path === "/login") return;
+  const inPortal = path === "/requester" || path.startsWith("/requester/");
+  window.location.href = inPortal ? `/login?return_to=${encodeURIComponent(path)}` : "/login";
 }
 
 async function ensureCSRFToken() {

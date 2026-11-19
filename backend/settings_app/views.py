@@ -18,6 +18,7 @@ from .serializers import (
 
 class PublicUISettingsView(APIView):
     permission_classes = [AllowAny]
+    requester_access = True
 
     @extend_schema(responses=PublicUISettingsSerializer)
     def get(self, request):

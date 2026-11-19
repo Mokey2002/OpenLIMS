@@ -2,6 +2,7 @@ from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.test import TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -13,6 +14,19 @@ User = get_user_model()
 
 @override_settings(CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
 class OffboardingSocketTests(TransactionTestCase):
+    def test_portal_only_users_cannot_subscribe_to_lab_job_updates(self):
+        user = User.objects.create_user("portal-requester")
+        group, _ = Group.objects.get_or_create(name="requester")
+        user.groups.add(group)
+        access = str(RefreshToken.for_user(user).access_token)
+
+        async def connect():
+            communicator = WebsocketCommunicator(application, f"/ws/jobs/?token={access}")
+            self.assertEqual(await communicator.connect(), (False, 4001))
+            await communicator.disconnect()
+
+        async_to_sync(connect)()
+
     def test_offboarding_closes_open_sockets_and_old_tokens_cannot_reconnect_after_reactivation(self):
         admin = User.objects.create_superuser("socket-director", password=None)
         target = User.objects.create_user("socket-departure", password=None)
