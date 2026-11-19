@@ -160,9 +160,6 @@ export default function Layout() {
     setGlobalSearch("");
   }
 
-  if (loadingMe) return <div className="py-5 text-center" role="status">
-    <Spinner size="sm" className="me-2" />Loading…
-  </div>;
   if (isRequesterOnly(me)) return <Navigate to="/requester" replace />;
 
   return (
@@ -222,7 +219,7 @@ export default function Layout() {
                 {userIsAdmin && <DropdownItemLink to="/sops">SOP Management</DropdownItemLink>}
               </NavDropdown>
 
-              <FavoritesMenu userId={me?.id} currentPath={location.pathname} routes={routeLabels} canVisit={canVisitFavorite} />
+              <FavoritesMenu userId={loadingMe ? undefined : me?.id} currentPath={location.pathname} routes={routeLabels} canVisit={canVisitFavorite} />
 
               {userIsAdmin && (
                 <NavDropdown title="Admin" id="admin-nav">
@@ -239,10 +236,10 @@ export default function Layout() {
             </Form>
 
             <div className="d-flex align-items-center gap-3">
-              <div className="text-light small text-xl-end">
+              {!loadingMe && <div className="text-light small text-xl-end">
                 <div className="fw-semibold" data-testid="current-user-name">{me?.username || identityLoadError || "Account unavailable"}</div>
                 <div className="text-light opacity-75" data-testid="current-user-roles">{me?.roles?.length ? me.roles.join(", ") : (identityLoadError ? "Unable to load role" : "No assigned role")}</div>
-              </div>
+              </div>}
               <Button as={NavLink} to="/me" variant="outline-light" size="sm">My profile</Button>
               <Button as={NavLink} to="/getting-started" variant="outline-light" size="sm">Getting started</Button>
               <Button variant="outline-light" size="sm" onClick={logout}>Logout</Button>
@@ -252,9 +249,13 @@ export default function Layout() {
       </Navbar>
 
       <AssistantPageProvider>
-        <Container fluid className="px-4 pb-5"><RouteContent /></Container>
+        <Container fluid className="px-4 pb-5">
+          {loadingMe ? <div className="py-5 text-center" role="status">
+            <Spinner size="sm" className="me-2" />Loading…
+          </div> : <RouteContent />}
+        </Container>
         <footer className="app-footer-version">OpenLIMS {OPENLIMS_VERSION}</footer>
-        {assistantHelperEnabled && <AssistantWidget />}
+        {!loadingMe && assistantHelperEnabled && <AssistantWidget />}
       </AssistantPageProvider>
     </>
   );
