@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.11.** Los pies de página de la pantalla de acceso, el área
+**Versión actual: v0.78.12.** Los pies de página de la pantalla de acceso, el área
 del laboratorio y el portal usan `OPENLIMS_VERSION` del archivo generado
 `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
@@ -34,9 +34,30 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.12** | Cuenta de ejemplo para solicitantes, etiquetas imprimibles e informe publicado. | [Demostración para solicitantes](#demostración-para-solicitantes) |
 | **v0.78.11** | Acceso para solicitantes en la misma página que las cuentas del laboratorio y de demostración. | [Acceso para solicitantes](#acceso-para-solicitantes) |
 | **v0.78.10** | Solicitudes de pruebas, etiquetas de envío, seguimiento y descarga de informes publicados. | [Portal de solicitudes](#portal-de-solicitudes) |
-| **v0.78.9** | Ayuda contextual para la navegación, las acciones de control de calidad y los identificadores de importación. | [Ayuda de navegación e importación](#ayuda-de-navegación-e-importación) |
+
+## v0.78.12 — Demo del portal de solicitudes
+
+### Demostración para solicitantes
+
+Ejecuta `seed_demo` en una instalación de evaluación. Se crean la cuenta
+`demo-requester` y el proyecto **Requester Portal Demo**. Configura la contraseña
+con `changepassword demo-requester` en el contenedor de la API. En una instalación
+desde código con el archivo de Compose de producción, usa estos comandos.
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py seed_demo
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py changepassword demo-requester
+```
+
+En `/login`, selecciona **Abrir demostración para solicitantes** e introduce la
+contraseña configurada. Abre **SUB-DEMO-0001** para imprimir la etiqueta de envío
+o **SUB-DEMO-0002** para ver la recepción y descargar el PDF publicado. El
+personal puede abrir las mismas solicitudes desde **Recibir → Solicitudes de
+workflow**. La prueba **Sample condition check** está publicada para probar
+envíos nuevos.
 
 ## v0.78.11 — Inicio de sesión para solicitantes
 
@@ -98,7 +119,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.11`
+**Versión de desarrollo actual:** `v0.78.12`
 
 **Demo:** http://35.164.28.250
 

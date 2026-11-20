@@ -150,6 +150,17 @@ test("requester sign-in returns internal users to the request in their bookmark"
   await expect(page.getByRole("heading", { name: summary.title })).toBeVisible();
 });
 
+test("the shared login offers the demo requester account", async ({ page }) => {
+  await page.route("**/api/v1/ui-settings/", route => reply(route, { ui_language: "en" }));
+
+  await page.goto("/login");
+  await page.getByRole("link", { name: "Open requester demo" }).click();
+  const form = page.getByRole("form", { name: "Requester sign-in" });
+  await expect(form.getByLabel("Username")).toHaveValue("demo-requester");
+  await expect(form.getByLabel("Password")).toHaveValue("");
+  await expect(form.getByRole("button", { name: "Continue to requester portal" })).toBeDisabled();
+});
+
 test("staff opens a submission barcode against its receiving project", async ({ page, context, baseURL }) => {
   const user = { id: 2, username: "receiver", roles: ["tech"] };
   const item = {

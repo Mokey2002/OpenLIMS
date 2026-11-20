@@ -5,6 +5,8 @@ import { login } from "../api";
 import { isRequesterOnly } from "../authz";
 import { OPENLIMS_VERSION } from "../version";
 
+const demoRequesterUsername = "demo-requester";
+
 const demoAccounts = [
   {
     label: "Director",
@@ -53,8 +55,8 @@ const demoAccounts = [
   },
 ];
 
-function SignInCard({ id, title, hint, buttonLabel, recoveryLabel, pending, submitting, error, onSignIn }) {
-  const [username, setUsername] = useState("");
+function SignInCard({ id, title, hint, buttonLabel, recoveryLabel, pending, submitting, error, onSignIn, initialUsername = "" }) {
+  const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState("");
 
   function submit(event) {
@@ -94,6 +96,7 @@ export default function Login() {
   const [search] = useSearchParams();
   const returnTo = search.get("return_to") || "";
   const portalReturn = /^\/requester(?:\/[a-f0-9-]{36})?\/?$/.test(returnTo) ? returnTo : "";
+  const useDemoRequester = portalReturn === "/requester" && search.get("demo") === "requester";
 
   const signingIn = useRef(false);
   const [pending, setPending] = useState(null);
@@ -162,11 +165,15 @@ export default function Login() {
               onSignIn={credentials => signIn({ section: "lab", ...credentials })}
             />}
             <SignInCard
+              key={useDemoRequester ? demoRequesterUsername : "requester"}
               id="openlims-requester"
               title="Requester sign-in"
-              hint="Use the account provided by your lab to submit and track test requests."
+              hint={useDemoRequester
+                ? "Enter the password set for this demo account."
+                : "Use the account provided by your lab to submit and track test requests."}
               buttonLabel="Continue to requester portal"
               recoveryLabel="Reset requester password"
+              initialUsername={useDemoRequester ? demoRequesterUsername : ""}
               pending={pending !== null}
               submitting={pending === "requester"}
               error={error?.section === "requester" ? error.message : null}
@@ -227,6 +234,24 @@ export default function Login() {
                       </div>
                     </div>
                   ))}
+                  <div className="soft-card">
+                    <div className="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                      <div>
+                        <div className="d-flex align-items-center gap-2 mb-1">
+                          <strong>Requester demo</strong>
+                          <Badge bg="light" text="dark">Requester portal</Badge>
+                        </div>
+                        <div className="text-muted small mb-2">
+                          Try example test requests, printable labels, and a released report.
+                        </div>
+                        <code className="small">{demoRequesterUsername}</code>
+                      </div>
+                      <Link to="/login?return_to=%2Frequester&demo=requester"
+                        className="btn btn-outline-secondary btn-sm">
+                        Open requester demo
+                      </Link>
+                    </div>
+                  </div>
                 </div>
 
                 <Alert variant="info" className="mt-4 mb-0">

@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.11-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.12-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -52,9 +52,30 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.12** | Seed a requester account, printable submission labels, and a released example report. | [Requester demo](#requester-demo) |
 | **v0.78.11** | Give requesters a dedicated sign-in section on the shared login page. | [Requester sign-in](#requester-sign-in) |
 | **v0.78.10** | Submit test requests, print submission labels, track receipt and status, and download released reports. | [Requester portal](#requester-portal) |
-| **v0.78.9** | Explain navigation links, instrument QC actions, and import identifiers in context. | [Navigation and import guidance](#navigation-and-import-guidance) |
+
+### v0.78.12 — Requester demo
+
+#### Requester demo
+
+Run the full `seed_demo` command on an evaluation installation. It adds the
+`demo-requester` account and the **Requester Portal Demo** project. Set the
+account's password with Django's `changepassword demo-requester` command in the
+API container. Use these commands for a production-style source installation.
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py seed_demo
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py changepassword demo-requester
+```
+
+On `/login`, choose **Open requester demo** in **Demo Accounts** to fill in the
+username, then enter the password you set. In the portal, open **SUB-DEMO-0001**
+to print a submission label or **SUB-DEMO-0002** to see recorded receipt and
+download the released PDF. Lab staff can find the same requests under
+**Receive → Workflow Requests**. The project also includes a published **Sample
+condition check** test for trying a new submission.
 
 ### v0.78.11 — Requester sign-in
 
@@ -118,7 +139,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.11`.
+**Current development version:** `v0.78.12`.
 
 ## Personal favorites
 
@@ -1013,7 +1034,7 @@ The health check verifies:
 
 The sign-in page, lab workspace, and requester portal use `OPENLIMS_VERSION` in
 their footers. It comes from the generated `frontend/src/version.js` file.
-The current application version is **v0.78.11**.
+The current application version is **v0.78.12**.
 
 Footer source:
 
