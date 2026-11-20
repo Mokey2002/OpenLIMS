@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, Row } from "react-bootstrap";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { login } from "../api";
 import { isRequesterOnly } from "../authz";
+import { OPENLIMS_VERSION } from "../version";
 
 const demoAccounts = [
   {
@@ -52,62 +53,83 @@ const demoAccounts = [
   },
 ];
 
+function SignInCard({ id, title, hint, buttonLabel, recoveryLabel, pending, submitting, error, onSignIn }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+
+  function submit(event) {
+    event.preventDefault();
+    if (username && password) onSignIn({ username, password });
+  }
+
+  return (
+    <Card className="app-card border-0 shadow-sm">
+      <Card.Body className="p-4">
+        <h2 id={`${id}-title`} className="h4 mb-2">{title}</h2>
+        <p className="text-muted">{hint}</p>
+        <Form aria-labelledby={`${id}-title`} aria-busy={submitting} onSubmit={submit}>
+          {error && <Alert variant="danger" role="alert">{error}</Alert>}
+          <Form.Group className="mb-3" controlId={`${id}-username`}>
+            <Form.Label>Username</Form.Label>
+            <Form.Control name="username" autoComplete="username" required
+              value={username} onChange={event => setUsername(event.target.value)} />
+          </Form.Group>
+          <Form.Group className="mb-3" controlId={`${id}-password`}>
+            <Form.Label>Password</Form.Label>
+            <Form.Control type="password" name="password" autoComplete="current-password" required
+              value={password} onChange={event => setPassword(event.target.value)} />
+          </Form.Group>
+          <Button type="submit" variant="dark" className="w-100" disabled={pending || !username || !password}>
+            {submitting ? "Signing in..." : buttonLabel}
+          </Button>
+        </Form>
+        <Link to="/forgot-password" className="d-block mt-3">{recoveryLabel}</Link>
+      </Card.Body>
+    </Card>
+  );
+}
+
 export default function Login() {
   const nav = useNavigate();
   const [search] = useSearchParams();
   const returnTo = search.get("return_to") || "";
   const portalReturn = /^\/requester(?:\/[a-f0-9-]{36})?\/?$/.test(returnTo) ? returnTo : "";
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [demoLoading, setDemoLoading] = useState("");
+  const signingIn = useRef(false);
+  const [pending, setPending] = useState(null);
+  const [error, setError] = useState(null);
 
-  async function submit(e) {
-    e.preventDefault();
-
-    setErr("");
-    setLoading(true);
+  async function signIn({ section, username, password, destination, demoLabel }) {
+    if (signingIn.current) return;
+    signingIn.current = true;
+    setPending(demoLabel ?? section);
+    setError(null);
 
     try {
       const session = await login(username, password);
-      nav(portalReturn || (isRequesterOnly(session?.user) ? "/requester" : "/"), { replace: true });
-    } catch (e) {
-      setErr(e.message || String(e));
+      nav(destination ?? (isRequesterOnly(session?.user) ? "/requester" : "/"), { replace: true });
+    } catch (failure) {
+      setError({
+        section,
+        message: demoLabel
+          ? `Demo login failed for ${demoLabel}. Make sure seed_demo has been run.`
+          : failure.message || String(failure),
+      });
     } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loginAsDemo(account) {
-    setErr("");
-    setDemoLoading(account.label);
-
-    try {
-      await login(account.username, account.password);
-      nav("/");
-    } catch {
-      setErr(
-        `Demo login failed for ${account.label}. Make sure seed_demo has been run.`
-      );
-    } finally {
-      setDemoLoading("");
+      signingIn.current = false;
+      setPending(null);
     }
   }
 
   return (
     <div
-      className="d-flex align-items-center justify-content-center"
-      style={{
-        minHeight: "100vh",
-        background:
-          "linear-gradient(135deg, #f8fafc 0%, #eef2ff 45%, #f8fafc 100%)",
-      }}
+      className="min-vh-100 d-flex flex-column"
+      style={{ background: "linear-gradient(135deg, #f8fafc 0%, #eef2ff 45%, #f8fafc 100%)" }}
     >
-      <div className="w-100 px-3" style={{ maxWidth: "1120px" }}>
+      <main className="w-100 px-3 py-4 mx-auto my-auto" style={{ maxWidth: "1120px" }}>
         <div className="text-center mb-4">
           <div
+            aria-hidden="true"
             className="mx-auto mb-3 d-flex align-items-center justify-content-center"
             style={{
               width: "64px",
@@ -124,69 +146,49 @@ export default function Login() {
           </div>
 
           <h1 className="fw-bold mb-2">OpenLIMS</h1>
-
-          <p className="text-muted mb-0">{portalReturn ? "Requester portal" : "For the best demo experience, start with the Director account first."}</p>
         </div>
 
-        {err && <Alert variant="danger">{err}</Alert>}
-
-        <Row className="g-4 align-items-stretch justify-content-center">
-          <Col lg={5}>
-            <Card className="app-card border-0 shadow-sm h-100">
-              <Card.Body className="p-4">
-                <h4 className="mb-2">Sign in</h4>
-
-                <p className="text-muted">{portalReturn ? "Use the account provided by your lab." : "Use your OpenLIMS account or try one of the demo roles."}</p>
-
-                <Form onSubmit={submit}>
-                  <Form.Group className="mb-3" controlId="openlims-username">
-                    <Form.Label>Username</Form.Label>
-                    <Form.Control
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="Enter username"
-                      autoComplete="username"
-                    />
-                  </Form.Group>
-
-                  <Form.Group className="mb-4" controlId="openlims-password">
-                    <Form.Label>Password</Form.Label>
-                    <Form.Control
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter password"
-                      autoComplete="current-password"
-                    />
-                  </Form.Group>
-
-                  <Button
-                    type="submit"
-                    variant="dark"
-                    className="w-100"
-                    disabled={loading || !username || !password}
-                  >
-                    {loading ? "Signing in..." : "Sign in"}
-                  </Button>
-                </Form>
-                <Link to="/forgot-password" className="d-block mt-3">Forgot password?</Link>
-                {!portalReturn && <Link to="/login?return_to=%2Frequester" className="d-block mt-2">Requester portal sign-in</Link>}
-
-              </Card.Body>
-            </Card>
+        <Row className="g-4 justify-content-center">
+          <Col lg={5} className="d-flex flex-column gap-4">
+            {!portalReturn && <SignInCard
+              id="openlims"
+              title="Lab sign-in"
+              hint="Use your OpenLIMS account or try one of the demo roles."
+              buttonLabel="Sign in"
+              recoveryLabel="Forgot password?"
+              pending={pending !== null}
+              submitting={pending === "lab"}
+              error={error?.section === "lab" ? error.message : null}
+              onSignIn={credentials => signIn({ section: "lab", ...credentials })}
+            />}
+            <SignInCard
+              id="openlims-requester"
+              title="Requester sign-in"
+              hint="Use the account provided by your lab to submit and track test requests."
+              buttonLabel="Continue to requester portal"
+              recoveryLabel="Reset requester password"
+              pending={pending !== null}
+              submitting={pending === "requester"}
+              error={error?.section === "requester" ? error.message : null}
+              onSignIn={credentials => signIn({
+                section: "requester", ...credentials, destination: portalReturn || "/requester",
+              })}
+            />
+            {portalReturn && <Link className="text-center" to="/login">All sign-in options</Link>}
           </Col>
 
           {!portalReturn && <Col lg={7}>
-            <Card className="app-card border-0 shadow-sm h-100">
+            <Card className="app-card border-0 shadow-sm">
               <Card.Body className="p-4">
                 <div className="mb-3">
-                  <h4 className="mb-1">Demo Accounts</h4>
+                  <h2 className="h4 mb-1">Demo Accounts</h2>
                   <p className="text-muted mb-0">
                     Start with Director for the full demo, then compare with Tech
                     and Viewer permissions.
                   </p>
                 </div>
 
+                {error?.section === "demo" && <Alert variant="danger" role="alert">{error.message}</Alert>}
                 <div className="d-grid gap-3">
                   {demoAccounts.map((account) => (
                     <div key={account.label} className="soft-card">
@@ -213,10 +215,12 @@ export default function Login() {
                         <Button
                           variant={account.variant}
                           size="sm"
-                          onClick={() => loginAsDemo(account)}
-                          disabled={Boolean(demoLoading)}
+                          onClick={() => signIn({
+                            section: "demo", username: account.username, password: account.password, demoLabel: account.label,
+                          })}
+                          disabled={pending !== null}
                         >
-                          {demoLoading === account.label
+                          {pending === account.label
                             ? "Signing in..."
                             : `Login as ${account.label}`}
                         </Button>
@@ -234,7 +238,8 @@ export default function Login() {
             </Card>
           </Col>}
         </Row>
-      </div>
+      </main>
+      <footer className="app-footer-version">OpenLIMS {OPENLIMS_VERSION}</footer>
     </div>
   );
 }

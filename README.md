@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.10-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.11-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -52,9 +52,15 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.11** | Give requesters a dedicated sign-in section on the shared login page. | [Requester sign-in](#requester-sign-in) |
 | **v0.78.10** | Submit test requests, print submission labels, track receipt and status, and download released reports. | [Requester portal](#requester-portal) |
 | **v0.78.9** | Explain navigation links, instrument QC actions, and import identifiers in context. | [Navigation and import guidance](#navigation-and-import-guidance) |
-| **v0.78.8** | Run Snakemake quality checks on completed instrument exports and download a report. | [Instrument export QC](#instrument-export-qc) |
+
+### v0.78.11 — Requester sign-in
+
+#### Requester sign-in
+
+Open `/login` and use **Requester sign-in** with the account provided by your lab. **Continue to requester portal** opens your test requests. If you arrived through a bookmarked request, sign-in returns you to that request. **Lab sign-in** and **Demo Accounts** are on the same page.
 
 ### v0.78.10 — Requester portal
 
@@ -62,7 +68,7 @@ For updates, select a newer **published** release; selecting the installed versi
 
 1. A director creates or invites a **Requester (portal only)** in **Admin → Users**, then adds the account to the appropriate project. Internal lab users can open **Receive → Requester portal** with their existing accounts.
 2. In **Workflow Requests → Tests in the requester portal**, publish an active request type with an active default pipeline. Use a project-specific request type when the test should only be listed for that project.
-3. Requesters sign in at `/requester`, choose a project and test, and enter one reference per sample. Download the PDF, print at actual size on 100 × 50 mm labels, and attach each label to the matching sample.
+3. Requesters use **Requester sign-in** on `/login` or open `/requester` directly. In the portal, choose a project and test, and enter one reference per sample. Download the PDF, print at actual size on 100 × 50 mm labels, and attach each label to the matching sample.
 4. Staff scan the submission label in **Receive sample**, register the tube in the preselected project, and record physical receipt. Once the submitted samples are received, a director can approve the request and start the test workflow.
 5. Requesters track receipt and request status in **My test requests**. Staff upload reports in **Workflow Requests**, and a director releases each report. The requester can then download it from the portal.
 
@@ -112,7 +118,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.10`.
+**Current development version:** `v0.78.11`.
 
 ## Personal favorites
 
@@ -1005,8 +1011,9 @@ The health check verifies:
 
 ## 🔖 Frontend Version Footer
 
-The frontend footer uses `OPENLIMS_VERSION` from the generated
-`frontend/src/version.js` file. The current application version is **v0.78.10**.
+The sign-in page, lab workspace, and requester portal use `OPENLIMS_VERSION` in
+their footers. It comes from the generated `frontend/src/version.js` file.
+The current application version is **v0.78.11**.
 
 Footer source:
 
