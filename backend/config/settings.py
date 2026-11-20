@@ -34,6 +34,13 @@ CELERY_TASK_EAGER_PROPAGATES = CELERY_TASK_ALWAYS_EAGER
 CELERY_TASK_ROUTES = {
     "imports.tasks.run_instrument_qc": {"queue": "instrument_qc"},
 }
+KAFKA_BOOTSTRAP_SERVERS = env("OPENLIMS_KAFKA_BOOTSTRAP_SERVERS", default="").strip()
+KAFKA_TOPIC = env("OPENLIMS_KAFKA_TOPIC", default="openlims.requester.v1")
+KAFKA_SECURITY_PROTOCOL = env("OPENLIMS_KAFKA_SECURITY_PROTOCOL", default="PLAINTEXT").strip().upper()
+KAFKA_SASL_MECHANISM = env("OPENLIMS_KAFKA_SASL_MECHANISM", default="PLAIN")
+KAFKA_SASL_USERNAME = env("OPENLIMS_KAFKA_SASL_USERNAME", default="")
+KAFKA_SASL_PASSWORD = env("OPENLIMS_KAFKA_SASL_PASSWORD", default="")
+
 SNAKEMAKE_EXECUTABLE = env(
     "OPENLIMS_SNAKEMAKE_EXECUTABLE", default="/opt/openlims/snakemake/bin/snakemake",
 )

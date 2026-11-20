@@ -11,6 +11,7 @@ from rest_framework.response import Response
 
 from core.audit import record_audit_event
 from core.permissions import is_admin, is_tech
+from events.kafka import queue_requester_event
 from notifications.models import Notification
 from pipelines.models import PipelineTemplate
 from registry.services import registry_records_for_user
@@ -323,4 +324,9 @@ class WorkflowRequestReportViewSet(viewsets.ModelViewSet):
             actor=request.user,
             details={"report_public_id": str(report.public_id)},
         )
+        if portal_submission:
+            queue_requester_event(
+                "report.released", report.request, occurred_at=report.approved_at,
+                data={"report_id": str(report.public_id)},
+            )
         return Response(self.get_serializer(report).data)

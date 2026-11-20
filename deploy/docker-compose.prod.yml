@@ -70,6 +70,15 @@ services:
       redis:
         condition: service_healthy
 
+  kafka-scheduler:
+    build:
+      context: ../backend
+    restart: unless-stopped
+    profiles: ["kafka"]
+    env_file: [.env]
+    command: celery -A config.kafka_scheduler beat -l info --pidfile= --schedule=/tmp/openlims-kafka-schedule
+    depends_on: [worker]
+
   qc-worker:
     build:
       context: ../backend

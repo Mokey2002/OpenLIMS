@@ -56,6 +56,14 @@ services:
       timeout: 15s
       start_period: 30s
       retries: 5
+  kafka-scheduler:
+    image: ${OPENLIMS_BACKEND_IMAGE:?}
+    restart: unless-stopped
+    profiles: ["kafka"]
+    env_file: [".env"]
+    command: celery -A config.kafka_scheduler beat -l info --pidfile= --schedule=/tmp/openlims-kafka-schedule
+    depends_on:
+      worker: {condition: service_healthy}
   qc-worker:
     image: ${OPENLIMS_BACKEND_IMAGE:?}
     restart: unless-stopped
