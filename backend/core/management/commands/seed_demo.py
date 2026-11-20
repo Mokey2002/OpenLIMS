@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from django.contrib.contenttypes.models import ContentType
 
+from core.demo_requester import DEMO_REQUESTER_USERNAME, seed_requester_demo
 from inventory.models import (
     Container,
     InventoryItem,
@@ -3236,6 +3237,7 @@ class Command(BaseCommand):
             registry_demo=registry_demo,
             pipeline_run=pipeline_run,
         )
+        seed_requester_demo(director=director, technician=peter)
 
         # --------------------------------------------------
         # Demo project feed posts
@@ -3450,6 +3452,7 @@ class Command(BaseCommand):
         self.stdout.write("  maria (tech + QC reviewer)")
         self.stdout.write("  michael (tech)")
         self.stdout.write("  viewer (read only)")
+        self.stdout.write(f"  {DEMO_REQUESTER_USERNAME} (requester portal)")
         self.stdout.write("")
         self.stdout.write("Comprehensive demos:")
         self.stdout.write("  Registry + immutable Molecular Biology revisions")
@@ -3461,6 +3464,7 @@ class Command(BaseCommand):
         self.stdout.write("  Notebook templates, autosave revisions, comments, review, lock, and PDF provenance")
         self.stdout.write("  Inventory v2 barcodes, hierarchy, ledger, plate placement, alerts, and cycle counts")
         self.stdout.write("  Workflow requests, triage, approval, material reservation, execution, and reports")
+        self.stdout.write("  Requester portal submissions, printable labels, sample receipt, and a released report")
         self.stdout.write(
             "seed_demo does not create, require, display, or change passwords. "
             "Existing credentials are preserved; new demo identities are non-login accounts."

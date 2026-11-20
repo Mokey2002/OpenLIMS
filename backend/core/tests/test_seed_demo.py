@@ -1,12 +1,21 @@
 import secrets
 import tempfile
+from hashlib import sha256
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.test import TestCase, override_settings
+from rest_framework.test import APIClient
 
+from core.demo_requester import (
+    COMPLETED_REQUEST_NUMBER,
+    DEMO_PROJECT_CODE,
+    DEMO_REQUESTER_USERNAME,
+    PENDING_REQUEST_NUMBER,
+    TEST_CODE,
+)
 from core.management.commands.seed_demo import (
     create_demo_user,
     link_demo_import_job,
@@ -134,6 +143,53 @@ class DemoInstrumentProvenanceTests(TestCase):
 
 
 class DemoSeedProvenanceIntegrationTests(TestCase):
+    def assert_requester_demo(self, requester, report):
+        self.assertEqual(list(requester.groups.values_list("name", flat=True)), ["requester"])
+        self.assertEqual(list(requester.projects.values_list("code", flat=True)), [DEMO_PROJECT_CODE])
+        self.assertFalse(requester.is_staff)
+        self.assertFalse(requester.is_superuser)
+
+        portal = APIClient()
+        portal.force_authenticate(requester)
+        endpoint = "/api/v1/requester-requests/"
+        catalog = portal.get(f"{endpoint}catalog/")
+        self.assertEqual(catalog.status_code, 200)
+        self.assertIn(TEST_CODE, [test["code"] for test in catalog.data["tests"]])
+        requests = portal.get(endpoint)
+        self.assertEqual(requests.status_code, 200)
+        self.assertEqual(
+            {row["request_number"]: row["status"] for row in requests.data["results"]},
+            {PENDING_REQUEST_NUMBER: "SUBMITTED", COMPLETED_REQUEST_NUMBER: "COMPLETED"},
+        )
+
+        pending = requester.workflow_requests.get(request_number=PENDING_REQUEST_NUMBER)
+        labels = portal.get(f"{endpoint}{pending.public_id}/labels/")
+        self.assertEqual(labels.status_code, 200)
+        self.assertTrue(labels.content.startswith(b"%PDF-"))
+        self.assertIsNone(pending.items.get().sample_id)
+
+        completed = report.request
+        detail = portal.get(f"{endpoint}{completed.public_id}/")
+        self.assertIsNotNone(detail.data["samples"][0]["received_at"])
+        self.assertEqual(detail.data["reports"][0]["public_id"], str(report.public_id))
+        self.assertEqual(completed.reports.count(), 1)
+        download = portal.get(f"{endpoint}{completed.public_id}/reports/{report.public_id}/download/")
+        self.assertEqual(download.status_code, 200)
+        pdf = b"".join(download.streaming_content)
+        self.assertTrue(pdf.startswith(b"%PDF-"))
+        self.assertIn(b"/Type /Page", pdf)
+        self.assertEqual(sha256(pdf).hexdigest(), report.checksum_sha256)
+
+        lab = APIClient()
+        lab.force_authenticate(User.objects.get(username="peter"))
+        lookup = lab.get("/api/v1/samples/accession-lookup/", {"barcode": pending.items.get().submission_barcode})
+        self.assertEqual(lookup.status_code, 200)
+        self.assertEqual(lookup.data["submission"]["request_number"], PENDING_REQUEST_NUMBER)
+        lab_request = lab.get(f"/api/v1/workflow-requests/{completed.pk}/")
+        self.assertEqual(lab_request.status_code, 200)
+        self.assertEqual(lab_request.data["items"][0]["execution"]["status"], PipelineRun.STATUS_COMPLETED)
+        self.assertTrue(lab_request.data["reports"][0]["approved"])
+
     @patch("core.management.commands.seed_demo.build_blast_database")
     def test_seed_demo_populates_all_instrument_provenance_and_can_rerun(
         self,
@@ -156,6 +212,12 @@ class DemoSeedProvenanceIntegrationTests(TestCase):
         with tempfile.TemporaryDirectory() as media_root:
             with override_settings(MEDIA_ROOT=media_root):
                 call_command("seed_demo")
+                demo_requester = User.objects.get(username=DEMO_REQUESTER_USERNAME)
+                self.assertFalse(demo_requester.has_usable_password())
+                password = secrets.token_urlsafe(24)
+                demo_requester.set_password(password)
+                demo_requester.save(update_fields=["password"])
+                demo_report = WorkflowRequestReport.objects.get(request__request_number=COMPLETED_REQUEST_NUMBER)
                 first_work_item_count = WorkItem.objects.count()
                 first_capability_counts = {
                     "links": EntityLink.objects.count(),
@@ -171,6 +233,9 @@ class DemoSeedProvenanceIntegrationTests(TestCase):
                     "workflow_requests": WorkflowRequest.objects.count(),
                 }
                 call_command("seed_demo")
+                demo_requester.refresh_from_db()
+                self.assertTrue(demo_requester.check_password(password))
+                self.assert_requester_demo(demo_requester, demo_report)
 
         self.assertEqual(WorkItem.objects.count(), first_work_item_count)
         self.assertEqual(
@@ -231,7 +296,7 @@ class DemoSeedProvenanceIntegrationTests(TestCase):
             )
 
         self.assertEqual(SampleRelationship.objects.count(), 4)
-        self.assertEqual(SampleCustodyEvent.objects.count(), 4)
+        self.assertEqual(SampleCustodyEvent.objects.count(), 5)
         self.assertEqual(InventoryReservation.objects.filter(lot__lot_code="GIBSON-DEMO-2026-01").count(), 3)
 
         template = PipelineTemplate.objects.get(code="DEMO_PARALLEL_PLASMID")
