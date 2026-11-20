@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.12.** Los pies de página de la pantalla de acceso, el área
+**Versión actual: v0.78.13.** Los pies de página de la pantalla de acceso, el área
 del laboratorio y el portal usan `OPENLIMS_VERSION` del archivo generado
 `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
@@ -34,9 +34,60 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.13** | Eventos de envío, recepción y publicación de informes en Apache Kafka. | [Eventos de solicitudes en Kafka](#eventos-de-solicitudes-en-kafka) |
 | **v0.78.12** | Cuenta de ejemplo para solicitantes, etiquetas imprimibles e informe publicado. | [Demostración para solicitantes](#demostración-para-solicitantes) |
 | **v0.78.11** | Acceso para solicitantes en la misma página que las cuentas del laboratorio y de demostración. | [Acceso para solicitantes](#acceso-para-solicitantes) |
-| **v0.78.10** | Solicitudes de pruebas, etiquetas de envío, seguimiento y descarga de informes publicados. | [Portal de solicitudes](#portal-de-solicitudes) |
+
+## v0.78.13 — Integración con Kafka
+
+### Eventos de solicitudes en Kafka
+
+OpenLIMS puede publicar la actividad del portal de solicitudes en Apache Kafka.
+Crea el tema `openlims.requester.v1` y concede permiso de escritura al productor.
+El trabajador de Celery debe poder conectarse a las direcciones anunciadas por
+los brokers. Añade esta configuración a `deploy/.env` en una instalación desde
+código o a `.env` en una instalación con imágenes precompiladas. El ejemplo usa
+SASL sobre TLS.
+
+```dotenv
+OPENLIMS_KAFKA_BOOTSTRAP_SERVERS=kafka.example.org:9093
+OPENLIMS_KAFKA_TOPIC=openlims.requester.v1
+OPENLIMS_KAFKA_SECURITY_PROTOCOL=SASL_SSL
+OPENLIMS_KAFKA_SASL_MECHANISM=SCRAM-SHA-512
+OPENLIMS_KAFKA_SASL_USERNAME=openlims
+OPENLIMS_KAFKA_SASL_PASSWORD='replace-with-producer-password'
+COMPOSE_PROFILES=kafka
+```
+
+El protocolo predeterminado es `PLAINTEXT` para brokers locales. Configura
+`OPENLIMS_KAFKA_BOOTSTRAP_SERVERS` para habilitar la integración e incluye el perfil
+`kafka` para iniciar el programador. Si usas imágenes precompiladas, ejecuta
+`./openlims start` en el directorio de instalación. Para una instalación de
+producción desde código, ejecuta el siguiente comando.
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml up -d --build
+```
+
+| Evento | Momento | Campos de `data` |
+| --- | --- | --- |
+| `request.submitted` | Se envía una solicitud nueva desde el portal. | Objeto vacío |
+| `sample.received` | El personal registra la primera recepción de una muestra de la solicitud. | `sample_id` |
+| `report.released` | La dirección publica el informe de una solicitud del portal. | `report_id` |
+
+Cada mensaje es JSON UTF-8 e incluye `schema_version` (actualmente `1`),
+`event_id`, `event_type`, `occurred_at` (ISO 8601), `request_id`, `project_id` y
+`data`. Los identificadores son UUID públicos. El tema está destinado a
+integraciones de confianza con acceso a eventos de todos los proyectos.
+Los sistemas solicitantes pueden descargar un PDF con credenciales autorizadas
+mediante `GET /api/v1/requester-requests/{request_id}/reports/{report_id}/download/`.
+
+La misma transacción de PostgreSQL guarda el cambio y el evento pendiente. El
+programador envía una tarea a Celery cada 15 segundos. El trabajador lee la cola,
+publica en orden por solicitud y usa `request_id` como clave de Kafka. Los eventos
+pendientes se reintentan al recuperarse el broker. La entrega es al menos una vez,
+por lo que se debe usar `event_id` para evitar duplicados. Consulta los registros
+de `worker` y `kafka-scheduler` para diagnosticar problemas de entrega.
 
 ## v0.78.12 — Demo del portal de solicitudes
 
@@ -119,7 +170,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.12`
+**Versión de desarrollo actual:** `v0.78.13`
 
 **Demo:** http://35.164.28.250
 

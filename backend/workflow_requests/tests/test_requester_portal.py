@@ -1,14 +1,16 @@
 import re
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import IntegrityError
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from events.models import Event
+from events.models import Event, KafkaOutboxEvent
 from pipelines.models import AnalysisDefinition, PipelineRun, PipelineTemplate, PipelineTemplateStep, ProcedureDefinition
 from projects.models import Project
 from samples.models import Sample, SampleAccession
@@ -134,6 +136,7 @@ class RequesterPortalTests(TestCase):
         self.assertEqual(workflow_request.form_data, {"measurement_count": 0, "include_summary": False})
         self.assertFalse(Sample.objects.exists())
 
+    @override_settings(KAFKA_BOOTSTRAP_SERVERS="kafka:9092")
     def test_retries_are_idempotent_and_labels_require_the_owner(self):
         payload = self.payload()
         first = self.owner.post(PORTAL, payload, format="json")
@@ -155,10 +158,36 @@ class RequesterPortalTests(TestCase):
         self.assertEqual(neighbor.get(path).status_code, 404)
         self.assertEqual(neighbor.get(f"{path}labels/").status_code, 404)
         self.assertEqual(neighbor.post(PORTAL, payload, format="json").status_code, 409)
+        event = KafkaOutboxEvent.objects.get()
+        workflow_request = WorkflowRequest.objects.get()
+        self.assertEqual(event.request_id, workflow_request.public_id)
+        self.assertEqual(event.payload, {
+            "schema_version": 1,
+            "event_id": str(event.event_id),
+            "event_type": "request.submitted",
+            "request_id": str(workflow_request.public_id),
+            "project_id": str(self.project.public_id),
+            "occurred_at": workflow_request.submitted_at.isoformat(),
+            "data": {},
+        })
         self.project.members.remove(self.requester)
         self.assertEqual(self.owner.get(path).status_code, 404)
         self.assertEqual(self.owner.get(f"{path}labels/").status_code, 404)
 
+    @override_settings(KAFKA_BOOTSTRAP_SERVERS="")
+    def test_kafka_is_optional(self):
+        self.submit()
+        self.assertFalse(KafkaOutboxEvent.objects.exists())
+
+    @override_settings(KAFKA_BOOTSTRAP_SERVERS="kafka:9092")
+    def test_outbox_write_failure_rolls_back_submission(self):
+        with patch.object(KafkaOutboxEvent, "save", side_effect=IntegrityError("Outbox write failed")):
+            with self.assertRaisesMessage(IntegrityError, "Outbox write failed"):
+                self.owner.post(PORTAL, self.payload(), format="json")
+        self.assertFalse(WorkflowRequest.objects.exists())
+        self.assertFalse(Event.objects.filter(action="WORKFLOW_REQUEST_SUBMITTED").exists())
+
+    @override_settings(KAFKA_BOOTSTRAP_SERVERS="kafka:9092")
     def test_submission_label_hands_off_to_staff_receipt_and_pipeline(self):
         workflow_request = self.submit(sample_references=["Tube A"])
         item = workflow_request.items.get()
@@ -193,6 +222,11 @@ class RequesterPortalTests(TestCase):
             response = self.staff.post(receipt_url, receipt, format="json")
             self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(SampleAccession.objects.count(), 1)
+        self.assertEqual(KafkaOutboxEvent.objects.count(), 2)
+        event = KafkaOutboxEvent.objects.filter(payload__event_type="sample.received").get()
+        self.assertEqual(event.request_id, workflow_request.public_id)
+        self.assertEqual(event.payload["data"], {"sample_id": str(item.sample.public_id)})
+        self.assertEqual(event.payload["occurred_at"], item.sample.accession.receipt.occurred_at.isoformat())
         self.assertEqual(self.staff.get(lookup_url).data["kind"], "existing")
         self.assertIsNotNone(self.owner.get(detail_url).data["samples"][0]["received_at"])
 
@@ -203,6 +237,7 @@ class RequesterPortalTests(TestCase):
         PipelineRun.objects.update(status=PipelineRun.STATUS_COMPLETED)
         self.assertEqual(self.owner.get(detail_url).data["status"], "COMPLETED")
 
+    @override_settings(KAFKA_BOOTSTRAP_SERVERS="kafka:9092")
     def test_only_released_reports_can_be_downloaded_through_the_portal(self):
         workflow_request = self.submit()
         WorkflowRequestMessage.objects.create(
@@ -229,10 +264,17 @@ class RequesterPortalTests(TestCase):
             self.assertEqual(self.owner.get(download_url).status_code, 404)
             self.assertEqual(APIClient().get(private_path).status_code, 404)
             self.assertEqual(self.staff.get(upload.data["file"]).status_code, 200)
+            self.assertEqual(KafkaOutboxEvent.objects.count(), 1)
             release_url = f"/api/v1/workflow-request-reports/{report.pk}/approve/"
             for _ in range(2):
                 self.assertEqual(self.admin.post(release_url, {}, format="json").status_code, 200)
             self.assertEqual(Event.objects.filter(action="WORKFLOW_REQUEST_REPORT_APPROVED").count(), 1)
+            self.assertEqual(KafkaOutboxEvent.objects.count(), 2)
+            event = KafkaOutboxEvent.objects.get(payload__event_type="report.released")
+            report.refresh_from_db()
+            self.assertEqual(event.request_id, workflow_request.public_id)
+            self.assertEqual(event.payload["data"], {"report_id": str(report.public_id)})
+            self.assertEqual(event.payload["occurred_at"], report.approved_at.isoformat())
             self.assertEqual(self.owner.get(path).data["reports"][0]["title"], "Lab report")
             downloaded = self.owner.get(download_url)
             self.assertEqual(downloaded.status_code, 200)

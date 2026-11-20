@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.12-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.13-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -52,9 +52,59 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.13** | Publish requester submissions, sample receipts, and report releases to Apache Kafka. | [Kafka requester events](#kafka-requester-events) |
 | **v0.78.12** | Seed a requester account, printable submission labels, and a released example report. | [Requester demo](#requester-demo) |
 | **v0.78.11** | Give requesters a dedicated sign-in section on the shared login page. | [Requester sign-in](#requester-sign-in) |
-| **v0.78.10** | Submit test requests, print submission labels, track receipt and status, and download released reports. | [Requester portal](#requester-portal) |
+
+### v0.78.13 — Kafka integration
+
+#### Kafka requester events
+
+OpenLIMS can publish new requester portal activity to an Apache Kafka cluster.
+Create the topic `openlims.requester.v1` and give the OpenLIMS producer permission
+to write to it. The Celery worker must be able to reach the brokers' advertised
+addresses. Add these settings to `deploy/.env` for a source installation or to
+the installation's `.env` for a prebuilt release. This example uses SASL over TLS.
+
+```dotenv
+OPENLIMS_KAFKA_BOOTSTRAP_SERVERS=kafka.example.org:9093
+OPENLIMS_KAFKA_TOPIC=openlims.requester.v1
+OPENLIMS_KAFKA_SECURITY_PROTOCOL=SASL_SSL
+OPENLIMS_KAFKA_SASL_MECHANISM=SCRAM-SHA-512
+OPENLIMS_KAFKA_SASL_USERNAME=openlims
+OPENLIMS_KAFKA_SASL_PASSWORD='replace-with-producer-password'
+COMPOSE_PROFILES=kafka
+```
+
+The security protocol defaults to `PLAINTEXT` for local brokers. Set
+`OPENLIMS_KAFKA_BOOTSTRAP_SERVERS` to enable the integration and include `kafka`
+in the Compose profiles to start its scheduler. For a prebuilt release, run
+`./openlims start` from the installation directory. For a production-style
+source installation, run the following command.
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml up -d --build
+```
+
+| Event | Queued when | JSON `data` fields |
+| --- | --- | --- |
+| `request.submitted` | A new portal request is submitted. | Empty object |
+| `sample.received` | Staff record the first accession for a submitted sample. | `sample_id` |
+| `report.released` | A director releases a report for a portal request. | `report_id` |
+
+Each message is UTF-8 JSON with `schema_version` (currently `1`), `event_id`,
+`event_type`, `occurred_at` (ISO 8601), `request_id`, `project_id`, and `data`.
+Identifiers are public UUIDs. The topic is for trusted integrations that can read
+events across projects. Requester systems can retrieve a released PDF with
+authorized credentials at
+`GET /api/v1/requester-requests/{request_id}/reports/{report_id}/download/`.
+
+The same PostgreSQL transaction saves the workflow change and its outbox event.
+The scheduler dispatches a Celery task every 15 seconds. The worker reads the
+outbox, publishes in order per request, and uses `request_id` as the Kafka key.
+Pending events survive a broker outage and retry when Kafka recovers. Delivery
+is at least once, so use `event_id` to deduplicate. Inspect the `worker` and
+`kafka-scheduler` logs to diagnose delivery issues.
 
 ### v0.78.12 — Requester demo
 
@@ -139,7 +189,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.12`.
+**Current development version:** `v0.78.13`.
 
 ## Personal favorites
 
@@ -1034,7 +1084,7 @@ The health check verifies:
 
 The sign-in page, lab workspace, and requester portal use `OPENLIMS_VERSION` in
 their footers. It comes from the generated `frontend/src/version.js` file.
-The current application version is **v0.78.12**.
+The current application version is **v0.78.13**.
 
 Footer source:
 

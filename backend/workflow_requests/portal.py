@@ -15,6 +15,7 @@ from rest_framework.response import Response
 
 from core.audit import record_audit_event
 from core.permissions import is_admin, is_requester_only
+from events.kafka import queue_requester_event
 from pipelines.models import PipelineRun
 from projects.models import Project
 
@@ -210,6 +211,7 @@ class RequesterPortalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, v
                 after={"status": workflow_request.status, "item_count": len(references)},
                 details={"source": "requester_portal"},
             )
+            queue_requester_event("request.submitted", workflow_request, occurred_at=submitted_at)
         elif (
             workflow_request.requester_id != request.user.pk
             or workflow_request.project_id != values["project"].pk

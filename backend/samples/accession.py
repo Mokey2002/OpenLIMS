@@ -1,6 +1,7 @@
 """Explicit barcode accessioning; scans alone never change laboratory records."""
 from io import BytesIO
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.http import HttpResponse
@@ -9,6 +10,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
+from events.kafka import queue_requester_event
 from events.models import Event
 from workflow_requests.intake import registered_submission, submission_context, submission_for_barcode
 from .access import require_sample_modify_access, user_can_access_sample
@@ -146,6 +148,18 @@ def register(view, request):
     return Response({"kind": "existing", **state(serializer.instance, request)}, status=201)
 
 
+def _record_accession(sample, receipt):
+    accession = SampleAccession.objects.create(sample=sample, receipt=receipt)
+    if settings.KAFKA_BOOTSTRAP_SERVERS:
+        item = sample.workflow_request_items.exclude(submission_reference="").select_related("request__project").first()
+        if item:
+            queue_requester_event(
+                "sample.received", item.request, occurred_at=receipt.occurred_at,
+                data={"sample_id": str(sample.public_id)},
+            )
+    return accession
+
+
 def receive(view, request):
     require_active(request)
     values = code_from(request.data, receipt=True)
@@ -171,7 +185,7 @@ def receive(view, request):
                 Event.objects.create(entity_type="Sample", entity_id=str(sample.pk), actor=request.user,
                     action="SAMPLE_RECEIVED", payload={"custody_event_id": receipt.pk,
                     "barcode": values["barcode"], "reason": values["reason"], "received_at": receipt.occurred_at.isoformat()})
-            SampleAccession.objects.create(sample=sample, receipt=receipt)
+            _record_accession(sample, receipt)
         return Response(state(sample, request))
 
 
@@ -189,7 +203,7 @@ def verify(view, request):
             legacy = sample.custody_events.filter(action=SampleCustodyEvent.ACTION_RECEIVE).order_by("occurred_at", "id").first()
             if not legacy:
                 raise ValidationError("Record physical receipt before confirming its label.")
-            accession = SampleAccession.objects.create(sample=sample, receipt=legacy)
+            accession = _record_accession(sample, legacy)
         if sample.status in (Sample.STATUS_ARCHIVED, Sample.STATUS_CANCELLED):
             raise ValidationError("Archived or cancelled samples cannot be label-confirmed.")
         if accession.label_verified_at is None:

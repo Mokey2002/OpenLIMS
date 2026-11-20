@@ -9,6 +9,7 @@ pytest
 pytest-django
 pytest-cov
 celery
+confluent-kafka>=2.8,<3.0
 redis
 gunicorn
 psycopg2-binary
