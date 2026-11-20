@@ -2,8 +2,9 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.10.** El pie de página usa `OPENLIMS_VERSION` del archivo
-generado `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
+**Versión actual: v0.78.11.** Los pies de página de la pantalla de acceso, el área
+del laboratorio y el portal usan `OPENLIMS_VERSION` del archivo generado
+`frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
 `VERSION`, la etiqueta Git alcanzable más reciente, la versión generada existente
 o `development`, en ese orden. Una variable `VITE_OPENLIMS_VERSION` explícita
@@ -33,9 +34,15 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.11** | Acceso para solicitantes en la misma página que las cuentas del laboratorio y de demostración. | [Acceso para solicitantes](#acceso-para-solicitantes) |
 | **v0.78.10** | Solicitudes de pruebas, etiquetas de envío, seguimiento y descarga de informes publicados. | [Portal de solicitudes](#portal-de-solicitudes) |
 | **v0.78.9** | Ayuda contextual para la navegación, las acciones de control de calidad y los identificadores de importación. | [Ayuda de navegación e importación](#ayuda-de-navegación-e-importación) |
-| **v0.78.8** | Control de calidad de exportaciones de instrumentos con Snakemake e informe descargable. | [Control de calidad de exportaciones](#control-de-calidad-de-exportaciones) |
+
+## v0.78.11 — Inicio de sesión para solicitantes
+
+### Acceso para solicitantes
+
+Abre `/login` y usa **Acceso para solicitantes** con la cuenta que te proporcionó el laboratorio. **Continuar al portal de solicitudes** abre tus solicitudes de pruebas. Si llegaste desde un enlace guardado, al iniciar sesión vuelves a la solicitud correspondiente. **Acceso al laboratorio** y **Cuentas de demostración** aparecen en la misma página.
 
 ## v0.78.10 — Portal de solicitudes
 
@@ -43,7 +50,7 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 1. Desde **Admin → Usuarios**, invita o crea una cuenta **Solicitante (solo portal)** y añádela al proyecto correspondiente. El personal del laboratorio puede abrir **Recibir → Portal de solicitudes** con su cuenta habitual.
 2. En **Solicitudes de workflow**, publica un tipo de solicitud activo con un flujo predeterminado activo. Puedes limitar la prueba a un proyecto específico.
-3. Los solicitantes inician sesión en `/requester`, eligen proyecto y prueba, e introducen una referencia por muestra. Descargan el PDF e imprimen las etiquetas de 100 × 50 mm a tamaño real.
+3. Los solicitantes usan **Acceso para solicitantes** en `/login` o abren `/requester` directamente. En el portal, eligen proyecto y prueba e introducen una referencia por muestra. Descargan el PDF e imprimen las etiquetas de 100 × 50 mm a tamaño real.
 4. El personal escanea la etiqueta en **Recibir muestra**, registra el tubo en el proyecto indicado y confirma la recepción física. El director puede aprobar la solicitud una vez recibidas las muestras.
 5. Los solicitantes consultan el estado en **Mis solicitudes de pruebas**. El personal carga el informe y el director lo publica para que el solicitante pueda descargarlo.
 
@@ -91,7 +98,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.10`
+**Versión de desarrollo actual:** `v0.78.11`
 
 **Demo:** http://35.164.28.250
 

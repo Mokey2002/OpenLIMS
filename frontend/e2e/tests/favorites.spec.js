@@ -33,9 +33,10 @@ async function setup(page, context, options = {}) {
 }
 
 async function signIn(page, username) {
-  await page.getByLabel("Username", { exact: true }).fill(username);
-  await page.getByLabel("Password", { exact: true }).fill("test-password");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const form = page.getByRole("form", { name: "Lab sign-in" });
+  await form.getByLabel("Username", { exact: true }).fill(username);
+  await form.getByLabel("Password", { exact: true }).fill("test-password");
+  await form.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByTestId("current-user-name")).toHaveText(username);
 }
 

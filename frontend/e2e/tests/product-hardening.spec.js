@@ -2,8 +2,9 @@ const { test, expect } = require("@playwright/test");
 
 async function loginAsDirector(page, context) {
   await page.goto("/login");
-  await page.getByLabel("Username").fill("director");
-  await page.getByLabel("Password").fill("Director123!");
+  const form = page.getByRole("form", { name: "Lab sign-in" });
+  await form.getByLabel("Username").fill("director");
+  await form.getByLabel("Password").fill("Director123!");
 
   const loginResponsePromise = page.waitForResponse(
     (response) =>
@@ -11,7 +12,7 @@ async function loginAsDirector(page, context) {
       response.request().method() === "POST"
   );
 
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await form.getByRole("button", { name: "Sign in", exact: true }).click();
   const loginResponse = await loginResponsePromise;
 
   if (!loginResponse.ok()) {

@@ -16,12 +16,8 @@ function reply(route, json, status = 200) {
   return route.fulfill({ json, status });
 }
 
-test("a client submits a test, downloads its labels, and sees a report after release", async ({ page }) => {
-  const user = { id: 1, username: "client", roles: ["requester"] };
+async function mockPortalSignIn(page, user, handleRequest) {
   let signedIn = false;
-  let submitted;
-  let released = false;
-  const labRequests = [];
   await page.route("**/api/v1/**", async route => {
     const request = route.request();
     const path = new URL(request.url()).pathname.slice("/api/v1".length);
@@ -30,11 +26,25 @@ test("a client submits a test, downloads its labels, and sees a report after rel
       json: { detail: "CSRF cookie set." }, headers: { "Set-Cookie": "csrftoken=portal-test; Path=/" },
     });
     if (path === "/auth/login/") {
+      const { username, password } = request.postDataJSON();
+      if (username !== user.username || password !== "test-password") {
+        return reply(route, { detail: "Invalid sign-in." }, 401);
+      }
       signedIn = true;
       return reply(route, { user });
     }
     if (path === "/auth/refresh/") return reply(route, { detail: "No session" }, 401);
     if (path === "/session/") return signedIn ? reply(route, { user, feature_flags: {} }) : reply(route, {}, 401);
+    return handleRequest(route, path);
+  });
+}
+
+test("a client signs in from the shared page and follows a test request through release", async ({ page }) => {
+  const user = { id: 1, username: "client", roles: ["requester"] };
+  let submitted;
+  let released = false;
+  const labRequests = [];
+  await mockPortalSignIn(page, user, (route, path) => {
     if (path === "/requester-requests/catalog/") return reply(route, {
       projects: [project],
       tests: [{
@@ -46,8 +56,8 @@ test("a client submits a test, downloads its labels, and sees a report after rel
       }],
     });
     if (path === "/requester-requests/") {
-      if (request.method() === "POST") {
-        submitted = request.postDataJSON();
+      if (route.request().method() === "POST") {
+        submitted = route.request().postDataJSON();
         return reply(route, { public_id: requestId, request_number: summary.request_number }, 201);
       }
       return reply(route, { results: submitted ? [{ ...summary, status: "COMPLETED" }] : [], next: null, previous: null });
@@ -63,16 +73,24 @@ test("a client submits a test, downloads its labels, and sees a report after rel
         body: "%PDF fixture", headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${filename}"` },
       });
     }
-    if (signedIn) labRequests.push(path);
+    labRequests.push(path);
     return reply(route, [], 403);
   });
 
-  await page.goto("/requester");
-  await expect(page).toHaveURL(/\/login\?return_to=%2Frequester$/);
-  await expect(page.getByText("Demo Accounts")).toHaveCount(0);
-  await page.getByLabel("Username").fill("client");
-  await page.getByLabel("Password").fill("test-password");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.goto("/login");
+  const lab = page.getByRole("form", { name: "Lab sign-in" });
+  const requester = page.getByRole("form", { name: "Requester sign-in" });
+  await expect(lab).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Demo Accounts" })).toBeVisible();
+  await expect(page.getByRole("contentinfo")).toHaveText(`OpenLIMS ${version}`);
+  await requester.getByLabel("Username").fill("client");
+  await expect(lab.getByLabel("Username")).toHaveValue("");
+  await requester.getByLabel("Password").fill("incorrect");
+  await requester.getByRole("button", { name: "Continue to requester portal" }).click();
+  await expect(requester.getByRole("alert")).toContainText("Invalid sign-in.");
+  await expect(lab.getByRole("alert")).toHaveCount(0);
+  await requester.getByLabel("Password").fill("test-password");
+  await requester.getByRole("button", { name: "Continue to requester portal" }).click();
   await expect(page.getByRole("heading", { name: "Requester portal" })).toBeVisible();
 
   await page.goto("/");
@@ -108,6 +126,28 @@ test("a client submits a test, downloads its labels, and sees a report after rel
   await page.getByRole("link", { name: "Back to my test requests" }).click();
   await expect(page.getByRole("link", { name: summary.title })).toBeVisible();
   expect(labRequests).toEqual([]);
+});
+
+test("requester sign-in returns internal users to the request in their bookmark", async ({ page }) => {
+  const user = { id: 2, username: "receiver", roles: ["tech"] };
+  await mockPortalSignIn(page, user, (route, path) => {
+    if (path === `/requester-requests/${requestId}/`) {
+      return reply(route, { ...summary, status: "SUBMITTED", samples: [], reports: [] });
+    }
+    return reply(route, {}, 404);
+  });
+
+  const bookmark = `/requester/${requestId}`;
+  await page.goto(bookmark);
+  await expect(page).toHaveURL(`/login?return_to=${encodeURIComponent(bookmark)}`);
+  const form = page.getByRole("form", { name: "Requester sign-in" });
+  await expect(page.getByRole("heading", { name: "Demo Accounts" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "All sign-in options" })).toHaveAttribute("href", "/login");
+  await form.getByLabel("Username").fill(user.username);
+  await form.getByLabel("Password").fill("test-password");
+  await form.getByRole("button", { name: "Continue to requester portal" }).click();
+  await expect(page).toHaveURL(bookmark);
+  await expect(page.getByRole("heading", { name: summary.title })).toBeVisible();
 });
 
 test("staff opens a submission barcode against its receiving project", async ({ page, context, baseURL }) => {
