@@ -49,9 +49,10 @@ for (const denied of ["localStorage", "sessionStorage", "removal", "writes"]) {
       else Object.defineProperty(window, mode, { configurable: true, get: blocked });
     }, denied);
     await page.goto("/login");
-    await page.locator("#openlims-username").fill("director");
-    await page.locator("#openlims-password").fill("test-password");
-    await page.locator('button[type="submit"]').click();
+    const form = page.getByRole("form", { name: "Lab sign-in" });
+    await form.getByLabel("Username").fill("director");
+    await form.getByLabel("Password").fill("test-password");
+    await form.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByTestId("current-user-name")).toHaveText("director");
     await page.getByRole("button", { name: "Logout", exact: true }).click();
     await expect(page).toHaveURL(/\/login$/);

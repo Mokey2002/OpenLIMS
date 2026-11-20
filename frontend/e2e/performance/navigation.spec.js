@@ -10,10 +10,12 @@ test("My Work and destination content timing", async ({ page }, testInfo) => {
   const readyLimit = Number(process.env.OPENLIMS_PERF_READY_MS || 30000);
   if (!Number.isFinite(readyLimit) || readyLimit <= 0) throw new Error("Invalid readiness timeout.");
   await page.goto("/login");
-  await page.getByLabel("Username", { exact: true }).fill(process.env.OPENLIMS_PERF_USER);
-  await page.getByLabel("Password", { exact: true }).fill(process.env.OPENLIMS_PERF_PASSWORD);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const form = page.getByRole("form", { name: "Lab sign-in" });
+  await form.getByLabel("Username", { exact: true }).fill(process.env.OPENLIMS_PERF_USER);
+  await form.getByLabel("Password", { exact: true }).fill(process.env.OPENLIMS_PERF_PASSWORD);
+  await form.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByTestId("my-work-page")).toBeVisible({ timeout: readyLimit });
+  const navigation = page.getByTestId("workflow-navigation");
   let documents = 0;
   page.on("request", request => { if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documents++; });
   const samples = { projects: [], sample_list: [], my_work: [] };
@@ -30,9 +32,9 @@ test("My Work and destination content timing", async ({ page }, testInfo) => {
         ["projects", "Plan", "Projects", process.env.OPENLIMS_PERF_PROJECT],
         ["sample_list", "Receive", "Samples", process.env.OPENLIMS_PERF_SAMPLE],
       ]) {
-        await page.getByRole("button", { name: menu, exact: true }).click();
-        await measure(name, () => page.getByRole("link", { name: link, exact: true }).click(), page.getByText(value, { exact: true }).first());
-        await measure("my_work", () => page.getByRole("link", { name: "My Work", exact: true }).click(), page.getByTestId("my-work-page"));
+        await navigation.getByRole("button", { name: menu, exact: true }).click();
+        await measure(name, () => navigation.getByRole("link", { name: link, exact: true }).click(), page.getByText(value, { exact: true }).first());
+        await measure("my_work", () => navigation.getByRole("link", { name: "My Work", exact: true }).click(), page.getByTestId("my-work-page"));
       }
     }
     expect(documents, "Navigation must not require a full document refresh").toBe(0);
