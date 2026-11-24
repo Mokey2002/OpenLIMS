@@ -1,11 +1,10 @@
 import { useRef, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, Row } from "react-bootstrap";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { login } from "../api";
+import { login, loginRequesterDemo } from "../api";
 import { isRequesterOnly } from "../authz";
+import { useLanguage } from "../i18n";
 import { OPENLIMS_VERSION } from "../version";
-
-const demoRequesterUsername = "demo-requester";
 
 const demoAccounts = [
   {
@@ -55,8 +54,8 @@ const demoAccounts = [
   },
 ];
 
-function SignInCard({ id, title, hint, buttonLabel, recoveryLabel, pending, submitting, error, onSignIn, initialUsername = "" }) {
-  const [username, setUsername] = useState(initialUsername);
+function SignInCard({ id, title, hint, buttonLabel, recoveryLabel, pending, submitting, error, onSignIn }) {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
   function submit(event) {
@@ -93,32 +92,30 @@ function SignInCard({ id, title, hint, buttonLabel, recoveryLabel, pending, subm
 
 export default function Login() {
   const nav = useNavigate();
+  const { requesterDemoEnabled } = useLanguage();
   const { state } = useLocation();
   const [search] = useSearchParams();
   const returnTo = search.get("return_to") || "";
   const portalReturn = /^\/requester(?:\/[a-f0-9-]{36})?\/?$/.test(returnTo) ? returnTo : "";
-  const useDemoRequester = portalReturn === "/requester" && search.get("demo") === "requester";
   const sessionCheckStatus = state?.sessionCheckStatus;
 
   const signingIn = useRef(false);
   const [pending, setPending] = useState(null);
   const [error, setError] = useState(null);
 
-  async function signIn({ section, username, password, destination, demoLabel }) {
+  async function signIn({ section, authenticate, destination, accountLabel, errorMessage }) {
     if (signingIn.current) return;
     signingIn.current = true;
-    setPending(demoLabel ?? section);
+    setPending(accountLabel ?? section);
     setError(null);
 
     try {
-      const session = await login(username, password);
+      const session = await authenticate();
       nav(destination ?? (isRequesterOnly(session?.user) ? "/requester" : "/"), { replace: true });
     } catch (failure) {
       setError({
         section,
-        message: demoLabel
-          ? `Demo login failed for ${demoLabel}. Make sure seed_demo has been run.`
-          : failure.message || String(failure),
+        message: errorMessage || failure.message || String(failure),
       });
     } finally {
       signingIn.current = false;
@@ -174,23 +171,22 @@ export default function Login() {
               pending={pending !== null}
               submitting={pending === "lab"}
               error={error?.section === "lab" ? error.message : null}
-              onSignIn={credentials => signIn({ section: "lab", ...credentials })}
+              onSignIn={({ username, password }) => signIn({
+                section: "lab", authenticate: () => login(username, password),
+              })}
             />}
             <SignInCard
-              key={useDemoRequester ? demoRequesterUsername : "requester"}
               id="openlims-requester"
               title="Requester sign-in"
-              hint={useDemoRequester
-                ? "Enter the password set for this demo account."
-                : "Use the account provided by your lab to submit and track test requests."}
+              hint="Use the account provided by your lab to submit and track test requests."
               buttonLabel="Continue to requester portal"
               recoveryLabel="Reset requester password"
-              initialUsername={useDemoRequester ? demoRequesterUsername : ""}
               pending={pending !== null}
               submitting={pending === "requester"}
               error={error?.section === "requester" ? error.message : null}
-              onSignIn={credentials => signIn({
-                section: "requester", ...credentials, destination: portalReturn || "/requester",
+              onSignIn={({ username, password }) => signIn({
+                section: "requester", authenticate: () => login(username, password),
+                destination: portalReturn || "/requester",
               })}
             />
             {portalReturn && <Link className="text-center" to="/login">All sign-in options</Link>}
@@ -235,7 +231,9 @@ export default function Login() {
                           variant={account.variant}
                           size="sm"
                           onClick={() => signIn({
-                            section: "demo", username: account.username, password: account.password, demoLabel: account.label,
+                            section: "demo", authenticate: () => login(account.username, account.password),
+                            accountLabel: account.label,
+                            errorMessage: `Demo login failed for ${account.label}. Make sure seed_demo has been run.`,
                           })}
                           disabled={pending !== null}
                         >
@@ -246,7 +244,7 @@ export default function Login() {
                       </div>
                     </div>
                   ))}
-                  <div className="soft-card">
+                  {requesterDemoEnabled && <div className="soft-card">
                     <div className="d-flex justify-content-between align-items-start gap-3 flex-wrap">
                       <div>
                         <div className="d-flex align-items-center gap-2 mb-1">
@@ -256,14 +254,16 @@ export default function Login() {
                         <div className="text-muted small mb-2">
                           Try example test requests, printable labels, and a released report.
                         </div>
-                        <code className="small">{demoRequesterUsername}</code>
                       </div>
-                      <Link to="/login?return_to=%2Frequester&demo=requester"
-                        className="btn btn-outline-secondary btn-sm">
-                        Open requester demo
-                      </Link>
+                      <Button variant="outline-secondary" size="sm" disabled={pending !== null}
+                        onClick={() => signIn({
+                          section: "demo", authenticate: loginRequesterDemo, accountLabel: "Requester demo",
+                          destination: "/requester",
+                        })}>
+                        {pending === "Requester demo" ? "Signing in..." : "Open requester demo"}
+                      </Button>
                     </div>
-                  </div>
+                  </div>}
                 </div>
 
                 <Alert variant="info" className="mt-4 mb-0">

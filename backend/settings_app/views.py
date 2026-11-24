@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import status, viewsets
 from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import action
@@ -18,12 +19,16 @@ from .serializers import (
 
 class PublicUISettingsView(APIView):
     permission_classes = [AllowAny]
-    requester_access = True
+    authentication_classes = []
 
     @extend_schema(responses=PublicUISettingsSerializer)
     def get(self, request):
         settings_obj = SystemSettings.load()
-        return Response({"ui_language": settings_obj.ui_language, "assistant_helper_enabled": settings_obj.assistant_helper_enabled})
+        return Response({
+            "ui_language": settings_obj.ui_language,
+            "assistant_helper_enabled": settings_obj.assistant_helper_enabled,
+            "requester_demo_enabled": settings.OPENLIMS_REQUESTER_DEMO_ENABLED,
+        })
 
 
 class FeatureFlagsView(APIView):

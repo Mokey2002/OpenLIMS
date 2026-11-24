@@ -5,7 +5,8 @@ from settings_app.models import SystemSettings
 
 
 @pytest.mark.django_db
-def test_ui_language_is_available_before_login(api_client):
+def test_ui_language_is_available_before_login(api_client, settings):
+    settings.OPENLIMS_REQUESTER_DEMO_ENABLED = False
     settings_obj = SystemSettings.load()
     settings_obj.ui_language = "es"
     settings_obj.save()
@@ -13,7 +14,9 @@ def test_ui_language_is_available_before_login(api_client):
     response = api_client.get("/api/ui-settings/")
 
     assert response.status_code == 200
-    assert response.data == {"ui_language": "es", "assistant_helper_enabled": True}
+    assert response.data == {
+        "ui_language": "es", "assistant_helper_enabled": True, "requester_demo_enabled": False,
+    }
 
 
 @pytest.mark.django_db

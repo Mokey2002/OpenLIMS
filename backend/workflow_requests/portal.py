@@ -15,6 +15,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.audit import record_audit_event
+from core.demo_requester_access import (
+    DEMO_PROJECT_CODE, DEMO_PROJECT_DESCRIPTION, can_use_requester_demo, is_requester_demo_session,
+)
 from core.permissions import is_admin, is_requester_only
 from events.kafka import queue_requester_event
 from pipelines.models import PipelineRun
@@ -25,15 +28,20 @@ from .models import AssayRequestType, ClientTeamMembership, WorkflowRequest, Wor
 from .services import portal_form_schema, validate_submission_form
 
 
-def available_projects(user):
+def available_projects(user, *, demo=False):
+    if demo:
+        return Project.objects.filter(code=DEMO_PROJECT_CODE, description=DEMO_PROJECT_DESCRIPTION, members=user)
     if is_admin(user) and not is_requester_only(user):
         return Project.objects.all()
     return Project.objects.filter(members=user)
 
 
-def available_tests(projects):
+def available_tests(projects, *, demo=False):
+    project_scope = Q(project__in=projects)
+    if not demo:
+        project_scope |= Q(project__isnull=True)
     return AssayRequestType.objects.filter(
-        Q(project__isnull=True) | Q(project__in=projects),
+        project_scope,
         active=True,
         portal_enabled=True,
         default_pipeline__active=True,
@@ -73,9 +81,10 @@ class PortalSubmissionSerializer(serializers.Serializer):
         super().__init__(*args, **kwargs)
         request = self.context.get("request")
         if request and request.user.is_authenticated:
-            projects = available_projects(request.user)
+            demo = is_requester_demo_session(request.auth)
+            projects = available_projects(request.user, demo=demo)
             self.fields["project"].queryset = projects
-            self.fields["request_type"].queryset = available_tests(projects)
+            self.fields["request_type"].queryset = available_tests(projects, demo=demo)
 
     def validate_sample_references(self, references):
         if any(not reference.isprintable() for reference in references):
@@ -177,13 +186,16 @@ class RequesterPortalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, v
 
     def get_queryset(self):
         user = self.request.user
+        demo = is_requester_demo_session(self.request.auth)
         queryset = (
-            WorkflowRequest.objects.filter(project__in=available_projects(user))
+            WorkflowRequest.objects.filter(project__in=available_projects(user, demo=demo))
             .exclude(status=WorkflowRequest.STATUS_DRAFT)
             .select_related("project", "request_type", "client_team")
             .order_by("-created_at", "-pk")
         )
-        if is_requester_only(user):
+        if demo:
+            queryset = queryset.filter(requester=user, client_team__isnull=True).annotate(can_view_reports=Value(True))
+        elif is_requester_only(user):
             team_results = Exists(ClientTeamMembership.objects.filter(
                 team_id=OuterRef("client_team_id"), team__project_id=OuterRef("project_id"),
                 user=user, can_view_results=True,
@@ -213,9 +225,10 @@ class RequesterPortalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, v
     @action(detail=False, methods=["get"])
     def catalog(self, request):
         user = request.user
-        accessible = available_projects(user)
+        demo = is_requester_demo_session(request.auth)
+        accessible = available_projects(user, demo=demo)
         client_teams = []
-        if is_requester_only(user):
+        if not demo and is_requester_only(user):
             memberships = ClientTeamMembership.objects.filter(user=user)
             assigned = memberships.filter(team__project_id=OuterRef("pk"))
             projects_with_submit = accessible.filter(~Exists(assigned) | Exists(assigned.filter(can_submit=True)))
@@ -227,7 +240,7 @@ class RequesterPortalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, v
         else:
             projects_with_submit = accessible
         projects = list(projects_with_submit.order_by("name").values("id", "code", "name"))
-        types = available_tests([project["id"] for project in projects]).values(
+        types = available_tests([project["id"] for project in projects], demo=demo).values(
             "id", "project_id", "code", "name", "description", "form_schema",
         )
         return Response({"projects": projects, "tests": list(types) if projects else [], "client_teams": client_teams})
@@ -240,9 +253,12 @@ class RequesterPortalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, v
         public_id = values["submission_id"]
         request_type = values["request_type"]
         submitted_at = timezone.now()
-        if is_requester_only(request.user):
+        demo = is_requester_demo_session(request.auth)
+        if demo or is_requester_only(request.user):
             # Serialize new submissions with changes to this requester's team grants.
-            get_user_model().objects.select_for_update().get(pk=request.user.pk)
+            requester = get_user_model().objects.select_for_update().get(pk=request.user.pk)
+            if demo and not can_use_requester_demo(requester):
+                raise PermissionDenied("The requester demo session is no longer available.")
         workflow_request = WorkflowRequest.objects.filter(public_id=public_id).first()
         created = False
         if workflow_request is None:

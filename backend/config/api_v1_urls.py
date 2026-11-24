@@ -10,6 +10,7 @@ from core.views import (
     CookieLoginView,
     CookieLogoutView,
     CookieRefreshView,
+    CookieRequesterDemoView,
     MeView,
     OpenLIMSTokenObtainPairView,
 )
@@ -23,6 +24,7 @@ urlpatterns = [
     path("", include("config.api_urls")),
     path("auth/csrf/", CSRFTokenView.as_view(), name="csrf"),
     path("auth/login/", CookieLoginView.as_view(), name="cookie-login"),
+    path("auth/requester-demo/", CookieRequesterDemoView.as_view(), name="cookie-requester-demo"),
     path("auth/refresh/", CookieRefreshView.as_view(), name="cookie-refresh"),
     path("auth/logout/", CookieLogoutView.as_view(), name="cookie-logout"),
     path(

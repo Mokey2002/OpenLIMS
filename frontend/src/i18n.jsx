@@ -940,7 +940,7 @@ const spanishText = {
   "Requester demo": "Demostración para solicitantes",
   "Open requester demo": "Abrir demostración para solicitantes",
   "Try example test requests, printable labels, and a released report.": "Prueba solicitudes de ejemplo, etiquetas imprimibles y un informe publicado.",
-  "Enter the password set for this demo account.": "Introduce la contraseña configurada para esta cuenta de demostración.",
+  "Requester demo is unavailable. Check the seeded evaluation account and project.": "La demostración para solicitantes no está disponible. Revisa la cuenta y el proyecto de evaluación.",
   "Use the account provided by your lab to submit and track test requests.": "Usa la cuenta que te proporcionó el laboratorio para enviar y consultar solicitudes de pruebas.",
   "Continue to requester portal": "Continuar al portal de solicitudes",
   "Reset requester password": "Restablecer contraseña del solicitante",
@@ -1081,11 +1081,13 @@ const LanguageContext = createContext({
   language: "en",
   locale: "en-US",
   setLanguage: () => {},
+  requesterDemoEnabled: false,
   t: (value) => value,
 });
 
 export function LanguageProvider({ children }) {
   const [assistantHelperEnabled, setAssistantHelperEnabled] = useState(null);
+  const [requesterDemoEnabled, setRequesterDemoEnabled] = useState(false);
   const [language, setLanguageState] = useState(() => {
     try {
       return normalizeLanguage(window.localStorage.getItem(LANGUAGE_STORAGE_KEY));
@@ -1111,6 +1113,7 @@ export function LanguageProvider({ children }) {
         if (active) {
           setLanguage(settings.ui_language);
           setAssistantHelperEnabled(settings.assistant_helper_enabled !== false);
+          setRequesterDemoEnabled(settings.requester_demo_enabled === true);
         }
       })
       .catch(() => {
@@ -1155,9 +1158,10 @@ export function LanguageProvider({ children }) {
       setLanguage,
       assistantHelperEnabled,
       setAssistantHelperEnabled,
+      requesterDemoEnabled,
       t: (text) => translateText(text, language),
     }),
-    [language, setLanguage, assistantHelperEnabled]
+    [language, setLanguage, assistantHelperEnabled, requesterDemoEnabled]
   );
 
   return (

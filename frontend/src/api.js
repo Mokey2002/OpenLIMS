@@ -291,6 +291,11 @@ export async function login(username, password) {
   return response.json();
 }
 
+export function loginRequesterDemo() {
+  clearLegacyTokens();
+  return apiPost("/api/v1/auth/requester-demo/", {});
+}
+
 export async function logout() {
   try {
     const csrf = await ensureCSRFToken();

@@ -16,12 +16,12 @@ function reply(route, json, status = 200) {
   return route.fulfill({ json, status });
 }
 
-async function mockPortalSignIn(page, user, handleRequest) {
+async function mockPortalSignIn(page, user, handleRequest, { demo = false } = {}) {
   let signedIn = false;
   await page.route("**/api/v1/**", async route => {
     const request = route.request();
     const path = new URL(request.url()).pathname.slice("/api/v1".length);
-    if (path === "/ui-settings/") return reply(route, { ui_language: "en" });
+    if (path === "/ui-settings/") return reply(route, { ui_language: "en", requester_demo_enabled: demo });
     if (path === "/auth/csrf/") return route.fulfill({
       json: { detail: "CSRF cookie set." }, headers: { "Set-Cookie": "csrftoken=portal-test; Path=/" },
     });
@@ -30,6 +30,10 @@ async function mockPortalSignIn(page, user, handleRequest) {
       if (username !== user.username || password !== "test-password") {
         return reply(route, { detail: "Invalid sign-in." }, 401);
       }
+      signedIn = true;
+      return reply(route, { user });
+    }
+    if (path === "/auth/requester-demo/" && demo) {
       signedIn = true;
       return reply(route, { user });
     }
@@ -196,9 +200,16 @@ test("requester sign-in returns internal users to the request in their bookmark"
   await expect(page.getByRole("heading", { name: summary.title })).toBeVisible();
 });
 
-test("the shared login offers the demo requester account", async ({ page }) => {
+test("the shared login opens the demo requester portal in one click", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 700 });
-  await page.route("**/api/v1/ui-settings/", route => reply(route, { ui_language: "en" }));
+  const user = { id: 1, username: "demo-requester", roles: ["requester"] };
+  await mockPortalSignIn(page, user, (route, path) => {
+    if (path === "/requester-requests/catalog/") return reply(route, { projects: [project], tests: [] });
+    if (path === "/requester-requests/") return reply(route, {
+      results: [{ ...summary, status: "SUBMITTED" }], next: null, previous: null,
+    });
+    return reply(route, {}, 404);
+  }, { demo: true });
 
   await page.goto("/login");
   const requesterLink = page.getByRole("link", { name: "Requester sign-in", exact: true });
@@ -207,11 +218,16 @@ test("the shared login offers the demo requester account", async ({ page }) => {
   await expect(page.getByRole("form", { name: "Requester sign-in" })).toBeVisible();
   await expect(page.getByRole("form", { name: "Lab sign-in" })).toHaveCount(0);
   await page.getByRole("link", { name: "All sign-in options" }).click();
-  await page.getByRole("link", { name: "Open requester demo" }).click();
-  const form = page.getByRole("form", { name: "Requester sign-in" });
-  await expect(form.getByLabel("Username")).toHaveValue("demo-requester");
-  await expect(form.getByLabel("Password")).toHaveValue("");
-  await expect(form.getByRole("button", { name: "Continue to requester portal" })).toBeDisabled();
+  const [signIn] = await Promise.all([
+    page.waitForRequest("**/api/v1/auth/requester-demo/"),
+    page.getByRole("button", { name: "Open requester demo" }).click(),
+  ]);
+  expect(signIn.method()).toBe("POST");
+  expect(signIn.postDataJSON()).toEqual({});
+  await expect(page).toHaveURL(/\/requester$/);
+  await expect(page.getByRole("heading", { name: "Requester portal" })).toBeVisible();
+  await expect(page.getByRole("link", { name: summary.title })).toBeVisible();
+  await expect(page.getByRole("form", { name: "Requester sign-in" })).toHaveCount(0);
 });
 
 test("staff opens a submission barcode against its receiving project", async ({ page, context, baseURL }) => {
