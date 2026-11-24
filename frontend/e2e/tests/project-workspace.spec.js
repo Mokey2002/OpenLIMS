@@ -8,6 +8,7 @@ for (const role of ['admin', 'viewer']) {
       if (path.endsWith('/me/')) body = { id: 1, username: 'tester', roles: [role] };
       else if (path.endsWith('/ui-settings/')) body = { ui_language: 'en' };
       else if (path === '/api/v1/projects/1/') body = { id: 1, code: 'TEST', name: 'Test project', members: [], member_usernames: [] };
+      else if (path === '/api/v1/client-teams/') body = { teams: [], requesters: [] };
       else if (path === '/api/v1/samples/') body = { count: 1, next: null, results: [{ id: 1, sample_id: 'S-101', status: 'QC' }] };
       else if (path.endsWith('/custom-fields/')) body = { fields: {} };
       await route.fulfill({ json: body });
@@ -25,5 +26,6 @@ for (const role of ['admin', 'viewer']) {
     await expect(page.getByRole('link', { name: 'S-101', exact: true }).last()).toBeVisible();
     await page.getByRole('button', { name: 'Team', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Save Team', exact: true })).toHaveCount(role === 'admin' ? 1 : 0);
+    await expect(page.getByRole('button', { name: 'Create client team', exact: true })).toHaveCount(role === 'admin' ? 1 : 0);
   });
 }

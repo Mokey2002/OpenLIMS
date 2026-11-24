@@ -122,8 +122,8 @@ test("pins are unavailable until the account is identified", async ({ page, cont
   });
   await page.goto("/samples");
   try {
-    await expect(page.locator("#favorites-nav")).toHaveText("Favorites");
-    await expect(page.locator("#favorites-nav")).toBeDisabled();
+    await expect(page.getByRole("status")).toHaveText("Checking sign-in…");
+    await expect(page.locator("#favorites-nav")).toHaveCount(0);
   } finally {
     release();
   }
@@ -140,9 +140,9 @@ test("identity failures do not expose or modify any favorites", async ({ page, c
     localStorage.setItem("openlims_favorites:user:1", '["/projects"]');
   });
   await page.goto("/samples");
-  await expect(page.getByTestId("current-user-name")).toHaveText("Account unavailable");
-  await expect(page.locator("#favorites-nav")).toHaveText("Favorites");
-  await expect(page.locator("#favorites-nav")).toBeDisabled();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("alert").filter({ hasText: "OpenLIMS could not verify your sign-in." })).toBeVisible();
+  await expect(page.locator("#favorites-nav")).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem("openlims_favorites:user:1"))).toBe('["/projects"]');
   expect(await page.evaluate(() => localStorage.getItem("openlims_favorites"))).toBe('["/inventory"]');
 });

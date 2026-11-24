@@ -18,8 +18,10 @@ from registry.services import registry_records_for_user
 from samples.access import get_sample_access_queryset
 from samples.models import Sample
 
+from .client_teams import ClientTeamAssignmentInput, eligible_requesters, report_recipient_ids
 from .models import (
     AssayRequestType,
+    ClientTeam,
     RequestResourceRequirement,
     WorkflowRequest,
     WorkflowRequestItem,
@@ -140,6 +142,39 @@ class WorkflowRequestViewSet(viewsets.ModelViewSet):
 
     def _locked_request(self):
         return WorkflowRequest.objects.select_for_update().get(pk=self.get_object().pk)
+
+    @transaction.atomic
+    @action(detail=True, methods=["get", "post"], url_path="client-team")
+    def client_team(self, request, pk=None):
+        if not is_admin(request.user):
+            raise PermissionDenied("Only a director can share a request with a client team.")
+        workflow_request = self._locked_request() if request.method == "POST" else self.get_object()
+        if not workflow_request.items.exclude(submission_reference="").exists():
+            raise ValidationError({"client_team": "Choose a request submitted through the requester portal."})
+        teams = ClientTeam.objects.filter(
+            Q(memberships__can_submit=True) | Q(memberships__can_view_results=True),
+            project_id=workflow_request.project_id,
+            memberships__user_id=workflow_request.requester_id,
+            memberships__user__in=eligible_requesters(workflow_request.project),
+        )
+        if request.method == "POST":
+            form = ClientTeamAssignmentInput(data=request.data, teams=teams)
+            form.is_valid(raise_exception=True)
+            team = form.validated_data["client_team"]
+            previous = workflow_request.client_team
+            if previous != team:
+                workflow_request.client_team = team
+                workflow_request.save(update_fields=["client_team", "updated_at"])
+                record_audit_event(
+                    entity=workflow_request, action="WORKFLOW_REQUEST_TEAM_UPDATED", actor=request.user,
+                    before={"client_team": str(previous.public_id) if previous else None},
+                    after={"client_team": str(team.public_id) if team else None},
+                )
+        return Response({
+            "client_team": workflow_request.client_team_id,
+            "client_team_name": workflow_request.client_team.name if workflow_request.client_team_id else None,
+            "teams": list(teams.values("id", "name")),
+        })
 
     @transaction.atomic
     @action(detail=True, methods=["post"])
@@ -312,12 +347,13 @@ class WorkflowRequestReportViewSet(viewsets.ModelViewSet):
             f"/requester/{report.request.public_id}" if portal_submission
             else f"/workflow-requests?request={report.request.public_id}"
         )
-        Notification.objects.create(
-            user=report.request.requester,
-            title=f"Approved report for {report.request.request_number}",
-            message=report.title,
-            link=notification_link,
-        )
+        for user_id in report_recipient_ids(report.request):
+            Notification.objects.create(
+                user_id=user_id,
+                title=f"Approved report for {report.request.request_number}",
+                message=report.title,
+                link=notification_link,
+            )
         record_audit_event(
             entity=report.request,
             action="WORKFLOW_REQUEST_REPORT_APPROVED",

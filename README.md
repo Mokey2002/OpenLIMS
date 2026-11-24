@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.13-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.14-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -52,9 +52,37 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.14** | Share requests and reports within client teams. Verify the server session before opening the workspace. | [Client team access](#client-team-access) |
 | **v0.78.13** | Publish requester submissions, sample receipts, and report releases to Apache Kafka. | [Kafka requester events](#kafka-requester-events) |
 | **v0.78.12** | Seed a requester account, printable submission labels, and a released example report. | [Requester demo](#requester-demo) |
-| **v0.78.11** | Give requesters a dedicated sign-in section on the shared login page. | [Requester sign-in](#requester-sign-in) |
+
+### v0.78.14 — Client team access
+
+The shared `/login` page has a **Requester sign-in** link at the top.
+`/login?return_to=%2Frequester` opens that form directly.
+
+#### Client team access
+
+Lab directors can create named client teams under **Projects → Team → Client
+teams**. Add each requester account to the project first, then select the
+account and save its team permissions.
+
+| Permission | What the account can do |
+| --- | --- |
+| **Submit requests** | Submit for the team, track requests it submitted, and print their submission labels. |
+| **View team requests and results** | Open requests assigned to the team and download released reports, including reports for its own team requests. |
+
+Grant either or both permissions. Assigned requesters choose a team that allows
+submission for new requests in the project. Requesters without a client team
+assignment in the project can submit individually. Only the submitting account
+can print a request's labels.
+
+To share an existing portal request, open it under **Receive → Workflow
+Requests** and choose **Client team sharing**. Choose a team in the same project
+where the submitting account already has team access. Select **Private to the
+requester** to limit the request and its released reports to that account.
+Clear both permission boxes and choose **Save access** to revoke a member's
+team permissions. Shared visibility also requires current project membership.
 
 ### v0.78.13 — Kafka integration
 
@@ -189,7 +217,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.13`.
+**Current development version:** `v0.78.14`.
 
 ## Personal favorites
 
@@ -215,7 +243,7 @@ directly from the repository owner.
 | **Notebook** | Scoped collaborative notebooks, block experiments, immutable revisions, comments, assignments, review/sign-off, locking, cloning, and provenance-rich PDF export |
 | **Inventory** | Site-to-well location hierarchy, generic barcodes, plate maps, reagent/lot metadata, immutable scan ledger, reservations, alerts, and cycle-count reconciliation |
 | **Workflow Requests** | Configurable internal assay forms, triage/approval, SLAs, pipeline assignment, resource reservation, batch/plate grouping, requester messages, execution status, and approved reports |
-| **Requester portal** | Project-scoped test requests, printable sample labels, receipt and status tracking, and released report downloads |
+| **Requester portal** | Project-scoped test requests, printable sample labels, receipt and status tracking, released reports, and separate submission and results permissions for client teams |
 | **Imports** | Instrument CSV imports, flexible header detection, direct instrument/API ingestion |
 | **Migration** | Legacy CSV migration profiles, reusable field mappings, preview/dry-run, queued imports, row review |
 | **External IDs** | Preserve legacy sample IDs and aliases from older systems |
@@ -926,6 +954,7 @@ Database records and uploaded files are stored in Docker volumes. Keep the same 
 | Cannot connect to Docker | Start Docker Desktop or ask your server administrator to grant Docker access. Confirm `docker info` works. |
 | Port 8080 is already in use | Choose another `OPENLIMS_HTTP_PORT`, update both local origins and `OPENLIMS_PUBLIC_URL` to that port, then rerun the start command. |
 | Page does not load or shows 502 | Check `ps` and the API logs above. The web service waits for a healthy API. |
+| Sign-in check returns HTTP 400 | If the API logs show `Invalid HTTP_HOST header`, add the browser hostname to `DJANGO_ALLOWED_HOSTS` and recreate the API service. |
 | Login fails or returns CSRF 403 | Use the exact configured browser address. Local HTTP needs the three secure-cookie settings set to `false`. |
 | Database authentication fails | The password in `DATABASE_URL` must match `POSTGRES_PASSWORD`. Changing the environment file does not reset a password in an existing database volume. |
 | A dependency download fails | Check network access and retry the build. Do not delete the database or volumes to fix download errors. |
@@ -941,6 +970,29 @@ For access from other computers, use your server's real hostname and a trusted H
 - Arrange backups of the database, uploaded files, and private configuration before using real lab data.
 
 Then follow steps 4–6 using your HTTPS address. SMTP and external AI are optional. See [Deployment Notes](#-deployment-notes) for more detail. The separate [guided installer](deploy/installer/README.md) is an initial implementation requiring published image digests; it is not needed for this source-based setup and is not an upgrade tool.
+
+### When the server IP changes
+
+If users open OpenLIMS by IP, update the old address in `deploy/.env`. Use the
+bare IP in `DJANGO_ALLOWED_HOSTS`. Use the exact browser origin, including scheme
+and any port, in `CSRF_TRUSTED_ORIGINS` and `OPENLIMS_PUBLIC_URL`. For example,
+an instance reached at `http://203.0.113.10:8080` would use these values.
+
+```dotenv
+DJANGO_ALLOWED_HOSTS=203.0.113.10,localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=http://203.0.113.10:8080
+OPENLIMS_PUBLIC_URL=http://203.0.113.10:8080
+```
+
+Apply the changes by recreating the API service.
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml up -d api
+```
+
+For a prebuilt installation, edit its `.env` and run `./openlims start`. If users
+open a DNS hostname, update its DNS record to point to the new IP and retain
+the browser hostname in the OpenLIMS settings.
 
 ## 💻 Local Development
 
@@ -1084,7 +1136,7 @@ The health check verifies:
 
 The sign-in page, lab workspace, and requester portal use `OPENLIMS_VERSION` in
 their footers. It comes from the generated `frontend/src/version.js` file.
-The current application version is **v0.78.13**.
+The current application version is **v0.78.14**.
 
 Footer source:
 

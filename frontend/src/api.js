@@ -132,7 +132,7 @@ async function performRequest(path, options = {}, retry = true) {
       if (renewed) return performRequest(requestPath, options, false);
     }
     redirectToLogin();
-    throw new Error("Session expired. Please log in again.");
+    throw new ApiError(401);
   }
 
   return response;
@@ -175,8 +175,8 @@ function downloadResponseBlob(response, fallbackFilename) {
   });
 }
 
-export async function apiGet(path, { signal } = {}) {
-  const response = await request(path, { method: "GET", signal });
+export async function apiGet(path, { signal, cache } = {}) {
+  const response = await request(path, { method: "GET", signal, cache });
   if (!response.ok) throw await responseError(response);
   return response.json();
 }

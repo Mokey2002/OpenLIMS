@@ -1,14 +1,15 @@
 import json
 from datetime import timedelta
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Exists, OuterRef, Prefetch, Q
+from django.db.models import Case, Exists, OuterRef, Prefetch, Q, Value, When
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -20,7 +21,7 @@ from pipelines.models import PipelineRun
 from projects.models import Project
 
 from .files import report_download, submission_labels
-from .models import AssayRequestType, WorkflowRequest, WorkflowRequestItem, WorkflowRequestReport
+from .models import AssayRequestType, ClientTeamMembership, WorkflowRequest, WorkflowRequestItem, WorkflowRequestReport
 from .services import portal_form_schema, validate_submission_form
 
 
@@ -39,10 +40,27 @@ def available_tests(projects):
     )
 
 
+def submission_team(user, project, team_id):
+    memberships = ClientTeamMembership.objects.filter(user=user, team__project=project)
+    if not is_requester_only(user):
+        memberships = memberships.none()
+    permitted = memberships.filter(can_submit=True)
+    if team_id is not None:
+        if not permitted.filter(team_id=team_id).exists():
+            raise ValidationError({"client_team": "Choose a client team you can submit for in this project."})
+        return team_id
+    if permitted.exists():
+        raise ValidationError({"client_team": "Choose a client team for this request."})
+    if memberships.exists():
+        raise PermissionDenied("Your client team access does not permit submissions in this project.")
+    return None
+
+
 class PortalSubmissionSerializer(serializers.Serializer):
     submission_id = serializers.UUIDField()
     project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.none())
     request_type = serializers.PrimaryKeyRelatedField(queryset=AssayRequestType.objects.none())
+    client_team = serializers.IntegerField(min_value=1, required=False, allow_null=True)
     title = serializers.CharField(max_length=255)
     sample_references = serializers.ListField(
         child=serializers.CharField(max_length=64),
@@ -91,11 +109,12 @@ class PortalSubmissionSerializer(serializers.Serializer):
 class PortalRequestSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source="project.name")
     test_name = serializers.CharField(source="request_type.name")
+    client_team_name = serializers.CharField(source="client_team.name", allow_null=True, read_only=True)
     status = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkflowRequest
-        fields = ("public_id", "request_number", "title", "project_name", "test_name", "status", "submitted_at")
+        fields = ("public_id", "request_number", "title", "project_name", "test_name", "client_team_name", "status", "submitted_at")
 
     def get_status(self, obj):
         if obj.status in (WorkflowRequest.STATUS_APPROVED, WorkflowRequest.STATUS_IN_PROGRESS) and obj.has_runs:
@@ -105,12 +124,17 @@ class PortalRequestSerializer(serializers.ModelSerializer):
 
 class PortalSubmissionSampleSerializer(serializers.ModelSerializer):
     reference = serializers.CharField(source="submission_reference")
-    barcode = serializers.CharField(source="submission_barcode")
+    barcode = serializers.SerializerMethodField()
     received_at = serializers.DateTimeField(source="submission_received_at")
 
     class Meta:
         model = WorkflowRequestItem
-        fields = ("reference", "barcode", "received_at")
+        fields = ("public_id", "reference", "barcode", "received_at")
+
+    def get_barcode(self, obj):
+        if obj.request.requester_id == self.context["request"].user.pk:
+            return obj.submission_barcode
+        return None
 
 
 class PortalReportSerializer(serializers.ModelSerializer):
@@ -121,10 +145,20 @@ class PortalReportSerializer(serializers.ModelSerializer):
 
 class PortalRequestDetailSerializer(PortalRequestSerializer):
     samples = PortalSubmissionSampleSerializer(source="submission_samples", many=True)
-    reports = PortalReportSerializer(source="released_reports", many=True)
+    reports = serializers.SerializerMethodField()
+    can_view_reports = serializers.BooleanField(read_only=True)
+    can_download_labels = serializers.SerializerMethodField()
 
     class Meta(PortalRequestSerializer.Meta):
-        fields = PortalRequestSerializer.Meta.fields + ("samples", "reports")
+        fields = PortalRequestSerializer.Meta.fields + ("samples", "reports", "can_view_reports", "can_download_labels")
+
+    def get_reports(self, obj):
+        if not obj.can_view_reports:
+            return []
+        return PortalReportSerializer(obj.released_reports, many=True).data
+
+    def get_can_download_labels(self, obj):
+        return obj.requester_id == self.context["request"].user.pk
 
 
 @method_decorator(never_cache, name="dispatch")
@@ -142,12 +176,23 @@ class RequesterPortalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, v
         return PortalRequestSerializer
 
     def get_queryset(self):
+        user = self.request.user
         queryset = (
-            WorkflowRequest.objects.filter(requester=self.request.user, project__in=available_projects(self.request.user))
+            WorkflowRequest.objects.filter(project__in=available_projects(user))
             .exclude(status=WorkflowRequest.STATUS_DRAFT)
-            .select_related("project", "request_type")
+            .select_related("project", "request_type", "client_team")
             .order_by("-created_at", "-pk")
         )
+        if is_requester_only(user):
+            team_results = Exists(ClientTeamMembership.objects.filter(
+                team_id=OuterRef("client_team_id"), team__project_id=OuterRef("project_id"),
+                user=user, can_view_results=True,
+            ))
+            queryset = queryset.filter(Q(requester=user) | team_results).annotate(
+                can_view_reports=Case(When(client_team__isnull=True, then=Value(True)), default=team_results),
+            )
+        else:
+            queryset = queryset.filter(requester=user).annotate(can_view_reports=Value(True))
         if self.action in ("list", "retrieve"):
             runs = WorkflowRequestItem.objects.filter(request_id=OuterRef("pk"), pipeline_run__isnull=False)
             queryset = queryset.annotate(
@@ -167,11 +212,25 @@ class RequesterPortalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, v
 
     @action(detail=False, methods=["get"])
     def catalog(self, request):
-        projects = list(available_projects(request.user).order_by("name").values("id", "code", "name"))
+        user = request.user
+        accessible = available_projects(user)
+        client_teams = []
+        if is_requester_only(user):
+            memberships = ClientTeamMembership.objects.filter(user=user)
+            assigned = memberships.filter(team__project_id=OuterRef("pk"))
+            projects_with_submit = accessible.filter(~Exists(assigned) | Exists(assigned.filter(can_submit=True)))
+            client_teams = [
+                {"id": row.team_id, "name": row.team.name, "project_id": row.team.project_id}
+                for row in memberships.filter(can_submit=True, team__project__in=projects_with_submit)
+                .select_related("team").order_by("team__name", "team_id")
+            ]
+        else:
+            projects_with_submit = accessible
+        projects = list(projects_with_submit.order_by("name").values("id", "code", "name"))
         types = available_tests([project["id"] for project in projects]).values(
             "id", "project_id", "code", "name", "description", "form_schema",
         )
-        return Response({"projects": projects, "tests": list(types) if projects else []})
+        return Response({"projects": projects, "tests": list(types) if projects else [], "client_teams": client_teams})
 
     @transaction.atomic
     def create(self, request):
@@ -181,22 +240,30 @@ class RequesterPortalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, v
         public_id = values["submission_id"]
         request_type = values["request_type"]
         submitted_at = timezone.now()
-        workflow_request, created = WorkflowRequest.objects.get_or_create(
-            public_id=public_id,
-            defaults={
-                "request_number": f"SUB-{public_id.hex}",
-                "requester": request.user,
-                "project": values["project"],
-                "request_type": request_type,
-                "title": values["title"],
-                "form_data": values["form_data"],
-                "status": WorkflowRequest.STATUS_SUBMITTED,
-                "priority": request_type.default_priority,
-                "due_at": submitted_at + timedelta(hours=request_type.sla_hours),
-                "assigned_pipeline": request_type.default_pipeline,
-                "submitted_at": submitted_at,
-            },
-        )
+        if is_requester_only(request.user):
+            # Serialize new submissions with changes to this requester's team grants.
+            get_user_model().objects.select_for_update().get(pk=request.user.pk)
+        workflow_request = WorkflowRequest.objects.filter(public_id=public_id).first()
+        created = False
+        if workflow_request is None:
+            team_id = submission_team(request.user, values["project"], values.get("client_team"))
+            workflow_request, created = WorkflowRequest.objects.get_or_create(
+                public_id=public_id,
+                defaults={
+                    "request_number": f"SUB-{public_id.hex}",
+                    "requester": request.user,
+                    "project": values["project"],
+                    "client_team_id": team_id,
+                    "request_type": request_type,
+                    "title": values["title"],
+                    "form_data": values["form_data"],
+                    "status": WorkflowRequest.STATUS_SUBMITTED,
+                    "priority": request_type.default_priority,
+                    "due_at": submitted_at + timedelta(hours=request_type.sla_hours),
+                    "assigned_pipeline": request_type.default_pipeline,
+                    "submitted_at": submitted_at,
+                },
+            )
         references = values["sample_references"]
         if created:
             workflow_request.request_number = f"SUB-{submitted_at:%Y}-{workflow_request.pk:05d}"
@@ -215,6 +282,7 @@ class RequesterPortalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, v
         elif (
             workflow_request.requester_id != request.user.pk
             or workflow_request.project_id != values["project"].pk
+            or ("client_team" in values and workflow_request.client_team_id != values["client_team"])
             or workflow_request.request_type_id != request_type.pk
             or workflow_request.title != values["title"]
             or workflow_request.form_data != values["form_data"]
@@ -233,11 +301,17 @@ class RequesterPortalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, v
     def labels(self, request, **kwargs):
         workflow_request = self.get_object()
         items = list(workflow_request.items.exclude(submission_reference=""))
-        if not items or workflow_request.status in (WorkflowRequest.STATUS_CANCELLED, WorkflowRequest.STATUS_REJECTED):
+        if (
+            workflow_request.requester_id != request.user.pk or not items
+            or workflow_request.status in (WorkflowRequest.STATUS_CANCELLED, WorkflowRequest.STATUS_REJECTED)
+        ):
             raise NotFound("Submission labels are unavailable for this request.")
         return submission_labels(workflow_request, items)
 
     @action(detail=True, methods=["get"], url_path=r"reports/(?P<report_id>[0-9a-f-]{36})/download")
     def download_report(self, request, report_id, **kwargs):
-        report = get_object_or_404(self.get_object().reports.filter(approved=True), public_id=report_id)
+        workflow_request = self.get_object()
+        if not workflow_request.can_view_reports:
+            raise NotFound("Released report unavailable.")
+        report = get_object_or_404(workflow_request.reports.filter(approved=True), public_id=report_id)
         return report_download(report)

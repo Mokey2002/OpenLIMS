@@ -11,13 +11,15 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from events.models import Event, KafkaOutboxEvent
+from notifications.models import Notification
 from pipelines.models import AnalysisDefinition, PipelineRun, PipelineTemplate, PipelineTemplateStep, ProcedureDefinition
 from projects.models import Project
 from samples.models import Sample, SampleAccession
-from workflow_requests.models import AssayRequestType, WorkflowRequest, WorkflowRequestMessage, WorkflowRequestReport
+from workflow_requests.models import AssayRequestType, ClientTeam, WorkflowRequest, WorkflowRequestMessage, WorkflowRequestReport
 
 
 PORTAL = "/api/v1/requester-requests/"
+TEAMS = "/api/v1/client-teams/"
 PASSWORD = "local-test-password"
 
 
@@ -99,6 +101,118 @@ class RequesterPortalTests(TestCase):
         response = self.owner.post(PORTAL, self.payload(**overrides), format="json")
         self.assertEqual(response.status_code, 201, response.data)
         return WorkflowRequest.objects.get(public_id=response.data["public_id"])
+
+    def grant_team_access(self, team, user, *, submit=False, results=False):
+        response = self.admin.post(
+            f"{TEAMS}{team.pk}/member-access/",
+            {"user": user.pk, "can_submit": submit, "can_view_results": results},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_team_submission_and_results_are_independent_and_scoped(self):
+        created = self.admin.post(TEAMS, {"name": "Client A", "project": self.project.pk}, format="json")
+        self.assertEqual(created.status_code, 201, created.data)
+        team = ClientTeam.objects.get(pk=created.data["id"])
+        other_team = ClientTeam.objects.create(name="Client B", project=self.project)
+        other_client = get_user_model().objects.create_user(username="other-client", password=PASSWORD)
+        other_client.groups.add(Group.objects.get(name="requester"))
+        self.project.members.add(other_client)
+        self.grant_team_access(team, self.requester, submit=True)
+        self.grant_team_access(team, self.neighbor, results=True)
+        self.grant_team_access(other_team, other_client, results=True)
+        results_viewer = self.sign_in(self.neighbor)
+        unrelated = self.sign_in(other_client)
+
+        self.assertEqual(self.owner.get(f"{PORTAL}catalog/").data["client_teams"], [
+            {"id": team.pk, "name": "Client A", "project_id": self.project.pk},
+        ])
+        self.assertEqual(results_viewer.get(f"{PORTAL}catalog/").data["projects"], [])
+        self.assertEqual(results_viewer.post(PORTAL, self.payload(), format="json").status_code, 403)
+        self.assertEqual(self.owner.post(PORTAL, self.payload(), format="json").status_code, 400)
+        self.assertEqual(
+            self.owner.post(PORTAL, self.payload(client_team=other_team.pk), format="json").status_code, 400,
+        )
+        payload = self.payload(client_team=team.pk)
+        first = self.owner.post(PORTAL, payload, format="json")
+        self.assertEqual(first.status_code, 201, first.data)
+        self.assertEqual(self.owner.post(PORTAL, payload, format="json").status_code, 200)
+        workflow_request = WorkflowRequest.objects.get(public_id=first.data["public_id"])
+        self.assertEqual(workflow_request.client_team, team)
+        path = f"{PORTAL}{workflow_request.public_id}/"
+        self.assertEqual(results_viewer.get(PORTAL).data["count"], 1)
+        self.assertEqual(unrelated.get(PORTAL).data["count"], 0)
+        self.assertEqual(unrelated.get(path).status_code, 404)
+        self.assertEqual(results_viewer.get(path).data["client_team_name"], "Client A")
+        self.assertIsNone(results_viewer.get(path).data["samples"][0]["barcode"])
+        self.assertEqual(results_viewer.get(f"{path}labels/").status_code, 404)
+        self.assertEqual(self.owner.get(f"{path}labels/").status_code, 200)
+        self.assertFalse(self.owner.get(path).data["can_view_reports"])
+
+        with TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
+            report = WorkflowRequestReport.objects.create(
+                request=workflow_request, title="Client A report", uploaded_by=self.technician,
+                file=SimpleUploadedFile("released.pdf", b"team report", content_type="application/pdf"),
+            )
+            download = f"{path}reports/{report.public_id}/download/"
+            self.assertEqual(results_viewer.get(download).status_code, 404)
+            release = self.admin.post(f"/api/v1/workflow-request-reports/{report.pk}/approve/", {}, format="json")
+            self.assertEqual(release.status_code, 200, release.data)
+
+            self.assertEqual(results_viewer.get(path).data["reports"][0]["title"], report.title)
+            response = results_viewer.get(download)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(b"".join(response.streaming_content), b"team report")
+            self.assertEqual(self.owner.get(path).data["reports"], [])
+            self.assertEqual(self.owner.get(download).status_code, 404)
+            self.assertEqual(unrelated.get(download).status_code, 404)
+            self.assertEqual(
+                list(Notification.objects.filter(message=report.title).values_list("user_id", flat=True)), [self.neighbor.pk],
+            )
+            self.grant_team_access(team, self.requester, submit=True, results=True)
+            self.assertEqual(self.owner.get(download).status_code, 200)
+
+            self.project.members.remove(self.neighbor)
+            self.assertEqual(results_viewer.get(download).status_code, 404)
+            self.project.members.add(self.neighbor)
+            self.grant_team_access(team, self.neighbor)
+            self.assertEqual(results_viewer.get(path).status_code, 404)
+            self.assertEqual(results_viewer.post(PORTAL, self.payload(), format="json").status_code, 403)
+
+    def test_directors_can_share_and_revoke_existing_request_visibility(self):
+        workflow_request = self.submit()
+        team = ClientTeam.objects.create(name="Client A", project=self.project)
+        wrong_team = ClientTeam.objects.create(name="Other project", project=self.other_project)
+        self.grant_team_access(team, self.requester, submit=True, results=True)
+        self.grant_team_access(team, self.neighbor, results=True)
+        viewer = self.sign_in(self.neighbor)
+        path = f"{PORTAL}{workflow_request.public_id}/"
+        share = f"/api/v1/workflow-requests/{workflow_request.pk}/client-team/"
+        self.assertEqual(viewer.get(path).status_code, 404)
+        self.assertEqual(self.owner.get(path).status_code, 200)
+        self.assertEqual(self.staff.post(share, {"client_team": team.pk}, format="json").status_code, 403)
+        self.assertEqual(self.admin.post(share, {"client_team": wrong_team.pk}, format="json").status_code, 400)
+        self.assertEqual(self.admin.get(share).data["teams"], [{"id": team.pk, "name": team.name}])
+        response = self.admin.post(share, {"client_team": team.pk}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(viewer.get(path).status_code, 200)
+        self.assertEqual(self.admin.post(share, {"client_team": None}, format="json").status_code, 200)
+        self.assertEqual(viewer.get(path).status_code, 404)
+        self.assertEqual(Event.objects.filter(action="WORKFLOW_REQUEST_TEAM_UPDATED").count(), 2)
+
+    def test_team_configuration_requires_director_and_project_requesters(self):
+        team = ClientTeam.objects.create(name="Client A", project=self.project)
+        self.assertEqual(self.staff.get(f"{TEAMS}?project={self.project.pk}").status_code, 403)
+        self.assertEqual(self.owner.get(f"{TEAMS}?project={self.project.pk}").status_code, 403)
+        roster = self.admin.get(f"{TEAMS}?project={self.project.pk}")
+        self.assertEqual(roster.status_code, 200, roster.data)
+        self.assertCountEqual([row["id"] for row in roster.data["requesters"]], [self.requester.pk, self.neighbor.pk])
+        for user in (self.technician, self.outsider):
+            response = self.admin.post(f"{TEAMS}{team.pk}/member-access/", {
+                "user": user.pk, "can_submit": True, "can_view_results": True,
+            }, format="json")
+            self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(team.memberships.exists())
 
     def test_requester_credentials_are_scoped_to_the_portal(self):
         self.assertEqual(APIClient().get(PORTAL).status_code, 401)

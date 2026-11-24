@@ -69,6 +69,31 @@ test("browser session uses HttpOnly cookies and no stored JWTs", async ({ page, 
   expect(nonVersionedBusinessRequests).toEqual([]);
 });
 
+test("a fresh visit opens the shared sign-in page", async ({ page }) => {
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("form", { name: "Lab sign-in" })).toBeVisible();
+  await expect(page.getByRole("form", { name: "Requester sign-in" })).toBeVisible();
+  await expect(page.getByTestId("workflow-navigation")).toHaveCount(0);
+});
+
+test("a rejected session check opens sign-in without loading the lab workspace", async ({ page }) => {
+  const workspaceRequests = [];
+  page.on("request", request => {
+    if (/\/api\/v1\/(me|my-work)\//.test(new URL(request.url()).pathname)) {
+      workspaceRequests.push(request.url());
+    }
+  });
+  await page.route("**/api/v1/session/", route => route.fulfill({
+    status: 400, contentType: "text/html", body: "<h1>Bad Request (400)</h1>",
+  }));
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("alert").filter({ hasText: "The server rejected the sign-in check (HTTP 400)." })).toBeVisible();
+  await expect(page.getByTestId("workflow-navigation")).toHaveCount(0);
+  expect(workspaceRequests).toEqual([]);
+});
+
 test("authenticated header falls back to me when session bootstrap is unavailable", async ({ page, context }) => {
   await page.route("**/api/v1/session/", async (route) => {
     await route.fulfill({

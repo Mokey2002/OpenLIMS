@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, Row } from "react-bootstrap";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { login } from "../api";
 import { isRequesterOnly } from "../authz";
 import { OPENLIMS_VERSION } from "../version";
@@ -93,10 +93,12 @@ function SignInCard({ id, title, hint, buttonLabel, recoveryLabel, pending, subm
 
 export default function Login() {
   const nav = useNavigate();
+  const { state } = useLocation();
   const [search] = useSearchParams();
   const returnTo = search.get("return_to") || "";
   const portalReturn = /^\/requester(?:\/[a-f0-9-]{36})?\/?$/.test(returnTo) ? returnTo : "";
   const useDemoRequester = portalReturn === "/requester" && search.get("demo") === "requester";
+  const sessionCheckStatus = state?.sessionCheckStatus;
 
   const signingIn = useRef(false);
   const [pending, setPending] = useState(null);
@@ -149,7 +151,17 @@ export default function Login() {
           </div>
 
           <h1 className="fw-bold mb-2">OpenLIMS</h1>
+          {!portalReturn && <Link className="btn btn-outline-dark btn-sm mt-2"
+            to="/login?return_to=%2Frequester" state={state}>
+            Requester sign-in
+          </Link>}
         </div>
+
+        {typeof sessionCheckStatus === "number" && <Alert variant="warning" role="alert">
+          {sessionCheckStatus === 400
+            ? "The server rejected the sign-in check (HTTP 400). Check the OpenLIMS address or contact your lab."
+            : "OpenLIMS could not verify your sign-in. Try signing in again."}
+        </Alert>}
 
         <Row className="g-4 justify-content-center">
           <Col lg={5} className="d-flex flex-column gap-4">
