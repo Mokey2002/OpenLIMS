@@ -14,7 +14,7 @@ import {
 import { Navigate, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { apiGet, logout as apiLogout } from "./api";
 import { clearLegacyTokens } from "./auth";
-import { isAdmin, isRequesterOnly, isTech } from "./authz";
+import { isAdmin, isRequesterOnly, isTech, validIdentity } from "./authz";
 import { OPENLIMS_VERSION } from "./version";
 import { useLanguage } from "./i18n";
 import RouteContent from "./components/RouteContent";
@@ -81,59 +81,63 @@ function DropdownItemLink({ to, children, hint }) {
   );
 }
 
-function validIdentity(user) {
-  return Boolean(user?.username && Array.isArray(user?.roles));
-}
-
 export default function Layout() {
-  const { assistantHelperEnabled } = useLanguage();
+  const { assistantHelperEnabled, t } = useLanguage();
   const nav = useNavigate();
   const location = useLocation();
   const [me, setMe] = useState(null);
   const [loadingMe, setLoadingMe] = useState(true);
-  const [identityLoadError, setIdentityLoadError] = useState("");
+  const [sessionCheckStatus, setSessionCheckStatus] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [globalSearch, setGlobalSearch] = useState("");
   const [featureFlags, setFeatureFlags] = useState({});
 
   useEffect(() => {
+    const controller = new AbortController();
+    const options = { signal: controller.signal, cache: "no-store" };
     clearLegacyTokens();
     (async () => {
       try {
-        const session = await apiGet("/api/v1/session/");
+        const session = await apiGet("/api/v1/session/", options);
+        if (controller.signal.aborted) return;
         if (!validIdentity(session?.user)) {
           throw new Error("Session bootstrap did not include a valid authenticated user.");
         }
         setMe(session.user);
         setUnreadCount(session.unread_notification_count || 0);
         setFeatureFlags(session.feature_flags || {});
-        setIdentityLoadError("");
       } catch (sessionError) {
+        if (controller.signal.aborted || sessionError.status === 401) return;
+        if (sessionError.status === 400) {
+          setSessionCheckStatus(400);
+          return;
+        }
         console.warn("Session bootstrap failed; falling back to /me/:", sessionError);
         try {
-          const fallbackUser = await apiGet("/api/v1/me/");
+          const fallbackUser = await apiGet("/api/v1/me/", options);
+          if (controller.signal.aborted) return;
           if (!validIdentity(fallbackUser)) {
             throw new Error("Fallback identity response did not include username and roles.");
           }
           setMe(fallbackUser);
-          setIdentityLoadError("");
           if (isRequesterOnly(fallbackUser)) return;
 
           try {
-            const fallbackFlags = await apiGet("/api/v1/feature-flags/");
-            setFeatureFlags(fallbackFlags || {});
+            const fallbackFlags = await apiGet("/api/v1/feature-flags/", options);
+            if (!controller.signal.aborted) setFeatureFlags(fallbackFlags || {});
           } catch (flagsError) {
-            console.warn("Failed to load feature flags during identity fallback:", flagsError);
+            if (!controller.signal.aborted) console.warn("Failed to load feature flags during identity fallback:", flagsError);
           }
         } catch (fallbackError) {
-          console.error("Failed to load authenticated user identity:", fallbackError);
-          setMe(null);
-          setIdentityLoadError("Account unavailable");
+          if (!controller.signal.aborted && fallbackError.status !== 401) {
+            setSessionCheckStatus(fallbackError.status ?? 0);
+          }
         }
       } finally {
-        setLoadingMe(false);
+        if (!controller.signal.aborted) setLoadingMe(false);
       }
     })();
+    return () => controller.abort();
   }, []);
 
   const userIsAdmin = isAdmin(me);
@@ -160,6 +164,10 @@ export default function Layout() {
     setGlobalSearch("");
   }
 
+  if (loadingMe) return <main className="py-5 text-center" role="status">
+    <Spinner size="sm" className="me-2" aria-hidden="true" />{t("Checking sign-in…")}
+  </main>;
+  if (!me) return <Navigate to="/login" replace state={{ sessionCheckStatus }} />;
   if (isRequesterOnly(me)) return <Navigate to="/requester" replace />;
 
   return (
@@ -219,7 +227,7 @@ export default function Layout() {
                 {userIsAdmin && <DropdownItemLink to="/sops">SOP Management</DropdownItemLink>}
               </NavDropdown>
 
-              <FavoritesMenu userId={loadingMe ? undefined : me?.id} currentPath={location.pathname} routes={routeLabels} canVisit={canVisitFavorite} />
+              <FavoritesMenu userId={me.id} currentPath={location.pathname} routes={routeLabels} canVisit={canVisitFavorite} />
 
               {userIsAdmin && (
                 <NavDropdown title="Admin" id="admin-nav">
@@ -236,10 +244,10 @@ export default function Layout() {
             </Form>
 
             <div className="d-flex align-items-center gap-3">
-              {!loadingMe && <div className="text-light small text-xl-end">
-                <div className="fw-semibold" data-testid="current-user-name">{me?.username || identityLoadError || "Account unavailable"}</div>
-                <div className="text-light opacity-75" data-testid="current-user-roles">{me?.roles?.length ? me.roles.join(", ") : (identityLoadError ? "Unable to load role" : "No assigned role")}</div>
-              </div>}
+              <div className="text-light small text-xl-end">
+                <div className="fw-semibold" data-testid="current-user-name">{me.username}</div>
+                <div className="text-light opacity-75" data-testid="current-user-roles">{me.roles.length ? me.roles.join(", ") : "No assigned role"}</div>
+              </div>
               <Button as={NavLink} to="/me" variant="outline-light" size="sm">My profile</Button>
               <Button as={NavLink} to="/getting-started" variant="outline-light" size="sm">Getting started</Button>
               <Button variant="outline-light" size="sm" onClick={logout}>Logout</Button>
@@ -250,12 +258,10 @@ export default function Layout() {
 
       <AssistantPageProvider>
         <Container fluid className="px-4 pb-5">
-          {loadingMe ? <div className="py-5 text-center" role="status">
-            <Spinner size="sm" className="me-2" />Loading…
-          </div> : <RouteContent />}
+          <RouteContent />
         </Container>
         <footer className="app-footer-version">OpenLIMS {OPENLIMS_VERSION}</footer>
-        {!loadingMe && assistantHelperEnabled && <AssistantWidget />}
+        {assistantHelperEnabled && <AssistantWidget />}
       </AssistantPageProvider>
     </>
   );

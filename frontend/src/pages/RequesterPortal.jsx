@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Container, Row } from "react-bootstrap";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { apiDownload, apiGet, logout } from "../api";
-import { isRequesterOnly } from "../authz";
+import { isRequesterOnly, validIdentity } from "../authz";
 import RequesterSubmissionForm from "../components/RequesterSubmissionForm";
 import { useLanguage } from "../i18n";
 import { OPENLIMS_VERSION } from "../version";
@@ -18,23 +18,26 @@ const statusDisplay = {
   CANCELLED: ["Cancelled", "secondary"],
 };
 
-function usePortalData(path) {
+function usePortalData(path, { cache } = {}) {
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    apiGet(path, { signal: controller.signal }).then(
+    apiGet(path, { signal: controller.signal, cache }).then(
       data => { if (!controller.signal.aborted) setResult({ path, revision, data }); },
-      failure => { if (!controller.signal.aborted) setResult({ path, revision, error: failure.message }); },
+      failure => {
+        if (!controller.signal.aborted) setResult({ path, revision, error: failure.message, errorStatus: failure.status });
+      },
     );
     return () => controller.abort();
-  }, [path, revision]);
+  }, [path, revision, cache]);
 
   const current = result?.path === path && result.revision === revision ? result : null;
   return {
     data: current?.data,
     error: current?.error,
+    errorStatus: current?.errorStatus,
     loading: !current,
     refresh: () => setRevision(current => current + 1),
   };
@@ -75,12 +78,14 @@ function RequestList() {
             <div className="text-break">
               <Link className="fw-semibold" to={`/requester/${row.public_id}`}>{row.title}</Link>
               <div className="small text-muted">{row.request_number} · {row.test_name}</div>
-              <div className="small text-muted">{row.project_name} · {formatDate(row.submitted_at, locale)}</div>
+              <div className="small text-muted">
+                {[row.project_name, row.client_team_name, formatDate(row.submitted_at, locale)].filter(Boolean).join(" · ")}
+              </div>
             </div>
             <StatusBadge status={row.status} />
           </div>
         </li>)}
-      </ul> : <p className="text-muted mb-0">{t("Your submitted requests will appear here.")}</p>}
+      </ul> : <p className="text-muted mb-0">{t("Your own and shared test requests will appear here.")}</p>}
       {(requests.data.previous || requests.data.next) && <div className="d-flex gap-2 mt-3">
         <Button variant="outline-secondary" size="sm" disabled={!requests.data.previous} onClick={() => setPage(page - 1)}>{t("Previous")}</Button>
         <Button variant="outline-secondary" size="sm" disabled={!requests.data.next} onClick={() => setPage(page + 1)}>{t("Next")}</Button>
@@ -92,16 +97,18 @@ function RequestList() {
 function PortalHome() {
   const catalog = usePortalData(`${requestPath}catalog/`);
   const { t } = useLanguage();
+  const canSubmit = catalog.data?.projects.length !== 0;
   return <>
     <h1 className="mb-4">{t("Requester portal")}</h1>
+    {!canSubmit && <Alert variant="light">{t("Contact your lab for permission to submit test requests.")}</Alert>}
     <Row className="g-4">
-      <Col lg={7}><RequestList /></Col>
-      <Col lg={5}><Card className="app-card"><Card.Body className="p-4">
+      <Col lg={canSubmit ? 7 : 12}><RequestList /></Col>
+      {canSubmit && <Col lg={5}><Card className="app-card"><Card.Body className="p-4">
         <h2 className="h5 mb-3">{t("New test request")}</h2>
         {catalog.data
           ? <RequesterSubmissionForm catalog={catalog.data} requestPath={requestPath} />
           : <PortalLoadState resource={catalog} />}
-      </Card.Body></Card></Col>
+      </Card.Body></Card></Col>}
     </Row>
   </>;
 }
@@ -114,7 +121,8 @@ function RequestDetail({ requestId }) {
   const [downloadError, setDownloadError] = useState("");
   const [downloading, setDownloading] = useState(false);
   const row = request.data;
-  const labelsAvailable = row && !["REJECTED", "CANCELLED"].includes(row.status);
+  const expectingReceipt = row && !["REJECTED", "CANCELLED"].includes(row.status);
+  const labelsAvailable = expectingReceipt && row.can_download_labels !== false;
 
   async function download(suffix, filename) {
     setDownloadError("");
@@ -132,7 +140,9 @@ function RequestDetail({ requestId }) {
         <div className="text-break">
           <p className="small text-muted mb-1">{row.request_number}</p>
           <h1 className="mb-2">{row.title}</h1>
-          <p className="text-muted mb-0">{row.project_name} · {row.test_name} · {formatDate(row.submitted_at, locale)}</p>
+          <p className="text-muted mb-0">
+            {[row.project_name, row.client_team_name, row.test_name, formatDate(row.submitted_at, locale)].filter(Boolean).join(" · ")}
+          </p>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-2">
           <StatusBadge status={row.status} />
@@ -153,20 +163,22 @@ function RequestDetail({ requestId }) {
             {t("Print at actual size on 100 × 50 mm stock. Match each label to its sample reference.")}
           </p>}
           <ul className="list-unstyled mb-0">
-            {row.samples.map(sample => <li className="d-flex justify-content-between flex-wrap gap-2 py-2 border-top" key={sample.barcode}>
+            {row.samples.map(sample => <li className="d-flex justify-content-between flex-wrap gap-2 py-2 border-top" key={sample.public_id || sample.barcode}>
               <div className="text-break">
                 <strong>{sample.reference}</strong>
-                <div><code className="small text-muted text-break">{sample.barcode}</code></div>
+                {sample.barcode && <div><code className="small text-muted text-break">{sample.barcode}</code></div>}
               </div>
               <span className="small align-self-center">
-                {sample.received_at ? `${t("Received")} · ${formatDate(sample.received_at, locale)}` : t(labelsAvailable ? "Awaiting receipt" : "Not received")}
+                {sample.received_at ? `${t("Received")} · ${formatDate(sample.received_at, locale)}` : t(expectingReceipt ? "Awaiting receipt" : "Not received")}
               </span>
             </li>)}
           </ul>
         </Card.Body></Card></Col>}
         <Col lg={row.samples.length ? 5 : 12}><Card className="app-card"><Card.Body className="p-4">
           <h2 className="h5 mb-3">{t("Released reports")}</h2>
-          {row.reports.length ? <ul className="list-unstyled mb-0">
+          {row.can_view_reports === false
+            ? <p className="text-muted mb-0">{t("Contact your lab for permission to view released reports.")}</p>
+            : row.reports.length ? <ul className="list-unstyled mb-0">
             {row.reports.map(report => <li className="border-top py-2" key={report.public_id}>
               <div className="fw-semibold text-break">{report.title}</div>
               <div className="small text-muted mb-2">{formatDate(report.approved_at, locale)}</div>
@@ -186,7 +198,8 @@ export default function RequesterPortal() {
   const { requestId } = useParams();
   const { t } = useLanguage();
   const navigate = useNavigate();
-  const session = usePortalData("/api/v1/session/");
+  const { pathname } = useLocation();
+  const session = usePortalData("/api/v1/session/", { cache: "no-store" });
   const [signOutError, setSignOutError] = useState("");
   const user = session.data?.user;
 
@@ -199,6 +212,10 @@ export default function RequesterPortal() {
       setSignOutError(error.message);
     }
   }
+
+  if (!session.loading && !validIdentity(user)) return <Navigate
+    to={`/login?return_to=${encodeURIComponent(pathname)}`} replace
+    state={{ sessionCheckStatus: session.errorStatus === 401 ? null : session.errorStatus ?? 0 }} />;
 
   return <div className="min-vh-100 d-flex flex-column">
     <header className="bg-dark text-light">

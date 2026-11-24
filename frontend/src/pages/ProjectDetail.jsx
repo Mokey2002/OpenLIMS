@@ -12,6 +12,7 @@ import {
   Nav,
 } from "react-bootstrap";
 import { apiGet, apiPatch, apiPost, apiPostForm } from "../api";
+import ClientTeamAccess from "../components/ClientTeamAccess";
 import ProjectSequences from "../components/ProjectSequences";
 import { canWrite, isAdmin, readOnlyMessage } from "../authz";
 import "./ProjectDetail.css";
@@ -1087,6 +1088,10 @@ function ProjectWorkspace({ id }) {
           </Col>
         )}
       </Row>
+
+      {section === "team" && userIsAdmin && <div className="mb-4">
+        <ClientTeamAccess projectId={id} projectMembers={project.members} />
+      </div>}
 
       <Row style={section !== "review" ? { display: "none" } : undefined} className="g-4 mb-4">
         <Col lg={6}>

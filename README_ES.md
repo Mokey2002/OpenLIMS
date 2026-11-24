@@ -2,7 +2,7 @@
 
 **Primeros pasos:** [Instalación paso a paso](#instalación-paso-a-paso) · [Installation guide in English](README.md#installation)
 
-**Versión actual: v0.78.13.** Los pies de página de la pantalla de acceso, el área
+**Versión actual: v0.78.14.** Los pies de página de la pantalla de acceso, el área
 del laboratorio y el portal usan `OPENLIMS_VERSION` del archivo generado
 `frontend/src/version.js`. Antes de iniciar o compilar el frontend,
 `frontend/scripts/write-version.mjs` toma `VITE_OPENLIMS_VERSION`, el archivo raíz
@@ -34,9 +34,37 @@ Para actualizar, elige una versión **publicada** más reciente. Si ya está ins
 
 | Versión | Mejoras | Detalles |
 | --- | --- | --- |
+| **v0.78.14** | Solicitudes e informes compartidos con equipos de clientes y verificación de la sesión antes de abrir el área de trabajo. | [Acceso para equipos de clientes](#acceso-para-equipos-de-clientes) |
 | **v0.78.13** | Eventos de envío, recepción y publicación de informes en Apache Kafka. | [Eventos de solicitudes en Kafka](#eventos-de-solicitudes-en-kafka) |
 | **v0.78.12** | Cuenta de ejemplo para solicitantes, etiquetas imprimibles e informe publicado. | [Demostración para solicitantes](#demostración-para-solicitantes) |
-| **v0.78.11** | Acceso para solicitantes en la misma página que las cuentas del laboratorio y de demostración. | [Acceso para solicitantes](#acceso-para-solicitantes) |
+
+## v0.78.14 — Equipos de clientes
+
+La página compartida `/login` tiene el enlace **Acceso para solicitantes** en la
+parte superior. `/login?return_to=%2Frequester` abre ese formulario directamente.
+
+### Acceso para equipos de clientes
+
+La dirección del laboratorio puede crear equipos en **Proyectos → Equipo →
+Equipos de clientes**. Agrega primero cada cuenta de solicitante al proyecto y
+luego selecciona la cuenta y guarda sus permisos en el equipo.
+
+| Permiso | Qué puede hacer la cuenta |
+| --- | --- |
+| **Enviar solicitudes** | Enviar solicitudes para el equipo, seguir las que envió e imprimir sus etiquetas. |
+| **Ver solicitudes y resultados del equipo** | Abrir las solicitudes asignadas al equipo y descargar los informes publicados, incluidos los de sus propias solicitudes del equipo. |
+
+Puedes conceder uno o ambos permisos. Los solicitantes asignados a un equipo
+eligen un equipo que les permite enviar solicitudes nuevas en el proyecto. Las
+cuentas sin equipo asignado en el proyecto pueden enviar solicitudes de forma
+individual. Solo la cuenta que envió una solicitud puede imprimir sus etiquetas.
+
+Para compartir una solicitud existente, ábrela en **Recibir → Solicitudes de
+workflow** y usa **Compartir con un equipo de clientes**. Elige un equipo del
+mismo proyecto al que ya tenga acceso el solicitante. Usa **Privada para el
+solicitante** para limitar la solicitud y sus informes publicados a esa cuenta.
+Para revocar los permisos, desmarca ambas casillas y elige **Guardar acceso**.
+El acceso compartido también requiere pertenecer al proyecto.
 
 ## v0.78.13 — Integración con Kafka
 
@@ -170,7 +198,7 @@ OpenLIMS organiza proyectos, muestras, inventario, trabajos, resultados, control
 
 > **Estado actual:** OpenLIMS es un prototipo con arquitectura de producción. Todavía no es un LIMS clínico, diagnóstico o regulado completamente validado.
 
-**Versión de desarrollo actual:** `v0.78.13`
+**Versión de desarrollo actual:** `v0.78.14`
 
 **Demo:** http://35.164.28.250
 
@@ -299,6 +327,7 @@ Los registros y archivos se guardan en volúmenes de Docker. Conserva el nombre 
 | No se puede conectar a Docker | Abre Docker Desktop o solicita acceso a Docker al administrador del servidor. Comprueba `docker info`. |
 | El puerto 8080 está ocupado | Cambia `OPENLIMS_HTTP_PORT`, los dos orígenes locales y `OPENLIMS_PUBLIC_URL` al nuevo puerto; repite el inicio. |
 | No carga la página o aparece 502 | Revisa `ps` y los logs de la API. La interfaz espera a que la API esté saludable. |
+| La verificación del inicio de sesión devuelve HTTP 400 | Si los logs de la API muestran `Invalid HTTP_HOST header`, agrega el hostname del navegador a `DJANGO_ALLOWED_HOSTS` y vuelve a crear el servicio de la API. |
 | Falla el inicio de sesión o aparece CSRF 403 | Usa la dirección configurada. En HTTP local, las tres opciones de cookies seguras deben ser `false`. |
 | Falla la autenticación de PostgreSQL | La contraseña de `DATABASE_URL` debe coincidir con `POSTGRES_PASSWORD`. Editar el archivo no cambia la contraseña de una base de datos ya creada. |
 | Falla la descarga de una dependencia | Revisa la conexión y repite la compilación. No borres la base de datos ni los volúmenes. |
@@ -314,6 +343,21 @@ Antes de iniciar el mismo stack para otros usuarios:
 - Prepara copias de la base de datos, archivos subidos y configuración privada antes de trabajar con datos reales.
 
 Después sigue los pasos 4–6 usando tu dirección HTTPS. SMTP e IA externa son opcionales. El [instalador guiado](deploy/installer/README.md) es una implementación inicial que requiere imágenes publicadas con sus digests; no es necesario para esta instalación desde código ni sirve para actualizar instalaciones existentes.
+
+Si los usuarios abren OpenLIMS por IP y la dirección cambia, actualiza
+`DJANGO_ALLOWED_HOSTS` con la nueva IP sin esquema ni puerto. Usa la dirección
+exacta del navegador, con esquema y puerto, en `CSRF_TRUSTED_ORIGINS` y
+`OPENLIMS_PUBLIC_URL`. En una instalación desde código, cambia `deploy/.env`
+y vuelve a crear el servicio de la API con el siguiente comando.
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml up -d api
+```
+
+En una instalación con imágenes precompiladas, edita su archivo `.env` y
+ejecuta `./openlims start`. Si los usuarios acceden por nombre de dominio,
+actualiza el registro DNS a la nueva IP y conserva el nombre en la configuración
+de OpenLIMS.
 
 Para modificar código con recarga automática, consulta [Local Development](README.md#-local-development): esa alternativa requiere iniciar también el frontend con npm.
 

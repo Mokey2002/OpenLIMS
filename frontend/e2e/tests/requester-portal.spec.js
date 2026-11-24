@@ -47,6 +47,10 @@ test("a client signs in from the shared page and follows a test request through 
   await mockPortalSignIn(page, user, (route, path) => {
     if (path === "/requester-requests/catalog/") return reply(route, {
       projects: [project],
+      client_teams: [
+        { id: 7, project_id: project.id, name: "Client quality team" },
+        { id: 8, project_id: project.id, name: "Client operations team" },
+      ],
       tests: [{
         id: 5, project_id: project.id, code: "CHECK", name: "Material check",
         form_schema: { required: ["reads", "summary"], properties: {
@@ -97,6 +101,7 @@ test("a client signs in from the shared page and follows a test request through 
   await expect(page).toHaveURL(/\/requester$/);
   await expect(page.getByRole("link", { name: "Lab workspace" })).toHaveCount(0);
   await expect(page.getByRole("contentinfo")).toHaveText(`OpenLIMS ${version}`);
+  await page.getByLabel("Client team", { exact: true }).selectOption("7");
   await page.getByLabel("Test", { exact: true }).selectOption("5");
   await page.getByLabel("Request title").fill(summary.title);
   await page.getByLabel("Sample references").fill("Tube A");
@@ -105,7 +110,7 @@ test("a client signs in from the shared page and follows a test request through 
   await page.getByRole("button", { name: "Submit test request" }).click();
   await expect(page.getByRole("heading", { name: summary.title })).toBeVisible();
   expect(submitted).toMatchObject({
-    project: project.id, request_type: 5, title: summary.title,
+    project: project.id, client_team: 7, request_type: 5, title: summary.title,
     sample_references: ["Tube A"], form_data: { reads: 0, summary: false },
     submission_id: expect.stringMatching(/^[a-f0-9-]{36}$/),
   });
@@ -126,6 +131,47 @@ test("a client signs in from the shared page and follows a test request through 
   await page.getByRole("link", { name: "Back to my test requests" }).click();
   await expect(page.getByRole("link", { name: summary.title })).toBeVisible();
   expect(labRequests).toEqual([]);
+});
+
+test("a client team results viewer can download a shared report", async ({ page }) => {
+  const user = { id: 2, username: "team-reviewer", roles: ["requester"] };
+  const shared = { ...summary, client_team_name: "Client quality team", status: "COMPLETED" };
+  await mockPortalSignIn(page, user, (route, path) => {
+    if (path === "/requester-requests/catalog/") return reply(route, { projects: [], tests: [], client_teams: [] });
+    if (path === "/requester-requests/") return reply(route, { results: [shared], next: null, previous: null });
+    if (path === `/requester-requests/${requestId}/`) return reply(route, {
+      ...shared, can_view_reports: true, can_download_labels: false,
+      samples: [{ public_id: reportId, reference: "Tube A", barcode: null, received_at: summary.submitted_at }],
+      reports: [{ public_id: reportId, title: "Shared lab report", approved_at: summary.submitted_at }],
+    });
+    if (path.endsWith(`/reports/${reportId}/download/`)) return route.fulfill({
+      body: "%PDF fixture",
+      headers: { "Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="shared-report.pdf"' },
+    });
+    return reply(route, {}, 404);
+  });
+  await page.goto("/login");
+  const signIn = page.getByRole("form", { name: "Requester sign-in" });
+  await signIn.getByLabel("Username").fill(user.username);
+  await signIn.getByLabel("Password").fill("test-password");
+  await signIn.getByRole("button", { name: "Continue to requester portal" }).click();
+  await expect(page.getByText("Contact your lab for permission to submit test requests.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit test request" })).toHaveCount(0);
+  await page.getByRole("link", { name: summary.title }).click();
+  await expect(page.getByText(/Client quality team/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download labels (PDF)" })).toHaveCount(0);
+  const [report] = await Promise.all([
+    page.waitForEvent("download"), page.getByRole("button", { name: "Download report Shared lab report" }).click(),
+  ]);
+  expect(report.suggestedFilename()).toBe("shared-report.pdf");
+});
+
+test("a failed requester session check preserves the bookmarked request on sign-in", async ({ page }) => {
+  await page.route("**/api/v1/session/", route => reply(route, { detail: "Bad Request" }, 400));
+  await page.goto(`/requester/${requestId}`);
+  await expect(page).toHaveURL(new RegExp(`/login\\?return_to=%2Frequester%2F${requestId}$`));
+  await expect(page.getByRole("form", { name: "Requester sign-in" })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("HTTP 400");
 });
 
 test("requester sign-in returns internal users to the request in their bookmark", async ({ page }) => {
@@ -151,9 +197,16 @@ test("requester sign-in returns internal users to the request in their bookmark"
 });
 
 test("the shared login offers the demo requester account", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 700 });
   await page.route("**/api/v1/ui-settings/", route => reply(route, { ui_language: "en" }));
 
   await page.goto("/login");
+  const requesterLink = page.getByRole("link", { name: "Requester sign-in", exact: true });
+  await expect(requesterLink).toBeInViewport();
+  await requesterLink.click();
+  await expect(page.getByRole("form", { name: "Requester sign-in" })).toBeVisible();
+  await expect(page.getByRole("form", { name: "Lab sign-in" })).toHaveCount(0);
+  await page.getByRole("link", { name: "All sign-in options" }).click();
   await page.getByRole("link", { name: "Open requester demo" }).click();
   const form = page.getByRole("form", { name: "Requester sign-in" });
   await expect(form.getByLabel("Username")).toHaveValue("demo-requester");

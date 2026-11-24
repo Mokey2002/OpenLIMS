@@ -64,14 +64,17 @@ export default function RequesterSubmissionForm({ catalog, requestPath }) {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const feedback = useFormFeedback();
-  const { projects, tests } = catalog;
+  const { projects, tests, client_teams: clientTeams = [] } = catalog;
   const [submissionId] = useState(createClientId);
   const [project, setProject] = useState(() => projects.length === 1 ? String(projects[0].id) : "");
+  const [teamId, setTeamId] = useState("");
   const [testId, setTestId] = useState("");
   const [title, setTitle] = useState("");
   const [references, setReferences] = useState("");
   const [values, setValues] = useState({});
   const availableTests = tests.filter(test => !test.project_id || String(test.project_id) === project);
+  const availableTeams = clientTeams.filter(team => String(team.project_id) === project);
+  const team = teamId || (availableTeams.length === 1 ? String(availableTeams[0].id) : "");
   const test = availableTests.find(row => String(row.id) === testId);
   const fields = testFields(test?.form_schema);
 
@@ -84,6 +87,7 @@ export default function RequesterSubmissionForm({ catalog, requestPath }) {
     const created = await apiPost(requestPath, {
       submission_id: submissionId,
       project: Number(project),
+      ...(team ? { client_team: Number(team) } : {}),
       request_type: Number(testId),
       title,
       sample_references: sampleReferences,
@@ -102,12 +106,19 @@ export default function RequesterSubmissionForm({ catalog, requestPath }) {
   return <FeedbackForm feedback={feedback} onSubmit={submit}>
     <FormField name="project" label="Project">
       <Form.Select required value={project} onChange={(event) => {
-        setProject(event.target.value); setTestId(""); setValues({}); feedback.clear();
+        setProject(event.target.value); setTeamId(""); setTestId(""); setValues({}); feedback.clear();
       }}>
         <option value="">{t("Choose project")}</option>
         {projects.map(row => <option value={row.id} key={row.id}>{row.name} · {row.code}</option>)}
       </Form.Select>
     </FormField>
+    {availableTeams.length > 0 && <FormField name="client_team" label="Client team"
+      hint="Colleagues with results access can open this request and its released reports.">
+      <Form.Select required value={team} onChange={event => { setTeamId(event.target.value); feedback.clear(); }}>
+        <option value="">{t("Choose client team")}</option>
+        {availableTeams.map(row => <option value={row.id} key={row.id}>{row.name}</option>)}
+      </Form.Select>
+    </FormField>}
     <FormField name="request_type" label="Test" hint={test?.description}>
       <Form.Select required disabled={!project || !availableTests.length} value={testId} onChange={(event) => {
         setTestId(event.target.value); setValues({}); feedback.clear();
@@ -124,6 +135,6 @@ export default function RequesterSubmissionForm({ catalog, requestPath }) {
     </FormField>
     {fields.map(field => <TestField key={field.key} field={field} value={values[field.key] ?? ""}
       onChange={event => setValues(current => ({ ...current, [field.key]: event.target.value }))} />)}
-    <Button type="submit" disabled={!test}>{t("Submit test request")}</Button>
+    <Button type="submit" disabled={!test || (availableTeams.length > 0 && !team)}>{t("Submit test request")}</Button>
   </FeedbackForm>;
 }

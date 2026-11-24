@@ -86,6 +86,28 @@ class RequestResourceRequirement(PublicIDModel):
             raise ValidationError({"inventory_item": "Material requirements need an inventory item."})
 
 
+class ClientTeam(PublicIDModel):
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="client_teams")
+    name = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ["name", "pk"]
+        constraints = [models.UniqueConstraint(fields=["project", "name"], name="client_team_project_name_unique")]
+
+    def __str__(self):
+        return self.name
+
+
+class ClientTeamMembership(models.Model):
+    team = models.ForeignKey(ClientTeam, on_delete=models.CASCADE, related_name="memberships")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="client_team_memberships")
+    can_submit = models.BooleanField(default=False)
+    can_view_results = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["team", "user"], name="client_team_user_unique")]
+
+
 class WorkflowRequest(PublicIDModel):
     STATUS_DRAFT = "DRAFT"
     STATUS_SUBMITTED = "SUBMITTED"
@@ -120,6 +142,9 @@ class WorkflowRequest(PublicIDModel):
     request_type = models.ForeignKey(AssayRequestType, on_delete=models.PROTECT, related_name="requests")
     project = models.ForeignKey("projects.Project", on_delete=models.PROTECT, related_name="workflow_requests")
     requester = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="workflow_requests")
+    client_team = models.ForeignKey(
+        ClientTeam, on_delete=models.PROTECT, null=True, blank=True, editable=False, related_name="requests",
+    )
     title = models.CharField(max_length=255)
     form_data = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
