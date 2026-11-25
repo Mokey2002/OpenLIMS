@@ -2,13 +2,16 @@ from rest_framework.decorators import action
 from .invitations import send_invitation, InvitationSendThrottle
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import update_last_login
 from django.db import transaction
 from django.db.models import CharField, OuterRef, Subquery
 from django.db.models.functions import Cast
 from django.middleware.csrf import get_token
 from drf_spectacular.utils import OpenApiTypes, extend_schema
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from rest_framework_simplejwt.exceptions import TokenError, AuthenticationFailed
@@ -17,6 +20,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from events.models import Event
 from .authentication import enforce_csrf
+from .demo_requester_access import DEMO_REQUESTER_CLAIM, DEMO_REQUESTER_USERNAME, can_use_requester_demo
 from .permissions import IsAdminOnly, is_requester_only
 from .user_safety import (
     LastAdministratorConflict, LastAdministratorError, last_administrator_id,
@@ -70,6 +74,13 @@ def _clear_auth_cookies(response):
     )
 
 
+def _cookie_login_response(request, user, access, refresh):
+    response = Response({"user": MeSerializer(user).data})
+    _set_auth_cookies(response, access, refresh)
+    get_token(request)
+    return response
+
+
 class OpenLIMSTokenObtainPairView(TokenObtainPairView):
     serializer_class = OpenLIMSTokenObtainPairSerializer
 
@@ -97,10 +108,31 @@ class CookieLoginView(APIView):
         serializer.is_valid(raise_exception=True)
         tokens = serializer.validated_data
 
-        response = Response({"user": MeSerializer(serializer.user).data})
-        _set_auth_cookies(response, tokens["access"], tokens["refresh"])
-        get_token(request)
-        return response
+        return _cookie_login_response(request, serializer.user, tokens["access"], tokens["refresh"])
+
+
+class RequesterDemoThrottle(AnonRateThrottle):
+    scope = "requester_demo"
+    rate = "20/min"
+
+
+class CookieRequesterDemoView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [RequesterDemoThrottle]
+
+    @transaction.atomic
+    def post(self, request):
+        if not settings.OPENLIMS_REQUESTER_DEMO_ENABLED:
+            raise NotFound("Requester demo is disabled for this installation.")
+        enforce_csrf(request)
+        requester = User.objects.select_for_update().filter(username=DEMO_REQUESTER_USERNAME).first()
+        if not can_use_requester_demo(requester):
+            raise NotFound("Requester demo is unavailable. Check the seeded evaluation account and project.")
+        update_last_login(None, requester)
+        refresh = OpenLIMSTokenObtainPairSerializer.get_token(requester)
+        refresh[DEMO_REQUESTER_CLAIM] = True
+        return _cookie_login_response(request, requester, str(refresh.access_token), str(refresh))
 
 
 class CookieRefreshView(APIView):

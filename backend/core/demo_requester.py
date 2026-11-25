@@ -23,11 +23,13 @@ from samples.models import Sample, SampleAccession, SampleCustodyEvent
 from workflow_requests.models import AssayRequestType, WorkflowRequest, WorkflowRequestItem, WorkflowRequestReport
 from workflow_requests.services import approve_request
 
+from .demo_requester_access import (
+    DEMO_PROJECT_CODE,
+    DEMO_PROJECT_DESCRIPTION,
+    DEMO_REQUESTER_EMAIL,
+    DEMO_REQUESTER_USERNAME,
+)
 
-DEMO_REQUESTER_USERNAME = "demo-requester"
-DEMO_REQUESTER_EMAIL = "demo-requester@example.invalid"
-DEMO_PROJECT_CODE = "PRJ-REQUESTER-DEMO"
-DEMO_PROJECT_DESCRIPTION = "Fictional requester submissions, sample receipt, and report release."
 PENDING_REQUEST_NUMBER = "SUB-DEMO-0001"
 COMPLETED_REQUEST_NUMBER = "SUB-DEMO-0002"
 TEST_CODE = "DEMO_SAMPLE_CONDITION"

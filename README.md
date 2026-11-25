@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.14-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.78.15-blue">
   <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-green">
   <img alt="Backend" src="https://img.shields.io/badge/backend-Django%20REST%20Framework-darkgreen">
   <img alt="Frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB">
@@ -52,9 +52,31 @@ For updates, select a newer **published** release; selecting the installed versi
 
 | Version | Improvements | Details |
 | --- | --- | --- |
+| **v0.78.15** | Open the seeded requester portal in one click from the shared sign-in page. | [One-click requester demo](#one-click-requester-demo) |
 | **v0.78.14** | Share requests and reports within client teams. Verify the server session before opening the workspace. | [Client team access](#client-team-access) |
 | **v0.78.13** | Publish requester submissions, sample receipts, and report releases to Apache Kafka. | [Kafka requester events](#kafka-requester-events) |
-| **v0.78.12** | Seed a requester account, printable submission labels, and a released example report. | [Requester demo](#requester-demo) |
+
+### One-click requester demo
+
+On `/login`, choose **Open requester demo** under **Demo Accounts** to open
+the portal as `demo-requester`. That button creates a requester session for
+the seeded **Requester Portal Demo** project. You can view the example
+requests and released PDF, print labels, and submit a test.
+
+The local demo launcher enables one-click sign-in when it runs this version.
+For a source-based evaluation installation, set
+`OPENLIMS_REQUESTER_DEMO_ENABLED=true` in `deploy/.env` and rebuild the stack.
+To populate the example account, project, and requests, run the full
+`seed_demo` command in the API container.
+
+```bash
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml up -d --build
+docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py seed_demo
+```
+
+Demo visitors share this account, so use fictional records. The server checks
+that the setting is still enabled and the account still has requester-only
+access to its demo project on each request.
 
 ### v0.78.14 — Client team access
 
@@ -138,18 +160,9 @@ is at least once, so use `event_id` to deduplicate. Inspect the `worker` and
 
 #### Requester demo
 
-Run the full `seed_demo` command on an evaluation installation. It adds the
-`demo-requester` account and the **Requester Portal Demo** project. Set the
-account's password with Django's `changepassword demo-requester` command in the
-API container. Use these commands for a production-style source installation.
-
-```bash
-docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py seed_demo
-docker compose --env-file deploy/.env -p openlims -f deploy/docker-compose.prod.yml exec api python manage.py changepassword demo-requester
-```
-
-On `/login`, choose **Open requester demo** in **Demo Accounts** to fill in the
-username, then enter the password you set. In the portal, open **SUB-DEMO-0001**
+The full `seed_demo` command adds the `demo-requester` account and the
+**Requester Portal Demo** project. The [one-click demo](#one-click-requester-demo)
+opens the portal. In the portal, open **SUB-DEMO-0001**
 to print a submission label or **SUB-DEMO-0002** to see recorded receipt and
 download the released PDF. Lab staff can find the same requests under
 **Receive → Workflow Requests**. The project also includes a published **Sample
@@ -217,7 +230,7 @@ The project is designed as a lightweight, configurable, production-style foundat
 
 > **Status:** OpenLIMS is currently a production-style prototype. It is not yet a fully validated clinical, diagnostic, or regulated production LIMS.
 
-**Current development version:** `v0.78.14`.
+**Current development version:** `v0.78.15`.
 
 ## Personal favorites
 
@@ -1136,7 +1149,7 @@ The health check verifies:
 
 The sign-in page, lab workspace, and requester portal use `OPENLIMS_VERSION` in
 their footers. It comes from the generated `frontend/src/version.js` file.
-The current application version is **v0.78.14**.
+The current application version is **v0.78.15**.
 
 Footer source:
 
